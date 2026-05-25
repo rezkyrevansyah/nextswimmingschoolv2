@@ -43,11 +43,12 @@ export default function SchoolPage() {
     const { data } = await supabase
       .from("members")
       .select(`
-        id, full_name,
+        id,
+        profile:profiles(full_name),
         member_classes(
           classes(
             id, name,
-            profiles(full_name)
+            class_coaches(profile:profiles(full_name))
           )
         ),
         rapor_entries(
@@ -58,15 +59,17 @@ export default function SchoolPage() {
 
     if (!data) return;
     const rows: Student[] = data.map((m) => {
-      const mc = (m.member_classes as unknown as { classes: { id: string; name: string; profiles: { full_name: string } | null } | null }[])?.[0];
+      const profile = (m.profile as unknown as { full_name: string } | null);
+      const mc = (m.member_classes as unknown as { classes: { id: string; name: string; class_coaches: { profile: { full_name: string } | null }[] } | null }[])?.[0];
       const cls = mc?.classes;
+      const firstCoach = cls?.class_coaches?.[0]?.profile;
       const entry = (m.rapor_entries as unknown as { id: string; scores: Record<string, number>; notes: string | null; period_id: string }[])
         ?.find((e) => e.period_id === pid);
       return {
         id: m.id,
-        full_name: m.full_name,
+        full_name: profile?.full_name ?? "—",
         class_name: cls?.name ?? "—",
-        coach_name: cls?.profiles?.full_name ? `Coach ${cls.profiles.full_name.split(" ")[0]}` : "—",
+        coach_name: firstCoach?.full_name ? `Coach ${firstCoach.full_name.split(" ")[0]}` : "—",
         period_id: pid,
         period_label: activePeriod?.label ?? null,
         entry_id: entry?.id ?? null,
@@ -96,8 +99,9 @@ export default function SchoolPage() {
       setSchoolName(school.name);
 
       // Load admin WA for the branch
-      const { data: branch } = await supabase.from("branches").select("phone").eq("id", school.branch_id).single();
-      if (branch?.phone) setAdminWaPhone(branch.phone);
+      const { data: branch } = await supabase.from("branches").select("wa_numbers").eq("id", school.branch_id).single();
+      const waNumbers = (branch as unknown as { wa_numbers: string[] } | null)?.wa_numbers;
+      if (waNumbers && waNumbers.length > 0) setAdminWaPhone(waNumbers[0]);
 
       // Load active rapor period for the branch
       const { data: period } = await supabase
@@ -286,10 +290,43 @@ export default function SchoolPage() {
         onClose={() => setOpen(null)}
         title={`Rapor — ${open?.full_name ?? ""}`}
         size="lg"
-        footer={<Btn variant="primary" onClick={() => setOpen(null)}>Tutup</Btn>}
+        footer={
+          <div className="flex gap-2">
+            <Btn variant="ghost" icon="print" onClick={() => {
+              const el = document.getElementById("rapor-print-area");
+              if (!el) return;
+              const w = window.open("", "_blank", "width=700,height=900");
+              if (!w) return;
+              w.document.write(`<!DOCTYPE html><html><head><title>Rapor — ${open?.full_name ?? ""}</title>
+                <style>
+                  body{font-family:sans-serif;padding:32px;color:#0f172a;max-width:600px;margin:auto}
+                  h1{font-size:20px;font-weight:700;margin-bottom:4px}
+                  .sub{color:#64748b;font-size:13px;margin-bottom:24px}
+                  .row{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+                  .label{font-size:14px;font-weight:600}
+                  .val{font-family:monospace;font-weight:700;color:#0369a1}
+                  .bar-bg{height:8px;background:#e2e8f0;border-radius:4px;overflow:hidden;margin-top:4px}
+                  .bar{height:100%;border-radius:4px}
+                  .note{background:#f8fafc;padding:12px;border-radius:8px;font-size:13px;color:#475569;margin-top:16px}
+                  .note-label{font-weight:700;font-size:13px;margin-bottom:6px}
+                  footer{margin-top:40px;border-top:1px solid #e2e8f0;padding-top:12px;font-size:11px;color:#94a3b8}
+                </style></head><body>${el.innerHTML}
+                <footer>Dicetak dari Next Swimming School · ${new Date().toLocaleDateString("id-ID", { dateStyle: "long" })}</footer>
+                </body></html>`);
+              w.document.close();
+              w.focus();
+              w.print();
+            }}>Cetak / Unduh PDF</Btn>
+            <Btn variant="primary" onClick={() => setOpen(null)}>Tutup</Btn>
+          </div>
+        }
       >
         {open && (
-          <div className="space-y-4">
+          <div id="rapor-print-area" className="space-y-4">
+            <div>
+              <h1 style={{ fontWeight: 700, fontSize: 18 }}>Rapor Siswa — {open.full_name}</h1>
+              <p className="text-xs text-ink-mute">{open.class_name} · {open.coach_name} · {open.period_label}</p>
+            </div>
             <Card className="!p-3 bg-paper-tint">
               <div className="flex items-center gap-3">
                 <Avatar name={open.full_name} size={42} />
@@ -335,7 +372,7 @@ export default function SchoolPage() {
         )}
       </Modal>
 
-      <RoleSwitcher />
+      <RoleSwitcher currentPath="/school" />
     </div>
   );
 }

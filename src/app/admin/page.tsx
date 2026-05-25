@@ -42,7 +42,7 @@ interface MemberRow {
 interface CoachProfile {
   id: string; full_name: string; email: string;
   phone: string | null; specialization: string | null;
-  certifications?: { title: string; status: string }[];
+  certifications?: { name: string; title: string | null; status: string }[];
 }
 
 interface AttendanceRow {
@@ -75,7 +75,7 @@ interface RegistrationRow {
 }
 
 interface CertRow {
-  id: string; title: string; issuer: string | null; valid_from: string | null;
+  id: string; name: string; title: string | null; issuer: string | null; valid_from: string | null;
   valid_until: string | null; photo_url: string | null; status: string;
   profile?: { full_name: string } | null;
 }
@@ -91,9 +91,8 @@ interface RaporPeriod {
 }
 
 interface School {
-  id: string; name: string; email: string | null; phone: string | null;
-  contact_person: string | null; status: string;
-  members?: { count: number }[];
+  id: string; name: string; email: string | null;
+  profile_id: string | null;
 }
 
 interface Branch {
@@ -209,12 +208,25 @@ function AdminSettings({ branch, onRefresh }: { branch: Branch | null; onRefresh
   const [lng, setLng] = useState(branch?.lng?.toString() ?? "");
   const [name, setName] = useState(branch?.name ?? "");
   const [address, setAddress] = useState(branch?.address ?? "");
+  const [waNumbers, setWaNumbers] = useState<string[]>(branch?.wa_numbers ?? []);
   const [saving, setSaving] = useState(false);
+
+  // Sync state when branch prop changes
+  useEffect(() => {
+    if (branch) {
+      setName(branch.name);
+      setAddress(branch.address ?? "");
+      setLat(branch.lat?.toString() ?? "");
+      setLng(branch.lng?.toString() ?? "");
+      setWaNumbers(branch.wa_numbers ?? []);
+    }
+  }, [branch?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const save = async () => {
     if (!branch) return;
     setSaving(true);
-    const { error } = await supabase.from("branches").update({ name, address, lat: lat ? parseFloat(lat) : null, lng: lng ? parseFloat(lng) : null }).eq("id", branch.id);
+    const clean = waNumbers.map(n => n.trim()).filter(Boolean);
+    const { error } = await supabase.from("branches").update({ name, address, lat: lat ? parseFloat(lat) : null, lng: lng ? parseFloat(lng) : null, wa_numbers: clean }).eq("id", branch.id);
     setSaving(false);
     if (error) return toast.error("Gagal menyimpan", error.message);
     toast.success("Settings disimpan");
@@ -249,6 +261,27 @@ function AdminSettings({ branch, onRefresh }: { branch: Branch | null; onRefresh
           <div className="grid sm:grid-cols-2 gap-4 pt-5 border-t border-line">
             <Field label="Nama cabang" required><Input value={name} onChange={e => setName(e.target.value)} /></Field>
             <Field label="Alamat lengkap" required><Input value={address} onChange={e => setAddress(e.target.value)} /></Field>
+          </div>
+          <div className="pt-5 border-t border-line">
+            <Field label="Nomor WhatsApp Admin" hint="Dipakai otomatis di tombol 'Hubungi Admin'. Format: 081234567890. Bisa lebih dari satu.">
+              <div className="space-y-2">
+                {waNumbers.map((num, i) => (
+                  <div key={i} className="flex gap-2">
+                    <Input
+                      type="tel"
+                      value={num}
+                      onChange={e => setWaNumbers(prev => prev.map((n, j) => j === i ? e.target.value : n))}
+                      placeholder="Mis. 081234567890"
+                      className="flex-1 font-mono"
+                    />
+                    <button onClick={() => setWaNumbers(prev => prev.filter((_, j) => j !== i))} className="w-9 h-9 rounded-lg text-ink-mute hover:text-danger-500 hover:bg-danger-50 flex items-center justify-center border border-line shrink-0">
+                      <Icon name="trash" className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+                <Btn variant="ghost" size="sm" icon="plus" onClick={() => setWaNumbers(prev => [...prev, ""])}>Tambah nomor</Btn>
+              </div>
+            </Field>
           </div>
           <Btn variant="primary" onClick={save} disabled={saving}>{saving ? "Menyimpan…" : "Simpan perubahan"}</Btn>
         </Card>
@@ -297,6 +330,7 @@ function AdminClass({ branchId }: { branchId: string }) {
     setSaving(true);
     const { error } = await supabase.from("classes").insert({
       name: form.name, schedule_days: form.schedule_days, time_start: form.schedule_time,
+      time_end: form.schedule_time,
       capacity: form.capacity, price_monthly: form.price_monthly, show_landing: form.show_on_landing,
       goal: form.goals, branch_id: branchId, status: "active", enrolled: 0,
     });
@@ -464,11 +498,31 @@ function AdminMember({ branchId }: { branchId: string }) {
     if (res.ok) toast.success("Password direset"); else toast.error("Gagal reset password");
   };
 
-  const suspend = async (m: MemberRow) => {
-    const yes = await confirm(`Suspend member ${m.profile?.full_name ?? "ini"}?`);
-    if (!yes) return;
-    await supabase.from("members").update({ status: "suspended" }).eq("id", m.id);
-    toast.success("Member di-suspend");
+  const [suspendMemberTarget, setSuspendMemberTarget] = useState<MemberRow | null>(null);
+  const [suspendMemberForm, setSuspendMemberForm] = useState({ reason: "", until: "" });
+  const [suspendingMember, setSuspendingMember] = useState(false);
+
+  const doSuspendMember = async () => {
+    if (!suspendMemberTarget || !suspendMemberForm.reason || !suspendMemberForm.until) return toast.error("Alasan dan tanggal berakhir wajib diisi");
+    setSuspendingMember(true);
+    const { error } = await supabase.from("members")
+      .update({ status: "suspended", suspend_until: suspendMemberForm.until, suspend_reason: suspendMemberForm.reason })
+      .eq("id", suspendMemberTarget.id);
+    setSuspendingMember(false);
+    if (error) return toast.error("Gagal suspend member", error.message);
+    toast.success(`${suspendMemberTarget.profile?.full_name ?? "Member"} di-suspend`);
+    setSuspendMemberTarget(null);
+    setDetail(null);
+    load();
+  };
+
+  const liftSuspendMember = async (m: MemberRow) => {
+    const { error } = await supabase.from("members")
+      .update({ status: "active", suspend_until: null, suspend_reason: null })
+      .eq("id", m.id);
+    if (error) return toast.error("Gagal mengakhiri suspend", error.message);
+    toast.success("Suspend diakhiri");
+    setDetail(null);
     load();
   };
 
@@ -540,7 +594,10 @@ function AdminMember({ branchId }: { branchId: string }) {
           <>
             <Btn variant="ghost" onClick={() => setDetail(null)}>Tutup</Btn>
             <Btn variant="outline" icon="refresh" onClick={() => detail && resetPassword(detail)}>Reset Password</Btn>
-            {detail?.status !== "suspended" && <Btn variant="ghost" className="text-warn-600" onClick={() => { detail && suspend(detail); setDetail(null); }}>Suspend</Btn>}
+            {detail?.status !== "suspended"
+              ? <Btn variant="ghost" className="text-warn-600" onClick={() => { setSuspendMemberTarget(detail); setSuspendMemberForm({ reason: "", until: "" }); }}>Suspend</Btn>
+              : <Btn variant="soft" size="sm" icon="check" onClick={() => detail && liftSuspendMember(detail)}>Akhiri Suspend</Btn>
+            }
           </>
         }>
         {detail && (
@@ -590,26 +647,51 @@ function AdminMember({ branchId }: { branchId: string }) {
           <Field label="Password" required hint="Min. 6 karakter"><Input type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} /></Field>
         </div>
       </Modal>
+
+      {/* Suspend member modal */}
+      <Modal open={!!suspendMemberTarget} onClose={() => setSuspendMemberTarget(null)} title={`Suspend Member — ${suspendMemberTarget?.profile?.full_name ?? ""}`} size="sm"
+        footer={<><Btn variant="ghost" onClick={() => setSuspendMemberTarget(null)}>Batal</Btn><Btn variant="ghost" className="text-warn-600" onClick={doSuspendMember} disabled={suspendingMember}>{suspendingMember ? "Menyimpan…" : "Terapkan Suspend"}</Btn></>}>
+        <div className="space-y-4">
+          <Card className="!p-3 bg-warn-50 border-warn-200">
+            <div className="flex items-start gap-2.5 text-sm text-warn-700"><Icon name="warning" className="w-5 h-5 shrink-0 mt-0.5" /><span>Member tidak bisa login selama masa suspend dan tidak muncul di daftar absensi coach.</span></div>
+          </Card>
+          <Field label="Alasan suspend" required>
+            <Textarea rows={2} value={suspendMemberForm.reason} onChange={e => setSuspendMemberForm(f => ({ ...f, reason: e.target.value }))} placeholder="Mis. Belum membayar tagihan selama 2 bulan." />
+          </Field>
+          <Field label="Suspend berakhir" required hint="Member otomatis aktif kembali setelah tanggal ini">
+            <Input type="date" value={suspendMemberForm.until} onChange={e => setSuspendMemberForm(f => ({ ...f, until: e.target.value }))} min={new Date().toISOString().slice(0, 10)} />
+          </Field>
+        </div>
+      </Modal>
     </div>
   );
 }
 
 // ── Coach ──────────────────────────────────────────────────────────────────────
 
+interface CoachFull extends CoachProfile {
+  suspend_until?: string | null;
+  suspend_reason?: string | null;
+}
+
 function AdminCoach({ branchId }: { branchId: string }) {
   const supabase = createClient();
   const toast = useToast();
-  const confirm = useConfirm();
-  const [coaches, setCoaches] = useState<CoachProfile[]>([]);
+  const [coaches, setCoaches] = useState<CoachFull[]>([]);
   const [loading, setLoading] = useState(true);
   const [openAdd, setOpenAdd] = useState(false);
+  const [suspendTarget, setSuspendTarget] = useState<CoachFull | null>(null);
   const [saving, setSaving] = useState(false);
+  const [suspending, setSuspending] = useState(false);
   const [form, setForm] = useState({ full_name: "", email: "", phone: "", password: "", specialization: "" });
+  const [suspendForm, setSuspendForm] = useState({ reason: "", until: "" });
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase.from("profiles").select("id, full_name, email, phone, specialization, certifications(title, status)").eq("branch_id", branchId).eq("role", "coach").order("full_name");
-    if (data) setCoaches(data as unknown as CoachProfile[]);
+    const { data } = await supabase.from("profiles")
+      .select("id, full_name, email, phone, specialization, suspend_until, suspend_reason, certifications(name, title, status)")
+      .eq("branch_id", branchId).eq("role", "coach").order("full_name");
+    if (data) setCoaches(data as unknown as CoachFull[]);
     setLoading(false);
   }, [branchId, supabase]);
 
@@ -630,9 +712,28 @@ function AdminCoach({ branchId }: { branchId: string }) {
     load();
   };
 
-  const toggleSuspend = async (c: CoachProfile) => {
-    // Coach status managed via auth — placeholder for now
-    toast.error(`Fitur suspend coach belum tersedia — hubungi owner.`);
+  const isSuspended = (c: CoachFull) => c.suspend_until && new Date(c.suspend_until) >= new Date();
+
+  const doSuspend = async () => {
+    if (!suspendTarget || !suspendForm.reason || !suspendForm.until) return toast.error("Alasan dan tanggal berakhir wajib diisi");
+    setSuspending(true);
+    const { error } = await supabase.from("profiles")
+      .update({ suspend_until: suspendForm.until, suspend_reason: suspendForm.reason })
+      .eq("id", suspendTarget.id);
+    setSuspending(false);
+    if (error) return toast.error("Gagal suspend coach", error.message);
+    toast.success(`${suspendTarget.full_name} di-suspend hingga ${fmtDate(suspendForm.until)}`);
+    setSuspendTarget(null);
+    load();
+  };
+
+  const liftSuspend = async (c: CoachFull) => {
+    const { error } = await supabase.from("profiles")
+      .update({ suspend_until: null, suspend_reason: null })
+      .eq("id", c.id);
+    if (error) return toast.error("Gagal mengakhiri suspend", error.message);
+    toast.success("Suspend diakhiri");
+    load();
   };
 
   return (
@@ -644,16 +745,28 @@ function AdminCoach({ branchId }: { branchId: string }) {
       {loading ? <div className="p-10 text-center text-ink-mute">Memuat data…</div> : (
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {coaches.map((c) => {
-            const activeCerts = c.certifications?.filter(ct => ct.status === "approved").map(ct => ct.title) ?? [];
+            const activeCerts = c.certifications?.filter(ct => ct.status === "approved").map(ct => ct.title ?? ct.name) ?? [];
+            const suspended = isSuspended(c);
             return (
               <Card key={c.id}>
                 <div className="flex items-start gap-3">
                   <Avatar name={c.full_name} size={56} />
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap"><div className="font-display font-bold text-ink truncate">{c.full_name}</div><Status kind="active">Aktif</Status></div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <div className="font-display font-bold text-ink truncate">{c.full_name}</div>
+                      <Status kind={suspended ? "suspended" : "active"}>{suspended ? "Suspend" : "Aktif"}</Status>
+                    </div>
                     {c.specialization && <div className="text-xs text-ocean-700 font-semibold mt-1">{c.specialization}</div>}
+                    {suspended && c.suspend_until && (
+                      <div className="text-xs text-warn-600 mt-1">s/d {fmtDate(c.suspend_until)}</div>
+                    )}
                   </div>
                 </div>
+                {suspended && c.suspend_reason && (
+                  <div className="mt-3 p-2.5 rounded-lg bg-warn-50 border border-warn-100 text-xs text-warn-700">
+                    <span className="font-semibold">Alasan: </span>{c.suspend_reason}
+                  </div>
+                )}
                 {activeCerts.length > 0 && (
                   <div className="mt-4 pt-4 border-t border-line">
                     <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Sertifikasi aktif</div>
@@ -661,7 +774,10 @@ function AdminCoach({ branchId }: { branchId: string }) {
                   </div>
                 )}
                 <div className="mt-4 flex gap-2">
-                  <Btn variant="ghost" size="sm" onClick={() => toggleSuspend(c)}>Suspend</Btn>
+                  {suspended
+                    ? <Btn variant="soft" size="sm" icon="check" onClick={() => liftSuspend(c)}>Akhiri Suspend</Btn>
+                    : <Btn variant="ghost" size="sm" className="text-warn-600" onClick={() => { setSuspendTarget(c); setSuspendForm({ reason: "", until: "" }); }}>Suspend</Btn>
+                  }
                 </div>
               </Card>
             );
@@ -669,6 +785,8 @@ function AdminCoach({ branchId }: { branchId: string }) {
           {coaches.length === 0 && <p className="text-ink-mute col-span-3">Belum ada coach di cabang ini.</p>}
         </div>
       )}
+
+      {/* Add coach modal */}
       <Modal open={openAdd} onClose={() => setOpenAdd(false)} title="Tambah Coach" size="sm"
         footer={<><Btn variant="ghost" onClick={() => setOpenAdd(false)}>Batal</Btn><Btn variant="primary" onClick={createCoach} disabled={saving}>{saving ? "Membuat…" : "Buat Akun"}</Btn></>}>
         <div className="space-y-4">
@@ -679,73 +797,153 @@ function AdminCoach({ branchId }: { branchId: string }) {
           <Field label="Password awal" required><Input type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} /></Field>
         </div>
       </Modal>
+
+      {/* Suspend coach modal */}
+      <Modal open={!!suspendTarget} onClose={() => setSuspendTarget(null)} title={`Suspend Coach — ${suspendTarget?.full_name ?? ""}`} size="sm"
+        footer={<><Btn variant="ghost" onClick={() => setSuspendTarget(null)}>Batal</Btn><Btn variant="ghost" className="text-warn-600" onClick={doSuspend} disabled={suspending}>{suspending ? "Menyimpan…" : "Terapkan Suspend"}</Btn></>}>
+        <div className="space-y-4">
+          <Card className="!p-3 bg-warn-50 border-warn-200">
+            <div className="flex items-start gap-2.5 text-sm text-warn-700"><Icon name="warning" className="w-5 h-5 shrink-0 mt-0.5" /><span>Coach tetap bisa login tapi tidak bisa melakukan aktivitas (Clock In, input rapor, dll) selama masa suspend.</span></div>
+          </Card>
+          <Field label="Alasan suspend" required>
+            <Textarea rows={2} value={suspendForm.reason} onChange={e => setSuspendForm(f => ({ ...f, reason: e.target.value }))} placeholder="Mis. Pelanggaran prosedur kehadiran." />
+          </Field>
+          <Field label="Suspend berakhir" required hint="Coach otomatis aktif kembali setelah tanggal ini">
+            <Input type="date" value={suspendForm.until} onChange={e => setSuspendForm(f => ({ ...f, until: e.target.value }))} min={new Date().toISOString().slice(0, 10)} />
+          </Field>
+        </div>
+      </Modal>
     </div>
   );
 }
 
-// ── Class Activity (static calendar — no DB needed) ─────────────────────────
+// ── Class Activity ──────────────────────────────────────────────────────────────
 
-const CAL_EVENTS = [
-  { day: 0, t: "15", h: 1,   name: "Tadpole",  coach: "Bagas P",  color: "bg-wave-100 text-wave-700 ring-wave-500/30" },
-  { day: 0, t: "17", h: 1,   name: "Orca",     coach: "Linda H",  color: "bg-ocean-100 text-ocean-700 ring-ocean-500/30" },
-  { day: 0, t: "18", h: 1.5, name: "Dolphin",  coach: "Dimas W",  color: "bg-ocean-100 text-ocean-700 ring-ocean-500/30" },
-  { day: 1, t: "16", h: 1,   name: "Shark",    coach: "Bagas P",  color: "bg-wave-100 text-wave-700 ring-wave-500/30" },
-  { day: 1, t: "19", h: 1,   name: "Adult",    coach: "Rizki A",  color: "bg-ocean-50 text-ocean-700 ring-ocean-500/30" },
-  { day: 2, t: "15", h: 1,   name: "Tadpole",  coach: "Yoga P",   color: "bg-sub-50 text-sub-600 ring-sub-500/30", sub: true },
-  { day: 2, t: "17", h: 1,   name: "Orca",     coach: "Linda H",  color: "bg-ocean-100 text-ocean-700 ring-ocean-500/30" },
-  { day: 3, t: "16", h: 1,   name: "Shark",    coach: "Bagas P",  color: "bg-wave-100 text-wave-700 ring-wave-500/30" },
-  { day: 3, t: "19", h: 1,   name: "Adult",    coach: "Rizki A",  color: "bg-ocean-50 text-ocean-700 ring-ocean-500/30" },
-  { day: 4, t: "17", h: 1,   name: "Orca",     coach: "Linda H",  color: "bg-archive-50 text-archive-600 ring-archive-500/40", holiday: true },
-  { day: 5, t: "08", h: 1.5, name: "Junior",   coach: "Linda H",  color: "bg-ocean-100 text-ocean-700 ring-ocean-500/30" },
-];
-const CAL_HOURS = ["07","08","09","10","14","15","16","17","18","19"];
+const CAL_HOURS = ["07","08","09","10","11","14","15","16","17","18","19","20"];
 const DAY_NAMES = ["Senin","Selasa","Rabu","Kamis","Jumat","Sabtu","Minggu"];
+const DAY_IDX: Record<string, number> = { Senin: 0, Selasa: 1, Rabu: 2, Kamis: 3, Jumat: 4, Sabtu: 5, Minggu: 6 };
 
-function AdminClassActivity() {
+interface CalEvent {
+  classId: string; name: string; coach: string; hour: string;
+  days: number[]; isSub?: boolean;
+}
+
+function getWeekDates(offset = 0) {
+  const now = new Date();
+  // Get Monday of current week
+  const mon = new Date(now);
+  mon.setDate(now.getDate() - ((now.getDay() + 6) % 7) + offset * 7);
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(mon);
+    d.setDate(mon.getDate() + i);
+    return d;
+  });
+}
+
+function AdminClassActivity({ branchId }: { branchId: string }) {
+  const supabase = createClient();
+  const [events, setEvents] = useState<CalEvent[]>([]);
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [loading, setLoading] = useState(true);
+
+  const weekDates = getWeekDates(weekOffset);
+
+  useEffect(() => {
+    if (!branchId) return;
+    setLoading(true);
+
+    Promise.all([
+      supabase.from("classes")
+        .select("id, name, schedule_days, time_start, class_coaches(profile:profiles(full_name))")
+        .eq("branch_id", branchId).eq("status", "active"),
+      supabase.from("coach_leaves")
+        .select("id, date_from, date_to, substitute_id, substitute:profiles!coach_leaves_substitute_id_fkey(full_name), coach_leave_classes(class_id)")
+        .eq("status", "approved")
+        .lte("date_from", weekDates[6].toISOString().slice(0, 10))
+        .gte("date_to", weekDates[0].toISOString().slice(0, 10)),
+    ]).then(([{ data: cls }, { data: leaves }]) => {
+      if (!cls) { setLoading(false); return; }
+
+      // Build substitute map: classId → substituteName for this week
+      const subMap: Record<string, string> = {};
+      (leaves ?? []).forEach((l) => {
+        const sub = (l as unknown as { substitute: { full_name: string } | null }).substitute;
+        if (sub) {
+          (l.coach_leave_classes ?? []).forEach((lc) => {
+            subMap[(lc as unknown as { class_id: string }).class_id] = sub.full_name;
+          });
+        }
+      });
+
+      const evts: CalEvent[] = (cls as unknown as {
+        id: string; name: string; schedule_days: string[];
+        time_start: string;
+        class_coaches: { profile: { full_name: string } | null }[];
+      }[]).map((c) => {
+        const coach = c.class_coaches?.[0]?.profile?.full_name ?? "—";
+        const subName = subMap[c.id];
+        return {
+          classId: c.id,
+          name: c.name,
+          coach: subName ? `${subName.split(" ")[0]}` : (coach === "—" ? "—" : `${coach.split(" ")[0]}`),
+          hour: c.time_start?.slice(0, 2) ?? "00",
+          days: (c.schedule_days ?? []).map((d: string) => DAY_IDX[d] ?? -1).filter((d: number) => d >= 0),
+          isSub: !!subName,
+        };
+      });
+      setEvents(evts);
+      setLoading(false);
+    });
+  }, [branchId, weekOffset]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const weekLabel = `${weekDates[0].getDate()} ${weekDates[0].toLocaleDateString("id-ID", { month: "short" })} – ${weekDates[6].getDate()} ${weekDates[6].toLocaleDateString("id-ID", { month: "short", year: "numeric" })}`;
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div><h2 className="font-display font-bold text-2xl">Class Activity</h2><p className="text-ink-mute text-sm mt-0.5">Kalender semua kelas. Klik untuk detail · tandai libur · assign pengganti.</p></div>
+        <div><h2 className="font-display font-bold text-2xl">Class Activity</h2><p className="text-ink-mute text-sm mt-0.5">Kalender semua kelas aktif minggu ini.</p></div>
         <div className="flex gap-2 items-center">
-          <div className="font-display font-bold text-ink px-2">26 Mei – 1 Juni 2026</div>
-          <Btn variant="primary" size="sm" icon="plus">Tandai libur</Btn>
+          <button onClick={() => setWeekOffset(w => w - 1)} className="w-8 h-8 rounded-lg border border-line hover:bg-paper-tint flex items-center justify-center text-ink-mute"><Icon name="chevron-left" className="w-4 h-4" /></button>
+          <div className="font-display font-bold text-ink px-2 text-sm">{weekLabel}</div>
+          <button onClick={() => setWeekOffset(w => w + 1)} className="w-8 h-8 rounded-lg border border-line hover:bg-paper-tint flex items-center justify-center text-ink-mute"><Icon name="chevron-right" className="w-4 h-4" /></button>
         </div>
       </div>
-      <Card padded={false} className="overflow-hidden">
-        <div className="overflow-x-auto">
-          <div className="grid min-w-[700px]" style={{ gridTemplateColumns: "60px repeat(7, 1fr)" }}>
-            <div className="border-r border-b border-line p-3" />
-            {DAY_NAMES.map((d, i) => (
-              <div key={d} className={`border-b border-line p-3 text-center ${i < 6 ? "border-r" : ""}`}>
-                <div className="text-[10px] font-bold text-ink-faint uppercase tracking-widest">{d.slice(0, 3)}</div>
-                <div className="font-display font-bold text-ink text-lg">{26 + i}</div>
-              </div>
-            ))}
-            {CAL_HOURS.map((h) => (
-              <React.Fragment key={h}>
-                <div className="border-r border-b border-line p-2 text-[10px] font-bold text-ink-faint text-right pr-3">{h}:00</div>
-                {Array.from({ length: 7 }).map((_, d) => {
-                  const ev = CAL_EVENTS.find((e) => e.day === d && e.t === h);
-                  return (
-                    <div key={d} className={`relative h-16 border-b border-line ${d < 6 ? "border-r" : ""} hover:bg-paper-tint`}>
-                      {ev && (
-                        <div className={`absolute inset-x-1 top-1 rounded-lg ring-1 ring-inset p-2 ${ev.color}`} style={{ height: `${ev.h * 64 - 8}px`, zIndex: 5 }}>
-                          <div className="font-bold text-[11px] truncate flex items-center gap-1">
-                            {ev.holiday && <Icon name="warning" className="w-3 h-3" />}
-                            {ev.sub && <Icon name="refresh" className="w-3 h-3" />}
-                            {ev.name}
+      {loading ? <div className="p-10 text-center text-ink-mute">Memuat kalender…</div> : (
+        <Card padded={false} className="overflow-hidden">
+          <div className="overflow-x-auto">
+            <div className="grid min-w-[700px]" style={{ gridTemplateColumns: "60px repeat(7, 1fr)" }}>
+              <div className="border-r border-b border-line p-3" />
+              {DAY_NAMES.map((d, i) => (
+                <div key={d} className={`border-b border-line p-3 text-center ${i < 6 ? "border-r" : ""}`}>
+                  <div className="text-[10px] font-bold text-ink-faint uppercase tracking-widest">{d.slice(0, 3)}</div>
+                  <div className="font-display font-bold text-ink text-lg">{weekDates[i].getDate()}</div>
+                </div>
+              ))}
+              {CAL_HOURS.map((h) => (
+                <React.Fragment key={h}>
+                  <div className="border-r border-b border-line p-2 text-[10px] font-bold text-ink-faint text-right pr-3">{h}:00</div>
+                  {Array.from({ length: 7 }).map((_, d) => {
+                    const ev = events.find((e) => e.days.includes(d) && e.hour === h);
+                    return (
+                      <div key={d} className={`relative h-16 border-b border-line ${d < 6 ? "border-r" : ""} hover:bg-paper-tint`}>
+                        {ev && (
+                          <div className={`absolute inset-x-1 top-1 rounded-lg ring-1 ring-inset p-2 ${ev.isSub ? "bg-sub-50 text-sub-700 ring-sub-500/30" : "bg-ocean-100 text-ocean-700 ring-ocean-500/30"}`} style={{ height: "56px", zIndex: 5 }}>
+                            <div className="font-bold text-[11px] truncate flex items-center gap-1">
+                              {ev.isSub && <Icon name="refresh" className="w-3 h-3" />}
+                              {ev.name}
+                            </div>
+                            <div className="text-[10px] opacity-80 truncate">{ev.isSub ? `Pengganti: ${ev.coach}` : ev.coach}</div>
                           </div>
-                          <div className="text-[10px] opacity-80 truncate">{ev.sub ? `Pengganti: ${ev.coach}` : ev.holiday ? "Libur" : ev.coach}</div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </React.Fragment>
-            ))}
+                        )}
+                      </div>
+                    );
+                  })}
+                </React.Fragment>
+              ))}
+            </div>
           </div>
-        </div>
-      </Card>
+        </Card>
+      )}
     </div>
   );
 }
@@ -943,14 +1141,17 @@ function AdminIzin({ branchId }: { branchId: string }) {
   const [tab, setTab] = useState("coach");
   const [leaves, setLeaves] = useState<LeaveRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [approveTarget, setApproveTarget] = useState<LeaveRow | null>(null);
+  const [substituteId, setSubstituteId] = useState("");
+  const [approving, setApproving] = useState(false);
+  const [allCoaches, setAllCoaches] = useState<CoachProfile[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
-    // Neither coach_leaves nor member_leaves have branch_id — filter via related entity
     let data: Record<string, unknown>[] | null = null;
     if (tab === "coach") {
       const { data: d } = await supabase.from("coach_leaves")
-        .select("id, type, reason, date_from, date_to, status, coach:profiles(full_name, role, branch_id)")
+        .select("id, type, reason, date_from, date_to, status, substitute_id, substitute_profile:profiles!coach_leaves_substitute_id_fkey(full_name), coach:profiles!coach_leaves_coach_id_fkey(full_name, role, branch_id)")
         .order("created_at", { ascending: false });
       data = (d as Record<string, unknown>[] | null)?.filter(
         l => (l.coach as { branch_id?: string } | null)?.branch_id === branchId
@@ -972,13 +1173,35 @@ function AdminIzin({ branchId }: { branchId: string }) {
     setLoading(false);
   }, [branchId, tab, supabase]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+    supabase.from("profiles").select("id, full_name").eq("branch_id", branchId).eq("role", "coach").order("full_name")
+      .then(({ data }) => { if (data) setAllCoaches(data as unknown as CoachProfile[]); });
+  }, [load]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const decide = async (id: string, status: "approved" | "rejected") => {
+    if (status === "approved" && tab === "coach") {
+      // Open modal to optionally assign substitute
+      const leave = leaves.find(l => l.id === id);
+      if (leave) { setApproveTarget(leave); setSubstituteId(leave.substitute_profile?.full_name ? (allCoaches.find(c => c.full_name === leave.substitute_profile?.full_name)?.id ?? "") : ""); return; }
+    }
     const table = tab === "coach" ? "coach_leaves" : "member_leaves";
-    const { error } = await (supabase.from(table) as ReturnType<typeof supabase.from>).update({ status, reviewed_at: new Date().toISOString() }).eq("id", id);
+    const { error } = await supabase.from(table as "coach_leaves").update({ status, reviewed_at: new Date().toISOString() }).eq("id", id);
     if (error) return toast.error("Gagal update status", error.message);
     toast.success(status === "approved" ? "Izin disetujui" : "Izin ditolak");
+    load();
+  };
+
+  const confirmApprove = async () => {
+    if (!approveTarget) return;
+    setApproving(true);
+    const upd: Record<string, unknown> = { status: "approved", reviewed_at: new Date().toISOString() };
+    if (substituteId) upd.substitute_id = substituteId;
+    const { error } = await supabase.from("coach_leaves").update(upd).eq("id", approveTarget.id);
+    setApproving(false);
+    if (error) return toast.error("Gagal menyetujui izin", error.message);
+    toast.success("Izin disetujui" + (substituteId ? " & pengganti ditetapkan" : ""));
+    setApproveTarget(null);
     load();
   };
 
@@ -1000,7 +1223,7 @@ function AdminIzin({ branchId }: { branchId: string }) {
             <thead><tr className="text-[11px] uppercase tracking-widest text-ink-faint font-bold border-b border-line">
               <th className="text-left py-3 px-5 font-bold">Nama</th>
               <th className="text-left py-3 font-bold">Jenis</th><th className="text-left py-3 font-bold">Mulai</th>
-              <th className="text-left py-3 font-bold">Selesai</th><th className="text-left py-3 font-bold">Status</th><th className="px-5" />
+              <th className="text-left py-3 font-bold">Selesai</th><th className="text-left py-3 font-bold">Status</th><th className="text-left py-3 font-bold">Pengganti</th><th className="px-5" />
             </tr></thead>
             <tbody className="divide-y divide-line">
               {leaves.map((l) => (
@@ -1010,6 +1233,7 @@ function AdminIzin({ branchId }: { branchId: string }) {
                   <td className="text-ink-soft">{fmtDate(l.date_from)}</td>
                   <td className="text-ink-soft">{fmtDate(l.date_to)}</td>
                   <td><Status kind={l.status as "pending" | "approved" | "rejected"}>{l.status === "pending" ? "Menunggu" : l.status === "approved" ? "Disetujui" : "Ditolak"}</Status></td>
+                  <td className="text-ink-soft text-xs">{l.substitute_profile?.full_name ?? "—"}</td>
                   <td className="px-5">{l.status === "pending" && (
                     <div className="flex gap-1 justify-end">
                       <Btn variant="ghost" size="sm" className="text-danger-500" onClick={() => decide(l.id, "rejected")}>Tolak</Btn>
@@ -1018,11 +1242,31 @@ function AdminIzin({ branchId }: { branchId: string }) {
                   )}</td>
                 </tr>
               ))}
-              {leaves.length === 0 && <tr><td colSpan={6} className="py-10 text-center text-ink-mute">Tidak ada pengajuan izin</td></tr>}
+              {leaves.length === 0 && <tr><td colSpan={7} className="py-10 text-center text-ink-mute">Tidak ada pengajuan izin</td></tr>}
             </tbody>
           </table>
         )}
       </Card>
+
+      {/* Approve coach leave + assign substitute modal */}
+      <Modal open={!!approveTarget} onClose={() => setApproveTarget(null)} title="Setujui Izin Coach" size="sm"
+        footer={<><Btn variant="ghost" onClick={() => setApproveTarget(null)}>Batal</Btn><Btn variant="primary" icon="check" onClick={confirmApprove} disabled={approving}>{approving ? "Menyetujui…" : "Setujui Izin"}</Btn></>}>
+        <div className="space-y-4">
+          <Card className="!p-3 bg-paper-tint">
+            <div className="text-sm font-semibold text-ink">{approveTarget?.profile?.full_name}</div>
+            <div className="text-xs text-ink-mute mt-0.5">{fmtDate(approveTarget?.date_from ?? "")} – {fmtDate(approveTarget?.date_to ?? "")} · {approveTarget?.type}</div>
+            {approveTarget?.reason && <div className="text-xs text-ink-soft mt-1">{approveTarget.reason}</div>}
+          </Card>
+          <Field label="Assign Coach Pengganti" hint="Opsional. Pengganti muncul di coach page mereka dengan label 'Pengganti' selama tanggal izin.">
+            <Select value={substituteId} onChange={e => setSubstituteId(e.target.value)}>
+              <option value="">— tanpa pengganti —</option>
+              {allCoaches
+                .filter(c => c.full_name !== approveTarget?.profile?.full_name)
+                .map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
+            </Select>
+          </Field>
+        </div>
+      </Modal>
     </div>
   );
 }
@@ -1032,9 +1276,12 @@ function AdminIzin({ branchId }: { branchId: string }) {
 function AdminPembayaran({ branchId }: { branchId: string }) {
   const supabase = createClient();
   const toast = useToast();
+  const confirm = useConfirm();
   const [bills, setBills] = useState<BillRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [verifying, setVerifying] = useState<string | null>(null);
+  const [generating, setGenerating] = useState(false);
+  const [genMonth, setGenMonth] = useState(() => new Date().toISOString().slice(0, 7));
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1060,10 +1307,77 @@ function AdminPembayaran({ branchId }: { branchId: string }) {
     toast.success("Pembayaran terverifikasi");
   };
 
+  // Format "2026-05" → "Mei 2026"
+  const fmtMonth = (ym: string) => {
+    const [y, m] = ym.split("-");
+    const d = new Date(Number(y), Number(m) - 1, 1);
+    return d.toLocaleDateString("id-ID", { month: "long", year: "numeric" });
+  };
+
+  const generateTagihan = async () => {
+    const label = fmtMonth(genMonth);
+    const yes = await confirm(`Generate tagihan bulanan untuk periode "${label}"? Member yang sudah memiliki tagihan bulan ini tidak akan di-generate ulang.`);
+    if (!yes) return;
+
+    setGenerating(true);
+    try {
+      // 1. Get all active reguler members with their class price
+      const { data: members, error: mErr } = await supabase
+        .from("members")
+        .select("id, member_classes(class:classes(id, price_monthly))")
+        .eq("branch_id", branchId)
+        .eq("status", "active")
+        .eq("type", "reguler");
+
+      if (mErr || !members) { toast.error("Gagal memuat member", mErr?.message); setGenerating(false); return; }
+
+      // 2. Get existing bills for this period
+      const { data: existing } = await supabase
+        .from("bills").select("member_id").eq("branch_id", branchId).eq("period_label", label);
+      const existingIds = new Set((existing ?? []).map(b => b.member_id));
+
+      // 3. Build insert rows — skip members who already have a bill this period
+      const rows: { member_id: string; branch_id: string; class_id: string | null; type: string; period_label: string; amount: number; discount: number; total: number; status: string }[] = [];
+      for (const m of members as unknown as { id: string; member_classes: { class: { id: string; price_monthly: number } | null }[] }[]) {
+        if (existingIds.has(m.id)) continue;
+        const cls = m.member_classes?.[0]?.class;
+        const amount = cls?.price_monthly ?? 0;
+        rows.push({
+          member_id: m.id,
+          branch_id: branchId,
+          class_id: cls?.id ?? null,
+          type: "monthly",
+          period_label: label,
+          amount,
+          discount: 0,
+          total: amount,
+          status: "unpaid",
+        });
+      }
+
+      if (rows.length === 0) {
+        toast.success("Semua member reguler sudah memiliki tagihan untuk periode ini");
+        setGenerating(false);
+        return;
+      }
+
+      const { error } = await supabase.from("bills").insert(rows);
+      if (error) { toast.error("Gagal generate tagihan", error.message); setGenerating(false); return; }
+      toast.success(`${rows.length} tagihan berhasil digenerate`, `Periode ${label}`);
+      load();
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <div><h2 className="font-display font-bold text-2xl">Pembayaran</h2><p className="text-ink-mute text-sm mt-0.5">Verifikasi pembayaran masuk.</p></div>
+        <div><h2 className="font-display font-bold text-2xl">Pembayaran</h2><p className="text-ink-mute text-sm mt-0.5">Verifikasi pembayaran masuk & generate tagihan bulanan.</p></div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Input type="month" value={genMonth} onChange={e => setGenMonth(e.target.value)} className="font-mono text-sm w-40" />
+          <Btn variant="primary" icon="invoice" onClick={generateTagihan} disabled={generating}>{generating ? "Generating…" : "Generate Tagihan"}</Btn>
+        </div>
       </div>
       <div className="grid sm:grid-cols-4 gap-4">
         <Stat label="Tagihan bulan ini"  value={bills.length} icon="invoice" tone="ocean" />
@@ -1118,7 +1432,7 @@ function AdminApprovement({ branchId }: { branchId: string }) {
     await Promise.all([
       supabase.from("registrations").select("id, full_name, birth_date, gender, phone, phone_owner, parent_name, status, created_at").eq("branch_id", branchId).eq("status", "pending").order("created_at")
         .then(({ data }) => { if (data) setRegistrations(data as RegistrationRow[]); }),
-      supabase.from("certifications").select("id, title, issuer, valid_from, valid_until, photo_url, status, profile:profiles(full_name)").eq("status", "pending")
+      supabase.from("certifications").select("id, name, title, issuer, valid_from, valid_until, photo_url, status, profile:profiles(full_name)").eq("status", "pending")
         .then(({ data }) => { if (data) setCerts(data as unknown as CertRow[]); }),
     ]);
     setLoading(false);
@@ -1171,7 +1485,7 @@ function AdminApprovement({ branchId }: { branchId: string }) {
             <div className="space-y-3">
               {certs.map((c) => (
                 <div key={c.id} className="p-3 rounded-xl border border-line">
-                  <div className="flex items-center gap-3"><Avatar name={c.profile?.full_name ?? "?"} size={42} /><div className="flex-1 min-w-0"><div className="font-semibold text-ink truncate">{c.profile?.full_name}</div><div className="text-xs text-ink-mute">{c.title} — {c.issuer}</div></div></div>
+                  <div className="flex items-center gap-3"><Avatar name={c.profile?.full_name ?? "?"} size={42} /><div className="flex-1 min-w-0"><div className="font-semibold text-ink truncate">{c.profile?.full_name}</div><div className="text-xs text-ink-mute">{c.title ?? c.name} — {c.issuer ?? "—"}</div></div></div>
                   {c.photo_url && <a href={c.photo_url} target="_blank" rel="noreferrer" className="block mt-3"><img src={c.photo_url} alt="cert" className="w-full rounded-lg object-cover max-h-48" /></a>}
                   <div className="mt-3 flex gap-1.5">
                     <Btn variant="ghost" size="sm" className="text-danger-500" onClick={() => reviewCert(c.id, "rejected")}>Tolak</Btn>
@@ -1280,10 +1594,10 @@ function AdminSchoolPanel({ branchId }: { branchId: string }) {
   const [loading, setLoading] = useState(true);
   const [openAdd, setOpenAdd] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ name: "", email: "", phone: "", contact_person: "" });
+  const [form, setForm] = useState({ name: "", email: "" });
 
   const load = useCallback(async () => {
-    const { data } = await supabase.from("schools").select("id, name, email, phone, contact_person, status").eq("branch_id", branchId).order("name");
+    const { data } = await supabase.from("schools").select("id, name, email, profile_id").eq("branch_id", branchId).order("name");
     if (data) setSchools(data as School[]);
     setLoading(false);
   }, [branchId, supabase]);
@@ -1293,7 +1607,7 @@ function AdminSchoolPanel({ branchId }: { branchId: string }) {
   const create = async () => {
     if (!form.name) return toast.error("Nama sekolah wajib diisi");
     setSaving(true);
-    const { error } = await supabase.from("schools").insert({ branch_id: branchId, name: form.name, email: form.email || null, phone: form.phone || null, contact_person: form.contact_person || null, status: "active" });
+    const { error } = await supabase.from("schools").insert({ branch_id: branchId, name: form.name, email: form.email || null });
     setSaving(false);
     if (error) return toast.error("Gagal menambah sekolah", error.message);
     toast.success("Sekolah ditambahkan");
@@ -1305,7 +1619,7 @@ function AdminSchoolPanel({ branchId }: { branchId: string }) {
     <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div><h2 className="font-display font-bold text-2xl">School Panel (Afiliasi)</h2><p className="text-ink-mute text-sm mt-0.5">Kelola sekolah afiliasi & rekap biaya yang ditanggung.</p></div>
-        <Btn variant="primary" icon="plus" onClick={() => { setForm({ name: "", email: "", phone: "", contact_person: "" }); setOpenAdd(true); }}>Tambah Sekolah</Btn>
+        <Btn variant="primary" icon="plus" onClick={() => { setForm({ name: "", email: "" }); setOpenAdd(true); }}>Tambah Sekolah</Btn>
       </div>
       {loading ? <div className="text-ink-mute text-sm">Memuat…</div> : (
         <div className="grid lg:grid-cols-2 gap-5">
@@ -1315,9 +1629,8 @@ function AdminSchoolPanel({ branchId }: { branchId: string }) {
                 <span className="w-14 h-14 rounded-2xl bg-ocean-700 text-white flex items-center justify-center"><Icon name="school" className="w-7 h-7" /></span>
                 <div className="flex-1 min-w-0">
                   <div className="font-display font-bold text-ink">{s.name}</div>
-                  <div className="text-xs text-ink-mute">{s.email ?? s.phone ?? "—"}</div>
-                  {s.contact_person && <div className="text-xs text-ink-soft mt-1">Kontak: {s.contact_person}</div>}
-                  <div className="mt-4 flex gap-2"><Status kind={s.status === "active" ? "active" : "inactive"}>{s.status === "active" ? "Aktif" : "Nonaktif"}</Status></div>
+                  <div className="text-xs text-ink-mute">{s.email ?? "—"}</div>
+                  <div className="mt-4 flex gap-2"><Status kind="active">Aktif</Status></div>
                 </div>
               </div>
             </Card>
@@ -1330,8 +1643,6 @@ function AdminSchoolPanel({ branchId }: { branchId: string }) {
         <div className="space-y-4">
           <Field label="Nama sekolah" required><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></Field>
           <Field label="Email sekolah"><Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} /></Field>
-          <Field label="No HP sekolah"><Input type="tel" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} /></Field>
-          <Field label="Nama kontak"><Input value={form.contact_person} onChange={e => setForm(f => ({ ...f, contact_person: e.target.value }))} /></Field>
         </div>
       </Modal>
     </div>
@@ -1410,7 +1721,7 @@ export default function AdminPage() {
 
   const pages: Record<string, React.ReactNode> = {
     dashboard: <AdminDashboard branchId={branchId} />,
-    activity:  <AdminClassActivity />,
+    activity:  <AdminClassActivity branchId={branchId} />,
     classes:   <AdminClass branchId={branchId} />,
     members:   <AdminMember branchId={branchId} />,
     coaches:   <AdminCoach branchId={branchId} />,

@@ -137,10 +137,11 @@ function MemberHome({
         }
       });
 
-    // Latest announcement
+    // Latest announcement (active only)
     supabase.from("announcements")
       .select("title, body")
       .eq("branch_id", branchId)
+      .eq("active", true)
       .order("created_at", { ascending: false })
       .limit(1)
       .single()
@@ -572,9 +573,9 @@ function MemberLeave({ memberId }: { memberId: string }) {
       member_id: memberId,
       date_from: form.start_date,
       date_to: form.end_date || form.start_date,
-      type: form.type,
+      type: form.type as "izin" | "sakit" | "ujian" | "lainnya",
       reason: form.notes || null,
-      status: "pending",
+      status: "pending" as const,
     }).select("id").single();
     // Link to classes via member_leave_classes
     if (!error && newLeave && form.class_id) {
@@ -621,7 +622,7 @@ function MemberLeave({ memberId }: { memberId: string }) {
       </Card>
 
       <Modal open={openForm} onClose={() => setOpenForm(false)} title="Ajukan Izin"
-        footer={<><Btn variant="ghost" onClick={() => setOpenForm(false)}>Batal</Btn><Btn variant="primary" loading={submitting} onClick={submit}>Submit</Btn></>}>
+        footer={<><Btn variant="ghost" onClick={() => setOpenForm(false)}>Batal</Btn><Btn variant="primary" disabled={submitting} onClick={submit}>Submit</Btn></>}>
         <div className="space-y-4">
           <Field label="Kelas" required>
             <Select value={form.class_id} onChange={(e) => setForm((f) => ({ ...f, class_id: e.target.value }))}>
@@ -670,7 +671,7 @@ function MemberRapor({ memberId, memberName }: { memberId: string; memberName: s
   const load = useCallback(async () => {
     if (!memberId) return;
     const { data } = await supabase.from("rapor_entries")
-      .select("id, scores, notes, coach_id, period_id, class_id, rapor_periods(label), classes(name), profiles(full_name)")
+      .select("id, scores, notes, coach_id, period_id, class_id, rapor_periods(label), classes(name), coach:profiles!rapor_entries_coach_id_fkey(full_name)")
       .eq("member_id", memberId)
       .order("created_at", { ascending: false });
     if (!data) return;
@@ -685,7 +686,7 @@ function MemberRapor({ memberId, memberName }: { memberId: string; memberName: s
     setEntries(data.map((e) => {
       const p = e.rapor_periods as unknown as { label: string } | null;
       const cls = e.classes as unknown as { name: string } | null;
-      const prof = e.profiles as unknown as { full_name: string } | null;
+      const prof = (e as unknown as { coach: { full_name: string } | null }).coach;
       const review = reviewMap.get(e.id);
       return {
         id: e.id,
@@ -807,7 +808,7 @@ function MemberRapor({ memberId, memberName }: { memberId: string; memberName: s
                 ))}
               </div>
               <Textarea rows={2} placeholder="Tulis review Anda (opsional)" value={reviewText} onChange={(e) => setReviewText(e.target.value)} />
-              <Btn variant="primary" size="sm" className="mt-3" loading={saving} onClick={saveReview}>Simpan review</Btn>
+              <Btn variant="primary" size="sm" className="mt-3" disabled={saving} onClick={saveReview}>Simpan review</Btn>
             </Card>
           </div>
         )}
@@ -928,7 +929,7 @@ function MemberProfile({ memberId, memberName }: { memberId: string; memberName:
           <Field label="No HP"><Input value={editPhone} onChange={(e) => setEditPhone(e.target.value)} /></Field>
           <Field label="Alamat"><Textarea rows={2} value={editAddress} onChange={(e) => setEditAddress(e.target.value)} /></Field>
           <Field label="Riwayat kesehatan / alergi"><Textarea rows={2} value={editHealth} onChange={(e) => setEditHealth(e.target.value)} /></Field>
-          <Btn variant="primary" loading={saving} onClick={saveProfile}>Simpan perubahan</Btn>
+          <Btn variant="primary" disabled={saving} onClick={saveProfile}>Simpan perubahan</Btn>
         </div>
         <div className="mt-4 pt-4 border-t border-line text-xs text-ink-mute flex items-start gap-2">
           <Icon name="info" className="w-4 h-4 mt-0.5 text-wave-600" />
@@ -942,7 +943,7 @@ function MemberProfile({ memberId, memberName }: { memberId: string; memberName:
           <Field label="Password baru"><Input type="password" value={newPwd} onChange={(e) => setNewPwd(e.target.value)} /></Field>
           <Field label="Konfirmasi password"><Input type="password" value={confirmPwd} onChange={(e) => setConfirmPwd(e.target.value)} /></Field>
           {pwdError && <p className="text-xs text-danger-600">{pwdError}</p>}
-          <Btn variant="primary" loading={pwdSaving} onClick={changePwd}>Simpan password baru</Btn>
+          <Btn variant="primary" disabled={pwdSaving} onClick={changePwd}>Simpan password baru</Btn>
         </div>
       </Card>
     </div>
@@ -971,11 +972,14 @@ export default function MemberPage() {
 
       // Load member record by profile_id (= auth uid)
       supabase.from("members")
-        .select("id, full_name")
+        .select("id, profile:profiles(full_name)")
         .eq("profile_id", u.id)
         .single()
         .then(({ data: m }) => {
-          if (m) { setMemberId(m.id); setMemberName(m.full_name); }
+          if (m) {
+            setMemberId(m.id);
+            setMemberName((m as unknown as { profile: { full_name: string } | null }).profile?.full_name ?? "");
+          }
         });
 
       // Load branch name

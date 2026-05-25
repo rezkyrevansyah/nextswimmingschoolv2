@@ -7,7 +7,8 @@ type IconName =
   | "settings" | "logout" | "menu" | "edit" | "trash" | "download" | "upload"
   | "eye" | "star" | "whatsapp" | "chat" | "school" | "book" | "flag"
   | "clipboard" | "sparkle" | "shield" | "target" | "sun" | "moon" | "info"
-  | "warning" | "filter" | "sort" | "close" | "refresh" | "copy" | "sendWA";
+  | "warning" | "filter" | "sort" | "close" | "refresh" | "copy" | "sendWA"
+  | "print" | "lock" | "archive" | "chevron-left" | "chevron-right";
 
 interface IconProps {
   name: IconName | string;
@@ -64,7 +65,12 @@ const PATHS: Record<string, React.ReactNode> = {
   close:     <path d="M6 6l12 12M18 6L6 18"/>,
   refresh:   <><path d="M21 12a9 9 0 11-3-6.7L21 8"/><path d="M21 3v5h-5"/></>,
   copy:      <><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 012-2h10"/></>,
-  sendWA:    <><path d="M3 11l18-8-8 18-2-8z"/></>,
+  sendWA:        <><path d="M3 11l18-8-8 18-2-8z"/></>,
+  print:         <><path d="M6 9V4h12v5"/><rect x="6" y="14" width="12" height="6" rx="1"/><path d="M6 14H4a2 2 0 01-2-2v-3a2 2 0 012-2h16a2 2 0 012 2v3a2 2 0 01-2 2h-2"/><circle cx="18" cy="11.5" r=".5" fill="currentColor"/></>,
+  lock:          <><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></>,
+  archive:       <><path d="M4 7h16M4 7l2 13h12l2-13"/><path d="M10 11h4"/></>,
+  "chevron-left": <path d="M15 6l-6 6 6 6"/>,
+  "chevron-right": <path d="M9 6l6 6-6 6"/>,
 };
 
 export default function Icon({ name, className = "w-5 h-5", strokeWidth = 1.75 }: IconProps) {

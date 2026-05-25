@@ -36,7 +36,7 @@ const NAV_ITEMS: MobileNavItem[] = [
 interface ClassRow {
   id: string; name: string; schedule_days: string[]; schedule_time: string;
   capacity: number; enrolled: number; goals: string | null;
-  member_classes?: { member: { id: string; full_name: string; birth_date: string | null; phone: string | null; parent_phone: string | null } | null }[];
+  member_classes?: { member: { id: string; profile: { full_name: string; birth_date: string | null; phone: string | null } | null } | null }[];
 }
 
 interface AttendanceRow {
@@ -51,7 +51,7 @@ interface MemberAttRow {
 }
 
 interface InvoiceSession {
-  id: string; session_date: string; rate_per_session: number; class?: { name: string } | null;
+  id: string; session_date: string; class_id: string; rate_per_session: number; class?: { name: string } | null;
 }
 
 interface PastInvoice {
@@ -69,6 +69,9 @@ interface ProfileData {
   phone: string | null; specialization: string | null;
   bank_name: string | null; bank_account: string | null; bank_holder: string | null;
   avatar_url: string | null;
+  is_profile_complete: boolean;
+  suspend_until: string | null;
+  suspend_reason: string | null;
   certifications?: { id: string; title: string; valid_from: string | null; valid_until: string | null; status: string }[];
 }
 
@@ -156,7 +159,6 @@ function ClockInFlow({ back, coachId, branchId, classes }: {
       session_date: today, clock_in_time: nowTime,
       status: "present", is_manual: false,
       selfie_url: selfieUrl,
-      lat: coords?.latitude ?? null, lng: coords?.longitude ?? null,
     });
 
     setSubmitting(false);
@@ -241,7 +243,7 @@ function ClockInFlow({ back, coachId, branchId, classes }: {
 function LeaveForm({ back, coachId, branchId, classes }: { back: () => void; coachId: string; branchId: string; classes: ClassRow[] }) {
   const toast = useToast();
   const supabase = createClient();
-  const [type, setType] = useState("Sakit");
+  const [type, setType] = useState("sakit");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [classId, setClassId] = useState("");
@@ -253,7 +255,7 @@ function LeaveForm({ back, coachId, branchId, classes }: { back: () => void; coa
     setSaving(true);
     const { data: leave, error } = await supabase.from("coach_leaves").insert({
       coach_id: coachId,
-      type, date_from: startDate, date_to: endDate, reason: reason || null, status: "pending",
+      type: type as "izin" | "sakit" | "lainnya", date_from: startDate, date_to: endDate, reason: reason || null, status: "pending" as const,
     }).select("id").single();
 
     if (error) { toast.error("Gagal mengajukan izin", error.message); setSaving(false); return; }
@@ -277,9 +279,9 @@ function LeaveForm({ back, coachId, branchId, classes }: { back: () => void; coa
         <div className="space-y-4">
           <Field label="Jenis izin" required>
             <div className="grid grid-cols-3 gap-2">
-              {["Izin", "Sakit", "Lainnya"].map((v) => (
-                <label key={v} className={`px-3 py-2 rounded-xl border text-sm font-semibold text-center cursor-pointer ${type === v ? "border-ocean-500 bg-ocean-50 text-ocean-700" : "border-line text-ink-soft hover:bg-paper-tint"}`}>
-                  <input type="radio" name="leave" className="sr-only" checked={type === v} onChange={() => setType(v)} />{v}
+              {[["izin", "Izin"], ["sakit", "Sakit"], ["lainnya", "Lainnya"]].map(([val, label]) => (
+                <label key={val} className={`px-3 py-2 rounded-xl border text-sm font-semibold text-center cursor-pointer ${type === val ? "border-ocean-500 bg-ocean-50 text-ocean-700" : "border-line text-ink-soft hover:bg-paper-tint"}`}>
+                  <input type="radio" name="leave" className="sr-only" checked={type === val} onChange={() => setType(val)} />{label}
                 </label>
               ))}
             </div>
@@ -312,15 +314,37 @@ function CoachHome({ setOverlay, coachId, branchId, profile, classes }: {
 }) {
   const supabase = createClient();
   const [monthStats, setMonthStats] = useState({ present: 0, leave: 0, sub: 0 });
+  const [subClasses, setSubClasses] = useState<{ classId: string; className: string; originalCoach: string }[]>([]);
 
   useEffect(() => {
     if (!coachId) return;
     const now = new Date();
+    const today = now.toISOString().slice(0, 10);
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
     const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split("T")[0];
+
     supabase.from("coach_attendances").select("id, status").eq("coach_id", coachId).gte("session_date", monthStart).lte("session_date", monthEnd)
       .then(({ data }) => {
-        if (data) setMonthStats({ present: data.filter(a => a.status === "present").length, leave: data.filter(a => a.status === "excused").length, sub: 0 });
+        if (data) setMonthStats({ present: data.filter(a => a.status === "present").length, leave: data.filter(a => a.status === "absent").length, sub: 0 });
+      });
+
+    // Load substitute assignments for today
+    supabase.from("coach_leaves")
+      .select("id, date_from, date_to, coach:profiles!coach_leaves_coach_id_fkey(full_name), coach_leave_classes(class:classes(id, name))")
+      .eq("substitute_id", coachId)
+      .eq("status", "approved")
+      .lte("date_from", today)
+      .gte("date_to", today)
+      .then(({ data }) => {
+        if (!data) return;
+        const subs: { classId: string; className: string; originalCoach: string }[] = [];
+        (data as unknown as { coach: { full_name: string } | null; coach_leave_classes: { class: { id: string; name: string } | null }[] }[]).forEach(l => {
+          l.coach_leave_classes.forEach(lc => {
+            if (lc.class) subs.push({ classId: lc.class.id, className: lc.class.name, originalCoach: l.coach?.full_name ?? "—" });
+          });
+        });
+        setSubClasses(subs);
+        setMonthStats(s => ({ ...s, sub: subs.length }));
       });
   }, [coachId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -334,7 +358,7 @@ function CoachHome({ setOverlay, coachId, branchId, profile, classes }: {
         <div className="relative">
           <div className="text-wave-200 text-[11px] uppercase tracking-widest font-bold">Selamat siang</div>
           <h2 className="font-display font-bold text-2xl mt-0.5">Halo, {profile?.full_name ?? "Coach"}</h2>
-          <p className="text-white/80 text-sm mt-1.5">Anda punya {todayClasses.length} kelas hari ini.</p>
+          <p className="text-white/80 text-sm mt-1.5">Anda punya {todayClasses.length + subClasses.length} kelas hari ini.</p>
           <div className="mt-4 grid grid-cols-3 gap-2">
             {[["Hadir bln ini", monthStats.present.toString()], ["Izin", monthStats.leave.toString()], ["Pengganti", monthStats.sub.toString()]].map(([l, v]) => (
               <div key={l} className="bg-white/10 backdrop-blur ring-1 ring-white/15 rounded-xl p-3">
@@ -348,7 +372,7 @@ function CoachHome({ setOverlay, coachId, branchId, profile, classes }: {
 
       <div>
         <SectionTitle sub={fmtDateLong(new Date())}>Kelas hari ini</SectionTitle>
-        {todayClasses.length === 0 ? (
+        {todayClasses.length === 0 && subClasses.length === 0 ? (
           <Card><p className="text-ink-mute text-sm">Tidak ada kelas hari ini.</p></Card>
         ) : (
           <div className="space-y-3">
@@ -361,6 +385,25 @@ function CoachHome({ setOverlay, coachId, branchId, profile, classes }: {
                   <div className="flex-1 min-w-0">
                     <div className="font-display font-bold text-ink">{c.name}</div>
                     <div className="text-xs text-ink-mute mt-0.5 font-mono">{c.schedule_time} · {c.enrolled}/{c.capacity} member</div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Btn variant="primary" size="sm" icon="camera" onClick={() => setOverlay("clockin")}>Clock-In</Btn>
+                    </div>
+                  </div>
+                </div>
+              </Card>
+            ))}
+            {subClasses.map((s) => (
+              <Card key={s.classId} className="border-sub-200 bg-sub-50/30">
+                <div className="flex items-start gap-3">
+                  <span className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 bg-sub-100 text-sub-600">
+                    <Icon name="refresh" className="w-6 h-6" />
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <div className="font-display font-bold text-ink">{s.className}</div>
+                      <Status kind="substitute">Pengganti</Status>
+                    </div>
+                    <div className="text-xs text-ink-mute mt-0.5">Menggantikan: {s.originalCoach}</div>
                     <div className="mt-3 flex flex-wrap gap-2">
                       <Btn variant="primary" size="sm" icon="camera" onClick={() => setOverlay("clockin")}>Clock-In</Btn>
                     </div>
@@ -439,7 +482,7 @@ function CoachAbsensi({ setOverlay, coachId, branchId, classes }: {
   const saveManualAtt = async () => {
     if (!manualClassId || !manualDate) return toast.error("Kelas dan tanggal wajib diisi");
     setSaving(true);
-    const rows = memberAtt.map(m => ({ class_id: manualClassId, member_id: m.member_id, session_date: manualDate, status: attStatus[m.member_id] ?? "hadir", method: "manual" as const }));
+    const rows = memberAtt.map(m => ({ class_id: manualClassId, member_id: m.member_id, session_date: manualDate, status: (attStatus[m.member_id] ?? "hadir") as "hadir" | "izin" | "sakit" | "tidak_hadir", method: "manual" as const }));
     const { error } = await supabase.from("member_attendances").upsert(rows, { onConflict: "class_id,member_id,session_date" });
     setSaving(false);
     if (error) return toast.error("Gagal menyimpan", error.message);
@@ -577,10 +620,10 @@ function CoachKelas({ classes }: { classes: ClassRow[] }) {
               <div className="grid sm:grid-cols-2 gap-2">
                 {(det.member_classes ?? []).map((mc, i) => mc.member && (
                   <div key={i} className="flex items-center gap-3 p-2.5 rounded-xl border border-line">
-                    <Avatar name={mc.member.full_name} size={34} />
-                    <div className="flex-1 min-w-0"><div className="font-semibold text-sm text-ink truncate">{mc.member.full_name}</div></div>
-                    {mc.member.phone && (
-                      <a href={waLink(`Halo ${mc.member.full_name}, saya Coach dari Next Swimming School.`)} target="_blank" rel="noreferrer">
+                    <Avatar name={mc.member.profile?.full_name ?? "?"} size={34} />
+                    <div className="flex-1 min-w-0"><div className="font-semibold text-sm text-ink truncate">{mc.member.profile?.full_name ?? "—"}</div></div>
+                    {mc.member.profile?.phone && (
+                      <a href={waLink(`Halo ${mc.member.profile.full_name}, saya Coach dari Next Swimming School.`)} target="_blank" rel="noreferrer">
                         <Icon name="whatsapp" className="w-4 h-4 text-[#25D366]" />
                       </a>
                     )}
@@ -618,21 +661,21 @@ function CoachInvoice({ coachId, branchId, profile }: { coachId: string; branchI
     const end = new Date(parseInt(y), parseInt(m), 0).toISOString().split("T")[0];
 
     const { data: att } = await supabase.from("coach_attendances")
-      .select("id, session_date, class:classes(name)")
+      .select("id, session_date, class_id, class:classes(id, name)")
       .eq("coach_id", coachId).eq("status", "present")
       .gte("session_date", start).lte("session_date", end)
       .is("invoice_id", null);
 
     if (att) {
       // Get rates for each class
-      const classIds = [...new Set(att.map((a: Record<string, unknown>) => (a.class as { id?: string } | null)?.id).filter(Boolean))];
+      const classIds = [...new Set(att.map((a: Record<string, unknown>) => a.class_id as string).filter(Boolean))];
       const { data: rates } = await supabase.from("coach_rates").select("class_id, rate_per_session").is("coach_id", null).in("class_id", classIds as string[]);
       const rateMap: Record<string, number> = {};
-      (rates ?? []).forEach((r: { class_id: string; rate_per_session: number }) => { rateMap[r.class_id] = r.rate_per_session; });
+      (rates ?? []).forEach((r: { class_id: string; rate_per_session: number | null }) => { if (r.rate_per_session != null) rateMap[r.class_id] = r.rate_per_session; });
 
       const sessionsWithRate = att.map((a: Record<string, unknown>) => {
         const cls = a.class as { id?: string; name?: string } | null;
-        return { id: a.id as string, session_date: a.session_date as string, rate_per_session: rateMap[cls?.id ?? ""] ?? 150000, class: cls ? { name: cls.name ?? "" } : null };
+        return { id: a.id as string, session_date: a.session_date as string, class_id: a.class_id as string, rate_per_session: rateMap[a.class_id as string] ?? 150000, class: cls ? { name: cls.name ?? "" } : null };
       });
       setSessions(sessionsWithRate);
       setSelected(new Set(sessionsWithRate.map((s: InvoiceSession) => s.id)));
@@ -666,7 +709,7 @@ function CoachInvoice({ coachId, branchId, profile }: { coachId: string; branchI
     // Link sessions to invoice
     const selectedSessions = sessions.filter(s => selected.has(s.id));
     await supabase.from("coach_invoice_items").insert(selectedSessions.map(s => ({
-      invoice_id: inv.id, attendance_id: s.id, session_date: s.session_date, rate: s.rate_per_session,
+      invoice_id: inv.id, attendance_id: s.id, class_id: s.class_id, rate: s.rate_per_session, session_count: 1,
     })));
     // Mark attendances as invoiced
     await supabase.from("coach_attendances").update({ invoice_id: inv.id }).in("id", [...selected]);
@@ -726,6 +769,34 @@ function CoachInvoice({ coachId, branchId, profile }: { coachId: string; branchI
                 <div className="flex-1 min-w-0"><div className="font-semibold text-ink text-sm font-mono">{iv.invoice_number}</div><div className="text-xs text-ink-mute">{iv.period_label}</div></div>
                 <div className="font-mono font-bold text-sm">{fmtIDR(iv.total_amount)}</div>
                 <Status kind={iv.status === "paid" ? "paid" : iv.status === "pending" ? "pending" : "unpaid"}>{iv.status === "paid" ? "Lunas" : "Pending"}</Status>
+                <button title="Cetak / Unduh PDF" onClick={() => {
+                  const w = window.open("", "_blank", "width=700,height=900");
+                  if (!w) return;
+                  w.document.write(`<!DOCTYPE html><html><head><title>${iv.invoice_number}</title>
+                    <style>body{font-family:sans-serif;padding:32px;color:#0f172a;max-width:600px;margin:auto}
+                    h1{font-size:22px;font-weight:700}
+                    .meta{color:#64748b;font-size:13px;margin-bottom:24px}
+                    .row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #e2e8f0;font-size:14px}
+                    .total{display:flex;justify-content:space-between;padding:12px 0;font-weight:700;font-size:16px;border-top:2px solid #0f172a;margin-top:8px}
+                    .status{display:inline-block;padding:2px 8px;border-radius:4px;font-size:12px;font-weight:700;background:${iv.status === "paid" ? "#dcfce7" : "#fef9c3"};color:${iv.status === "paid" ? "#166534" : "#854d0e"}}
+                    footer{margin-top:40px;border-top:1px solid #e2e8f0;padding-top:12px;font-size:11px;color:#94a3b8}
+                    </style></head><body>
+                    <h1>${iv.invoice_number}</h1>
+                    <div class="meta">
+                      Periode: ${iv.period_label}<br/>
+                      Coach: ${profile?.full_name ?? "—"}<br/>
+                      Rekening: ${profile?.bank_name ? `${profile.bank_name} - ${profile.bank_account} a/n ${profile.bank_holder}` : "—"}<br/>
+                      Status: <span class="status">${iv.status === "paid" ? "Lunas" : "Pending"}</span>
+                    </div>
+                    <div class="total"><span>Total</span><span>Rp ${iv.total_amount.toLocaleString("id-ID")}</span></div>
+                    <footer>Next Swimming School · ${new Date().toLocaleDateString("id-ID", { dateStyle: "long" })}</footer>
+                    </body></html>`);
+                  w.document.close();
+                  w.focus();
+                  w.print();
+                }} className="w-8 h-8 rounded-lg border border-line hover:bg-paper-tint flex items-center justify-center text-ink-mute hover:text-ocean-600">
+                  <Icon name="print" className="w-4 h-4" />
+                </button>
               </div>
             ))}
           </div>
@@ -797,8 +868,8 @@ function CoachRapor({ coachId, branchId }: { coachId: string; branchId: string }
               <Avatar name={e.member?.profile?.full_name ?? "?"} size={40} />
               <div className="flex-1 min-w-0"><div className="font-semibold text-ink truncate">{e.member?.profile?.full_name}</div><div className="text-xs text-ink-mute">{e.class?.name}</div></div>
               {e.locked ? <Status kind="approved">Selesai</Status> : <Status kind="pending">Belum</Status>}
-              <Btn variant={e.status === "filled" ? "ghost" : "primary"} size="sm" onClick={() => { setOpen(e); setScores({}); setNotes(""); }}>
-                {e.status === "filled" ? "Edit" : "Isi rapor"}
+              <Btn variant={e.locked ? "ghost" : "primary"} size="sm" onClick={() => { setOpen(e); setScores({}); setNotes(""); }}>
+                {e.locked ? "Edit" : "Isi rapor"}
               </Btn>
             </Card>
           ))}
@@ -958,14 +1029,14 @@ export default function CoachPage() {
 
   const loadProfile = useCallback(async (userId: string) => {
     const { data } = await supabase.from("profiles")
-      .select("id, full_name, email, phone, specialization, bank_name, bank_account, bank_holder, avatar_url, certifications(id, title, valid_from, valid_until, status)")
+      .select("id, full_name, email, phone, specialization, bank_name, bank_account, bank_holder, avatar_url, is_profile_complete, suspend_until, suspend_reason, certifications(id, title, valid_from, valid_until, status)")
       .eq("id", userId).single();
     if (data) setProfile(data as unknown as ProfileData);
     return data as ProfileData | null;
   }, [supabase]);
 
   const loadClasses = useCallback(async (profileId: string) => {
-    const { data } = await supabase.from("class_coaches").select("class:classes(id, name, schedule_days, schedule_time, capacity, enrolled, goals, member_classes(member:members(id, full_name, birth_date, phone, parent_phone)))").eq("coach_id", profileId);
+    const { data } = await supabase.from("class_coaches").select("class:classes(id, name, schedule_days, schedule_time, capacity, enrolled, goals, member_classes(member:members(id, profile:profiles(full_name, birth_date, phone))))").eq("coach_id", profileId);
     if (data) setClasses(data.map((d: Record<string, unknown>) => d.class as ClassRow).filter(Boolean));
   }, [supabase]);
 
@@ -981,6 +1052,9 @@ export default function CoachPage() {
   const coachId = profile?.id ?? "";
   const branchId = user?.user_metadata?.branch_id as string ?? "";
 
+  const isSuspended = profile?.suspend_until ? new Date(profile.suspend_until) >= new Date() : false;
+  const isProfileComplete = profile?.is_profile_complete ?? true; // default true until profile loaded
+
   const todayName = new Date().toLocaleDateString("id-ID", { weekday: "long" });
   const title = active === "home" ? (profile?.full_name ?? "Coach") : {
     absen: "Absensi", kelas: "Kelas", invoice: "Invoice", rapor: "Rapor", profile: "Profile"
@@ -991,16 +1065,55 @@ export default function CoachPage() {
     profile: "Data pribadi & sertifikasi"
   }[active] ?? "";
 
+  // Suspend/incomplete banners shown at the top of each tab's content
+  const SuspendBanner = isSuspended ? (
+    <Card className="bg-warn-50 border-warn-200 mb-4">
+      <div className="flex items-start gap-3">
+        <span className="w-10 h-10 rounded-xl bg-warn-100 text-warn-600 flex items-center justify-center shrink-0"><Icon name="warning" className="w-5 h-5" /></span>
+        <div>
+          <div className="font-display font-bold text-warn-700">Akun Anda sedang disuspend</div>
+          <p className="text-sm text-warn-600 mt-1">Alasan: {profile?.suspend_reason ?? "—"}</p>
+          <p className="text-xs text-warn-500 mt-0.5">Aktif kembali: {fmtDate(profile!.suspend_until!)}</p>
+        </div>
+      </div>
+    </Card>
+  ) : null;
+
+  const IncompleteBanner = (!isSuspended && profile && !isProfileComplete) ? (
+    <Card className="bg-ocean-50 border-ocean-200 mb-4">
+      <div className="flex items-start gap-3">
+        <span className="w-10 h-10 rounded-xl bg-ocean-100 text-ocean-600 flex items-center justify-center shrink-0"><Icon name="info" className="w-5 h-5" /></span>
+        <div>
+          <div className="font-display font-bold text-ocean-700">Lengkapi profil Anda</div>
+          <p className="text-sm text-ocean-600 mt-1">Fitur Clock In, Invoice, dan Rapor akan terkunci sampai profil Anda dinyatakan lengkap oleh admin.</p>
+        </div>
+      </div>
+    </Card>
+  ) : null;
+
+  // Lock active features when suspended or profile incomplete
+  const locked = isSuspended || !isProfileComplete;
+
+  const LockedNotice = ({ feature }: { feature: string }) => (
+    <Card className="!p-8 text-center border-dashed border-2">
+      <Icon name="lock" className="w-8 h-8 text-ink-faint mx-auto mb-3" />
+      <div className="font-display font-bold text-ink">{feature} tidak tersedia</div>
+      <p className="text-sm text-ink-mute mt-1">
+        {isSuspended ? "Akun Anda sedang disuspend." : "Lengkapi profil Anda terlebih dahulu."}
+      </p>
+    </Card>
+  );
+
   const content = overlay === "clockin"
-    ? <ClockInFlow back={() => setOverlay(null)} coachId={coachId} branchId={branchId} classes={classes} />
+    ? (locked ? <LockedNotice feature="Clock-In" /> : <ClockInFlow back={() => setOverlay(null)} coachId={coachId} branchId={branchId} classes={classes} />)
     : overlay === "leave"
     ? <LeaveForm back={() => setOverlay(null)} coachId={coachId} branchId={branchId} classes={classes} />
     : {
-        home:    <CoachHome setOverlay={setOverlay} coachId={coachId} branchId={branchId} profile={profile} classes={classes} />,
-        absen:   <CoachAbsensi setOverlay={setOverlay} coachId={coachId} branchId={branchId} classes={classes} />,
+        home:    <>{SuspendBanner}{IncompleteBanner}<CoachHome setOverlay={setOverlay} coachId={coachId} branchId={branchId} profile={profile} classes={classes} /></>,
+        absen:   <>{SuspendBanner}{IncompleteBanner}{locked ? <LockedNotice feature="Absensi" /> : <CoachAbsensi setOverlay={setOverlay} coachId={coachId} branchId={branchId} classes={classes} />}</>,
         kelas:   <CoachKelas classes={classes} />,
-        invoice: <CoachInvoice coachId={coachId} branchId={branchId} profile={profile} />,
-        rapor:   <CoachRapor coachId={coachId} branchId={branchId} />,
+        invoice: <>{SuspendBanner}{IncompleteBanner}{locked ? <LockedNotice feature="Invoice" /> : <CoachInvoice coachId={coachId} branchId={branchId} profile={profile} />}</>,
+        rapor:   <>{SuspendBanner}{IncompleteBanner}{locked ? <LockedNotice feature="Rapor" /> : <CoachRapor coachId={coachId} branchId={branchId} />}</>,
         profile: <CoachProfile profile={profile} onRefresh={() => user && loadProfile(user.id)} />,
       }[active];
 

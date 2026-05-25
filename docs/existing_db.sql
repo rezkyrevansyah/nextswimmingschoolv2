@@ -56,6 +56,9 @@ CREATE TABLE public.branches (
   wa_numbers ARRAY NOT NULL DEFAULT '{}'::text[],
   logo_url text,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
+  city text,
+  phone text,
+  status text NOT NULL DEFAULT 'active'::text CHECK (status = ANY (ARRAY['active'::text, 'archived'::text])),
   CONSTRAINT branches_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.certifications (
@@ -70,6 +73,8 @@ CREATE TABLE public.certifications (
   reviewed_by uuid,
   reviewed_at timestamp with time zone,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
+  title text,
+  issuer text,
   CONSTRAINT certifications_pkey PRIMARY KEY (id),
   CONSTRAINT certifications_coach_id_fkey FOREIGN KEY (coach_id) REFERENCES public.profiles(id),
   CONSTRAINT certifications_reviewed_by_fkey FOREIGN KEY (reviewed_by) REFERENCES public.profiles(id)
@@ -116,6 +121,9 @@ CREATE TABLE public.classes (
   status text NOT NULL DEFAULT 'active'::text CHECK (status = ANY (ARRAY['active'::text, 'archived'::text])),
   spreadsheet_filled boolean NOT NULL DEFAULT false,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
+  schedule_time text,
+  show_on_landing boolean,
+  goals text,
   CONSTRAINT classes_pkey PRIMARY KEY (id),
   CONSTRAINT classes_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branches(id)
 );
@@ -132,11 +140,16 @@ CREATE TABLE public.coach_attendances (
   manual_by uuid,
   manual_reason text,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
+  clock_in_time text,
+  status text NOT NULL DEFAULT 'present'::text CHECK (status = ANY (ARRAY['present'::text, 'absent'::text])),
+  manual_note text,
+  invoice_id uuid,
   CONSTRAINT coach_attendances_pkey PRIMARY KEY (id),
   CONSTRAINT coach_attendances_coach_id_fkey FOREIGN KEY (coach_id) REFERENCES public.profiles(id),
   CONSTRAINT coach_attendances_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.classes(id),
   CONSTRAINT coach_attendances_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branches(id),
-  CONSTRAINT coach_attendances_manual_by_fkey FOREIGN KEY (manual_by) REFERENCES public.profiles(id)
+  CONSTRAINT coach_attendances_manual_by_fkey FOREIGN KEY (manual_by) REFERENCES public.profiles(id),
+  CONSTRAINT coach_attendances_invoice_id_fkey FOREIGN KEY (invoice_id) REFERENCES public.coach_invoices(id)
 );
 CREATE TABLE public.coach_invoice_items (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -145,9 +158,11 @@ CREATE TABLE public.coach_invoice_items (
   session_count integer NOT NULL,
   rate integer NOT NULL,
   subtotal integer DEFAULT (session_count * rate),
+  attendance_id uuid,
   CONSTRAINT coach_invoice_items_pkey PRIMARY KEY (id),
   CONSTRAINT coach_invoice_items_invoice_id_fkey FOREIGN KEY (invoice_id) REFERENCES public.coach_invoices(id),
-  CONSTRAINT coach_invoice_items_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.classes(id)
+  CONSTRAINT coach_invoice_items_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.classes(id),
+  CONSTRAINT coach_invoice_items_attendance_id_fkey FOREIGN KEY (attendance_id) REFERENCES public.coach_attendances(id)
 );
 CREATE TABLE public.coach_invoices (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -158,6 +173,10 @@ CREATE TABLE public.coach_invoices (
   status USER-DEFINED NOT NULL DEFAULT 'pending'::invoice_status,
   pdf_url text,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
+  invoice_number text,
+  bank_info text,
+  submitted_at timestamp with time zone NOT NULL DEFAULT now(),
+  paid_at timestamp with time zone,
   CONSTRAINT coach_invoices_pkey PRIMARY KEY (id),
   CONSTRAINT coach_invoices_coach_id_fkey FOREIGN KEY (coach_id) REFERENCES public.profiles(id),
   CONSTRAINT coach_invoices_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branches(id)
@@ -195,6 +214,7 @@ CREATE TABLE public.coach_rates (
   rate integer NOT NULL,
   set_by uuid,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
+  rate_per_session integer,
   CONSTRAINT coach_rates_pkey PRIMARY KEY (id),
   CONSTRAINT coach_rates_coach_id_fkey FOREIGN KEY (coach_id) REFERENCES public.profiles(id),
   CONSTRAINT coach_rates_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.classes(id),
@@ -314,6 +334,7 @@ CREATE TABLE public.profiles (
   is_profile_complete boolean NOT NULL DEFAULT false,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  email text,
   CONSTRAINT profiles_pkey PRIMARY KEY (id),
   CONSTRAINT profiles_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id),
   CONSTRAINT profiles_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branches(id)

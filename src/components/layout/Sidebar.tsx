@@ -6,6 +6,7 @@ import Icon from "@/components/ui/Icon";
 export interface NavItem {
   id?: string;
   label?: string;
+  short?: string;
   icon?: string;
   badge?: number | string;
   section?: string;
