@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find \"d:\\\\projects\\\\nextswimmingschoolv2\\\\NSS\" -type f -exec wc -l {} +)",
+      "Bash(du -sh \"d:\\\\projects\\\\nextswimmingschoolv2\\\\NSS\"/*)"
+    ]
+  }
+}

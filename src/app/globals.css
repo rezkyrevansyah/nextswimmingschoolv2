@@ -1,26 +1,171 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
+/* ── Custom design tokens ── */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  /* Font families */
+  --font-display: "Plus Jakarta Sans", system-ui, sans-serif;
+  --font-sans: Inter, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  /* Ocean palette */
+  --color-ocean-50:  #EAF4FB;
+  --color-ocean-100: #D2E7F4;
+  --color-ocean-200: #A7CFE8;
+  --color-ocean-300: #6FAEDA;
+  --color-ocean-400: #3D8AC8;
+  --color-ocean-500: #1A6BB0;
+  --color-ocean-600: #0E4F8F;
+  --color-ocean-700: #0B3F73;
+  --color-ocean-800: #0A2F58;
+  --color-ocean-900: #082544;
+
+  /* Wave palette */
+  --color-wave-50:  #E5F7FE;
+  --color-wave-100: #C6EEFC;
+  --color-wave-200: #8DD9F8;
+  --color-wave-300: #54C2F3;
+  --color-wave-400: #2DB8EF;
+  --color-wave-500: #16B0E8;
+  --color-wave-600: #0A8CC0;
+  --color-wave-700: #076B95;
+  --color-wave-800: #075575;
+  --color-wave-900: #063F58;
+
+  /* Ink */
+  --color-ink:       #0A2540;
+  --color-ink-soft:  #1F3A5E;
+  --color-ink-mute:  #577496;
+  --color-ink-faint: #8AA3BD;
+
+  /* Paper */
+  --color-paper:      #FFFFFF;
+  --color-paper-tint: #F6FAFD;
+  --color-paper-deep: #EEF4FA;
+
+  /* Line */
+  --color-line:        #E1ECF4;
+  --color-line-strong: #C8DCEB;
+
+  /* Semantic */
+  --color-ok-50:  #ECFDF5;
+  --color-ok-500: #16A34A;
+  --color-ok-600: #15803D;
+
+  --color-warn-50:  #FFFBEB;
+  --color-warn-500: #F59E0B;
+  --color-warn-600: #B45309;
+
+  --color-danger-50:  #FEF2F2;
+  --color-danger-500: #DC2626;
+  --color-danger-600: #B91C1C;
+
+  --color-suspend-50:  #FFF5EB;
+  --color-suspend-500: #EA580C;
+  --color-suspend-600: #C2410C;
+
+  --color-archive-50:  #F1F5F9;
+  --color-archive-500: #64748B;
+  --color-archive-600: #475569;
+
+  --color-sub-50:  #EFF6FF;
+  --color-sub-500: #3B82F6;
+  --color-sub-600: #1D4ED8;
+
+  --color-manual-50:  #F5F3FF;
+  --color-manual-500: #7C3AED;
+  --color-manual-600: #6D28D9;
+
+  /* Shadows */
+  --shadow-card:  0 1px 0 rgba(10,37,64,.04), 0 4px 16px -8px rgba(10,37,64,.08);
+  --shadow-lift:  0 4px 14px -4px rgba(10,37,64,.12), 0 12px 32px -8px rgba(10,37,64,.10);
+  --shadow-float: 0 10px 30px -6px rgba(14,79,143,.25);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* ── Base styles ── */
+html {
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+  color: var(--color-ink);
+  background: var(--color-paper-tint);
+}
+
+h1, h2, h3, h4, h5, h6, .font-display {
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
+}
+
+/* ── Scrollbar ── */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { scrollbar-width: none; }
+
+/* ── Animated water gradient ── */
+@keyframes waveShift {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+.water-bg {
+  background: linear-gradient(120deg, #0E4F8F 0%, #16B0E8 50%, #0E4F8F 100%);
+  background-size: 200% 200%;
+  animation: waveShift 18s ease-in-out infinite;
+}
+
+/* ── Faint grid ── */
+.grid-faint {
+  background-image:
+    linear-gradient(to right,  rgba(14,79,143,.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(14,79,143,.04) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+/* ── Caustics overlay ── */
+.caustics::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: .18;
+  background-image:
+    radial-gradient(circle at 20% 30%, #fff 0 1px, transparent 2px),
+    radial-gradient(circle at 70% 60%, #fff 0 1px, transparent 2px),
+    radial-gradient(circle at 40% 80%, #fff 0 1px, transparent 2px);
+  background-size: 180px 180px, 240px 240px, 200px 200px;
+}
+
+/* ── Skeleton ── */
+@keyframes pulseFade {
+  0%, 100% { opacity: .6; }
+  50%       { opacity: .9; }
+}
+.skeleton { animation: pulseFade 1.4s ease-in-out infinite; }
+
+/* ── Entry animation ── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+.anim-in { animation: fadeUp .35s ease-out both; }
+
+/* ── Focus ring ── */
+*:focus-visible {
+  outline: 2px solid #16B0E8;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* ── Search clear button ── */
+input[type="search"]::-webkit-search-cancel-button { -webkit-appearance: none; }
+
+/* ── QR placeholder ── */
+.qr-cells {
+  background-image: conic-gradient(
+    from 0deg at 50% 50%,
+    #0A2540 25%, transparent 0 50%,
+    #0A2540 0 75%, transparent 0
+  );
+  background-size: 14px 14px;
 }
