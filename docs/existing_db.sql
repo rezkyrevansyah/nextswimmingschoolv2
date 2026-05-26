@@ -99,6 +99,33 @@ CREATE TABLE public.class_criteria (
   CONSTRAINT class_criteria_pkey PRIMARY KEY (id),
   CONSTRAINT class_criteria_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.classes(id)
 );
+CREATE TABLE public.class_holidays (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  class_id uuid NOT NULL,
+  branch_id uuid NOT NULL,
+  holiday_date date NOT NULL,
+  reason text,
+  created_by uuid,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT class_holidays_pkey PRIMARY KEY (id),
+  CONSTRAINT class_holidays_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.classes(id),
+  CONSTRAINT class_holidays_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branches(id),
+  CONSTRAINT class_holidays_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id)
+);
+CREATE TABLE public.class_programs (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  class_id uuid NOT NULL,
+  coach_id uuid NOT NULL,
+  month text NOT NULL,
+  week integer NOT NULL CHECK (week >= 1 AND week <= 5),
+  topic text NOT NULL,
+  description text,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT class_programs_pkey PRIMARY KEY (id),
+  CONSTRAINT class_programs_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.classes(id),
+  CONSTRAINT class_programs_coach_id_fkey FOREIGN KEY (coach_id) REFERENCES public.profiles(id)
+);
 CREATE TABLE public.classes (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
   branch_id uuid NOT NULL,

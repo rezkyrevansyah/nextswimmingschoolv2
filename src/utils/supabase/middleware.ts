@@ -51,5 +51,32 @@ export const updateSession = async (request: NextRequest) => {
     return NextResponse.redirect(url);
   }
 
+  // Block suspended members — redirect to /login with ?suspended=1
+  if (user && pathname === "/member") {
+    const { data: member } = await supabase
+      .from("members")
+      .select("status, suspend_until")
+      .eq("profile_id", user.id)
+      .single();
+
+    if (member) {
+      const isSuspended =
+        member.status === "suspended" ||
+        (member.suspend_until != null &&
+          new Date(member.suspend_until) >= new Date());
+      if (isSuspended) {
+        await supabase.auth.signOut();
+        const url = request.nextUrl.clone();
+        url.pathname = "/login";
+        url.searchParams.set("suspended", "1");
+        return NextResponse.redirect(url);
+      }
+    }
+  }
+
+  // Block suspended coaches — show banner inside coach page (don't log out)
+  // The coach page itself reads suspend_until and shows the banner.
+  // No redirect needed here — coach can still login but features are locked.
+
   return supabaseResponse;
 };

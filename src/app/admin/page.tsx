@@ -35,6 +35,7 @@ interface MemberRow {
   id: string; profile_id: string; type: string; status: string;
   date_start: string; qr_code: string | null;
   remaining_sessions: number | null; total_sessions: number | null;
+  suspend_until?: string | null; suspend_reason?: string | null;
   profile?: { full_name: string; birth_date: string | null; phone: string | null } | null;
   member_classes?: { class: { id: string; name: string } | null }[];
 }
@@ -46,7 +47,7 @@ interface CoachProfile {
 }
 
 interface AttendanceRow {
-  id: string; class_id: string; session_date: string; clock_in_time: string | null;
+  id: string; coach_id: string; class_id: string; session_date: string; clock_in_time: string | null;
   status: string; distance_meters: number | null; is_manual: boolean;
   manual_note: string | null;
   profile?: { full_name: string } | null;
@@ -108,6 +109,17 @@ function AdminDashboard({ branchId }: { branchId: string }) {
   const [stats, setStats] = useState({ members: 0, coaches: 0, classes: 0, pending: 0 });
   const [todayClasses, setTodayClasses] = useState<ClassRow[]>([]);
   const [recentAttendance, setRecentAttendance] = useState<AttendanceRow[]>([]);
+  const [classesWithoutCoach, setClassesWithoutCoach] = useState<{ id: string; name: string }[]>([]);
+
+  const loadAttendance = useCallback(async () => {
+    if (!branchId) return;
+    const today = new Date().toISOString().split("T")[0];
+    const { data } = await supabase.from("coach_attendances")
+      .select("id, session_date, clock_in_time, status, is_manual, profile:profiles!coach_attendances_coach_id_fkey(full_name), class:classes(name)")
+      .eq("branch_id", branchId).eq("session_date", today)
+      .order("clock_in_at", { ascending: false }).limit(8);
+    if (data) setRecentAttendance(data as unknown as AttendanceRow[]);
+  }, [branchId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!branchId) return;
@@ -116,7 +128,6 @@ function AdminDashboard({ branchId }: { branchId: string }) {
       supabase.from("members").select("id", { count: "exact" }).eq("branch_id", branchId).eq("status", "active"),
       supabase.from("profiles").select("id", { count: "exact" }).eq("branch_id", branchId).eq("role", "coach"),
       supabase.from("classes").select("id", { count: "exact" }).eq("branch_id", branchId).eq("status", "active"),
-      // Pending approvals: registrations + pending leaves
       supabase.from("registrations").select("id", { count: "exact" }).eq("branch_id", branchId).eq("status", "pending"),
     ]).then(([m, c, k, reg]) => {
       setStats({ members: m.count ?? 0, coaches: c.count ?? 0, classes: k.count ?? 0, pending: reg.count ?? 0 });
@@ -128,15 +139,55 @@ function AdminDashboard({ branchId }: { branchId: string }) {
       .eq("branch_id", branchId).eq("status", "active").contains("schedule_days", [today]).limit(6)
       .then(({ data }) => { if (data) setTodayClasses(data as unknown as ClassRow[]); });
 
-    // Recent attendance
-    supabase.from("coach_attendances")
-      .select("id, session_date, clock_in_time, status, is_manual, profile:profiles(full_name), class:classes(name)")
-      .eq("branch_id", branchId).order("created_at", { ascending: false }).limit(6)
-      .then(({ data }) => { if (data) setRecentAttendance(data as unknown as AttendanceRow[]); });
-  }, [branchId]); // eslint-disable-line react-hooks/exhaustive-deps
+    // Alert: classes with no active coach (all coaches suspended or no coach assigned)
+    supabase.from("classes").select("id, name, class_coaches(coach:profiles(id, suspend_until))")
+      .eq("branch_id", branchId).eq("status", "active")
+      .then(({ data }) => {
+        if (!data) return;
+        const now = new Date();
+        const noActiveCoach = data.filter((c) => {
+          const coaches = (c as unknown as { class_coaches: { coach: { id: string; suspend_until: string | null } | null }[] }).class_coaches ?? [];
+          if (coaches.length === 0) return true; // no coach assigned
+          return coaches.every((cc) => {
+            const suspUntil = cc.coach?.suspend_until;
+            return suspUntil != null && new Date(suspUntil) >= now;
+          });
+        });
+        setClassesWithoutCoach(noActiveCoach.map(c => ({ id: c.id, name: c.name })));
+      });
+
+    // Initial attendance load
+    loadAttendance();
+
+    // Realtime: new coach clock-ins → refresh attendance panel
+    const channel = supabase.channel(`live_att:${branchId}`)
+      .on("postgres_changes", {
+        event: "INSERT", schema: "public", table: "coach_attendances",
+        filter: `branch_id=eq.${branchId}`,
+      }, () => { loadAttendance(); })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [branchId, loadAttendance]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="space-y-6">
+      {classesWithoutCoach.length > 0 && (
+        <Card className="bg-danger-50 border-danger-300">
+          <div className="flex items-start gap-3">
+            <span className="w-10 h-10 rounded-xl bg-danger-100 text-danger-600 flex items-center justify-center shrink-0"><Icon name="warning" className="w-5 h-5" /></span>
+            <div className="flex-1">
+              <div className="font-display font-bold text-danger-700">Kelas tanpa coach aktif</div>
+              <p className="text-sm text-danger-600 mt-0.5">Kelas berikut tidak memiliki coach aktif — semua coach sedang disuspend atau belum di-assign. Segera assign coach pengganti.</p>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {classesWithoutCoach.map((c) => (
+                  <span key={c.id} className="px-2 py-1 rounded-lg bg-danger-100 text-danger-700 text-xs font-bold">{c.name}</span>
+                ))}
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Stat label="Member aktif"  value={stats.members} icon="users"   tone="ocean" />
         <Stat label="Coach aktif"   value={stats.coaches} icon="swim"    tone="wave"  />
@@ -300,17 +351,32 @@ function AdminSettings({ branch, onRefresh }: { branch: Branch | null; onRefresh
 
 // ── Class ──────────────────────────────────────────────────────────────────────
 
+interface Criterion {
+  id: string; label: string; kind: string; options: string[] | null; sort_order: number;
+}
+
+const EMPTY_CLASS_FORM = { name: "", schedule_days: [] as string[], schedule_time: "", capacity: 15, price_monthly: 0, show_on_landing: true, goals: "" };
+const DAY_OPTS = ["Senin","Selasa","Rabu","Kamis","Jumat","Sabtu","Minggu"];
+
 function AdminClass({ branchId }: { branchId: string }) {
   const supabase = createClient();
   const toast = useToast();
   const confirm = useConfirm();
   const [classes, setClasses] = useState<ClassRow[]>([]);
-  const [open, setOpen] = useState(false);
   const [coaches, setCoaches] = useState<CoachProfile[]>([]);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ name: "", schedule_days: [] as string[], schedule_time: "", capacity: 15, price_monthly: 0, show_on_landing: true, goals: "" });
 
-  const DAY_OPTS = ["Senin","Selasa","Rabu","Kamis","Jumat","Sabtu","Minggu"];
+  // Create / Edit class modal
+  const [openForm, setOpenForm] = useState(false);
+  const [editTarget, setEditTarget] = useState<ClassRow | null>(null);
+  const [form, setForm] = useState(EMPTY_CLASS_FORM);
+
+  // Criteria (aspek penilaian) modal
+  const [criteriaClass, setCriteriaClass] = useState<ClassRow | null>(null);
+  const [criteria, setCriteria] = useState<Criterion[]>([]);
+  const [loadingCriteria, setLoadingCriteria] = useState(false);
+  const [criterionForm, setCriterionForm] = useState({ label: "", kind: "score_10", options: "" });
+  const [savingCriterion, setSavingCriterion] = useState(false);
 
   const load = useCallback(async () => {
     const { data } = await supabase.from("classes")
@@ -325,19 +391,36 @@ function AdminClass({ branchId }: { branchId: string }) {
       .then(({ data }) => { if (data) setCoaches(data as unknown as CoachProfile[]); });
   }, [load]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const openCreate = () => { setEditTarget(null); setForm(EMPTY_CLASS_FORM); setOpenForm(true); };
+  const openEdit = (c: ClassRow) => {
+    setEditTarget(c);
+    setForm({ name: c.name, schedule_days: c.schedule_days ?? [], schedule_time: c.schedule_time ?? "", capacity: c.capacity, price_monthly: c.price_monthly, show_on_landing: c.show_on_landing ?? false, goals: "" });
+    setOpenForm(true);
+  };
+
   const saveClass = async () => {
     if (!form.name || form.schedule_days.length === 0) return toast.error("Nama kelas dan hari wajib diisi");
     setSaving(true);
-    const { error } = await supabase.from("classes").insert({
-      name: form.name, schedule_days: form.schedule_days, time_start: form.schedule_time,
-      time_end: form.schedule_time,
-      capacity: form.capacity, price_monthly: form.price_monthly, show_landing: form.show_on_landing,
-      goal: form.goals, branch_id: branchId, status: "active", enrolled: 0,
-    });
-    setSaving(false);
-    if (error) return toast.error("Gagal membuat kelas", error.message);
-    toast.success("Kelas dibuat");
-    setOpen(false);
+    if (editTarget) {
+      const { error } = await supabase.from("classes").update({
+        name: form.name, schedule_days: form.schedule_days, time_start: form.schedule_time,
+        time_end: form.schedule_time, capacity: form.capacity, price_monthly: form.price_monthly,
+        show_landing: form.show_on_landing,
+      }).eq("id", editTarget.id);
+      setSaving(false);
+      if (error) return toast.error("Gagal update kelas", error.message);
+      toast.success("Kelas diperbarui");
+    } else {
+      const { error } = await supabase.from("classes").insert({
+        name: form.name, schedule_days: form.schedule_days, time_start: form.schedule_time,
+        time_end: form.schedule_time, capacity: form.capacity, price_monthly: form.price_monthly,
+        show_landing: form.show_on_landing, goal: form.goals, branch_id: branchId, status: "active", enrolled: 0,
+      });
+      setSaving(false);
+      if (error) return toast.error("Gagal membuat kelas", error.message);
+      toast.success("Kelas dibuat");
+    }
+    setOpenForm(false);
     load();
   };
 
@@ -351,15 +434,51 @@ function AdminClass({ branchId }: { branchId: string }) {
 
   const toggleDay = (d: string) => setForm(f => ({ ...f, schedule_days: f.schedule_days.includes(d) ? f.schedule_days.filter(x => x !== d) : [...f.schedule_days, d] }));
 
+  // ── Criteria ───────────────────────────────────────────────────────────────
+  const openCriteria = async (c: ClassRow) => {
+    setCriteriaClass(c);
+    setLoadingCriteria(true);
+    const { data } = await supabase.from("class_criteria").select("id, label, kind, options, sort_order").eq("class_id", c.id).order("sort_order");
+    setCriteria((data ?? []) as Criterion[]);
+    setLoadingCriteria(false);
+    setCriterionForm({ label: "", kind: "score_10", options: "" });
+  };
+
+  const addCriterion = async () => {
+    if (!criteriaClass || !criterionForm.label) return toast.error("Label wajib diisi");
+    setSavingCriterion(true);
+    const opts = criterionForm.kind === "choice" ? criterionForm.options.split("\n").map(s => s.trim()).filter(Boolean) : null;
+    const { error } = await supabase.from("class_criteria").insert({
+      class_id: criteriaClass.id, label: criterionForm.label, kind: criterionForm.kind,
+      options: opts, sort_order: criteria.length,
+    });
+    setSavingCriterion(false);
+    if (error) return toast.error("Gagal menyimpan", error.message);
+    toast.success("Aspek penilaian ditambahkan");
+    setCriterionForm({ label: "", kind: "score_10", options: "" });
+    const { data } = await supabase.from("class_criteria").select("id, label, kind, options, sort_order").eq("class_id", criteriaClass.id).order("sort_order");
+    setCriteria((data ?? []) as Criterion[]);
+  };
+
+  const deleteCriterion = async (id: string) => {
+    const yes = await confirm("Hapus aspek penilaian ini? Data rapor yang sudah diisi tidak akan terpengaruh.");
+    if (!yes) return;
+    await supabase.from("class_criteria").delete().eq("id", id);
+    setCriteria(prev => prev.filter(c => c.id !== id));
+    toast.success("Aspek penilaian dihapus");
+  };
+
+  const kindLabel: Record<string, string> = { score_10: "Nilai 1–10", score_100: "Nilai 1–100", choice: "Pilihan ganda", text: "Teks bebas" };
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div><h2 className="font-display font-bold text-2xl">Manajemen Kelas</h2><p className="text-ink-mute text-sm mt-0.5">Buat kelas, atur jadwal, dan konfigurasi aspek penilaian.</p></div>
-        <Btn variant="primary" icon="plus" onClick={() => setOpen(true)}>Tambah Kelas</Btn>
+        <Btn variant="primary" icon="plus" onClick={openCreate}>Tambah Kelas</Btn>
       </div>
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
         {classes.map((c) => {
-          const coaches2 = c.class_coaches?.map(cc => cc.profile?.full_name).filter(Boolean) ?? [];
+          const coachNames = c.class_coaches?.map(cc => cc.profile?.full_name).filter(Boolean) ?? [];
           const pct = c.enrolled / (c.capacity || 1);
           return (
             <Card key={c.id} padded={false} className="overflow-hidden">
@@ -372,8 +491,8 @@ function AdminClass({ branchId }: { branchId: string }) {
               <div className="p-4">
                 <div className="font-display font-bold text-ink">{c.name}</div>
                 <div className="text-xs text-ink-mute mt-0.5">{(c.schedule_days ?? []).join(", ")} · {c.schedule_time}</div>
-                {coaches2.length > 0 && (
-                  <div className="mt-3 flex items-center gap-2 text-sm"><Avatar name={coaches2[0]!} size={24} /><span className="text-ink-soft font-medium">{coaches2[0]}</span></div>
+                {coachNames.length > 0 && (
+                  <div className="mt-3 flex items-center gap-2 text-sm"><Avatar name={coachNames[0]!} size={24} /><span className="text-ink-soft font-medium">{coachNames[0]}</span></div>
                 )}
                 <div className="mt-3">
                   <div className="flex justify-between text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-1">
@@ -387,7 +506,9 @@ function AdminClass({ branchId }: { branchId: string }) {
                 <div className="mt-4 pt-4 border-t border-line flex items-center justify-between">
                   <div className="font-display font-bold text-ocean-700">{fmtIDR(c.price_monthly)}<span className="text-xs text-ink-mute font-semibold">/bln</span></div>
                   <div className="flex gap-1">
-                    <button onClick={() => archiveClass(c)} className="w-8 h-8 rounded-lg hover:bg-paper-tint text-ink-mute hover:text-danger-500 flex items-center justify-center"><Icon name="archive" className="w-4 h-4" /></button>
+                    <button onClick={() => openCriteria(c)} title="Aspek penilaian" className="w-8 h-8 rounded-lg hover:bg-paper-tint text-ink-mute hover:text-ocean-600 flex items-center justify-center"><Icon name="book" className="w-4 h-4" /></button>
+                    <button onClick={() => openEdit(c)} title="Edit kelas" className="w-8 h-8 rounded-lg hover:bg-paper-tint text-ink-mute hover:text-ocean-600 flex items-center justify-center"><Icon name="edit" className="w-4 h-4" /></button>
+                    <button onClick={() => archiveClass(c)} title="Arsipkan" className="w-8 h-8 rounded-lg hover:bg-paper-tint text-ink-mute hover:text-danger-500 flex items-center justify-center"><Icon name="archive" className="w-4 h-4" /></button>
                   </div>
                 </div>
               </div>
@@ -395,8 +516,10 @@ function AdminClass({ branchId }: { branchId: string }) {
           );
         })}
       </div>
-      <Modal open={open} onClose={() => setOpen(false)} title="Tambah Kelas Baru" size="lg"
-        footer={<><Btn variant="ghost" onClick={() => setOpen(false)}>Batal</Btn><Btn variant="primary" onClick={saveClass} disabled={saving}>{saving ? "Menyimpan…" : "Simpan kelas"}</Btn></>}>
+
+      {/* Create / Edit class modal */}
+      <Modal open={openForm} onClose={() => setOpenForm(false)} title={editTarget ? `Edit Kelas — ${editTarget.name}` : "Tambah Kelas Baru"} size="lg"
+        footer={<><Btn variant="ghost" onClick={() => setOpenForm(false)}>Batal</Btn><Btn variant="primary" onClick={saveClass} disabled={saving}>{saving ? "Menyimpan…" : editTarget ? "Simpan perubahan" : "Simpan kelas"}</Btn></>}>
         <div className="space-y-4">
           <div className="grid sm:grid-cols-2 gap-4">
             <Field label="Nama kelas" required><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Mis. Tadpole — Pengenalan Air" /></Field>
@@ -414,11 +537,72 @@ function AdminClass({ branchId }: { branchId: string }) {
               ))}
             </div>
           </Field>
-          <Field label="Tujuan kelas"><Textarea rows={2} value={form.goals} onChange={e => setForm(f => ({ ...f, goals: e.target.value }))} placeholder="Mis. Pengenalan air, blowing bubbles." /></Field>
+          {!editTarget && <Field label="Tujuan kelas"><Textarea rows={2} value={form.goals} onChange={e => setForm(f => ({ ...f, goals: e.target.value }))} placeholder="Mis. Pengenalan air, blowing bubbles." /></Field>}
           <div className="flex items-center justify-between p-3 rounded-xl bg-ocean-50/50 border border-ocean-100">
             <div><div className="font-semibold text-ink text-sm">Tampilkan di landing page</div><div className="text-xs text-ink-mute">Kelas akan muncul di section Swimming Programs.</div></div>
             <Switch checked={form.show_on_landing} onChange={v => setForm(f => ({ ...f, show_on_landing: v }))} />
           </div>
+          {editTarget && coaches.length > 0 && (
+            <div>
+              <div className="text-xs font-bold uppercase tracking-widest text-ink-faint mb-2">Coach yang mengajar</div>
+              <div className="flex flex-wrap gap-2">
+                {editTarget.class_coaches?.map(cc => cc.profile && (
+                  <span key={cc.profile.id} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-ocean-50 text-ocean-700 text-xs font-semibold">
+                    <Avatar name={cc.profile.full_name ?? ""} size={18} />{cc.profile.full_name}
+                  </span>
+                ))}
+                {(editTarget.class_coaches?.length ?? 0) === 0 && <span className="text-xs text-warn-600 font-semibold">Belum ada coach assigned</span>}
+              </div>
+            </div>
+          )}
+        </div>
+      </Modal>
+
+      {/* Criteria modal */}
+      <Modal open={!!criteriaClass} onClose={() => setCriteriaClass(null)} title={`Aspek Penilaian — ${criteriaClass?.name ?? ""}`} size="lg"
+        footer={<Btn variant="ghost" onClick={() => setCriteriaClass(null)}>Tutup</Btn>}>
+        <div className="space-y-5">
+          {loadingCriteria ? <div className="text-ink-mute text-sm text-center py-6">Memuat…</div> : (
+            <>
+              {criteria.length > 0 ? (
+                <div className="space-y-2">
+                  {criteria.map((cr, i) => (
+                    <div key={cr.id} className="flex items-center gap-3 p-3 rounded-xl border border-line hover:bg-paper-tint">
+                      <span className="w-6 h-6 rounded-full bg-ocean-50 text-ocean-700 text-xs font-bold flex items-center justify-center shrink-0">{i + 1}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-ink text-sm">{cr.label}</div>
+                        <div className="text-xs text-ink-mute">{kindLabel[cr.kind] ?? cr.kind}{cr.options && ` · ${cr.options.join(", ")}`}</div>
+                      </div>
+                      <button onClick={() => deleteCriterion(cr.id)} className="w-7 h-7 rounded-lg hover:bg-danger-50 text-ink-faint hover:text-danger-500 flex items-center justify-center shrink-0"><Icon name="x" className="w-3.5 h-3.5" /></button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-ink-mute">Belum ada aspek penilaian. Tambahkan di bawah.</p>
+              )}
+
+              <div className="border-t border-line pt-4 space-y-3">
+                <div className="text-xs font-bold uppercase tracking-widest text-ink-faint">Tambah Aspek Baru</div>
+                <div className="grid sm:grid-cols-2 gap-3">
+                  <Field label="Label aspek" required><Input value={criterionForm.label} onChange={e => setCriterionForm(f => ({ ...f, label: e.target.value }))} placeholder="Mis. Teknik gaya bebas" /></Field>
+                  <Field label="Tipe penilaian">
+                    <Select value={criterionForm.kind} onChange={e => setCriterionForm(f => ({ ...f, kind: e.target.value }))}>
+                      <option value="score_10">Nilai 1–10</option>
+                      <option value="score_100">Nilai 1–100</option>
+                      <option value="choice">Pilihan ganda</option>
+                      <option value="text">Teks bebas</option>
+                    </Select>
+                  </Field>
+                </div>
+                {criterionForm.kind === "choice" && (
+                  <Field label="Pilihan jawaban" hint="Satu pilihan per baris">
+                    <Textarea rows={3} value={criterionForm.options} onChange={e => setCriterionForm(f => ({ ...f, options: e.target.value }))} placeholder={"Sangat Baik\nBaik\nCukup\nPerlu Latihan"} />
+                  </Field>
+                )}
+                <Btn variant="primary" size="sm" icon="plus" onClick={addCriterion} disabled={savingCriterion}>{savingCriterion ? "Menyimpan…" : "Tambah Aspek"}</Btn>
+              </div>
+            </>
+          )}
         </div>
       </Modal>
     </div>
@@ -438,14 +622,15 @@ function AdminMember({ branchId }: { branchId: string }) {
   const [detail, setDetail] = useState<MemberRow | null>(null);
   const [saving, setSaving] = useState(false);
   const [classes, setClasses] = useState<ClassRow[]>([]);
-  const [form, setForm] = useState({ full_name: "", birth_date: "", type: "reguler", phone: "", class_id: "", email: "", password: "" });
+  const [form, setForm] = useState({ full_name: "", birth_date: "", gender: "", type: "reguler", phone: "", phone_owner: "self", parent_name: "", parent_phone: "", address: "", health_notes: "", class_id: "", school_id: "", email: "", password: "" });
+  const [schoolsList, setSchoolsList] = useState<School[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
-    let q = supabase.from("members").select("id, profile_id, type, status, date_start, qr_code, remaining_sessions, total_sessions, profile:profiles(full_name, birth_date, phone), member_classes(class:classes(id, name))")
+    let q = supabase.from("members").select("id, profile_id, type, status, date_start, qr_code, remaining_sessions, total_sessions, suspend_until, suspend_reason, profile:profiles(full_name, birth_date, phone), member_classes(class:classes(id, name))")
       .eq("branch_id", branchId).order("created_at", { ascending: false });
     if (tab !== "all" && tab !== "suspended") q = q.eq("type", tab);
-    if (tab === "suspended") q = (supabase.from("members").select("id, profile_id, type, status, date_start, qr_code, remaining_sessions, total_sessions, profile:profiles(full_name, birth_date, phone), member_classes(class:classes(id, name))") as typeof q).eq("branch_id", branchId).eq("status", "suspended");
+    if (tab === "suspended") q = (supabase.from("members").select("id, profile_id, type, status, date_start, qr_code, remaining_sessions, total_sessions, suspend_until, suspend_reason, profile:profiles(full_name, birth_date, phone), member_classes(class:classes(id, name))") as typeof q).eq("branch_id", branchId).eq("status", "suspended");
     const { data } = await q;
     if (data) setMembers(data as unknown as MemberRow[]);
     setLoading(false);
@@ -456,10 +641,20 @@ function AdminMember({ branchId }: { branchId: string }) {
   useEffect(() => {
     supabase.from("classes").select("id, name, capacity, enrolled, status, branch_id, schedule_days, schedule_time, price_monthly, show_on_landing").eq("branch_id", branchId).eq("status", "active")
       .then(({ data }) => { if (data) setClasses(data as unknown as ClassRow[]); });
+    supabase.from("schools").select("id, name").eq("branch_id", branchId).order("name")
+      .then(({ data }) => { if (data) setSchoolsList(data as School[]); });
   }, [branchId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const createMember = async () => {
     if (!form.full_name || !form.email || !form.password) return toast.error("Nama, email, dan password wajib diisi");
+    // Capacity check
+    if (form.class_id) {
+      const cls = classes.find(c => c.id === form.class_id);
+      if (cls && cls.enrolled >= cls.capacity) {
+        const ok = await confirm(`Kelas "${cls.name}" sudah penuh (${cls.enrolled}/${cls.capacity} member). Tetap lanjutkan?`);
+        if (!ok) return;
+      }
+    }
     setSaving(true);
     const res = await fetch("/api/admin/users", {
       method: "POST",
@@ -471,10 +666,17 @@ function AdminMember({ branchId }: { branchId: string }) {
 
     // Update the auto-created member profile with extra fields
     if (json.user_id) {
-      await supabase.from("members").update({ type: form.type as "reguler" | "private" | "school_affiliate" }).eq("profile_id", json.user_id);
-      await supabase.from("profiles").update({ birth_date: form.birth_date || null, phone: form.phone || null }).eq("id", json.user_id);
+      await supabase.from("profiles").update({
+        birth_date: form.birth_date || null, phone: form.phone || null,
+        gender: form.gender || null, address: form.address || null,
+        health_notes: form.health_notes || null,
+      }).eq("id", json.user_id);
+
+      const memberUpd: Record<string, unknown> = { type: form.type };
+      if (form.type === "school_affiliate" && form.school_id) memberUpd.school_id = form.school_id;
+      await supabase.from("members").update(memberUpd).eq("profile_id", json.user_id);
+
       if (form.class_id) {
-        // Assign to class
         const memberRes = await supabase.from("members").select("id").eq("profile_id", json.user_id).single();
         if (memberRes.data) {
           await supabase.from("member_classes").insert({ member_id: memberRes.data.id, class_id: form.class_id, joined_at: new Date().toISOString() });
@@ -488,19 +690,49 @@ function AdminMember({ branchId }: { branchId: string }) {
     load();
   };
 
-  const resetPassword = async (m: MemberRow) => {
-    const np = window.prompt(`Password baru untuk ${m.profile?.full_name ?? "member"}:`);
-    if (!np || np.length < 6) return toast.error("Password minimal 6 karakter");
-    const res = await fetch(`/api/admin/users/${m.profile_id}`, {
+  const openEdit = (m: MemberRow) => {
+    const currentClassId = m.member_classes?.[0]?.class?.id ?? "";
+    setEditMemberForm({ full_name: m.profile?.full_name ?? "", phone: m.profile?.phone ?? "", birth_date: m.profile?.birth_date ?? "", class_id: currentClassId });
+    setOpenEditMember(true);
+  };
+
+  const saveMemberEdit = async () => {
+    if (!detail) return;
+    if (!editMemberForm.full_name) return toast.error("Nama lengkap wajib diisi");
+    setSavingEdit(true);
+    await supabase.from("profiles").update({ full_name: editMemberForm.full_name, phone: editMemberForm.phone || null, birth_date: editMemberForm.birth_date || null }).eq("id", detail.profile_id);
+    if (editMemberForm.class_id) {
+      const currentClassId = detail.member_classes?.[0]?.class?.id;
+      if (editMemberForm.class_id !== currentClassId) {
+        if (currentClassId) await supabase.from("member_classes").delete().eq("member_id", detail.id).eq("class_id", currentClassId);
+        await supabase.from("member_classes").upsert({ member_id: detail.id, class_id: editMemberForm.class_id, joined_at: new Date().toISOString() }, { onConflict: "member_id,class_id" });
+      }
+    }
+    setSavingEdit(false);
+    toast.success("Data member diperbarui");
+    setOpenEditMember(false);
+    load();
+  };
+
+  const resetPassword = async () => {
+    if (!detail) return;
+    if (!newPwd || newPwd.length < 6) return toast.error("Password minimal 6 karakter");
+    const res = await fetch(`/api/admin/users/${detail.profile_id}`, {
       method: "PATCH", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password: np }),
+      body: JSON.stringify({ password: newPwd }),
     });
-    if (res.ok) toast.success("Password direset"); else toast.error("Gagal reset password");
+    if (res.ok) { toast.success("Password direset"); setOpenResetPwd(false); setNewPwd(""); }
+    else toast.error("Gagal reset password");
   };
 
   const [suspendMemberTarget, setSuspendMemberTarget] = useState<MemberRow | null>(null);
   const [suspendMemberForm, setSuspendMemberForm] = useState({ reason: "", until: "" });
   const [suspendingMember, setSuspendingMember] = useState(false);
+  const [openEditMember, setOpenEditMember] = useState(false);
+  const [editMemberForm, setEditMemberForm] = useState({ full_name: "", phone: "", birth_date: "", class_id: "" });
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [openResetPwd, setOpenResetPwd] = useState(false);
+  const [newPwd, setNewPwd] = useState("");
 
   const doSuspendMember = async () => {
     if (!suspendMemberTarget || !suspendMemberForm.reason || !suspendMemberForm.until) return toast.error("Alasan dan tanggal berakhir wajib diisi");
@@ -539,7 +771,7 @@ function AdminMember({ branchId }: { branchId: string }) {
     <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div><h2 className="font-display font-bold text-2xl">Manajemen Member</h2><p className="text-ink-mute text-sm mt-0.5">CRUD member, suspend, dan reset password.</p></div>
-        <div className="flex gap-2"><Btn variant="primary" icon="plus" onClick={() => { setForm({ full_name: "", birth_date: "", type: "reguler", phone: "", class_id: "", email: "", password: "" }); setOpenCreate(true); }}>Tambah Member</Btn></div>
+        <div className="flex gap-2"><Btn variant="primary" icon="plus" onClick={() => { setForm({ full_name: "", birth_date: "", gender: "", type: "reguler", phone: "", phone_owner: "self", parent_name: "", parent_phone: "", address: "", health_notes: "", class_id: "", school_id: "", email: "", password: "" }); setOpenCreate(true); }}>Tambah Member</Btn></div>
       </div>
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Stat label="Total aktif"       value={stats.all}     icon="users"   tone="ocean" />
@@ -593,7 +825,8 @@ function AdminMember({ branchId }: { branchId: string }) {
         footer={
           <>
             <Btn variant="ghost" onClick={() => setDetail(null)}>Tutup</Btn>
-            <Btn variant="outline" icon="refresh" onClick={() => detail && resetPassword(detail)}>Reset Password</Btn>
+            <Btn variant="outline" icon="edit" onClick={() => detail && openEdit(detail)}>Edit Data</Btn>
+            <Btn variant="outline" icon="refresh" onClick={() => { setOpenResetPwd(true); setNewPwd(""); }}>Reset Password</Btn>
             {detail?.status !== "suspended"
               ? <Btn variant="ghost" className="text-warn-600" onClick={() => { setSuspendMemberTarget(detail); setSuspendMemberForm({ reason: "", until: "" }); }}>Suspend</Btn>
               : <Btn variant="soft" size="sm" icon="check" onClick={() => detail && liftSuspendMember(detail)}>Akhiri Suspend</Btn>
@@ -614,11 +847,13 @@ function AdminMember({ branchId }: { branchId: string }) {
                 <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Sejak</div><div className="font-semibold text-ink">{fmtDate(detail.date_start)}</div></div>
                 <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Sisa sesi</div><div className="font-semibold text-ink">{detail.remaining_sessions ?? "—"}</div></div>
                 <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">No HP</div><div className="font-semibold text-ink font-mono text-xs">{detail.profile?.phone ?? "—"}</div></div>
+                {detail.status === "suspended" && <div className="col-span-2"><div className="text-[10px] uppercase tracking-widest font-bold text-warn-500">Suspend s.d.</div><div className="font-semibold text-warn-700">{fmtDate(detail.suspend_until ?? "")}</div></div>}
               </div>
               <div className="pt-3 border-t border-line">
                 <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-2">Kelas yang diikuti</div>
                 <div className="flex flex-wrap gap-1.5">
                   {detail.member_classes?.map((mc, i) => mc.class && <span key={i} className="px-2 py-1 rounded-lg bg-ocean-50 text-ocean-700 text-xs font-semibold">{mc.class.name}</span>)}
+                  {(detail.member_classes?.length ?? 0) === 0 && <span className="text-xs text-warn-600 font-semibold">Belum assign ke kelas</span>}
                 </div>
               </div>
             </div>
@@ -626,23 +861,76 @@ function AdminMember({ branchId }: { branchId: string }) {
         )}
       </Modal>
 
+      {/* Edit member modal */}
+      <Modal open={openEditMember} onClose={() => setOpenEditMember(false)} title={`Edit — ${detail?.profile?.full_name ?? ""}`} size="sm"
+        footer={<><Btn variant="ghost" onClick={() => setOpenEditMember(false)}>Batal</Btn><Btn variant="primary" onClick={saveMemberEdit} disabled={savingEdit}>{savingEdit ? "Menyimpan…" : "Simpan"}</Btn></>}>
+        <div className="space-y-4">
+          <Field label="Nama lengkap" required><Input value={editMemberForm.full_name} onChange={e => setEditMemberForm(f => ({ ...f, full_name: e.target.value }))} /></Field>
+          <Field label="No HP / WA"><Input type="tel" value={editMemberForm.phone} onChange={e => setEditMemberForm(f => ({ ...f, phone: e.target.value }))} /></Field>
+          <Field label="Tanggal lahir"><Input type="date" value={editMemberForm.birth_date} onChange={e => setEditMemberForm(f => ({ ...f, birth_date: e.target.value }))} /></Field>
+          <Field label="Ganti kelas" hint="Kosongkan untuk tidak mengubah kelas">
+            <Select value={editMemberForm.class_id} onChange={e => setEditMemberForm(f => ({ ...f, class_id: e.target.value }))}>
+              <option value="">— tidak mengubah kelas —</option>
+              {classes.map(c => <option key={c.id} value={c.id}>{c.name} ({c.enrolled}/{c.capacity})</option>)}
+            </Select>
+          </Field>
+        </div>
+      </Modal>
+
+      {/* Reset password modal */}
+      <Modal open={openResetPwd} onClose={() => setOpenResetPwd(false)} title={`Reset Password — ${detail?.profile?.full_name ?? ""}`} size="sm"
+        footer={<><Btn variant="ghost" onClick={() => setOpenResetPwd(false)}>Batal</Btn><Btn variant="primary" onClick={resetPassword}>Reset Password</Btn></>}>
+        <Field label="Password baru" hint="Min. 6 karakter"><Input type="password" value={newPwd} onChange={e => setNewPwd(e.target.value)} placeholder="••••••••" /></Field>
+      </Modal>
+
       <Modal open={openCreate} onClose={() => setOpenCreate(false)} title="Tambah Member Baru" size="lg"
         footer={<><Btn variant="ghost" onClick={() => setOpenCreate(false)}>Batal</Btn><Btn variant="primary" onClick={createMember} disabled={saving}>{saving ? "Menyimpan…" : "Simpan & kirim WA"}</Btn></>}>
         <div className="grid sm:grid-cols-2 gap-4">
           <Field label="Nama lengkap" required><Input value={form.full_name} onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))} /></Field>
           <Field label="Tanggal lahir"><Input type="date" value={form.birth_date} onChange={e => setForm(f => ({ ...f, birth_date: e.target.value }))} /></Field>
+          <Field label="Jenis kelamin">
+            <Select value={form.gender} onChange={e => setForm(f => ({ ...f, gender: e.target.value }))}>
+              <option value="">— pilih —</option>
+              <option value="male">Laki-laki</option>
+              <option value="female">Perempuan</option>
+            </Select>
+          </Field>
           <Field label="Tipe member" required>
             <Select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}>
               <option value="reguler">Reguler</option><option value="private">Private</option><option value="school_affiliate">Afiliasi Sekolah</option>
             </Select>
           </Field>
-          <Field label="No HP / WA"><Input type="tel" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} /></Field>
+          {form.type === "school_affiliate" && (
+            <Field label="Sekolah afiliasi">
+              <Select value={form.school_id} onChange={e => setForm(f => ({ ...f, school_id: e.target.value }))}>
+                <option value="">— pilih sekolah —</option>
+                {schoolsList.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </Select>
+            </Field>
+          )}
           <Field label="Assign kelas">
             <Select value={form.class_id} onChange={e => setForm(f => ({ ...f, class_id: e.target.value }))}>
               <option value="">— pilih kelas —</option>
               {classes.map(c => <option key={c.id} value={c.id}>{c.name} ({c.enrolled}/{c.capacity})</option>)}
             </Select>
           </Field>
+          <Field label="No HP / WA member">
+            <Input type="tel" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} />
+          </Field>
+          <Field label="Pemilik kontak">
+            <Select value={form.phone_owner} onChange={e => setForm(f => ({ ...f, phone_owner: e.target.value }))}>
+              <option value="self">Milik member sendiri</option>
+              <option value="parent">Milik orang tua / wali</option>
+            </Select>
+          </Field>
+          {form.phone_owner === "parent" && (
+            <>
+              <Field label="Nama orang tua / wali"><Input value={form.parent_name} onChange={e => setForm(f => ({ ...f, parent_name: e.target.value }))} /></Field>
+              <Field label="No HP orang tua / wali"><Input type="tel" value={form.parent_phone} onChange={e => setForm(f => ({ ...f, parent_phone: e.target.value }))} /></Field>
+            </>
+          )}
+          <Field label="Alamat" className="sm:col-span-2"><Textarea rows={2} value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} placeholder="Jl. ..." /></Field>
+          <Field label="Catatan kesehatan" className="sm:col-span-2" hint="Alergi, kondisi khusus, dll."><Textarea rows={2} value={form.health_notes} onChange={e => setForm(f => ({ ...f, health_notes: e.target.value }))} /></Field>
           <Field label="Email login" required><Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} /></Field>
           <Field label="Password" required hint="Min. 6 karakter"><Input type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} /></Field>
         </div>
@@ -685,6 +973,7 @@ function AdminCoach({ branchId }: { branchId: string }) {
   const [suspending, setSuspending] = useState(false);
   const [form, setForm] = useState({ full_name: "", email: "", phone: "", password: "", specialization: "" });
   const [suspendForm, setSuspendForm] = useState({ reason: "", until: "" });
+  const [coachCredential, setCoachCredential] = useState<{ full_name: string; email: string; password: string; phone: string } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -706,9 +995,9 @@ function AdminCoach({ branchId }: { branchId: string }) {
     });
     const json = await res.json() as { error?: string };
     if (!res.ok) { toast.error("Gagal membuat coach", json.error); setSaving(false); return; }
-    toast.success("Coach dibuat");
     setSaving(false);
     setOpenAdd(false);
+    setCoachCredential({ full_name: form.full_name, email: form.email, password: form.password, phone: form.phone });
     load();
   };
 
@@ -813,6 +1102,31 @@ function AdminCoach({ branchId }: { branchId: string }) {
           </Field>
         </div>
       </Modal>
+
+      {/* Coach credential popup */}
+      <Modal open={!!coachCredential} onClose={() => setCoachCredential(null)} title="Akun Coach Dibuat" size="sm"
+        footer={<><Btn variant="ghost" onClick={() => setCoachCredential(null)}>Tutup</Btn>{coachCredential?.phone && <Btn variant="wa" icon="whatsapp" onClick={() => window.open(waLink(`Halo ${coachCredential.full_name}, akun coach Anda telah dibuat.\n\nEmail: ${coachCredential.email}\nPassword: ${coachCredential.password}\n\nSilakan login di aplikasi Next Swimming School.`), "_blank")}>Kirim via WA</Btn>}</>}>
+        <div className="space-y-3">
+          <Card className="!p-4 bg-ok-50 border-ok-200">
+            <div className="flex items-center gap-2 text-ok-700 font-semibold text-sm"><Icon name="check" className="w-4 h-4" />Akun berhasil dibuat</div>
+          </Card>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between py-2.5 border-b border-line">
+              <span className="text-xs text-ink-mute uppercase tracking-widest font-bold">Nama</span>
+              <span className="font-semibold text-sm">{coachCredential?.full_name}</span>
+            </div>
+            <div className="flex items-center justify-between py-2.5 border-b border-line">
+              <span className="text-xs text-ink-mute uppercase tracking-widest font-bold">Email</span>
+              <span className="font-mono text-sm">{coachCredential?.email}</span>
+            </div>
+            <div className="flex items-center justify-between py-2.5">
+              <span className="text-xs text-ink-mute uppercase tracking-widest font-bold">Password</span>
+              <span className="font-mono text-sm bg-paper-deep px-2 py-0.5 rounded">{coachCredential?.password}</span>
+            </div>
+          </div>
+          <p className="text-xs text-ink-mute">Simpan atau kirim kredensial ini ke coach. Password tidak bisa dilihat lagi setelah modal ini ditutup.</p>
+        </div>
+      </Modal>
     </div>
   );
 }
@@ -840,61 +1154,124 @@ function getWeekDates(offset = 0) {
   });
 }
 
+interface HolidayEntry { id: string; class_id: string; holiday_date: string; reason: string | null }
+interface CalEventExt extends CalEvent { isHoliday?: boolean; holidayId?: string }
+
 function AdminClassActivity({ branchId }: { branchId: string }) {
   const supabase = createClient();
-  const [events, setEvents] = useState<CalEvent[]>([]);
+  const toast = useToast();
+  const [events, setEvents] = useState<CalEventExt[]>([]);
   const [weekOffset, setWeekOffset] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [holidays, setHolidays] = useState<HolidayEntry[]>([]);
+  const [allClasses, setAllClasses] = useState<{ id: string; name: string }[]>([]);
+
+  // Holiday modal state
+  const [openHoliday, setOpenHoliday] = useState(false);
+  const [holidayForm, setHolidayForm] = useState({ class_id: "", holiday_date: "", reason: "" });
+  const [savingH, setSavingH] = useState(false);
 
   const weekDates = getWeekDates(weekOffset);
+  const weekStart = weekDates[0].toISOString().slice(0, 10);
+  const weekEnd   = weekDates[6].toISOString().slice(0, 10);
 
-  useEffect(() => {
+  const load = useCallback(async () => {
     if (!branchId) return;
     setLoading(true);
 
-    Promise.all([
+    const [{ data: cls }, { data: leaves }, { data: hols }] = await Promise.all([
       supabase.from("classes")
         .select("id, name, schedule_days, time_start, class_coaches(profile:profiles(full_name))")
         .eq("branch_id", branchId).eq("status", "active"),
       supabase.from("coach_leaves")
-        .select("id, date_from, date_to, substitute_id, substitute:profiles!coach_leaves_substitute_id_fkey(full_name), coach_leave_classes(class_id)")
+        .select("id, date_from, date_to, substitute:profiles!coach_leaves_substitute_id_fkey(full_name), coach_leave_classes(class_id)")
         .eq("status", "approved")
-        .lte("date_from", weekDates[6].toISOString().slice(0, 10))
-        .gte("date_to", weekDates[0].toISOString().slice(0, 10)),
-    ]).then(([{ data: cls }, { data: leaves }]) => {
-      if (!cls) { setLoading(false); return; }
+        .lte("date_from", weekEnd).gte("date_to", weekStart),
+      supabase.from("class_holidays")
+        .select("id, class_id, holiday_date, reason")
+        .eq("branch_id", branchId)
+        .gte("holiday_date", weekStart).lte("holiday_date", weekEnd),
+    ]);
 
-      // Build substitute map: classId → substituteName for this week
-      const subMap: Record<string, string> = {};
-      (leaves ?? []).forEach((l) => {
-        const sub = (l as unknown as { substitute: { full_name: string } | null }).substitute;
-        if (sub) {
-          (l.coach_leave_classes ?? []).forEach((lc) => {
-            subMap[(lc as unknown as { class_id: string }).class_id] = sub.full_name;
-          });
-        }
-      });
+    if (!cls) { setLoading(false); return; }
 
-      const evts: CalEvent[] = (cls as unknown as {
-        id: string; name: string; schedule_days: string[];
-        time_start: string;
-        class_coaches: { profile: { full_name: string } | null }[];
-      }[]).map((c) => {
-        const coach = c.class_coaches?.[0]?.profile?.full_name ?? "—";
-        const subName = subMap[c.id];
+    setAllClasses((cls as { id: string; name: string }[]).map(c => ({ id: c.id, name: c.name })));
+
+    const holArr = (hols ?? []) as HolidayEntry[];
+    setHolidays(holArr);
+
+    // Build substitute map: classId → substituteName for this week
+    const subMap: Record<string, string> = {};
+    (leaves ?? []).forEach((l) => {
+      const sub = (l as unknown as { substitute: { full_name: string } | null }).substitute;
+      if (sub) {
+        (l.coach_leave_classes ?? []).forEach((lc) => {
+          subMap[(lc as unknown as { class_id: string }).class_id] = sub.full_name;
+        });
+      }
+    });
+
+    // Build holiday set: "classId|YYYY-MM-DD" → holidayId
+    const holMap: Record<string, string> = {};
+    holArr.forEach(h => { holMap[`${h.class_id}|${h.holiday_date}`] = h.id; });
+
+    const evts: CalEventExt[] = (cls as unknown as {
+      id: string; name: string; schedule_days: string[];
+      time_start: string;
+      class_coaches: { profile: { full_name: string } | null }[];
+    }[]).flatMap((c) => {
+      const coach = c.class_coaches?.[0]?.profile?.full_name ?? "—";
+      const subName = subMap[c.id];
+      return (c.schedule_days ?? []).map((day: string) => {
+        const dayIdx = DAY_IDX[day] ?? -1;
+        if (dayIdx < 0) return null;
+        const dateStr = weekDates[dayIdx]?.toISOString().slice(0, 10);
+        const holKey = `${c.id}|${dateStr}`;
+        const holidayId = holMap[holKey];
         return {
           classId: c.id,
           name: c.name,
-          coach: subName ? `${subName.split(" ")[0]}` : (coach === "—" ? "—" : `${coach.split(" ")[0]}`),
+          coach: subName ? subName.split(" ")[0] : (coach === "—" ? "—" : coach.split(" ")[0]),
           hour: c.time_start?.slice(0, 2) ?? "00",
-          days: (c.schedule_days ?? []).map((d: string) => DAY_IDX[d] ?? -1).filter((d: number) => d >= 0),
+          days: [dayIdx],
           isSub: !!subName,
+          isHoliday: !!holidayId,
+          holidayId,
         };
-      });
-      setEvents(evts);
-      setLoading(false);
+      }).filter(Boolean) as CalEventExt[];
     });
-  }, [branchId, weekOffset]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    setEvents(evts);
+    setLoading(false);
+  }, [branchId, weekStart, weekEnd]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { load(); }, [load]);
+
+  const addHoliday = async () => {
+    if (!holidayForm.class_id || !holidayForm.holiday_date) return toast.error("Kelas dan tanggal wajib diisi");
+    setSavingH(true);
+    const user = (await supabase.auth.getUser()).data.user;
+    const { error } = await supabase.from("class_holidays").upsert({
+      class_id: holidayForm.class_id,
+      branch_id: branchId,
+      holiday_date: holidayForm.holiday_date,
+      reason: holidayForm.reason || null,
+      created_by: user?.id,
+    }, { onConflict: "class_id,holiday_date" });
+    setSavingH(false);
+    if (error) return toast.error("Gagal menyimpan", error.message);
+    toast.success("Kelas ditandai libur");
+    setOpenHoliday(false);
+    setHolidayForm({ class_id: "", holiday_date: "", reason: "" });
+    load();
+  };
+
+  const removeHoliday = async (holidayId: string) => {
+    const { error } = await supabase.from("class_holidays").delete().eq("id", holidayId);
+    if (error) return toast.error("Gagal batalkan", error.message);
+    toast.success("Status libur dibatalkan");
+    load();
+  };
 
   const weekLabel = `${weekDates[0].getDate()} ${weekDates[0].toLocaleDateString("id-ID", { month: "short" })} – ${weekDates[6].getDate()} ${weekDates[6].toLocaleDateString("id-ID", { month: "short", year: "numeric" })}`;
 
@@ -902,12 +1279,31 @@ function AdminClassActivity({ branchId }: { branchId: string }) {
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div><h2 className="font-display font-bold text-2xl">Class Activity</h2><p className="text-ink-mute text-sm mt-0.5">Kalender semua kelas aktif minggu ini.</p></div>
-        <div className="flex gap-2 items-center">
+        <div className="flex gap-2 items-center flex-wrap">
+          <Btn variant="soft" size="sm" icon="flag" onClick={() => setOpenHoliday(true)}>Tandai Libur</Btn>
           <button onClick={() => setWeekOffset(w => w - 1)} className="w-8 h-8 rounded-lg border border-line hover:bg-paper-tint flex items-center justify-center text-ink-mute"><Icon name="chevron-left" className="w-4 h-4" /></button>
           <div className="font-display font-bold text-ink px-2 text-sm">{weekLabel}</div>
           <button onClick={() => setWeekOffset(w => w + 1)} className="w-8 h-8 rounded-lg border border-line hover:bg-paper-tint flex items-center justify-center text-ink-mute"><Icon name="chevron-right" className="w-4 h-4" /></button>
         </div>
       </div>
+
+      {holidays.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {holidays.map(h => {
+            const cls = allClasses.find(c => c.id === h.class_id);
+            return (
+              <div key={h.id} className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-warn-50 border border-warn-200 text-xs font-semibold text-warn-700">
+                <Icon name="flag" className="w-3 h-3" />
+                {cls?.name ?? h.class_id} · {h.holiday_date}{h.reason ? ` (${h.reason})` : ""}
+                <button onClick={() => removeHoliday(h.id)} className="ml-1 hover:text-warn-900">
+                  <Icon name="x" className="w-3 h-3" />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {loading ? <div className="p-10 text-center text-ink-mute">Memuat kalender…</div> : (
         <Card padded={false} className="overflow-hidden">
           <div className="overflow-x-auto">
@@ -927,12 +1323,25 @@ function AdminClassActivity({ branchId }: { branchId: string }) {
                     return (
                       <div key={d} className={`relative h-16 border-b border-line ${d < 6 ? "border-r" : ""} hover:bg-paper-tint`}>
                         {ev && (
-                          <div className={`absolute inset-x-1 top-1 rounded-lg ring-1 ring-inset p-2 ${ev.isSub ? "bg-sub-50 text-sub-700 ring-sub-500/30" : "bg-ocean-100 text-ocean-700 ring-ocean-500/30"}`} style={{ height: "56px", zIndex: 5 }}>
+                          <div
+                            className={`absolute inset-x-1 top-1 rounded-lg ring-1 ring-inset p-2 ${
+                              ev.isHoliday
+                                ? "bg-warn-50 text-warn-700 ring-warn-400/40"
+                                : ev.isSub
+                                ? "bg-sub-50 text-sub-700 ring-sub-500/30"
+                                : "bg-ocean-100 text-ocean-700 ring-ocean-500/30"
+                            }`}
+                            style={{ height: "56px", zIndex: 5 }}
+                            title={ev.isHoliday ? "Libur" : undefined}
+                          >
                             <div className="font-bold text-[11px] truncate flex items-center gap-1">
-                              {ev.isSub && <Icon name="refresh" className="w-3 h-3" />}
+                              {ev.isHoliday && <Icon name="flag" className="w-3 h-3" />}
+                              {ev.isSub && !ev.isHoliday && <Icon name="refresh" className="w-3 h-3" />}
                               {ev.name}
                             </div>
-                            <div className="text-[10px] opacity-80 truncate">{ev.isSub ? `Pengganti: ${ev.coach}` : ev.coach}</div>
+                            <div className="text-[10px] opacity-80 truncate">
+                              {ev.isHoliday ? "Libur" : ev.isSub ? `Pengganti: ${ev.coach}` : ev.coach}
+                            </div>
                           </div>
                         )}
                       </div>
@@ -944,6 +1353,25 @@ function AdminClassActivity({ branchId }: { branchId: string }) {
           </div>
         </Card>
       )}
+
+      {/* Tandai Libur Modal */}
+      <Modal open={openHoliday} onClose={() => setOpenHoliday(false)} title="Tandai Kelas Libur" size="sm"
+        footer={<><Btn variant="ghost" onClick={() => setOpenHoliday(false)}>Batal</Btn><Btn variant="primary" onClick={addHoliday} disabled={savingH}>{savingH ? "Menyimpan…" : "Tandai Libur"}</Btn></>}>
+        <div className="space-y-4">
+          <Field label="Kelas" required>
+            <Select value={holidayForm.class_id} onChange={e => setHolidayForm(f => ({ ...f, class_id: e.target.value }))}>
+              <option value="">Pilih kelas…</option>
+              {allClasses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </Select>
+          </Field>
+          <Field label="Tanggal libur" required>
+            <Input type="date" value={holidayForm.holiday_date} onChange={e => setHolidayForm(f => ({ ...f, holiday_date: e.target.value }))} />
+          </Field>
+          <Field label="Alasan (opsional)">
+            <Input value={holidayForm.reason} onChange={e => setHolidayForm(f => ({ ...f, reason: e.target.value }))} placeholder="Mis. Libur nasional, kolam tutup" />
+          </Field>
+        </div>
+      </Modal>
     </div>
   );
 }
@@ -953,9 +1381,11 @@ function AdminClassActivity({ branchId }: { branchId: string }) {
 function AdminAbsensiCoach({ branchId }: { branchId: string }) {
   const supabase = createClient();
   const toast = useToast();
+  const confirm = useConfirm();
   const [records, setRecords] = useState<AttendanceRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [openManual, setOpenManual] = useState(false);
+  const [editTarget, setEditTarget] = useState<AttendanceRow | null>(null);
   const [coaches, setCoaches] = useState<CoachProfile[]>([]);
   const [classes, setClasses] = useState<ClassRow[]>([]);
   const [saving, setSaving] = useState(false);
@@ -980,15 +1410,48 @@ function AdminAbsensiCoach({ branchId }: { branchId: string }) {
     if (!form.coach_id || !form.class_id || !form.session_date) return toast.error("Coach, kelas, dan tanggal wajib diisi");
     setSaving(true);
     const user = (await supabase.auth.getUser()).data.user;
-    const { error } = await supabase.from("coach_attendances").insert({
-      branch_id: branchId, coach_id: form.coach_id, class_id: form.class_id,
-      session_date: form.session_date, is_manual: true, manual_by: user?.id || null,
-      manual_note: form.note || null, status: "present",
-    });
-    setSaving(false);
-    if (error) return toast.error("Gagal menyimpan", error.message);
-    toast.success("Absensi manual disimpan");
+    if (editTarget) {
+      const { error } = await supabase.from("coach_attendances").update({
+        coach_id: form.coach_id, class_id: form.class_id,
+        session_date: form.session_date, clock_in_time: form.clock_in_time || null,
+        manual_note: form.note || null,
+      }).eq("id", editTarget.id);
+      setSaving(false);
+      if (error) return toast.error("Gagal menyimpan", error.message);
+      toast.success("Absensi diperbarui");
+    } else {
+      const { error } = await supabase.from("coach_attendances").insert({
+        branch_id: branchId, coach_id: form.coach_id, class_id: form.class_id,
+        session_date: form.session_date, is_manual: true, manual_by: user?.id || null,
+        manual_note: form.note || null, status: "present",
+      });
+      setSaving(false);
+      if (error) return toast.error("Gagal menyimpan", error.message);
+      toast.success("Absensi manual disimpan");
+    }
     setOpenManual(false);
+    setEditTarget(null);
+    load();
+  };
+
+  const openEdit = (r: AttendanceRow) => {
+    setEditTarget(r);
+    setForm({
+      coach_id: r.coach_id,
+      class_id: r.class_id,
+      session_date: r.session_date,
+      clock_in_time: r.clock_in_time?.slice(0, 5) ?? "",
+      note: r.manual_note ?? "",
+    });
+    setOpenManual(true);
+  };
+
+  const deleteRecord = async (r: AttendanceRow) => {
+    const ok = await confirm({ title: "Hapus absensi?", message: `Hapus absensi ${r.profile?.full_name} tanggal ${fmtDate(r.session_date)}?`, confirmLabel: "Hapus", danger: true });
+    if (!ok) return;
+    const { error } = await supabase.from("coach_attendances").delete().eq("id", r.id);
+    if (error) return toast.error("Gagal menghapus", error.message);
+    toast.success("Absensi dihapus");
     load();
   };
 
@@ -996,7 +1459,7 @@ function AdminAbsensiCoach({ branchId }: { branchId: string }) {
     <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div><h2 className="font-display font-bold text-2xl">Absensi Coach</h2><p className="text-ink-mute text-sm mt-0.5">History clock-in coach · CRUD manual oleh admin.</p></div>
-        <Btn variant="primary" icon="plus" onClick={() => setOpenManual(true)}>Absensi Manual</Btn>
+        <Btn variant="primary" icon="plus" onClick={() => { setEditTarget(null); setForm({ coach_id: "", class_id: "", session_date: "", clock_in_time: "", note: "" }); setOpenManual(true); }}>Absensi Manual</Btn>
       </div>
       <Card padded={false}>
         {loading ? <div className="p-10 text-center text-ink-mute">Memuat data…</div> : (
@@ -1004,7 +1467,8 @@ function AdminAbsensiCoach({ branchId }: { branchId: string }) {
             <thead><tr className="text-[11px] uppercase tracking-widest text-ink-faint font-bold border-b border-line">
               <th className="text-left py-3 px-5 font-bold">Tanggal</th><th className="text-left py-3 font-bold">Coach</th>
               <th className="text-left py-3 font-bold">Kelas</th><th className="text-left py-3 font-bold">Clock-in</th>
-              <th className="text-left py-3 font-bold">Jarak</th><th className="text-left py-3 pr-5 font-bold">Metode</th>
+              <th className="text-left py-3 font-bold">Jarak</th><th className="text-left py-3 font-bold">Metode</th>
+              <th className="text-left py-3 pr-5 font-bold"></th>
             </tr></thead>
             <tbody className="divide-y divide-line">
               {records.map((r) => (
@@ -1014,15 +1478,21 @@ function AdminAbsensiCoach({ branchId }: { branchId: string }) {
                   <td className="text-ink-soft">{r.class?.name}</td>
                   <td className="font-mono">{r.clock_in_time?.slice(0, 5) ?? "—"}</td>
                   <td className="font-mono">{r.distance_meters != null ? `${r.distance_meters} m` : "—"}</td>
-                  <td className="pr-5">{r.is_manual ? <Status kind="manual">Manual</Status> : <Status kind="active">Selfie + GPS</Status>}</td>
+                  <td>{r.is_manual ? <Status kind="manual">Manual</Status> : <Status kind="active">Selfie + GPS</Status>}</td>
+                  <td className="pr-5">
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => openEdit(r)} className="p-1.5 rounded hover:bg-paper-tint text-ink-mute hover:text-ink" title="Edit"><Icon name="edit" className="w-4 h-4" /></button>
+                      <button onClick={() => deleteRecord(r)} className="p-1.5 rounded hover:bg-danger-50 text-ink-mute hover:text-danger-600" title="Hapus"><Icon name="trash" className="w-4 h-4" /></button>
+                    </div>
+                  </td>
                 </tr>
               ))}
-              {records.length === 0 && <tr><td colSpan={6} className="py-10 text-center text-ink-mute">Belum ada absensi</td></tr>}
+              {records.length === 0 && <tr><td colSpan={7} className="py-10 text-center text-ink-mute">Belum ada absensi</td></tr>}
             </tbody>
           </table>
         )}
       </Card>
-      <Modal open={openManual} onClose={() => setOpenManual(false)} title="Absensi Manual Coach"
+      <Modal open={openManual} onClose={() => { setOpenManual(false); setEditTarget(null); }} title={editTarget ? "Edit Absensi Coach" : "Absensi Manual Coach"}
         footer={<><Btn variant="ghost" onClick={() => setOpenManual(false)}>Batal</Btn><Btn variant="primary" onClick={saveManual} disabled={saving}>{saving ? "Menyimpan…" : "Simpan absensi"}</Btn></>}>
         <div className="space-y-4">
           <Card className="!p-3 bg-manual-50 border-manual-500/20">
@@ -1060,23 +1530,46 @@ function AdminPengumuman({ branchId }: { branchId: string }) {
   const [loading, setLoading] = useState(true);
   const [openAdd, setOpenAdd] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ title: "", body: "", target: "all", valid_until: "" });
+  const [classes, setClasses] = useState<ClassRow[]>([]);
+  const [form, setForm] = useState({ title: "", body: "", target: "all", valid_until: "", class_ids: [] as string[] });
 
   const load = useCallback(async () => {
-    const { data } = await supabase.from("announcements").select("id, title, body, target_all, active, valid_until, created_at").eq("branch_id", branchId).order("created_at", { ascending: false });
-    if (data) setAnnouncements(data as Announcement[]);
+    const { data } = await supabase.from("announcements")
+      .select("id, title, body, target_all, active, valid_until, created_at, announcement_classes(class_id, class:classes(name))")
+      .eq("branch_id", branchId).order("created_at", { ascending: false });
+    if (data) setAnnouncements(data as unknown as Announcement[]);
     setLoading(false);
   }, [branchId, supabase]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+    supabase.from("classes").select("id, name, schedule_time, status, branch_id, capacity, enrolled, schedule_days, price_monthly, show_on_landing")
+      .eq("branch_id", branchId).eq("status", "active").order("name")
+      .then(({ data }) => { if (data) setClasses(data as unknown as ClassRow[]); });
+  }, [load]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const toggleClass = (id: string) => {
+    setForm(f => ({
+      ...f,
+      class_ids: f.class_ids.includes(id) ? f.class_ids.filter(x => x !== id) : [...f.class_ids, id],
+    }));
+  };
 
   const create = async () => {
     if (!form.title || !form.body) return toast.error("Judul dan isi wajib diisi");
+    if (form.target === "class" && form.class_ids.length === 0) return toast.error("Pilih minimal satu kelas");
     setSaving(true);
     const user = (await supabase.auth.getUser()).data.user;
-    const { error } = await supabase.from("announcements").insert({ branch_id: branchId, title: form.title, body: form.body, target_all: form.target === "all", active: true, valid_until: form.valid_until || null, created_by: user?.id });
+    const { data: ann, error } = await supabase.from("announcements").insert({
+      branch_id: branchId, title: form.title, body: form.body,
+      target_all: form.target === "all", active: true,
+      valid_until: form.valid_until || null, created_by: user?.id,
+    }).select("id").single();
+    if (error || !ann) { setSaving(false); return toast.error("Gagal membuat pengumuman", error?.message); }
+    if (form.target === "class" && form.class_ids.length > 0) {
+      await supabase.from("announcement_classes").insert(form.class_ids.map(class_id => ({ announcement_id: ann.id, class_id })));
+    }
     setSaving(false);
-    if (error) return toast.error("Gagal membuat pengumuman", error.message);
     toast.success("Pengumuman dibuat");
     setOpenAdd(false);
     load();
@@ -1092,25 +1585,31 @@ function AdminPengumuman({ branchId }: { branchId: string }) {
     <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div><h2 className="font-display font-bold text-2xl">Pengumuman</h2><p className="text-ink-mute text-sm mt-0.5">Tampil di home member page sebagai banner.</p></div>
-        <Btn variant="primary" icon="plus" onClick={() => { setForm({ title: "", body: "", target: "all", valid_until: "" }); setOpenAdd(true); }}>Buat Pengumuman</Btn>
+        <Btn variant="primary" icon="plus" onClick={() => { setForm({ title: "", body: "", target: "all", valid_until: "", class_ids: [] }); setOpenAdd(true); }}>Buat Pengumuman</Btn>
       </div>
       {loading ? <div className="text-ink-mute text-sm">Memuat…</div> : (
         <div className="grid lg:grid-cols-2 gap-5">
-          {announcements.map((a) => (
-            <Card key={a.id}>
-              <div className="flex items-start gap-3">
-                <span className="w-11 h-11 rounded-xl bg-ocean-50 text-ocean-700 flex items-center justify-center shrink-0"><Icon name="bell" className="w-5 h-5" /></span>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap"><h3 className="font-display font-bold text-ink">{a.title}</h3><Status kind={a.active ? "active" : "inactive"}>{a.active ? "Aktif" : "Nonaktif"}</Status></div>
-                  {a.valid_until && <div className="text-xs text-ink-mute mt-1">Berlaku s/d {fmtDate(a.valid_until)} · Target: <b>{a.target_all ? "Semua" : "Spesifik"}</b></div>}
-                  <p className="text-sm text-ink-soft mt-3 leading-relaxed">{a.body}</p>
-                  <div className="mt-4 flex gap-2">
-                    {a.active && <Btn variant="ghost" size="sm" onClick={() => deactivate(a.id)}>Nonaktifkan</Btn>}
+          {announcements.map((a) => {
+            const annClasses = (a as unknown as { announcement_classes?: { class_id: string; class?: { name: string } | null }[] }).announcement_classes;
+            return (
+              <Card key={a.id}>
+                <div className="flex items-start gap-3">
+                  <span className="w-11 h-11 rounded-xl bg-ocean-50 text-ocean-700 flex items-center justify-center shrink-0"><Icon name="bell" className="w-5 h-5" /></span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap"><h3 className="font-display font-bold text-ink">{a.title}</h3><Status kind={a.active ? "active" : "inactive"}>{a.active ? "Aktif" : "Nonaktif"}</Status></div>
+                    <div className="text-xs text-ink-mute mt-1">
+                      {a.valid_until && <>Berlaku s/d {fmtDate(a.valid_until)} · </>}
+                      Target: <b>{a.target_all ? "Semua" : annClasses && annClasses.length > 0 ? annClasses.map(ac => ac.class?.name ?? "").join(", ") : "Spesifik"}</b>
+                    </div>
+                    <p className="text-sm text-ink-soft mt-3 leading-relaxed">{a.body}</p>
+                    <div className="mt-4 flex gap-2">
+                      {a.active && <Btn variant="ghost" size="sm" onClick={() => deactivate(a.id)}>Nonaktifkan</Btn>}
+                    </div>
                   </div>
                 </div>
-              </div>
-            </Card>
-          ))}
+              </Card>
+            );
+          })}
           {announcements.length === 0 && <p className="text-ink-mute">Belum ada pengumuman.</p>}
         </div>
       )}
@@ -1121,12 +1620,26 @@ function AdminPengumuman({ branchId }: { branchId: string }) {
           <Field label="Isi pengumuman" required><Textarea rows={4} value={form.body} onChange={e => setForm(f => ({ ...f, body: e.target.value }))} /></Field>
           <div className="grid sm:grid-cols-2 gap-4">
             <Field label="Target">
-              <Select value={form.target} onChange={e => setForm(f => ({ ...f, target: e.target.value }))}>
-                <option value="all">Semua</option><option value="member">Member</option><option value="coach">Coach</option>
+              <Select value={form.target} onChange={e => setForm(f => ({ ...f, target: e.target.value, class_ids: [] }))}>
+                <option value="all">Semua</option>
+                <option value="class">Per kelas</option>
               </Select>
             </Field>
             <Field label="Berlaku s/d"><Input type="date" value={form.valid_until} onChange={e => setForm(f => ({ ...f, valid_until: e.target.value }))} /></Field>
           </div>
+          {form.target === "class" && (
+            <Field label="Pilih kelas" hint="Bisa pilih lebih dari satu">
+              <div className="flex flex-wrap gap-2 mt-1">
+                {classes.map(c => (
+                  <button key={c.id} type="button" onClick={() => toggleClass(c.id)}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-semibold border transition ${form.class_ids.includes(c.id) ? "bg-ocean-600 text-white border-ocean-600" : "bg-white text-ink-soft border-line hover:border-ocean-300"}`}>
+                    {c.name}
+                  </button>
+                ))}
+                {classes.length === 0 && <span className="text-sm text-ink-mute">Tidak ada kelas aktif</span>}
+              </div>
+            </Field>
+          )}
         </div>
       </Modal>
     </div>
@@ -1145,6 +1658,14 @@ function AdminIzin({ branchId }: { branchId: string }) {
   const [substituteId, setSubstituteId] = useState("");
   const [approving, setApproving] = useState(false);
   const [allCoaches, setAllCoaches] = useState<CoachProfile[]>([]);
+  const [rejectTarget, setRejectTarget] = useState<LeaveRow | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
+  const [rejecting, setRejecting] = useState(false);
+  const [openCreate, setOpenCreate] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [allMembers, setAllMembers] = useState<{ id: string; full_name: string }[]>([]);
+  const [allClasses, setAllClasses] = useState<{ id: string; name: string }[]>([]);
+  const [createForm, setCreateForm] = useState({ target_id: "", type: "sakit", date_from: "", date_to: "", reason: "", class_ids: [] as string[], substitute_id: "" });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1177,18 +1698,62 @@ function AdminIzin({ branchId }: { branchId: string }) {
     load();
     supabase.from("profiles").select("id, full_name").eq("branch_id", branchId).eq("role", "coach").order("full_name")
       .then(({ data }) => { if (data) setAllCoaches(data as unknown as CoachProfile[]); });
+    supabase.from("members").select("id, profile:profiles(full_name)").eq("branch_id", branchId).eq("status", "active")
+      .then(({ data }) => { if (data) setAllMembers(data.map((m: Record<string, unknown>) => ({ id: m.id as string, full_name: ((m.profile as { full_name?: string } | null)?.full_name ?? "—") }))); });
+    supabase.from("classes").select("id, name").eq("branch_id", branchId).order("name")
+      .then(({ data }) => { if (data) setAllClasses(data as { id: string; name: string }[]); });
   }, [load]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const decide = async (id: string, status: "approved" | "rejected") => {
     if (status === "approved" && tab === "coach") {
-      // Open modal to optionally assign substitute
       const leave = leaves.find(l => l.id === id);
       if (leave) { setApproveTarget(leave); setSubstituteId(leave.substitute_profile?.full_name ? (allCoaches.find(c => c.full_name === leave.substitute_profile?.full_name)?.id ?? "") : ""); return; }
+    }
+    if (status === "rejected" && tab === "member") {
+      const leave = leaves.find(l => l.id === id);
+      if (leave) { setRejectTarget(leave); setRejectReason(""); return; }
     }
     const table = tab === "coach" ? "coach_leaves" : "member_leaves";
     const { error } = await supabase.from(table as "coach_leaves").update({ status, reviewed_at: new Date().toISOString() }).eq("id", id);
     if (error) return toast.error("Gagal update status", error.message);
     toast.success(status === "approved" ? "Izin disetujui" : "Izin ditolak");
+    load();
+  };
+
+  const confirmReject = async () => {
+    if (!rejectTarget) return;
+    setRejecting(true);
+    const upd: Record<string, unknown> = { status: "rejected", reviewed_at: new Date().toISOString() };
+    if (rejectReason.trim()) upd.reject_reason = rejectReason.trim();
+    const { error } = await supabase.from("member_leaves").update(upd).eq("id", rejectTarget.id);
+    setRejecting(false);
+    if (error) return toast.error("Gagal menolak izin", error.message);
+    toast.success("Izin ditolak");
+    setRejectTarget(null);
+    load();
+  };
+
+  const createLeave = async () => {
+    if (!createForm.target_id || !createForm.date_from || !createForm.date_to) return toast.error("Target, tanggal mulai, dan selesai wajib diisi");
+    setCreating(true);
+    if (tab === "coach") {
+      const ins: Record<string, unknown> = { coach_id: createForm.target_id, type: createForm.type, date_from: createForm.date_from, date_to: createForm.date_to, reason: createForm.reason || null, status: "approved", created_by_admin: true, reviewed_at: new Date().toISOString() };
+      if (createForm.substitute_id) ins.substitute_id = createForm.substitute_id;
+      const { data, error } = await supabase.from("coach_leaves").insert(ins).select("id").single();
+      if (error || !data) { setCreating(false); return toast.error("Gagal membuat izin", error?.message); }
+      if (createForm.class_ids.length > 0) {
+        await supabase.from("coach_leave_classes").insert(createForm.class_ids.map(cid => ({ leave_id: data.id, class_id: cid })));
+      }
+    } else {
+      const { data, error } = await supabase.from("member_leaves").insert({ member_id: createForm.target_id, type: createForm.type, date_from: createForm.date_from, date_to: createForm.date_to, reason: createForm.reason || null, status: "approved", created_by_admin: true, reviewed_at: new Date().toISOString() }).select("id").single();
+      if (error || !data) { setCreating(false); return toast.error("Gagal membuat izin", error?.message); }
+      if (createForm.class_ids.length > 0) {
+        await supabase.from("member_leave_classes").insert(createForm.class_ids.map(cid => ({ member_leave_id: data.id, class_id: cid })));
+      }
+    }
+    setCreating(false);
+    setOpenCreate(false);
+    toast.success("Izin berhasil dibuat");
     load();
   };
 
@@ -1209,6 +1774,7 @@ function AdminIzin({ branchId }: { branchId: string }) {
     <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div><h2 className="font-display font-bold text-2xl">Manajemen Izin</h2><p className="text-ink-mute text-sm mt-0.5">Approve pengajuan izin coach & member.</p></div>
+        <Btn variant="primary" icon="plus" onClick={() => { setCreateForm({ target_id: "", type: "sakit", date_from: "", date_to: "", reason: "", class_ids: [], substitute_id: "" }); setOpenCreate(true); }}>Buat Izin</Btn>
       </div>
       <Card padded={false}>
         <div className="px-5 py-3 border-b border-line flex items-center gap-2">
@@ -1267,6 +1833,72 @@ function AdminIzin({ branchId }: { branchId: string }) {
           </Field>
         </div>
       </Modal>
+
+      {/* Reject member leave + reason modal */}
+      <Modal open={!!rejectTarget} onClose={() => setRejectTarget(null)} title="Tolak Izin Member" size="sm"
+        footer={<><Btn variant="ghost" onClick={() => setRejectTarget(null)}>Batal</Btn><Btn variant="ghost" className="text-danger-500" onClick={confirmReject} disabled={rejecting}>{rejecting ? "Menolak…" : "Konfirmasi Tolak"}</Btn></>}>
+        <div className="space-y-4">
+          <Card className="!p-3 bg-paper-tint">
+            <div className="text-sm font-semibold text-ink">{rejectTarget?.profile?.full_name}</div>
+            <div className="text-xs text-ink-mute mt-0.5">{fmtDate(rejectTarget?.date_from ?? "")} – {fmtDate(rejectTarget?.date_to ?? "")} · {rejectTarget?.type}</div>
+            {rejectTarget?.reason && <div className="text-xs text-ink-soft mt-1">{rejectTarget.reason}</div>}
+          </Card>
+          <Field label="Alasan penolakan" hint="Opsional — akan dilihat oleh member.">
+            <Textarea rows={2} value={rejectReason} onChange={e => setRejectReason(e.target.value)} placeholder="Mis. Dokumen tidak lengkap." />
+          </Field>
+        </div>
+      </Modal>
+
+      {/* Admin create leave modal */}
+      <Modal open={openCreate} onClose={() => setOpenCreate(false)} title={`Buat Izin ${tab === "coach" ? "Coach" : "Member"}`} size="sm"
+        footer={<><Btn variant="ghost" onClick={() => setOpenCreate(false)}>Batal</Btn><Btn variant="primary" icon="check" onClick={createLeave} disabled={creating}>{creating ? "Menyimpan…" : "Buat Izin"}</Btn></>}>
+        <div className="space-y-4">
+          <Field label={tab === "coach" ? "Coach" : "Member"} required>
+            <Select value={createForm.target_id} onChange={e => setCreateForm(f => ({ ...f, target_id: e.target.value }))}>
+              <option value="">— pilih {tab === "coach" ? "coach" : "member"} —</option>
+              {tab === "coach"
+                ? allCoaches.map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)
+                : allMembers.map(m => <option key={m.id} value={m.id}>{m.full_name}</option>)}
+            </Select>
+          </Field>
+          <Field label="Jenis izin" required>
+            <Select value={createForm.type} onChange={e => setCreateForm(f => ({ ...f, type: e.target.value }))}>
+              <option value="sakit">Sakit</option>
+              <option value="izin">Izin</option>
+              <option value="cuti">Cuti</option>
+            </Select>
+          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Tanggal mulai" required><Input type="date" value={createForm.date_from} onChange={e => setCreateForm(f => ({ ...f, date_from: e.target.value }))} /></Field>
+            <Field label="Tanggal selesai" required><Input type="date" value={createForm.date_to} onChange={e => setCreateForm(f => ({ ...f, date_to: e.target.value }))} min={createForm.date_from} /></Field>
+          </div>
+          <Field label="Kelas yang ditinggalkan" hint="Opsional">
+            <div className="flex flex-wrap gap-1.5 mt-1">
+              {allClasses.map(c => {
+                const sel = createForm.class_ids.includes(c.id);
+                return (
+                  <button key={c.id} type="button"
+                    onClick={() => setCreateForm(f => ({ ...f, class_ids: sel ? f.class_ids.filter(id => id !== c.id) : [...f.class_ids, c.id] }))}
+                    className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors ${sel ? "bg-ocean-700 text-white border-ocean-700" : "bg-paper-tint border-line text-ink-soft hover:border-ocean-300"}`}>
+                    {c.name}
+                  </button>
+                );
+              })}
+            </div>
+          </Field>
+          {tab === "coach" && (
+            <Field label="Coach pengganti" hint="Opsional">
+              <Select value={createForm.substitute_id} onChange={e => setCreateForm(f => ({ ...f, substitute_id: e.target.value }))}>
+                <option value="">— tanpa pengganti —</option>
+                {allCoaches.filter(c => c.id !== createForm.target_id).map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
+              </Select>
+            </Field>
+          )}
+          <Field label="Keterangan" hint="Opsional">
+            <Textarea rows={2} value={createForm.reason} onChange={e => setCreateForm(f => ({ ...f, reason: e.target.value }))} placeholder="Mis. Demam sejak kemarin." />
+          </Field>
+        </div>
+      </Modal>
     </div>
   );
 }
@@ -1300,7 +1932,8 @@ function AdminPembayaran({ branchId }: { branchId: string }) {
 
   const verify = async (id: string) => {
     setVerifying(id);
-    const { error } = await supabase.from("bills").update({ status: "paid", paid_at: new Date().toISOString() }).eq("id", id);
+    const user = (await supabase.auth.getUser()).data.user;
+    const { error } = await supabase.from("bills").update({ status: "paid", paid_at: new Date().toISOString(), verified_by: user?.id ?? null }).eq("id", id);
     setVerifying(null);
     if (error) return toast.error("Gagal verifikasi", error.message);
     setBills(prev => prev.map(b => b.id === id ? { ...b, status: "paid" } : b));
@@ -1594,7 +2227,8 @@ function AdminSchoolPanel({ branchId }: { branchId: string }) {
   const [loading, setLoading] = useState(true);
   const [openAdd, setOpenAdd] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ name: "", email: "" });
+  const [form, setForm] = useState({ name: "", email: "", password: "" });
+  const [createdCredential, setCreatedCredential] = useState<{ name: string; email: string; password: string } | null>(null);
 
   const load = useCallback(async () => {
     const { data } = await supabase.from("schools").select("id, name, email, profile_id").eq("branch_id", branchId).order("name");
@@ -1605,13 +2239,27 @@ function AdminSchoolPanel({ branchId }: { branchId: string }) {
   useEffect(() => { load(); }, [load]);
 
   const create = async () => {
-    if (!form.name) return toast.error("Nama sekolah wajib diisi");
+    if (!form.name || !form.email || !form.password) return toast.error("Nama, email, dan password wajib diisi");
+    if (form.password.length < 6) return toast.error("Password minimal 6 karakter");
     setSaving(true);
-    const { error } = await supabase.from("schools").insert({ branch_id: branchId, name: form.name, email: form.email || null });
+    // 1. Create auth account with role=school
+    const res = await fetch("/api/admin/users", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: form.email, password: form.password, full_name: form.name, role: "school", branch_id: branchId }),
+    });
+    const json = await res.json() as { user_id?: string; error?: string };
+    if (!res.ok) { toast.error("Gagal membuat akun sekolah", json.error); setSaving(false); return; }
+
+    // 2. Insert into schools table
+    const { error } = await supabase.from("schools").insert({
+      branch_id: branchId, name: form.name, email: form.email, profile_id: json.user_id ?? null,
+    });
     setSaving(false);
     if (error) return toast.error("Gagal menambah sekolah", error.message);
-    toast.success("Sekolah ditambahkan");
+    toast.success("Sekolah ditambahkan & akun login dibuat");
+    setCreatedCredential({ name: form.name, email: form.email, password: form.password });
     setOpenAdd(false);
+    setForm({ name: "", email: "", password: "" });
     load();
   };
 
@@ -1619,7 +2267,7 @@ function AdminSchoolPanel({ branchId }: { branchId: string }) {
     <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div><h2 className="font-display font-bold text-2xl">School Panel (Afiliasi)</h2><p className="text-ink-mute text-sm mt-0.5">Kelola sekolah afiliasi & rekap biaya yang ditanggung.</p></div>
-        <Btn variant="primary" icon="plus" onClick={() => { setForm({ name: "", email: "" }); setOpenAdd(true); }}>Tambah Sekolah</Btn>
+        <Btn variant="primary" icon="plus" onClick={() => { setForm({ name: "", email: "", password: "" }); setOpenAdd(true); }}>Tambah Sekolah</Btn>
       </div>
       {loading ? <div className="text-ink-mute text-sm">Memuat…</div> : (
         <div className="grid lg:grid-cols-2 gap-5">
@@ -1630,7 +2278,9 @@ function AdminSchoolPanel({ branchId }: { branchId: string }) {
                 <div className="flex-1 min-w-0">
                   <div className="font-display font-bold text-ink">{s.name}</div>
                   <div className="text-xs text-ink-mute">{s.email ?? "—"}</div>
-                  <div className="mt-4 flex gap-2"><Status kind="active">Aktif</Status></div>
+                  <div className="mt-3 flex gap-2">
+                    <Status kind={s.profile_id ? "active" : "warn"}>{s.profile_id ? "Akun aktif" : "Belum ada akun"}</Status>
+                  </div>
                 </div>
               </div>
             </Card>
@@ -1638,11 +2288,36 @@ function AdminSchoolPanel({ branchId }: { branchId: string }) {
           {schools.length === 0 && <p className="text-ink-mute">Belum ada sekolah afiliasi.</p>}
         </div>
       )}
+
+      {/* Add school modal */}
       <Modal open={openAdd} onClose={() => setOpenAdd(false)} title="Tambah Sekolah Afiliasi" size="sm"
-        footer={<><Btn variant="ghost" onClick={() => setOpenAdd(false)}>Batal</Btn><Btn variant="primary" onClick={create} disabled={saving}>{saving ? "Menyimpan…" : "Tambahkan"}</Btn></>}>
+        footer={<><Btn variant="ghost" onClick={() => setOpenAdd(false)}>Batal</Btn><Btn variant="primary" onClick={create} disabled={saving}>{saving ? "Menyimpan…" : "Buat Sekolah & Akun"}</Btn></>}>
         <div className="space-y-4">
-          <Field label="Nama sekolah" required><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></Field>
-          <Field label="Email sekolah"><Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} /></Field>
+          <Field label="Nama sekolah" required><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Mis. SD Negeri 1 Bandung" /></Field>
+          <Field label="Email login" required hint="Digunakan untuk login ke school page"><Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} /></Field>
+          <Field label="Password" required hint="Min. 6 karakter — kirimkan ke pihak sekolah"><Input type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder="••••••••" /></Field>
+        </div>
+      </Modal>
+
+      {/* Credential popup after create */}
+      <Modal open={!!createdCredential} onClose={() => setCreatedCredential(null)} title="Sekolah Berhasil Ditambahkan" size="sm"
+        footer={
+          <>
+            <Btn variant="ghost" onClick={() => setCreatedCredential(null)}>Tutup</Btn>
+            <a href={waLink(`Halo, berikut akses login School Panel Next Swimming School untuk ${createdCredential?.name ?? ""}:\n\nEmail: ${createdCredential?.email ?? ""}\nPassword: ${createdCredential?.password ?? ""}\n\nLogin di: ${typeof window !== "undefined" ? window.location.origin : ""}/login`)} target="_blank" rel="noreferrer">
+              <Btn variant="wa" icon="whatsapp">Kirim ke WA Sekolah</Btn>
+            </a>
+          </>
+        }>
+        <div className="space-y-4">
+          <Card className="!p-4 bg-ok-50 border-ok-200">
+            <div className="flex items-start gap-2.5 text-sm text-ok-700"><Icon name="check" className="w-5 h-5 shrink-0 mt-0.5" /><span>Akun login berhasil dibuat. Kirimkan credential ini ke pihak sekolah.</span></div>
+          </Card>
+          <div className="space-y-2 text-sm">
+            <div className="flex justify-between p-3 rounded-lg bg-paper-tint"><span className="text-ink-mute">Sekolah</span><span className="font-semibold text-ink">{createdCredential?.name}</span></div>
+            <div className="flex justify-between p-3 rounded-lg bg-paper-tint"><span className="text-ink-mute">Email</span><span className="font-mono text-ink">{createdCredential?.email}</span></div>
+            <div className="flex justify-between p-3 rounded-lg bg-paper-tint"><span className="text-ink-mute">Password</span><span className="font-mono text-ink">{createdCredential?.password}</span></div>
+          </div>
         </div>
       </Modal>
     </div>

@@ -99,6 +99,7 @@ function MemberHome({
   const [pendingBill, setPendingBill] = useState<{ period: string; amount: number; class_name: string } | null>(null);
   const [latestAnnouncement, setLatestAnnouncement] = useState<{ title: string; body: string } | null>(null);
   const [upcomingSessions, setUpcomingSessions] = useState<{ date: string; day: string; time: string; class_name: string; coach: string }[]>([]);
+  const [privateReminder, setPrivateReminder] = useState<{ remaining: number; total: number } | null>(null);
 
   useEffect(() => {
     if (!memberId) return;
@@ -137,15 +138,32 @@ function MemberHome({
         }
       });
 
-    // Latest announcement (active only)
-    supabase.from("announcements")
-      .select("title, body")
-      .eq("branch_id", branchId)
-      .eq("active", true)
-      .order("created_at", { ascending: false })
-      .limit(1)
+    // Private session reminder
+    supabase.from("members")
+      .select("type, remaining_sessions, total_sessions")
+      .eq("id", memberId)
       .single()
-      .then(({ data }) => { if (data) setLatestAnnouncement(data); });
+      .then(({ data }) => {
+        if (data && data.type === "private" && data.remaining_sessions != null && data.remaining_sessions <= 1) {
+          setPrivateReminder({ remaining: data.remaining_sessions, total: data.total_sessions ?? 0 });
+        }
+      });
+
+    // Latest announcement — target_all OR targeted to member's classes
+    supabase.from("member_classes").select("class_id").eq("member_id", memberId)
+      .then(async ({ data: mcData }) => {
+        const classIds = (mcData ?? []).map((mc) => (mc as unknown as { class_id: string }).class_id);
+        // Fetch all active announcements for the branch
+        const { data: allAnns } = await supabase.from("announcements")
+          .select("title, body, target_all, announcement_classes(class_id)")
+          .eq("branch_id", branchId).eq("active", true)
+          .order("created_at", { ascending: false }).limit(20);
+        if (!allAnns) return;
+        // Show first announcement that is target_all OR has a matching class
+        const match = (allAnns as unknown as { title: string; body: string; target_all: boolean; announcement_classes: { class_id: string }[] }[])
+          .find((a) => a.target_all || a.announcement_classes.some((ac) => classIds.includes(ac.class_id)));
+        if (match) setLatestAnnouncement({ title: match.title, body: match.body });
+      });
 
     // Upcoming sessions from member_classes → classes (days + time_start)
     supabase.from("member_classes")
@@ -224,6 +242,25 @@ function MemberHome({
         </Card>
       )}
 
+      {privateReminder && (
+        <Card className="bg-wave-50 border-wave-200">
+          <div className="flex items-start gap-3">
+            <span className="w-11 h-11 rounded-xl bg-white text-wave-600 flex items-center justify-center shrink-0 animate-pulse"><Icon name="sparkle" className="w-5 h-5" /></span>
+            <div className="flex-1 min-w-0">
+              <div className="font-display font-bold text-ink">Paket sesi hampir habis</div>
+              <p className="text-sm text-ink-soft mt-0.5">
+                {privateReminder.remaining === 0
+                  ? "Paket sesi Anda sudah habis. Hubungi admin untuk perpanjangan."
+                  : `Sisa ${privateReminder.remaining} sesi terakhir dalam paket. Segera perpanjang agar latihan tidak terputus.`}
+              </p>
+            </div>
+          </div>
+          <a href={waLink(`Halo Admin, saya ingin memperpanjang paket sesi private untuk ${memberName}. Sisa sesi saat ini: ${privateReminder.remaining}.`)} target="_blank" rel="noreferrer" className="mt-3 inline-flex w-full">
+            <Btn variant="wa" size="sm" icon="whatsapp" className="w-full">Hubungi Admin — Perpanjang Paket</Btn>
+          </a>
+        </Card>
+      )}
+
       {latestAnnouncement && (
         <Card>
           <div className="flex items-start gap-3">
@@ -276,13 +313,14 @@ function MemberSchedule({ memberId }: { memberId: string }) {
   const supabase = createClient();
   const [classes, setClasses] = useState<{ id: string; name: string; schedule_days: string[]; schedule_time: string; location: string; coach_name: string }[]>([]);
   const [sessions, setSessions] = useState<{ date: string; day: string; time: string; class_id: string }[]>([]);
+  const [holidayClassIds, setHolidayClassIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!memberId) return;
     supabase.from("member_classes")
       .select("classes(id, name, schedule_days, time_start, location_name, class_coaches(profiles(full_name)))")
       .eq("member_id", memberId)
-      .then(({ data }) => {
+      .then(async ({ data }) => {
         if (!data) return;
         const cls = data.map((mc) => {
           const c = mc.classes as unknown as { id: string; name: string; schedule_days: string[]; time_start: string; location_name: string | null; class_coaches: { profiles: { full_name: string } | null }[] } | null;
@@ -291,6 +329,14 @@ function MemberSchedule({ memberId }: { memberId: string }) {
           return { id: c.id, name: c.name, schedule_days: c.schedule_days ?? [], schedule_time: c.time_start, location: c.location_name ?? "—", coach_name: firstCoach?.full_name ? `Coach ${firstCoach.full_name.split(" ")[0]}` : "—" };
         }).filter(Boolean) as typeof classes;
         setClasses(cls);
+
+        // Fetch today's holidays for these classes
+        const classIds = cls.map(c => c.id);
+        if (classIds.length > 0) {
+          const today = new Date().toISOString().slice(0, 10);
+          const { data: hols } = await supabase.from("class_holidays").select("class_id").in("class_id", classIds).eq("holiday_date", today);
+          if (hols) setHolidayClassIds(new Set(hols.map((h: { class_id: string }) => h.class_id)));
+        }
 
         // Build upcoming sessions
         const today = new Date();
@@ -318,10 +364,15 @@ function MemberSchedule({ memberId }: { memberId: string }) {
   return (
     <div className="space-y-5">
       <SectionTitle sub="Kelas terdaftar">Kelas Anda</SectionTitle>
-      {classes.map((c) => (
-        <Card key={c.id} padded={false} className="overflow-hidden">
+      {classes.map((c) => {
+        const isHoliday = holidayClassIds.has(c.id);
+        return (
+        <Card key={c.id} padded={false} className={`overflow-hidden${isHoliday ? " opacity-70" : ""}`}>
           <div className="p-5 bg-ocean-700 text-white">
-            <div className="font-display font-bold text-xl">{c.name}</div>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <div className="font-display font-bold text-xl">{c.name}</div>
+              {isHoliday && <Status kind="holiday" className="border-white/30">Libur Hari Ini</Status>}
+            </div>
             <div className="text-wave-200 text-sm mt-0.5">{c.coach_name}</div>
           </div>
           <div className="divide-y divide-line">
@@ -336,7 +387,8 @@ function MemberSchedule({ memberId }: { memberId: string }) {
             ))}
           </div>
         </Card>
-      ))}
+        );
+      })}
 
       {sessions.length > 0 && (
         <Card padded={false}>
@@ -390,7 +442,7 @@ function MemberAbsensi({ memberId }: { memberId: string }) {
           present: mapped.filter((r) => r.status === "hadir").length,
           excused: mapped.filter((r) => r.status === "izin").length,
           sick: mapped.filter((r) => r.status === "sakit").length,
-          absent: mapped.filter((r) => r.status === "tidak_hadir").length,
+          absent: mapped.filter((r) => r.status === "absent").length,
         });
       });
   }, [memberId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -414,14 +466,14 @@ function MemberAbsensi({ memberId }: { memberId: string }) {
             const dateStr = `${d.getDate()} ${monthNames[d.getMonth()]} ${d.getFullYear()}`;
             return (
               <div key={r.id} className="px-5 py-3 flex items-center gap-3">
-                <span className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${r.status === "hadir" ? "bg-ok-50 text-ok-600" : r.status === "tidak_hadir" ? "bg-danger-50 text-danger-500" : "bg-warn-50 text-warn-600"}`}>
-                  <Icon name={r.status === "hadir" ? "check" : r.status === "tidak_hadir" ? "x" : "info"} className="w-4 h-4" strokeWidth={2.5} />
+                <span className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${r.status === "hadir" ? "bg-ok-50 text-ok-600" : r.status === "absent" ? "bg-danger-50 text-danger-500" : "bg-warn-50 text-warn-600"}`}>
+                  <Icon name={r.status === "hadir" ? "check" : r.status === "absent" ? "x" : "info"} className="w-4 h-4" strokeWidth={2.5} />
                 </span>
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-semibold text-ink">{r.class_name}</div>
                   <div className="text-xs text-ink-mute font-mono">{dateStr} · {r.time}{r.notes ? ` · ${r.notes}` : ""}</div>
                 </div>
-                <Status kind={r.status === "hadir" ? "present" : r.status === "tidak_hadir" ? "absent" : r.status === "izin" ? "excused" : "sick"}>{r.status === "hadir" ? "Hadir" : r.status === "tidak_hadir" ? "Absen" : r.status === "izin" ? "Izin" : "Sakit"}</Status>
+                <Status kind={r.status === "hadir" ? "present" : r.status === "absent" ? "absent" : r.status === "izin" ? "excused" : "sick"}>{r.status === "hadir" ? "Hadir" : r.status === "absent" ? "Absen" : r.status === "izin" ? "Izin" : "Sakit"}</Status>
               </div>
             );
           })}
@@ -434,23 +486,40 @@ function MemberAbsensi({ memberId }: { memberId: string }) {
 
 // ── Tagihan ────────────────────────────────────────────────────────────────────
 
-function MemberBills({ memberId, memberName }: { memberId: string; memberName: string }) {
+function MemberBills({ memberId, memberName, branchId }: { memberId: string; memberName: string; branchId: string }) {
   const supabase = createClient();
   const [tab, setTab] = useState("active");
-  const [activeBills, setActiveBills] = useState<{ id: string; period_label: string; amount: number; class_name: string; due_date: string | null }[]>([]);
+  const [activeBills, setActiveBills] = useState<{ id: string; period_label: string; amount: number; discount: number; discount_reason: string | null; total: number; class_name: string; due_date: string | null }[]>([]);
   const [history, setHistory] = useState<{ id: string; period_label: string; amount: number; paid_at: string; payment_method: string | null }[]>([]);
+  const [adminWa, setAdminWa] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!branchId) return;
+    supabase.from("branches").select("wa_numbers").eq("id", branchId).single()
+      .then(({ data }) => {
+        if (data) {
+          const numbers = (data as unknown as { wa_numbers: string[] }).wa_numbers;
+          if (numbers?.length) setAdminWa(numbers[0]);
+        }
+      });
+  }, [branchId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const load = useCallback(async () => {
     if (!memberId) return;
     const [actRes, hisRes] = await Promise.all([
-      supabase.from("bills").select("id, period_label, amount, total, classes(name)").eq("member_id", memberId).eq("status", "unpaid").order("created_at", { ascending: false }),
+      supabase.from("bills").select("id, period_label, amount, discount, discount_reason, total, classes(name)").eq("member_id", memberId).eq("status", "unpaid").order("created_at", { ascending: false }),
       supabase.from("bills").select("id, period_label, amount, total, paid_at, paid_method").eq("member_id", memberId).eq("status", "paid").order("paid_at", { ascending: false }),
     ]);
     if (actRes.data) {
-      setActiveBills(actRes.data.map((b) => ({
-        id: b.id, period_label: b.period_label, amount: (b as unknown as { total: number }).total ?? b.amount, due_date: null,
-        class_name: (b.classes as unknown as { name: string } | null)?.name ?? "—",
-      })));
+      setActiveBills(actRes.data.map((b) => {
+        const bx = b as unknown as { amount: number; discount: number; discount_reason: string | null; total: number; classes: { name: string } | null };
+        return {
+          id: b.id, period_label: b.period_label,
+          amount: bx.amount ?? 0, discount: bx.discount ?? 0, discount_reason: bx.discount_reason ?? null,
+          total: bx.total ?? bx.amount ?? 0,
+          due_date: null, class_name: bx.classes?.name ?? "—",
+        };
+      }));
     }
     if (hisRes.data) {
       setHistory(hisRes.data.map((b) => ({
@@ -460,7 +529,13 @@ function MemberBills({ memberId, memberName }: { memberId: string; memberName: s
     }
   }, [memberId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+    const channel = supabase.channel(`bills:${memberId}`)
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "bills", filter: `member_id=eq.${memberId}` }, () => load())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [load]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const monthNames = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agt", "Sep", "Okt", "Nov", "Des"];
 
@@ -489,12 +564,25 @@ function MemberBills({ memberId, memberName }: { memberId: string; memberName: s
               </div>
               <div className="mt-4 pt-4 border-t border-warn-500/20 space-y-1.5 text-sm">
                 <div className="flex justify-between text-ink-mute"><span>Biaya kelas</span><span className="font-mono">{fmtIDR(b.amount)}</span></div>
-                <div className="flex justify-between font-display font-bold text-xl text-ink pt-2 border-t border-warn-500/20"><span>Total</span><span className="font-mono text-ocean-700">{fmtIDR(b.amount)}</span></div>
+                {b.discount > 0 && (
+                  <div className="flex justify-between text-ok-600">
+                    <span>Diskon{b.discount_reason ? ` (${b.discount_reason})` : ""}</span>
+                    <span className="font-mono">−{fmtIDR(b.discount)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between font-display font-bold text-xl text-ink pt-2 border-t border-warn-500/20"><span>Total</span><span className="font-mono text-ocean-700">{fmtIDR(b.total)}</span></div>
               </div>
               {b.due_date && (
                 <div className="mt-2 text-xs text-warn-700 font-semibold">Jatuh tempo: {fmtDate(b.due_date)}</div>
               )}
-              <a href={waLink(`Halo Admin, saya ingin konfirmasi pembayaran tagihan ${b.period_label} untuk ${memberName}. Bukti transfer terlampir.`)} target="_blank" rel="noreferrer" className="mt-4 inline-flex w-full">
+              {adminWa && (
+                <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded-xl bg-white border border-warn-500/20">
+                  <Icon name="whatsapp" className="w-4 h-4 text-ok-600 shrink-0" />
+                  <div className="text-xs text-ink-soft">Konfirmasi pembayaran ke admin:</div>
+                  <div className="font-mono font-bold text-sm text-ink ml-auto">{adminWa}</div>
+                </div>
+              )}
+              <a href={`https://wa.me/${adminWa?.replace(/\D/g, "") ?? ""}?text=${encodeURIComponent(`Halo Admin, saya ingin konfirmasi pembayaran tagihan ${b.period_label} untuk ${memberName}. Bukti transfer terlampir.`)}`} target="_blank" rel="noreferrer" className="mt-3 inline-flex w-full">
                 <Btn variant="wa" icon="whatsapp" size="lg" className="w-full">Hubungi Admin untuk konfirmasi</Btn>
               </a>
               <div className="mt-2 text-[11px] text-ink-mute text-center">Transfer ke rekening yang diberikan admin lalu kirim bukti via WA.</div>
@@ -535,7 +623,7 @@ function MemberLeave({ memberId }: { memberId: string }) {
   const [openForm, setOpenForm] = useState(false);
   const [leaves, setLeaves] = useState<{ id: string; date_from: string; date_to: string; type: string; reason: string | null; status: string; reject_reason: string | null; class_ids: string[] }[]>([]);
   const [myClasses, setMyClasses] = useState<{ id: string; name: string }[]>([]);
-  const [form, setForm] = useState({ class_id: "", start_date: "", end_date: "", type: "izin", notes: "" });
+  const [form, setForm] = useState({ class_ids: [] as string[], start_date: "", end_date: "", type: "izin", notes: "" });
   const [submitting, setSubmitting] = useState(false);
 
   const load = useCallback(async () => {
@@ -578,11 +666,11 @@ function MemberLeave({ memberId }: { memberId: string }) {
       status: "pending" as const,
     }).select("id").single();
     // Link to classes via member_leave_classes
-    if (!error && newLeave && form.class_id) {
-      await supabase.from("member_leave_classes").insert({ leave_id: newLeave.id, class_id: form.class_id });
+    if (!error && newLeave && form.class_ids.length > 0) {
+      await supabase.from("member_leave_classes").insert(form.class_ids.map((class_id) => ({ leave_id: newLeave.id, class_id })));
     }
     setSubmitting(false);
-    if (!error) { setOpenForm(false); setForm({ class_id: "", start_date: "", end_date: "", type: "izin", notes: "" }); load(); }
+    if (!error) { setOpenForm(false); setForm({ class_ids: [], start_date: "", end_date: "", type: "izin", notes: "" }); load(); }
   };
 
   const monthNames = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agt", "Sep", "Okt", "Nov", "Des"];
@@ -624,11 +712,17 @@ function MemberLeave({ memberId }: { memberId: string }) {
       <Modal open={openForm} onClose={() => setOpenForm(false)} title="Ajukan Izin"
         footer={<><Btn variant="ghost" onClick={() => setOpenForm(false)}>Batal</Btn><Btn variant="primary" disabled={submitting} onClick={submit}>Submit</Btn></>}>
         <div className="space-y-4">
-          <Field label="Kelas" required>
-            <Select value={form.class_id} onChange={(e) => setForm((f) => ({ ...f, class_id: e.target.value }))}>
-              <option value="">Pilih kelas…</option>
-              {myClasses.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </Select>
+          <Field label="Kelas" required hint="Bisa pilih lebih dari satu">
+            <div className="flex flex-wrap gap-2 mt-1">
+              {myClasses.map((c) => (
+                <button key={c.id} type="button"
+                  onClick={() => setForm((f) => ({ ...f, class_ids: f.class_ids.includes(c.id) ? f.class_ids.filter((x) => x !== c.id) : [...f.class_ids, c.id] }))}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-semibold border transition ${form.class_ids.includes(c.id) ? "bg-ocean-600 text-white border-ocean-600" : "bg-white text-ink-soft border-line hover:border-ocean-300"}`}>
+                  {c.name}
+                </button>
+              ))}
+              {myClasses.length === 0 && <span className="text-sm text-ink-mute">Tidak ada kelas terdaftar</span>}
+            </div>
           </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Tanggal mulai" required><Input type="date" value={form.start_date} onChange={(e) => setForm((f) => ({ ...f, start_date: e.target.value }))} /></Field>
@@ -773,23 +867,26 @@ function MemberRapor({ memberId, memberName }: { memberId: string; memberName: s
               <div className="flex items-center gap-3"><Avatar name={memberName} size={42} /><div><div className="font-semibold text-ink">{memberName}</div><div className="text-xs text-ink-mute">{selectedEntry.class_name} · {selectedEntry.coach_name}</div></div></div>
             </Card>
             <div className="space-y-3">
-              {[
-                { t: "Teknik gaya bebas", key: "freestyle",    max: 10 },
-                { t: "Teknik gaya dada",  key: "breaststroke", max: 10 },
-                { t: "Daya tahan",        key: "endurance",    max: 100 },
-              ].map((a) => {
-                const val = selectedEntry.scores[a.key];
-                return val != null ? (
-                  <div key={a.t}>
+              {Object.entries(selectedEntry.scores).map(([key, val]) => {
+                const numVal = typeof val === "number" ? val : null;
+                const strVal = typeof val === "string" ? val : null;
+                // Detect max: if key looks numeric and value is ≤100 render as bar
+                const isScore = numVal !== null;
+                const max = numVal !== null && numVal <= 10 ? 10 : 100;
+                return (
+                  <div key={key}>
                     <div className="flex justify-between text-sm">
-                      <span className="font-semibold text-ink">{a.t}</span>
-                      <span className="font-mono font-bold text-ocean-700">{val}/{a.max}</span>
+                      <span className="font-semibold text-ink capitalize">{key.replace(/_/g, " ")}</span>
+                      {isScore && <span className="font-mono font-bold text-ocean-700">{numVal}/{max}</span>}
                     </div>
-                    <div className="h-2 mt-1.5 bg-paper-deep rounded-full overflow-hidden">
-                      <div className={`h-full ${val / a.max > 0.7 ? "bg-ok-500" : val / a.max > 0.4 ? "bg-wave-500" : "bg-warn-500"}`} style={{ width: `${(val / a.max) * 100}%` }} />
-                    </div>
+                    {isScore && (
+                      <div className="h-2 mt-1.5 bg-paper-deep rounded-full overflow-hidden">
+                        <div className={`h-full ${numVal / max > 0.7 ? "bg-ok-500" : numVal / max > 0.4 ? "bg-wave-500" : "bg-warn-500"}`} style={{ width: `${(numVal / max) * 100}%` }} />
+                      </div>
+                    )}
+                    {strVal && <p className="text-sm text-ink-soft bg-paper-tint px-3 py-1.5 rounded-lg mt-1">{strVal}</p>}
                   </div>
-                ) : null;
+                );
               })}
               {selectedEntry.notes && (
                 <div>
@@ -914,11 +1011,17 @@ function MemberProfile({ memberId, memberName }: { memberId: string; memberName:
 
       <Card className="text-center">
         <SectionTitle sub="Print sebagai kartu absensi — QR tidak pernah berubah">QR Code Absensi</SectionTitle>
-        <div className="flex justify-center my-4"><QRBox value={profile?.qr_code ?? `NSS-M-${memberId.slice(0, 8).toUpperCase()}`} size={180} /></div>
-        <div className="grid grid-cols-2 gap-2">
-          <Btn variant="outline" size="md" icon="download">Download</Btn>
+        <div className="flex justify-center my-4">
+          <QRBox
+            value={profile?.qr_code ?? `NSS-M-${memberId.slice(0, 8).toUpperCase()}`}
+            size={180}
+            downloadable
+            downloadName={`QR-${profile?.full_name?.replace(/\s+/g, "-") ?? memberId}`}
+          />
+        </div>
+        <div className="flex justify-center gap-2">
           <a href={waLink("Halo, kirimkan kartu QR absensi anak saya untuk diprint.")} target="_blank" rel="noreferrer">
-            <Btn variant="wa" size="md" icon="whatsapp" className="w-full">Minta cetak</Btn>
+            <Btn variant="wa" size="md" icon="whatsapp">Minta cetak</Btn>
           </a>
         </div>
       </Card>
@@ -994,7 +1097,7 @@ export default function MemberPage() {
     home:     <MemberHome setActive={setActive} memberId={memberId} memberName={memberName} branchId={branchId} />,
     schedule: <MemberSchedule memberId={memberId} />,
     absen:    <MemberAbsensi memberId={memberId} />,
-    bills:    <MemberBills memberId={memberId} memberName={memberName} />,
+    bills:    <MemberBills memberId={memberId} memberName={memberName} branchId={branchId} />,
     leave:    <MemberLeave memberId={memberId} />,
     rapor:    <MemberRapor memberId={memberId} memberName={memberName} />,
     profile:  <MemberProfile memberId={memberId} memberName={memberName} />,

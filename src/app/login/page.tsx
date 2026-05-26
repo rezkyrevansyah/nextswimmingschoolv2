@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Logo from "@/components/ui/Logo";
 import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
@@ -51,14 +51,21 @@ function AuthShell({ children, side }: { children: React.ReactNode; side: React.
   );
 }
 
-export default function LoginPage() {
+function LoginForm() {
   const toast = useToast();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [pwd, setPwd] = useState("");
   const [show, setShow] = useState(false);
   const [loading, setLoading] = useState(false);
   const [forgot, setForgot] = useState(false);
+
+  useEffect(() => {
+    if (searchParams.get("suspended") === "1") {
+      toast.error("Akun disuspend", "Akun Anda sedang dalam masa suspend. Hubungi admin cabang untuk informasi lebih lanjut.");
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -205,5 +212,13 @@ export default function LoginPage() {
         </div>
       </Modal>
     </AuthShell>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
   );
 }

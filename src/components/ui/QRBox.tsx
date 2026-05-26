@@ -1,37 +1,45 @@
-import React from "react";
+"use client";
+import React, { useEffect, useRef, useState } from "react";
+import QRCode from "qrcode";
 
 interface QRBoxProps {
   size?: number;
   value?: string;
+  /** If true, renders a download <a> below the QR */
+  downloadable?: boolean;
+  downloadName?: string;
 }
 
-export default function QRBox({ size = 132, value = "NSS-XXX-000" }: QRBoxProps) {
+export default function QRBox({ size = 132, value = "NSS-XXX-000", downloadable, downloadName }: QRBoxProps) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [dataUrl, setDataUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!canvasRef.current) return;
+    QRCode.toCanvas(canvasRef.current, value, {
+      width: size,
+      margin: 1,
+      color: { dark: "#0A2540", light: "#ffffff" },
+    }).then(() => {
+      if (downloadable) setDataUrl(canvasRef.current!.toDataURL("image/png"));
+    }).catch(() => {});
+  }, [value, size, downloadable]);
+
   return (
     <div className="inline-flex flex-col items-center gap-1.5">
       <div className="p-2.5 bg-white rounded-xl border border-line shadow-sm">
-        <div style={{ width: size, height: size }} className="relative overflow-hidden rounded-md">
-          <svg viewBox="0 0 21 21" width={size} height={size} className="block">
-            {Array.from({ length: 21 }).map((_, y) =>
-              Array.from({ length: 21 }).map((_, x) => {
-                const k = (x * 73 + y * 131 + value.length * 17) % 9;
-                const corner = (x < 3 && y < 3) || (x > 17 && y < 3) || (x < 3 && y > 17);
-                const fill = corner || k < 3;
-                return fill ? (
-                  <rect key={`${x},${y}`} x={x} y={y} width="1" height="1" fill="#0A2540" />
-                ) : null;
-              })
-            )}
-            {([[0, 0], [14, 0], [0, 14]] as [number, number][]).map(([x, y], i) => (
-              <g key={i}>
-                <rect x={x} y={y} width="7" height="7" fill="#0A2540" />
-                <rect x={x + 1} y={y + 1} width="5" height="5" fill="#fff" />
-                <rect x={x + 2} y={y + 2} width="3" height="3" fill="#0A2540" />
-              </g>
-            ))}
-          </svg>
-        </div>
+        <canvas ref={canvasRef} width={size} height={size} className="block rounded-md" />
       </div>
       <div className="text-[10px] font-mono text-ink-mute tracking-wide">{value}</div>
+      {downloadable && dataUrl && (
+        <a
+          href={dataUrl}
+          download={`${downloadName ?? value}.png`}
+          className="text-xs font-semibold text-ocean-600 hover:text-ocean-700 flex items-center gap-1 mt-0.5"
+        >
+          ↓ Download PNG
+        </a>
+      )}
     </div>
   );
 }

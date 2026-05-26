@@ -258,8 +258,8 @@ export default function RegisterPage() {
             </Card>
 
             <div className="mt-6 grid sm:grid-cols-2 gap-3">
-              <a href={waLink("Halo, saya baru saja mendaftar via web — mohon dibantu konfirmasinya.")} target="_blank" rel="noreferrer">
-                <Btn variant="wa" icon="whatsapp" className="w-full" type="button">Chat admin dulu</Btn>
+              <a href={waLink("Halo, saya baru saja mendaftar via web — mohon dibantu konfirmasinya.")} target="_blank" rel="noreferrer" className="block">
+                <Btn variant="wa" size="lg" icon="whatsapp" className="w-full h-full">Chat admin dulu</Btn>
               </a>
               <Btn variant="primary" size="lg" className="w-full" disabled={loading}>
                 {loading ? "Mengirim…" : "Kirim pendaftaran"}
