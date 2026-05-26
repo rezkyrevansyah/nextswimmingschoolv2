@@ -34,10 +34,14 @@ interface ClassRow {
 
 interface MemberRow {
   id: string; profile_id: string; type: string; status: string;
-  date_start: string; qr_code: string | null;
+  date_start: string; qr_code: string | null; school_id: string | null;
   remaining_sessions: number | null; total_sessions: number | null;
   suspend_until?: string | null; suspend_reason?: string | null;
-  profile?: { full_name: string; birth_date: string | null; phone: string | null } | null;
+  profile?: {
+    full_name: string; birth_date: string | null; phone: string | null;
+    gender: string | null; address: string | null; health_notes: string | null;
+    email: string | null;
+  } | null;
   member_classes?: { class: { id: string; name: string } | null }[];
 }
 
@@ -436,20 +440,22 @@ function AdminClass({ branchId }: { branchId: string }) {
     if (!form.name || form.schedule_days.length === 0) return toast.error("Nama kelas dan hari wajib diisi");
     setSaving(true);
     if (editTarget) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await supabase.from("classes").update({
         name: form.name, schedule_days: form.schedule_days, time_start: form.time_start || null,
         time_end: form.time_end || null, capacity: Number(form.capacity) || 0, price_monthly: Number(form.price_monthly) || 0,
         show_landing: form.show_on_landing,
-      }).eq("id", editTarget.id);
+      } as any).eq("id", editTarget.id);
       setSaving(false);
       if (error) return toast.error("Gagal update kelas", error.message);
       toast.success("Kelas diperbarui");
     } else {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await supabase.from("classes").insert({
         name: form.name, schedule_days: form.schedule_days, time_start: form.time_start || null,
         time_end: form.time_end || null, capacity: Number(form.capacity) || 0, price_monthly: Number(form.price_monthly) || 0,
         show_landing: form.show_on_landing, goal: form.goals, branch_id: branchId, status: "active", enrolled: 0,
-      });
+      } as any);
       setSaving(false);
       if (error) return toast.error("Gagal membuat kelas", error.message);
       toast.success("Kelas dibuat");
@@ -664,7 +670,7 @@ function AdminMember({ branchId }: { branchId: string }) {
     if (!branchId) return;
     setLoading(true);
     const db = createClient();
-    const sel = "id, profile_id, type, status, date_start, qr_code, remaining_sessions, total_sessions, suspend_until, suspend_reason, profile:profiles(full_name, birth_date, phone), member_classes(class:classes(id, name))";
+    const sel = "id, profile_id, type, status, date_start, qr_code, school_id, remaining_sessions, total_sessions, suspend_until, suspend_reason, profile:profiles(full_name, birth_date, phone, gender, address, health_notes, email), member_classes(class:classes(id, name))";
     let q = db.from("members").select(sel).eq("branch_id", branchId).order("created_at", { ascending: false });
     if (tab === "suspended") q = db.from("members").select(sel).eq("branch_id", branchId).eq("status", "suspended") as typeof q;
     else if (tab !== "all") q = q.eq("type", tab);
@@ -688,7 +694,7 @@ function AdminMember({ branchId }: { branchId: string }) {
     if (form.class_id) {
       const cls = classes.find(c => c.id === form.class_id);
       if (cls && cls.enrolled >= cls.capacity) {
-        const ok = await confirm(`Kelas "${cls.name}" sudah penuh (${cls.enrolled}/${cls.capacity} member). Tetap lanjutkan?`);
+        const ok = await confirm({ body: `Kelas "${cls.name}" sudah penuh (${cls.enrolled}/${cls.capacity} member). Tetap lanjutkan?` });
         if (!ok) return;
       }
     }
@@ -716,8 +722,20 @@ function AdminMember({ branchId }: { branchId: string }) {
   };
 
   const openEdit = (m: MemberRow) => {
-    const currentClassId = m.member_classes?.[0]?.class?.id ?? "";
-    setEditMemberForm({ full_name: m.profile?.full_name ?? "", phone: m.profile?.phone ?? "", birth_date: m.profile?.birth_date ?? "", class_id: currentClassId });
+    setEditMemberForm({
+      full_name: m.profile?.full_name ?? "",
+      birth_date: m.profile?.birth_date ?? "",
+      gender: m.profile?.gender ?? "",
+      phone: m.profile?.phone ?? "",
+      phone_owner: "self",
+      parent_name: "",
+      parent_phone: "",
+      address: m.profile?.address ?? "",
+      health_notes: m.profile?.health_notes ?? "",
+      type: m.type ?? "reguler",
+      school_id: m.school_id ?? "",
+      class_ids: m.member_classes?.map(mc => mc.class?.id).filter(Boolean) as string[] ?? [],
+    });
     setOpenEditMember(true);
   };
 
@@ -725,14 +743,44 @@ function AdminMember({ branchId }: { branchId: string }) {
     if (!detail) return;
     if (!editMemberForm.full_name) return toast.error("Nama lengkap wajib diisi");
     setSavingEdit(true);
-    await supabase.from("profiles").update({ full_name: editMemberForm.full_name, phone: editMemberForm.phone || null, birth_date: editMemberForm.birth_date || null }).eq("id", detail.profile_id);
-    if (editMemberForm.class_id) {
-      const currentClassId = detail.member_classes?.[0]?.class?.id;
-      if (editMemberForm.class_id !== currentClassId) {
-        if (currentClassId) await supabase.from("member_classes").delete().eq("member_id", detail.id).eq("class_id", currentClassId);
-        await supabase.from("member_classes").upsert({ member_id: detail.id, class_id: editMemberForm.class_id, joined_at: new Date().toISOString() }, { onConflict: "member_id,class_id" });
+
+    // Update profiles
+    const { error: profileErr } = await createClient().from("profiles").update({
+      full_name: editMemberForm.full_name,
+      birth_date: editMemberForm.birth_date || null,
+      gender: editMemberForm.gender || null,
+      phone: editMemberForm.phone || null,
+      address: editMemberForm.address || null,
+      health_notes: editMemberForm.health_notes || null,
+    }).eq("id", detail.profile_id);
+    if (profileErr) { setSavingEdit(false); return toast.error("Gagal update profil", profileErr.message); }
+
+    // Update members row (type, school_id)
+    await createClient().from("members").update({
+      type: editMemberForm.type as "reguler" | "private" | "school_affiliate",
+      school_id: editMemberForm.type === "school_affiliate" ? (editMemberForm.school_id || null) : null,
+    }).eq("id", detail.id);
+
+    // Sync kelas — add new, remove removed
+    const prev = detail.member_classes?.map(mc => mc.class?.id).filter(Boolean) as string[] ?? [];
+    const next = editMemberForm.class_ids;
+    const toAdd = next.filter(id => !prev.includes(id));
+    const toRemove = prev.filter(id => !next.includes(id));
+    if (toAdd.length > 0) {
+      // capacity check for new classes
+      for (const cid of toAdd) {
+        const cls = classes.find(c => c.id === cid);
+        if (cls && cls.enrolled >= cls.capacity) {
+          const ok = await confirm({ body: `Kelas "${cls.name}" sudah penuh (${cls.enrolled}/${cls.capacity}). Tetap tambahkan?` });
+          if (!ok) { setSavingEdit(false); return; }
+        }
       }
+      await createClient().from("member_classes").insert(toAdd.map(class_id => ({ member_id: detail.id, class_id, joined_at: new Date().toISOString() })));
     }
+    if (toRemove.length > 0) {
+      await createClient().from("member_classes").delete().eq("member_id", detail.id).in("class_id", toRemove);
+    }
+
     setSavingEdit(false);
     toast.success("Data member diperbarui");
     setOpenEditMember(false);
@@ -754,7 +802,11 @@ function AdminMember({ branchId }: { branchId: string }) {
   const [suspendMemberForm, setSuspendMemberForm] = useState({ reason: "", until: "" });
   const [suspendingMember, setSuspendingMember] = useState(false);
   const [openEditMember, setOpenEditMember] = useState(false);
-  const [editMemberForm, setEditMemberForm] = useState({ full_name: "", phone: "", birth_date: "", class_id: "" });
+  const [editMemberForm, setEditMemberForm] = useState({
+    full_name: "", birth_date: "", gender: "", phone: "", phone_owner: "self",
+    parent_name: "", parent_phone: "", address: "", health_notes: "",
+    type: "reguler", school_id: "", class_ids: [] as string[],
+  });
   const [savingEdit, setSavingEdit] = useState(false);
   const [openResetPwd, setOpenResetPwd] = useState(false);
   const [newPwd, setNewPwd] = useState("");
@@ -887,18 +939,76 @@ function AdminMember({ branchId }: { branchId: string }) {
       </Modal>
 
       {/* Edit member modal */}
-      <Modal open={openEditMember} onClose={() => setOpenEditMember(false)} title={`Edit — ${detail?.profile?.full_name ?? ""}`} size="sm"
-        footer={<><Btn variant="ghost" onClick={() => setOpenEditMember(false)}>Batal</Btn><Btn variant="primary" onClick={saveMemberEdit} disabled={savingEdit}>{savingEdit ? "Menyimpan…" : "Simpan"}</Btn></>}>
-        <div className="space-y-4">
+      <Modal open={openEditMember} onClose={() => setOpenEditMember(false)} title={`Edit Member — ${detail?.profile?.full_name ?? ""}`} size="lg"
+        footer={<><Btn variant="ghost" onClick={() => setOpenEditMember(false)}>Batal</Btn><Btn variant="primary" onClick={saveMemberEdit} disabled={savingEdit}>{savingEdit ? "Menyimpan…" : "Simpan Perubahan"}</Btn></>}>
+        <div className="grid sm:grid-cols-2 gap-4">
+          {/* Identitas */}
           <Field label="Nama lengkap" required><Input value={editMemberForm.full_name} onChange={e => setEditMemberForm(f => ({ ...f, full_name: e.target.value }))} /></Field>
-          <Field label="No HP / WA"><Input type="tel" value={editMemberForm.phone} onChange={e => setEditMemberForm(f => ({ ...f, phone: e.target.value }))} /></Field>
           <Field label="Tanggal lahir"><Input type="date" value={editMemberForm.birth_date} onChange={e => setEditMemberForm(f => ({ ...f, birth_date: e.target.value }))} /></Field>
-          <Field label="Ganti kelas" hint="Kosongkan untuk tidak mengubah kelas">
-            <Select value={editMemberForm.class_id} onChange={e => setEditMemberForm(f => ({ ...f, class_id: e.target.value }))}>
-              <option value="">— tidak mengubah kelas —</option>
-              {classes.map(c => <option key={c.id} value={c.id}>{c.name} ({c.enrolled}/{c.capacity})</option>)}
+          <Field label="Jenis kelamin">
+            <Select value={editMemberForm.gender} onChange={e => setEditMemberForm(f => ({ ...f, gender: e.target.value }))}>
+              <option value="">— pilih —</option>
+              <option value="male">Laki-laki</option>
+              <option value="female">Perempuan</option>
             </Select>
           </Field>
+          <Field label="Tipe member" required>
+            <Select value={editMemberForm.type} onChange={e => setEditMemberForm(f => ({ ...f, type: e.target.value }))}>
+              <option value="reguler">Reguler</option>
+              <option value="private">Private</option>
+              <option value="school_affiliate">Afiliasi Sekolah</option>
+            </Select>
+          </Field>
+          {editMemberForm.type === "school_affiliate" && (
+            <Field label="Sekolah afiliasi">
+              <Select value={editMemberForm.school_id} onChange={e => setEditMemberForm(f => ({ ...f, school_id: e.target.value }))}>
+                <option value="">— pilih sekolah —</option>
+                {schoolsList.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </Select>
+            </Field>
+          )}
+          {/* Kontak */}
+          <Field label="No HP / WA member"><Input type="tel" value={editMemberForm.phone} onChange={e => setEditMemberForm(f => ({ ...f, phone: e.target.value }))} /></Field>
+          <Field label="Pemilik kontak">
+            <Select value={editMemberForm.phone_owner} onChange={e => setEditMemberForm(f => ({ ...f, phone_owner: e.target.value }))}>
+              <option value="self">Milik member sendiri</option>
+              <option value="parent">Milik orang tua / wali</option>
+            </Select>
+          </Field>
+          {editMemberForm.phone_owner === "parent" && (
+            <>
+              <Field label="Nama orang tua / wali"><Input value={editMemberForm.parent_name} onChange={e => setEditMemberForm(f => ({ ...f, parent_name: e.target.value }))} /></Field>
+              <Field label="No HP orang tua / wali"><Input type="tel" value={editMemberForm.parent_phone} onChange={e => setEditMemberForm(f => ({ ...f, parent_phone: e.target.value }))} /></Field>
+            </>
+          )}
+          <Field label="Alamat" className="sm:col-span-2"><Textarea rows={2} value={editMemberForm.address} onChange={e => setEditMemberForm(f => ({ ...f, address: e.target.value }))} placeholder="Jl. ..." /></Field>
+          <Field label="Catatan kesehatan" className="sm:col-span-2" hint="Alergi, kondisi khusus, dll."><Textarea rows={2} value={editMemberForm.health_notes} onChange={e => setEditMemberForm(f => ({ ...f, health_notes: e.target.value }))} /></Field>
+          {/* Kelas — multi-select checkboxes */}
+          <div className="sm:col-span-2">
+            <div className="text-sm font-semibold text-ink mb-2">Kelas yang diikuti</div>
+            {classes.length === 0 ? (
+              <div className="text-sm text-ink-mute">Belum ada kelas aktif di cabang ini.</div>
+            ) : (
+              <div className="grid sm:grid-cols-2 gap-2">
+                {classes.map(cls => {
+                  const checked = editMemberForm.class_ids.includes(cls.id);
+                  return (
+                    <button key={cls.id} type="button"
+                      onClick={() => setEditMemberForm(f => ({ ...f, class_ids: checked ? f.class_ids.filter(id => id !== cls.id) : [...f.class_ids, cls.id] }))}
+                      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border text-left transition-colors ${checked ? "bg-ocean-50 border-ocean-200" : "bg-paper-tint border-line hover:border-ocean-200"}`}>
+                      <div className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${checked ? "bg-ocean-600 border-ocean-600" : "border-line"}`}>
+                        {checked && <Icon name="check" className="w-3 h-3 text-white" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-sm text-ink truncate">{cls.name}</div>
+                        <div className="text-xs text-ink-mute">{cls.enrolled}/{cls.capacity} · {cls.time_start?.slice(0,5)}{cls.time_end ? `–${cls.time_end.slice(0,5)}` : ""}</div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       </Modal>
 
