@@ -10,11 +10,12 @@ import Status from "@/components/ui/Status";
 import Avatar from "@/components/ui/Avatar";
 import QRBox from "@/components/ui/QRBox";
 import Placeholder from "@/components/ui/Placeholder";
+import dynamic from "next/dynamic";
+const MapPicker = dynamic(() => import("@/components/ui/MapPicker"), { ssr: false, loading: () => <div className="rounded-xl border border-line bg-paper-tint h-[260px] flex items-center justify-center text-ink-mute text-sm">Memuat peta…</div> });
 import Modal from "@/components/ui/Modal";
 import Sidebar, { type NavItem } from "@/components/layout/Sidebar";
 import Topbar from "@/components/layout/Topbar";
 import Bell from "@/components/layout/Bell";
-import RoleSwitcher from "@/components/layout/RoleSwitcher";
 import { fmtIDR, fmtDate, waLink } from "@/lib/utils";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
@@ -26,7 +27,7 @@ import type { User } from "@supabase/supabase-js";
 interface ClassRow {
   id: string; name: string; branch_id: string; status: string;
   capacity: number; enrolled: number; price_monthly: number;
-  schedule_days: string[]; schedule_time: string; show_on_landing: boolean;
+  schedule_days: string[]; time_start: string; time_end: string; show_on_landing: boolean;
   branch?: { name: string } | null;
   class_coaches?: { profile: { full_name: string; id: string } | null }[];
 }
@@ -135,7 +136,7 @@ function AdminDashboard({ branchId }: { branchId: string }) {
 
     // Today's classes
     const today = new Date().toLocaleDateString("id-ID", { weekday: "long" });
-    supabase.from("classes").select("id, name, schedule_time, capacity, enrolled, class_coaches(profile:profiles(full_name, id))")
+    supabase.from("classes").select("id, name, time_start, time_end, capacity, enrolled, class_coaches(profile:profiles(full_name, id))")
       .eq("branch_id", branchId).eq("status", "active").contains("schedule_days", [today]).limit(6)
       .then(({ data }) => { if (data) setTodayClasses(data as unknown as ClassRow[]); });
 
@@ -209,9 +210,9 @@ function AdminDashboard({ branchId }: { branchId: string }) {
                   <div key={c.id} className="rounded-xl border border-line hover:border-ocean-200 hover:shadow-card p-3.5 transition">
                     <div className="flex items-center justify-between">
                       <div className="font-semibold text-ink text-sm">{c.name}</div>
-                      <Status kind="active" className="!text-[10px]">{c.schedule_time?.split(":").slice(0,2).join(":")}</Status>
+                      <Status kind="active" className="!text-[10px]">{c.time_start?.slice(0,5)}{c.time_end ? `–${c.time_end.slice(0,5)}` : ""}</Status>
                     </div>
-                    <div className="text-xs text-ink-mute mt-1">{c.schedule_time} · {coaches[0] ?? "—"}</div>
+                    <div className="text-xs text-ink-mute mt-1">{c.time_start?.slice(0,5)}{c.time_end ? `–${c.time_end.slice(0,5)}` : ""} · {coaches[0] ?? "—"}</div>
                     <div className="mt-2.5 flex items-center justify-between">
                       <div className="flex -space-x-1.5">
                         {Array.from({ length: Math.min(4, c.enrolled) }).map((_, k) => <Avatar key={k} name={`M${k + 1}`} size={22} ring />)}
@@ -251,7 +252,7 @@ function AdminDashboard({ branchId }: { branchId: string }) {
 
 // ── Settings ───────────────────────────────────────────────────────────────────
 
-function AdminSettings({ branch, onRefresh }: { branch: Branch | null; onRefresh: () => void }) {
+function AdminSettings({ branch, onRefresh, userId }: { branch: Branch | null; onRefresh: () => void; userId: string }) {
   const toast = useToast();
   const supabase = createClient();
   const { upload, uploading } = { upload: { logo: async (file: File, id: string) => { const form = new FormData(); form.append("file", file); form.append("branchId", id); const res = await fetch("/api/upload/logo", { method: "POST", body: form }); const d = await res.json() as { url?: string }; return d.url ?? ""; } }, uploading: false };
@@ -261,6 +262,31 @@ function AdminSettings({ branch, onRefresh }: { branch: Branch | null; onRefresh
   const [address, setAddress] = useState(branch?.address ?? "");
   const [waNumbers, setWaNumbers] = useState<string[]>(branch?.wa_numbers ?? []);
   const [saving, setSaving] = useState(false);
+
+  // Admin profile state
+  const [myPhone, setMyPhone] = useState("");
+  const [myName, setMyName] = useState("");
+  const [savingProfile, setSavingProfile] = useState(false);
+
+  useEffect(() => {
+    if (!userId) return;
+    supabase.from("profiles").select("full_name, phone").eq("id", userId).single()
+      .then(({ data }) => { if (data) { setMyName(data.full_name ?? ""); setMyPhone(data.phone ?? ""); } });
+  }, [userId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const saveProfile = async () => {
+    if (!userId) return;
+    setSavingProfile(true);
+    const res = await fetch(`/api/admin/users/${userId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ profile: { full_name: myName, phone: myPhone || null } }),
+    });
+    setSavingProfile(false);
+    const json = await res.json() as { error?: string };
+    if (!res.ok) return toast.error("Gagal menyimpan profil", json.error);
+    toast.success("Profil diperbarui");
+  };
 
   // Sync state when branch prop changes
   useEffect(() => {
@@ -336,14 +362,22 @@ function AdminSettings({ branch, onRefresh }: { branch: Branch | null; onRefresh
           </div>
           <Btn variant="primary" onClick={save} disabled={saving}>{saving ? "Menyimpan…" : "Simpan perubahan"}</Btn>
         </Card>
+        <div className="space-y-5">
         <Card>
           <SectionTitle sub="Untuk validasi absensi coach">Koordinat Lokasi</SectionTitle>
-          <Placeholder label="map-preview" ratio="4/3" />
+          <MapPicker lat={lat} lng={lng} onChange={(newLat, newLng) => { setLat(newLat); setLng(newLng); }} />
           <div className="mt-3 grid grid-cols-2 gap-2">
             <Field label="Latitude"><Input value={lat} onChange={e => setLat(e.target.value)} className="font-mono" placeholder="-6.2615" /></Field>
             <Field label="Longitude"><Input value={lng} onChange={e => setLng(e.target.value)} className="font-mono" placeholder="106.8106" /></Field>
           </div>
         </Card>
+        <Card className="space-y-4">
+          <SectionTitle sub="Data akun Anda">Profil Saya</SectionTitle>
+          <Field label="Nama lengkap"><Input value={myName} onChange={e => setMyName(e.target.value)} /></Field>
+          <Field label="Nomor WhatsApp" hint="Tampil di profil admin"><Input type="tel" value={myPhone} onChange={e => setMyPhone(e.target.value)} placeholder="081234567890" className="font-mono" /></Field>
+          <Btn variant="primary" onClick={saveProfile} disabled={savingProfile}>{savingProfile ? "Menyimpan…" : "Simpan profil"}</Btn>
+        </Card>
+        </div>
       </div>
     </div>
   );
@@ -355,7 +389,7 @@ interface Criterion {
   id: string; label: string; kind: string; options: string[] | null; sort_order: number;
 }
 
-const EMPTY_CLASS_FORM = { name: "", schedule_days: [] as string[], schedule_time: "", capacity: 15, price_monthly: 0, show_on_landing: true, goals: "" };
+const EMPTY_CLASS_FORM = { name: "", schedule_days: [] as string[], time_start: "", time_end: "", capacity: "", price_monthly: "", show_on_landing: true, goals: "" };
 const DAY_OPTS = ["Senin","Selasa","Rabu","Kamis","Jumat","Sabtu","Minggu"];
 
 function AdminClass({ branchId }: { branchId: string }) {
@@ -380,10 +414,10 @@ function AdminClass({ branchId }: { branchId: string }) {
 
   const load = useCallback(async () => {
     const { data } = await supabase.from("classes")
-      .select("id, name, branch_id, status, capacity, enrolled, price_monthly, schedule_days, schedule_time, show_on_landing, class_coaches(profile:profiles(full_name, id))")
+      .select("id, name, branch_id, status, capacity, enrolled, price_monthly, schedule_days, time_start, time_end, show_on_landing, class_coaches(profile:profiles(full_name, id))")
       .eq("branch_id", branchId).order("name");
     if (data) setClasses(data as unknown as ClassRow[]);
-  }, [branchId, supabase]);
+  }, [branchId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     load();
@@ -394,7 +428,7 @@ function AdminClass({ branchId }: { branchId: string }) {
   const openCreate = () => { setEditTarget(null); setForm(EMPTY_CLASS_FORM); setOpenForm(true); };
   const openEdit = (c: ClassRow) => {
     setEditTarget(c);
-    setForm({ name: c.name, schedule_days: c.schedule_days ?? [], schedule_time: c.schedule_time ?? "", capacity: c.capacity, price_monthly: c.price_monthly, show_on_landing: c.show_on_landing ?? false, goals: "" });
+    setForm({ name: c.name, schedule_days: c.schedule_days ?? [], time_start: c.time_start ?? "", time_end: c.time_end ?? "", capacity: c.capacity ? String(c.capacity) : "", price_monthly: c.price_monthly ? String(c.price_monthly) : "", show_on_landing: c.show_on_landing ?? false, goals: "" });
     setOpenForm(true);
   };
 
@@ -403,8 +437,8 @@ function AdminClass({ branchId }: { branchId: string }) {
     setSaving(true);
     if (editTarget) {
       const { error } = await supabase.from("classes").update({
-        name: form.name, schedule_days: form.schedule_days, time_start: form.schedule_time,
-        time_end: form.schedule_time, capacity: form.capacity, price_monthly: form.price_monthly,
+        name: form.name, schedule_days: form.schedule_days, time_start: form.time_start || null,
+        time_end: form.time_end || null, capacity: Number(form.capacity) || 0, price_monthly: Number(form.price_monthly) || 0,
         show_landing: form.show_on_landing,
       }).eq("id", editTarget.id);
       setSaving(false);
@@ -412,8 +446,8 @@ function AdminClass({ branchId }: { branchId: string }) {
       toast.success("Kelas diperbarui");
     } else {
       const { error } = await supabase.from("classes").insert({
-        name: form.name, schedule_days: form.schedule_days, time_start: form.schedule_time,
-        time_end: form.schedule_time, capacity: form.capacity, price_monthly: form.price_monthly,
+        name: form.name, schedule_days: form.schedule_days, time_start: form.time_start || null,
+        time_end: form.time_end || null, capacity: Number(form.capacity) || 0, price_monthly: Number(form.price_monthly) || 0,
         show_landing: form.show_on_landing, goal: form.goals, branch_id: branchId, status: "active", enrolled: 0,
       });
       setSaving(false);
@@ -490,7 +524,7 @@ function AdminClass({ branchId }: { branchId: string }) {
               </div>
               <div className="p-4">
                 <div className="font-display font-bold text-ink">{c.name}</div>
-                <div className="text-xs text-ink-mute mt-0.5">{(c.schedule_days ?? []).join(", ")} · {c.schedule_time}</div>
+                <div className="text-xs text-ink-mute mt-0.5">{(c.schedule_days ?? []).join(", ")} · {c.time_start?.slice(0,5)}{c.time_end ? `–${c.time_end.slice(0,5)}` : ""}</div>
                 {coachNames.length > 0 && (
                   <div className="mt-3 flex items-center gap-2 text-sm"><Avatar name={coachNames[0]!} size={24} /><span className="text-ink-soft font-medium">{coachNames[0]}</span></div>
                 )}
@@ -523,9 +557,10 @@ function AdminClass({ branchId }: { branchId: string }) {
         <div className="space-y-4">
           <div className="grid sm:grid-cols-2 gap-4">
             <Field label="Nama kelas" required><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Mis. Tadpole — Pengenalan Air" /></Field>
-            <Field label="Kapasitas" required><Input type="number" value={form.capacity} onChange={e => setForm(f => ({ ...f, capacity: Number(e.target.value) }))} /></Field>
-            <Field label="Harga/bulan" required><Input type="number" value={form.price_monthly || ""} onChange={e => setForm(f => ({ ...f, price_monthly: Number(e.target.value) }))} className="font-mono" placeholder="550000" /></Field>
-            <Field label="Jam sesi" required><Input type="time" value={form.schedule_time} onChange={e => setForm(f => ({ ...f, schedule_time: e.target.value }))} /></Field>
+            <Field label="Kapasitas" required><Input type="number" value={form.capacity} onChange={e => setForm(f => ({ ...f, capacity: e.target.value }))} placeholder="15" min="1" /></Field>
+            <Field label="Harga/bulan" required><Input type="number" value={form.price_monthly} onChange={e => setForm(f => ({ ...f, price_monthly: e.target.value }))} className="font-mono" placeholder="550000" min="0" /></Field>
+            <Field label="Jam mulai" required><Input type="time" value={form.time_start} onChange={e => setForm(f => ({ ...f, time_start: e.target.value }))} /></Field>
+            <Field label="Jam selesai" required><Input type="time" value={form.time_end} onChange={e => setForm(f => ({ ...f, time_end: e.target.value }))} /></Field>
           </div>
           <Field label="Hari sesi" required hint="Pilih satu atau lebih">
             <div className="flex flex-wrap gap-2 mt-1">
@@ -626,20 +661,22 @@ function AdminMember({ branchId }: { branchId: string }) {
   const [schoolsList, setSchoolsList] = useState<School[]>([]);
 
   const load = useCallback(async () => {
+    if (!branchId) return;
     setLoading(true);
-    let q = supabase.from("members").select("id, profile_id, type, status, date_start, qr_code, remaining_sessions, total_sessions, suspend_until, suspend_reason, profile:profiles(full_name, birth_date, phone), member_classes(class:classes(id, name))")
-      .eq("branch_id", branchId).order("created_at", { ascending: false });
-    if (tab !== "all" && tab !== "suspended") q = q.eq("type", tab);
-    if (tab === "suspended") q = (supabase.from("members").select("id, profile_id, type, status, date_start, qr_code, remaining_sessions, total_sessions, suspend_until, suspend_reason, profile:profiles(full_name, birth_date, phone), member_classes(class:classes(id, name))") as typeof q).eq("branch_id", branchId).eq("status", "suspended");
+    const db = createClient();
+    const sel = "id, profile_id, type, status, date_start, qr_code, remaining_sessions, total_sessions, suspend_until, suspend_reason, profile:profiles(full_name, birth_date, phone), member_classes(class:classes(id, name))";
+    let q = db.from("members").select(sel).eq("branch_id", branchId).order("created_at", { ascending: false });
+    if (tab === "suspended") q = db.from("members").select(sel).eq("branch_id", branchId).eq("status", "suspended") as typeof q;
+    else if (tab !== "all") q = q.eq("type", tab);
     const { data } = await q;
     if (data) setMembers(data as unknown as MemberRow[]);
     setLoading(false);
-  }, [branchId, tab, supabase]);
+  }, [branchId, tab]);
 
   useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
-    supabase.from("classes").select("id, name, capacity, enrolled, status, branch_id, schedule_days, schedule_time, price_monthly, show_on_landing").eq("branch_id", branchId).eq("status", "active")
+    supabase.from("classes").select("id, name, capacity, enrolled, status, branch_id, schedule_days, time_start, time_end, price_monthly, show_on_landing").eq("branch_id", branchId).eq("status", "active")
       .then(({ data }) => { if (data) setClasses(data as unknown as ClassRow[]); });
     supabase.from("schools").select("id, name").eq("branch_id", branchId).order("name")
       .then(({ data }) => { if (data) setSchoolsList(data as School[]); });
@@ -659,30 +696,18 @@ function AdminMember({ branchId }: { branchId: string }) {
     const res = await fetch("/api/admin/users", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: form.email, password: form.password, full_name: form.full_name, role: "member", branch_id: branchId, phone: form.phone }),
+      body: JSON.stringify({
+        email: form.email, password: form.password, full_name: form.full_name,
+        role: "member", branch_id: branchId, phone: form.phone,
+        birth_date: form.birth_date || null, gender: form.gender || null,
+        address: form.address || null, health_notes: form.health_notes || null,
+        member_type: form.type,
+        school_id: form.type === "school_affiliate" ? form.school_id : null,
+        class_id: form.class_id || null,
+      }),
     });
     const json = await res.json() as { user_id?: string; error?: string };
     if (!res.ok) { toast.error("Gagal membuat akun", json.error); setSaving(false); return; }
-
-    // Update the auto-created member profile with extra fields
-    if (json.user_id) {
-      await supabase.from("profiles").update({
-        birth_date: form.birth_date || null, phone: form.phone || null,
-        gender: form.gender || null, address: form.address || null,
-        health_notes: form.health_notes || null,
-      }).eq("id", json.user_id);
-
-      const memberUpd: Record<string, unknown> = { type: form.type };
-      if (form.type === "school_affiliate" && form.school_id) memberUpd.school_id = form.school_id;
-      await supabase.from("members").update(memberUpd).eq("profile_id", json.user_id);
-
-      if (form.class_id) {
-        const memberRes = await supabase.from("members").select("id").eq("profile_id", json.user_id).single();
-        if (memberRes.data) {
-          await supabase.from("member_classes").insert({ member_id: memberRes.data.id, class_id: form.class_id, joined_at: new Date().toISOString() });
-        }
-      }
-    }
 
     toast.success("Member dibuat", "Akun langsung aktif");
     setSaving(false);
@@ -960,31 +985,70 @@ function AdminMember({ branchId }: { branchId: string }) {
 interface CoachFull extends CoachProfile {
   suspend_until?: string | null;
   suspend_reason?: string | null;
+  is_archived?: boolean | null;
+  class_coaches?: { class_id: string; class?: { id: string; name: string; time_start: string | null; time_end: string | null; schedule_days: string[] | null } | null }[];
 }
 
+const EMPTY_COACH_FORM = { full_name: "", email: "", phone: "", password: "", specialization: "" };
+
 function AdminCoach({ branchId }: { branchId: string }) {
-  const supabase = createClient();
   const toast = useToast();
+  const confirm = useConfirm();
   const [coaches, setCoaches] = useState<CoachFull[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showArchived, setShowArchived] = useState(false);
+
+  // create
   const [openAdd, setOpenAdd] = useState(false);
-  const [suspendTarget, setSuspendTarget] = useState<CoachFull | null>(null);
   const [saving, setSaving] = useState(false);
-  const [suspending, setSuspending] = useState(false);
-  const [form, setForm] = useState({ full_name: "", email: "", phone: "", password: "", specialization: "" });
-  const [suspendForm, setSuspendForm] = useState({ reason: "", until: "" });
+  const [form, setForm] = useState(EMPTY_COACH_FORM);
   const [coachCredential, setCoachCredential] = useState<{ full_name: string; email: string; password: string; phone: string } | null>(null);
 
+  // detail panel
+  const [detail, setDetail] = useState<CoachFull | null>(null);
+
+  // edit
+  const [openEdit, setOpenEdit] = useState(false);
+  const [editForm, setEditForm] = useState({ full_name: "", phone: "", specialization: "" });
+  const [editSaving, setEditSaving] = useState(false);
+
+  // suspend
+  const [suspendTarget, setSuspendTarget] = useState<CoachFull | null>(null);
+  const [suspending, setSuspending] = useState(false);
+  const [suspendForm, setSuspendForm] = useState({ reason: "", until: "" });
+
+  // reset password
+  const [openReset, setOpenReset] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [resetSaving, setResetSaving] = useState(false);
+
+  // assign class
+  const [openAssign, setOpenAssign] = useState(false);
+  const [allClasses, setAllClasses] = useState<{ id: string; name: string; time_start: string | null; time_end: string | null; schedule_days: string[] | null }[]>([]);
+  const [assignedClassIds, setAssignedClassIds] = useState<string[]>([]);
+  const [assignSaving, setAssignSaving] = useState(false);
+
   const load = useCallback(async () => {
+    if (!branchId) return;
     setLoading(true);
-    const { data } = await supabase.from("profiles")
-      .select("id, full_name, email, phone, specialization, suspend_until, suspend_reason, certifications(name, title, status)")
+    const { data, error } = await createClient().from("profiles")
+      .select("id, full_name, email, phone, specialization, suspend_until, suspend_reason, is_archived, certifications!certifications_coach_id_fkey(name, title, status), class_coaches(class_id, class:classes(id, name, time_start, time_end, schedule_days))")
       .eq("branch_id", branchId).eq("role", "coach").order("full_name");
+    if (error) console.error("[AdminCoach] query error:", JSON.stringify(error));
     if (data) setCoaches(data as unknown as CoachFull[]);
     setLoading(false);
-  }, [branchId, supabase]);
+  }, [branchId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { load(); }, [load]);
+
+  const isSuspended = (c: CoachFull) => !c.is_archived && !!c.suspend_until && new Date(c.suspend_until) >= new Date();
+  const isArchived = (c: CoachFull) => !!c.is_archived;
+
+  const coachStatus = (c: CoachFull) => {
+    if (isArchived(c)) return "archived";
+    if (isSuspended(c)) return "suspended";
+    return "active";
+  };
 
   const createCoach = async () => {
     if (!form.full_name || !form.email || !form.password) return toast.error("Nama, email, dan password wajib diisi");
@@ -998,84 +1062,340 @@ function AdminCoach({ branchId }: { branchId: string }) {
     setSaving(false);
     setOpenAdd(false);
     setCoachCredential({ full_name: form.full_name, email: form.email, password: form.password, phone: form.phone });
+    setForm(EMPTY_COACH_FORM);
     load();
   };
 
-  const isSuspended = (c: CoachFull) => c.suspend_until && new Date(c.suspend_until) >= new Date();
+  const saveEdit = async () => {
+    if (!detail) return;
+    if (!editForm.full_name) return toast.error("Nama wajib diisi");
+    setEditSaving(true);
+    const { error } = await createClient().from("profiles")
+      .update({ full_name: editForm.full_name, phone: editForm.phone || null, specialization: editForm.specialization || null })
+      .eq("id", detail.id);
+    setEditSaving(false);
+    if (error) return toast.error("Gagal menyimpan", error.message);
+    toast.success("Data coach diperbarui");
+    setOpenEdit(false);
+    setDetail(prev => prev ? { ...prev, ...editForm } : prev);
+    load();
+  };
 
   const doSuspend = async () => {
     if (!suspendTarget || !suspendForm.reason || !suspendForm.until) return toast.error("Alasan dan tanggal berakhir wajib diisi");
     setSuspending(true);
-    const { error } = await supabase.from("profiles")
-      .update({ suspend_until: suspendForm.until, suspend_reason: suspendForm.reason })
-      .eq("id", suspendTarget.id);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await createClient().from("profiles").update({ suspend_until: suspendForm.until, suspend_reason: suspendForm.reason } as any).eq("id", suspendTarget.id);
     setSuspending(false);
     if (error) return toast.error("Gagal suspend coach", error.message);
     toast.success(`${suspendTarget.full_name} di-suspend hingga ${fmtDate(suspendForm.until)}`);
     setSuspendTarget(null);
+    if (detail?.id === suspendTarget.id) setDetail(prev => prev ? { ...prev, suspend_until: suspendForm.until, suspend_reason: suspendForm.reason } : prev);
     load();
   };
 
   const liftSuspend = async (c: CoachFull) => {
-    const { error } = await supabase.from("profiles")
-      .update({ suspend_until: null, suspend_reason: null })
-      .eq("id", c.id);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await createClient().from("profiles").update({ suspend_until: null, suspend_reason: null } as any).eq("id", c.id);
     if (error) return toast.error("Gagal mengakhiri suspend", error.message);
     toast.success("Suspend diakhiri");
+    if (detail?.id === c.id) setDetail(prev => prev ? { ...prev, suspend_until: null, suspend_reason: null } : prev);
     load();
   };
+
+  const toggleArchive = async (c: CoachFull) => {
+    const archiving = !c.is_archived;
+    const ok = await confirm({ body: archiving ? `Arsipkan coach ${c.full_name}? Coach tidak akan muncul di daftar aktif.` : `Aktifkan kembali coach ${c.full_name}?` });
+    if (!ok) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await createClient().from("profiles").update({ is_archived: archiving } as any).eq("id", c.id);
+    if (error) return toast.error("Gagal mengubah status", error.message);
+    toast.success(archiving ? "Coach diarsipkan" : "Coach diaktifkan kembali");
+    if (detail?.id === c.id) { setDetail(prev => prev ? { ...prev, is_archived: archiving } : prev); }
+    load();
+  };
+
+  const deleteCoach = async (c: CoachFull) => {
+    const ok = await confirm({ body: `Hapus permanen akun coach ${c.full_name}? Tindakan ini tidak bisa dibatalkan.`, danger: true, confirmLabel: "Hapus" });
+    if (!ok) return;
+    const res = await fetch(`/api/admin/users/${c.id}`, { method: "DELETE" });
+    if (!res.ok) {
+      const j = await res.json() as { error?: string };
+      return toast.error("Gagal menghapus coach", j.error);
+    }
+    toast.success("Coach dihapus");
+    setDetail(null);
+    load();
+  };
+
+  const resetPassword = async () => {
+    if (!detail || !newPassword || newPassword.length < 6) return toast.error("Password minimal 6 karakter");
+    setResetSaving(true);
+    const res = await fetch(`/api/admin/users/${detail.id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: newPassword }),
+    });
+    const j = await res.json() as { error?: string };
+    setResetSaving(false);
+    if (!res.ok) return toast.error("Gagal reset password", j.error);
+    toast.success("Password berhasil direset");
+    setOpenReset(false);
+    setNewPassword("");
+  };
+
+  const openAssignModal = async (c: CoachFull) => {
+    const { data } = await createClient().from("classes")
+      .select("id, name, time_start, time_end, schedule_days").eq("branch_id", branchId).eq("status", "active").order("name");
+    if (data) setAllClasses(data as unknown as typeof allClasses);
+    setAssignedClassIds(c.class_coaches?.map(cc => cc.class_id) ?? []);
+    setOpenAssign(true);
+  };
+
+  const saveAssign = async () => {
+    if (!detail) return;
+    setAssignSaving(true);
+    const current = detail.class_coaches?.map(cc => cc.class_id) ?? [];
+    const toAdd = assignedClassIds.filter(id => !current.includes(id));
+    const toRemove = current.filter(id => !assignedClassIds.includes(id));
+    if (toAdd.length > 0) {
+      await createClient().from("class_coaches").insert(toAdd.map(class_id => ({ class_id, coach_id: detail.id, is_primary: false })));
+    }
+    if (toRemove.length > 0) {
+      await createClient().from("class_coaches").delete().eq("coach_id", detail.id).in("class_id", toRemove);
+    }
+    setAssignSaving(false);
+    toast.success("Kelas berhasil diperbarui");
+    setOpenAssign(false);
+    load();
+  };
+
+  const visibleCoaches = showArchived ? coaches : coaches.filter(c => !c.is_archived);
 
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <div><h2 className="font-display font-bold text-2xl">Manajemen Coach</h2><p className="text-ink-mute text-sm mt-0.5">Coach cabang Anda.</p></div>
-        <Btn variant="primary" icon="plus" onClick={() => { setForm({ full_name: "", email: "", phone: "", password: "", specialization: "" }); setOpenAdd(true); }}>Tambah Coach</Btn>
+        <div>
+          <h2 className="font-display font-bold text-2xl">Manajemen Coach</h2>
+          <p className="text-ink-mute text-sm mt-0.5">Coach cabang Anda.</p>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          {coaches.some(c => c.is_archived) && (
+            <Btn variant="ghost" size="sm" onClick={() => setShowArchived(v => !v)}>
+              {showArchived ? "Sembunyikan Arsip" : `Tampilkan Arsip (${coaches.filter(c => c.is_archived).length})`}
+            </Btn>
+          )}
+          <Btn variant="primary" icon="plus" onClick={() => { setForm(EMPTY_COACH_FORM); setOpenAdd(true); }}>Tambah Coach</Btn>
+        </div>
       </div>
-      {loading ? <div className="p-10 text-center text-ink-mute">Memuat data…</div> : (
+
+      {loading ? (
+        <div className="p-10 text-center text-ink-mute">Memuat data…</div>
+      ) : (
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          {coaches.map((c) => {
+          {visibleCoaches.map((c) => {
             const activeCerts = c.certifications?.filter(ct => ct.status === "approved").map(ct => ct.title ?? ct.name) ?? [];
             const suspended = isSuspended(c);
+            const archived = isArchived(c);
+            const assignedClasses = c.class_coaches?.filter(cc => cc.class) ?? [];
             return (
-              <Card key={c.id}>
+              <Card key={c.id} className={archived ? "opacity-60" : ""}>
                 <div className="flex items-start gap-3">
-                  <Avatar name={c.full_name} size={56} />
+                  <Avatar name={c.full_name} size={52} />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <div className="font-display font-bold text-ink truncate">{c.full_name}</div>
-                      <Status kind={suspended ? "suspended" : "active"}>{suspended ? "Suspend" : "Aktif"}</Status>
+                      <Status kind={coachStatus(c) as "active" | "suspended" | "archived"}>
+                        {archived ? "Diarsipkan" : suspended ? "Suspend" : "Aktif"}
+                      </Status>
                     </div>
                     {c.specialization && <div className="text-xs text-ocean-700 font-semibold mt-1">{c.specialization}</div>}
-                    {suspended && c.suspend_until && (
-                      <div className="text-xs text-warn-600 mt-1">s/d {fmtDate(c.suspend_until)}</div>
-                    )}
+                    {c.phone && <div className="text-xs text-ink-mute mt-0.5">{c.phone}</div>}
+                    {suspended && c.suspend_until && <div className="text-xs text-warn-600 mt-1">Suspend s/d {fmtDate(c.suspend_until)}</div>}
                   </div>
                 </div>
-                {suspended && c.suspend_reason && (
-                  <div className="mt-3 p-2.5 rounded-lg bg-warn-50 border border-warn-100 text-xs text-warn-700">
-                    <span className="font-semibold">Alasan: </span>{c.suspend_reason}
+
+                {assignedClasses.length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-1">
+                    {assignedClasses.slice(0, 3).map(cc => (
+                      <span key={cc.class_id} className="text-[10px] font-semibold bg-ocean-50 text-ocean-700 px-2 py-0.5 rounded-full">{cc.class?.name}</span>
+                    ))}
+                    {assignedClasses.length > 3 && <span className="text-[10px] text-ink-mute">+{assignedClasses.length - 3} lainnya</span>}
                   </div>
                 )}
                 {activeCerts.length > 0 && (
-                  <div className="mt-4 pt-4 border-t border-line">
-                    <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Sertifikasi aktif</div>
-                    <div className="flex flex-wrap gap-1 mt-1.5">{activeCerts.map(s => <span key={s} className="text-[10px] font-semibold text-ocean-700 bg-ocean-50 px-1.5 py-0.5 rounded">{s}</span>)}</div>
+                  <div className="mt-3 pt-3 border-t border-line">
+                    <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-1">Sertifikasi aktif</div>
+                    <div className="flex flex-wrap gap-1">{activeCerts.map(s => <span key={s} className="text-[10px] font-semibold text-ok-700 bg-ok-50 px-1.5 py-0.5 rounded">{s}</span>)}</div>
                   </div>
                 )}
-                <div className="mt-4 flex gap-2">
-                  {suspended
-                    ? <Btn variant="soft" size="sm" icon="check" onClick={() => liftSuspend(c)}>Akhiri Suspend</Btn>
-                    : <Btn variant="ghost" size="sm" className="text-warn-600" onClick={() => { setSuspendTarget(c); setSuspendForm({ reason: "", until: "" }); }}>Suspend</Btn>
-                  }
+
+                <div className="mt-4 pt-3 border-t border-line flex gap-2 flex-wrap">
+                  <Btn variant="ghost" size="sm" icon="eye" onClick={() => setDetail(c)}>Detail</Btn>
+                  {!archived && c.phone && (
+                    <a href={waLink(`Halo ${c.full_name}, saya dari admin Next Swimming School.`, c.phone)} target="_blank" rel="noreferrer">
+                      <Btn variant="ghost" size="sm" icon="whatsapp" className="text-ok-600">WA</Btn>
+                    </a>
+                  )}
                 </div>
               </Card>
             );
           })}
-          {coaches.length === 0 && <p className="text-ink-mute col-span-3">Belum ada coach di cabang ini.</p>}
+          {visibleCoaches.length === 0 && (
+            <p className="text-ink-mute col-span-3">{showArchived ? "Tidak ada coach diarsipkan." : "Belum ada coach di cabang ini."}</p>
+          )}
         </div>
       )}
 
-      {/* Add coach modal */}
+      {/* ── Detail panel ── */}
+      {detail && (() => {
+        const suspended = isSuspended(detail);
+        const archived = isArchived(detail);
+        const activeCerts = detail.certifications?.filter(ct => ct.status === "approved") ?? [];
+        const assignedClasses = detail.class_coaches?.filter(cc => cc.class) ?? [];
+        return (
+          <div className="fixed inset-0 z-50 flex">
+            <div className="flex-1 bg-black/40" onClick={() => setDetail(null)} />
+            <div className="w-full max-w-md bg-white h-full overflow-y-auto shadow-float flex flex-col">
+              {/* Header */}
+              <div className="sticky top-0 bg-white border-b border-line px-5 py-4 flex items-center justify-between z-10">
+                <div className="font-display font-bold text-lg">Detail Coach</div>
+                <button onClick={() => setDetail(null)} className="p-1.5 rounded-lg hover:bg-paper-tint text-ink-mute"><Icon name="close" className="w-5 h-5" /></button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-5 space-y-5">
+                {/* Profile summary */}
+                <div className="flex items-start gap-4">
+                  <Avatar name={detail.full_name} size={64} />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-display font-bold text-xl text-ink">{detail.full_name}</div>
+                    {detail.specialization && <div className="text-sm text-ocean-700 font-semibold mt-0.5">{detail.specialization}</div>}
+                    <div className="flex items-center gap-2 mt-2 flex-wrap">
+                      <Status kind={coachStatus(detail) as "active" | "suspended" | "archived"}>
+                        {archived ? "Diarsipkan" : suspended ? "Suspend" : "Aktif"}
+                      </Status>
+                      {activeCerts.length > 0 && <span className="text-xs text-ok-700 bg-ok-50 px-2 py-0.5 rounded-full font-semibold">{activeCerts.length} Sertifikat</span>}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Suspend banner */}
+                {suspended && (
+                  <div className="p-3 rounded-xl bg-warn-50 border border-warn-200 space-y-1">
+                    <div className="flex items-center gap-2 text-warn-700 font-semibold text-sm"><Icon name="warning" className="w-4 h-4" />Sedang Disuspend</div>
+                    {detail.suspend_until && <div className="text-xs text-warn-600">Berakhir: {fmtDate(detail.suspend_until)}</div>}
+                    {detail.suspend_reason && <div className="text-xs text-warn-600">Alasan: {detail.suspend_reason}</div>}
+                  </div>
+                )}
+
+                {/* Contact info */}
+                <div className="space-y-2">
+                  <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Kontak</div>
+                  <div className="bg-paper-tint rounded-xl divide-y divide-line">
+                    <div className="flex items-center justify-between px-4 py-3">
+                      <span className="text-xs text-ink-mute">Email</span>
+                      <span className="text-sm font-mono text-ink">{detail.email}</span>
+                    </div>
+                    <div className="flex items-center justify-between px-4 py-3">
+                      <span className="text-xs text-ink-mute">No HP / WA</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-ink">{detail.phone ?? "—"}</span>
+                        {detail.phone && (
+                          <a href={waLink(`Halo ${detail.full_name}, saya dari admin Next Swimming School.`, detail.phone)} target="_blank" rel="noreferrer" className="text-ok-600 hover:text-ok-700">
+                            <Icon name="whatsapp" className="w-4 h-4" />
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* QR & ID */}
+                <div className="space-y-2">
+                  <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">QR Coach</div>
+                  <div className="flex items-center gap-4 p-4 bg-paper-tint rounded-xl">
+                    <QRBox size={80} />
+                    <div>
+                      <div className="text-xs text-ink-mute mb-1">ID Coach</div>
+                      <div className="font-mono text-sm font-bold text-ink bg-white px-2 py-1 rounded border border-line">{detail.id.slice(0, 8).toUpperCase()}</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Assigned classes */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Kelas yang Dihandle</div>
+                    {!archived && <button onClick={() => openAssignModal(detail)} className="text-xs text-ocean-600 font-semibold hover:underline">Edit Assign</button>}
+                  </div>
+                  {assignedClasses.length === 0 ? (
+                    <div className="p-3 rounded-xl bg-warn-50 border border-warn-100 text-xs text-warn-700 flex items-center gap-2">
+                      <Icon name="warning" className="w-4 h-4 shrink-0" />Belum diassign ke kelas manapun
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {assignedClasses.map(cc => (
+                        <div key={cc.class_id} className="flex items-center justify-between px-4 py-3 bg-paper-tint rounded-xl">
+                          <div>
+                            <div className="font-semibold text-sm text-ink">{cc.class?.name}</div>
+                            {cc.class?.schedule_days && <div className="text-xs text-ink-mute mt-0.5">{cc.class.schedule_days.join(", ")}{cc.class.time_start ? ` · ${cc.class.time_start.slice(0,5)}${cc.class.time_end ? `–${cc.class.time_end.slice(0,5)}` : ""}` : ""}</div>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Certifications */}
+                {(detail.certifications?.length ?? 0) > 0 && (
+                  <div className="space-y-2">
+                    <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Sertifikasi</div>
+                    <div className="space-y-2">
+                      {detail.certifications!.map((ct, i) => (
+                        <div key={i} className="flex items-center justify-between px-4 py-3 bg-paper-tint rounded-xl">
+                          <div>
+                            <div className="font-semibold text-sm text-ink">{ct.title ?? ct.name}</div>
+                            <div className="text-xs text-ink-mute">{ct.name}</div>
+                          </div>
+                          <Status kind={ct.status === "approved" ? "active" : ct.status === "pending" ? "pending" : "inactive"}>
+                            {ct.status === "approved" ? "Aktif" : ct.status === "pending" ? "Review" : "Ditolak"}
+                          </Status>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Action bar */}
+              <div className="sticky bottom-0 bg-white border-t border-line px-5 py-4 space-y-2">
+                {!archived && (
+                  <>
+                    <div className="flex gap-2">
+                      <Btn variant="outline" size="sm" icon="edit" className="flex-1" onClick={() => { setEditForm({ full_name: detail.full_name, phone: detail.phone ?? "", specialization: detail.specialization ?? "" }); setOpenEdit(true); }}>Edit Data</Btn>
+                      <Btn variant="outline" size="sm" icon="lock" className="flex-1" onClick={() => { setNewPassword(""); setOpenReset(true); }}>Reset Password</Btn>
+                    </div>
+                    <div className="flex gap-2">
+                      {suspended
+                        ? <Btn variant="soft" size="sm" icon="check" className="flex-1" onClick={() => liftSuspend(detail)}>Akhiri Suspend</Btn>
+                        : <Btn variant="ghost" size="sm" className="flex-1 text-warn-600" onClick={() => { setSuspendTarget(detail); setSuspendForm({ reason: "", until: "" }); }}>Suspend Coach</Btn>
+                      }
+                      <Btn variant="ghost" size="sm" className="flex-1 text-ink-mute" onClick={() => toggleArchive(detail)}>Arsipkan</Btn>
+                    </div>
+                  </>
+                )}
+                {archived && (
+                  <div className="flex gap-2">
+                    <Btn variant="soft" size="sm" icon="check" className="flex-1" onClick={() => toggleArchive(detail)}>Aktifkan Kembali</Btn>
+                    <Btn variant="ghost" size="sm" className="flex-1 text-danger-600" onClick={() => deleteCoach(detail)}>Hapus Permanen</Btn>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── Add coach modal ── */}
       <Modal open={openAdd} onClose={() => setOpenAdd(false)} title="Tambah Coach" size="sm"
         footer={<><Btn variant="ghost" onClick={() => setOpenAdd(false)}>Batal</Btn><Btn variant="primary" onClick={createCoach} disabled={saving}>{saving ? "Membuat…" : "Buat Akun"}</Btn></>}>
         <div className="space-y-4">
@@ -1087,7 +1407,17 @@ function AdminCoach({ branchId }: { branchId: string }) {
         </div>
       </Modal>
 
-      {/* Suspend coach modal */}
+      {/* ── Edit coach modal ── */}
+      <Modal open={openEdit} onClose={() => setOpenEdit(false)} title="Edit Data Coach" size="sm"
+        footer={<><Btn variant="ghost" onClick={() => setOpenEdit(false)}>Batal</Btn><Btn variant="primary" onClick={saveEdit} disabled={editSaving}>{editSaving ? "Menyimpan…" : "Simpan"}</Btn></>}>
+        <div className="space-y-4">
+          <Field label="Nama lengkap" required><Input value={editForm.full_name} onChange={e => setEditForm(f => ({ ...f, full_name: e.target.value }))} /></Field>
+          <Field label="No HP / WA"><Input type="tel" value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))} /></Field>
+          <Field label="Spesialisasi"><Input value={editForm.specialization} onChange={e => setEditForm(f => ({ ...f, specialization: e.target.value }))} placeholder="Mis. Teknik renang anak" /></Field>
+        </div>
+      </Modal>
+
+      {/* ── Suspend coach modal ── */}
       <Modal open={!!suspendTarget} onClose={() => setSuspendTarget(null)} title={`Suspend Coach — ${suspendTarget?.full_name ?? ""}`} size="sm"
         footer={<><Btn variant="ghost" onClick={() => setSuspendTarget(null)}>Batal</Btn><Btn variant="ghost" className="text-warn-600" onClick={doSuspend} disabled={suspending}>{suspending ? "Menyimpan…" : "Terapkan Suspend"}</Btn></>}>
         <div className="space-y-4">
@@ -1103,9 +1433,51 @@ function AdminCoach({ branchId }: { branchId: string }) {
         </div>
       </Modal>
 
-      {/* Coach credential popup */}
+      {/* ── Reset password modal ── */}
+      <Modal open={openReset} onClose={() => setOpenReset(false)} title={`Reset Password — ${detail?.full_name ?? ""}`} size="sm"
+        footer={<><Btn variant="ghost" onClick={() => setOpenReset(false)}>Batal</Btn><Btn variant="primary" onClick={resetPassword} disabled={resetSaving}>{resetSaving ? "Mereset…" : "Reset Password"}</Btn></>}>
+        <div className="space-y-4">
+          <Card className="!p-3 bg-ocean-50 border-ocean-100">
+            <div className="text-xs text-ocean-700">Password baru langsung aktif tanpa konfirmasi email. Sampaikan password baru ke coach.</div>
+          </Card>
+          <Field label="Password baru" required hint="Minimal 6 karakter">
+            <Input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="Password baru…" />
+          </Field>
+        </div>
+      </Modal>
+
+      {/* ── Assign class modal ── */}
+      <Modal open={openAssign} onClose={() => setOpenAssign(false)} title={`Assign Kelas — ${detail?.full_name ?? ""}`} size="sm"
+        footer={<><Btn variant="ghost" onClick={() => setOpenAssign(false)}>Batal</Btn><Btn variant="primary" onClick={saveAssign} disabled={assignSaving}>{assignSaving ? "Menyimpan…" : "Simpan"}</Btn></>}>
+        <div className="space-y-3">
+          <p className="text-sm text-ink-mute">Pilih kelas yang akan dihandle oleh coach ini.</p>
+          {allClasses.length === 0 ? (
+            <div className="text-sm text-ink-mute py-4 text-center">Belum ada kelas aktif di cabang ini.</div>
+          ) : (
+            <div className="space-y-2">
+              {allClasses.map(cls => {
+                const checked = assignedClassIds.includes(cls.id);
+                return (
+                  <button key={cls.id} onClick={() => setAssignedClassIds(ids => checked ? ids.filter(id => id !== cls.id) : [...ids, cls.id])}
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border text-left transition-colors ${checked ? "bg-ocean-50 border-ocean-200" : "bg-paper-tint border-line hover:border-ocean-200"}`}>
+                    <div className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${checked ? "bg-ocean-600 border-ocean-600" : "border-line"}`}>
+                      {checked && <Icon name="check" className="w-3 h-3 text-white" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-sm text-ink">{cls.name}</div>
+                      {cls.schedule_days && <div className="text-xs text-ink-mute">{cls.schedule_days.join(", ")}{cls.time_start ? ` · ${cls.time_start.slice(0,5)}${cls.time_end ? `–${cls.time_end.slice(0,5)}` : ""}` : ""}</div>}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </Modal>
+
+      {/* ── Coach credential popup ── */}
       <Modal open={!!coachCredential} onClose={() => setCoachCredential(null)} title="Akun Coach Dibuat" size="sm"
-        footer={<><Btn variant="ghost" onClick={() => setCoachCredential(null)}>Tutup</Btn>{coachCredential?.phone && <Btn variant="wa" icon="whatsapp" onClick={() => window.open(waLink(`Halo ${coachCredential.full_name}, akun coach Anda telah dibuat.\n\nEmail: ${coachCredential.email}\nPassword: ${coachCredential.password}\n\nSilakan login di aplikasi Next Swimming School.`), "_blank")}>Kirim via WA</Btn>}</>}>
+        footer={<><Btn variant="ghost" onClick={() => setCoachCredential(null)}>Tutup</Btn>{coachCredential?.phone && <Btn variant="wa" icon="whatsapp" onClick={() => { const num = coachCredential.phone!.replace(/^0/, "").replace(/\D/g, ""); const msg = encodeURIComponent(`Halo ${coachCredential.full_name}, akun coach Anda telah dibuat.\n\nEmail: ${coachCredential.email}\nPassword: ${coachCredential.password}\n\nSilakan login di aplikasi Next Swimming School.`); window.open(`https://wa.me/62${num}?text=${msg}`, "_blank"); }}>Kirim via WA</Btn>}</>}>
         <div className="space-y-3">
           <Card className="!p-4 bg-ok-50 border-ok-200">
             <div className="flex items-center gap-2 text-ok-700 font-semibold text-sm"><Icon name="check" className="w-4 h-4" />Akun berhasil dibuat</div>
@@ -1133,18 +1505,28 @@ function AdminCoach({ branchId }: { branchId: string }) {
 
 // ── Class Activity ──────────────────────────────────────────────────────────────
 
-const CAL_HOURS = ["07","08","09","10","11","14","15","16","17","18","19","20"];
 const DAY_NAMES = ["Senin","Selasa","Rabu","Kamis","Jumat","Sabtu","Minggu"];
 const DAY_IDX: Record<string, number> = { Senin: 0, Selasa: 1, Rabu: 2, Kamis: 3, Jumat: 4, Sabtu: 5, Minggu: 6 };
 
+// Calendar constants — 1 hour = PX_PER_HOUR pixels, start at CAL_START
+const CAL_START = 6;   // 06:00
+const CAL_END   = 22;  // 22:00 (exclusive label)
+const PX_PER_HOUR = 64;
+
+/** Convert "HH:MM:SS" or "HH:MM" to minutes-since-midnight */
+function timeToMin(t: string): number {
+  const [h, m] = t.split(":").map(Number);
+  return (h ?? 0) * 60 + (m ?? 0);
+}
+
 interface CalEvent {
-  classId: string; name: string; coach: string; hour: string;
+  classId: string; name: string; coach: string;
+  timeStart: string; timeEnd: string;
   days: number[]; isSub?: boolean;
 }
 
 function getWeekDates(offset = 0) {
   const now = new Date();
-  // Get Monday of current week
   const mon = new Date(now);
   mon.setDate(now.getDate() - ((now.getDay() + 6) % 7) + offset * 7);
   return Array.from({ length: 7 }, (_, i) => {
@@ -1181,7 +1563,7 @@ function AdminClassActivity({ branchId }: { branchId: string }) {
 
     const [{ data: cls }, { data: leaves }, { data: hols }] = await Promise.all([
       supabase.from("classes")
-        .select("id, name, schedule_days, time_start, class_coaches(profile:profiles(full_name))")
+        .select("id, name, schedule_days, time_start, time_end, class_coaches(profile:profiles(full_name))")
         .eq("branch_id", branchId).eq("status", "active"),
       supabase.from("coach_leaves")
         .select("id, date_from, date_to, substitute:profiles!coach_leaves_substitute_id_fkey(full_name), coach_leave_classes(class_id)")
@@ -1200,7 +1582,6 @@ function AdminClassActivity({ branchId }: { branchId: string }) {
     const holArr = (hols ?? []) as HolidayEntry[];
     setHolidays(holArr);
 
-    // Build substitute map: classId → substituteName for this week
     const subMap: Record<string, string> = {};
     (leaves ?? []).forEach((l) => {
       const sub = (l as unknown as { substitute: { full_name: string } | null }).substitute;
@@ -1211,13 +1592,12 @@ function AdminClassActivity({ branchId }: { branchId: string }) {
       }
     });
 
-    // Build holiday set: "classId|YYYY-MM-DD" → holidayId
     const holMap: Record<string, string> = {};
     holArr.forEach(h => { holMap[`${h.class_id}|${h.holiday_date}`] = h.id; });
 
     const evts: CalEventExt[] = (cls as unknown as {
       id: string; name: string; schedule_days: string[];
-      time_start: string;
+      time_start: string; time_end: string;
       class_coaches: { profile: { full_name: string } | null }[];
     }[]).flatMap((c) => {
       const coach = c.class_coaches?.[0]?.profile?.full_name ?? "—";
@@ -1232,7 +1612,8 @@ function AdminClassActivity({ branchId }: { branchId: string }) {
           classId: c.id,
           name: c.name,
           coach: subName ? subName.split(" ")[0] : (coach === "—" ? "—" : coach.split(" ")[0]),
-          hour: c.time_start?.slice(0, 2) ?? "00",
+          timeStart: c.time_start ?? "00:00",
+          timeEnd: c.time_end ?? c.time_start ?? "01:00",
           days: [dayIdx],
           isSub: !!subName,
           isHoliday: !!holidayId,
@@ -1275,6 +1656,10 @@ function AdminClassActivity({ branchId }: { branchId: string }) {
 
   const weekLabel = `${weekDates[0].getDate()} ${weekDates[0].toLocaleDateString("id-ID", { month: "short" })} – ${weekDates[6].getDate()} ${weekDates[6].toLocaleDateString("id-ID", { month: "short", year: "numeric" })}`;
 
+  // Total calendar height in px
+  const totalHours = CAL_END - CAL_START;
+  const calHeight = totalHours * PX_PER_HOUR;
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -1307,48 +1692,89 @@ function AdminClassActivity({ branchId }: { branchId: string }) {
       {loading ? <div className="p-10 text-center text-ink-mute">Memuat kalender…</div> : (
         <Card padded={false} className="overflow-hidden">
           <div className="overflow-x-auto">
-            <div className="grid min-w-[700px]" style={{ gridTemplateColumns: "60px repeat(7, 1fr)" }}>
-              <div className="border-r border-b border-line p-3" />
-              {DAY_NAMES.map((d, i) => (
-                <div key={d} className={`border-b border-line p-3 text-center ${i < 6 ? "border-r" : ""}`}>
-                  <div className="text-[10px] font-bold text-ink-faint uppercase tracking-widest">{d.slice(0, 3)}</div>
-                  <div className="font-display font-bold text-ink text-lg">{weekDates[i].getDate()}</div>
+            <div className="min-w-[700px]">
+              {/* Header row */}
+              <div className="grid border-b border-line" style={{ gridTemplateColumns: "52px repeat(7, 1fr)" }}>
+                <div className="border-r border-line" />
+                {DAY_NAMES.map((d, i) => {
+                  const date = weekDates[i];
+                  const isToday = date.toDateString() === new Date().toDateString();
+                  return (
+                    <div key={d} className={`border-b-0 p-3 text-center ${i < 6 ? "border-r border-line" : ""}`}>
+                      <div className="text-[10px] font-bold text-ink-faint uppercase tracking-widest">{d.slice(0, 3)}</div>
+                      <div className={`font-display font-bold text-lg mt-0.5 w-8 h-8 rounded-full flex items-center justify-center mx-auto ${isToday ? "bg-ocean-600 text-white" : "text-ink"}`}>
+                        {date.getDate()}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Body: time gutter + 7 day columns */}
+              <div className="grid" style={{ gridTemplateColumns: "52px repeat(7, 1fr)" }}>
+                {/* Time gutter */}
+                <div className="border-r border-line relative" style={{ height: `${calHeight}px` }}>
+                  {Array.from({ length: totalHours }, (_, i) => (
+                    <div key={i} className="absolute w-full flex items-start justify-end pr-2" style={{ top: `${i * PX_PER_HOUR}px`, height: `${PX_PER_HOUR}px` }}>
+                      <span className="text-[10px] font-bold text-ink-faint leading-none -mt-2">{String(CAL_START + i).padStart(2, "0")}:00</span>
+                    </div>
+                  ))}
                 </div>
-              ))}
-              {CAL_HOURS.map((h) => (
-                <React.Fragment key={h}>
-                  <div className="border-r border-b border-line p-2 text-[10px] font-bold text-ink-faint text-right pr-3">{h}:00</div>
-                  {Array.from({ length: 7 }).map((_, d) => {
-                    const ev = events.find((e) => e.days.includes(d) && e.hour === h);
-                    return (
-                      <div key={d} className={`relative h-16 border-b border-line ${d < 6 ? "border-r" : ""} hover:bg-paper-tint`}>
-                        {ev && (
+
+                {/* Day columns */}
+                {Array.from({ length: 7 }, (_, dayIdx) => {
+                  const dayEvents = events.filter(e => e.days.includes(dayIdx));
+                  return (
+                    <div key={dayIdx} className={`relative ${dayIdx < 6 ? "border-r border-line" : ""}`} style={{ height: `${calHeight}px` }}>
+                      {/* Hour gridlines */}
+                      {Array.from({ length: totalHours }, (_, i) => (
+                        <div key={i} className="absolute w-full border-t border-line/50" style={{ top: `${i * PX_PER_HOUR}px` }} />
+                      ))}
+                      {/* Half-hour gridlines (fainter) */}
+                      {Array.from({ length: totalHours }, (_, i) => (
+                        <div key={`h${i}`} className="absolute w-full border-t border-line/20" style={{ top: `${i * PX_PER_HOUR + PX_PER_HOUR / 2}px` }} />
+                      ))}
+
+                      {/* Events */}
+                      {dayEvents.map((ev) => {
+                        const startMin = timeToMin(ev.timeStart);
+                        const endMin   = timeToMin(ev.timeEnd);
+                        const topPx    = ((startMin - CAL_START * 60) / 60) * PX_PER_HOUR;
+                        const heightPx = Math.max(((endMin - startMin) / 60) * PX_PER_HOUR, 28);
+                        const timeLabel = `${ev.timeStart.slice(0,5)}–${ev.timeEnd.slice(0,5)}`;
+                        return (
                           <div
-                            className={`absolute inset-x-1 top-1 rounded-lg ring-1 ring-inset p-2 ${
+                            key={ev.classId}
+                            className={`absolute inset-x-1 rounded-lg ring-1 ring-inset px-2 py-1 overflow-hidden cursor-default select-none ${
                               ev.isHoliday
                                 ? "bg-warn-50 text-warn-700 ring-warn-400/40"
                                 : ev.isSub
                                 ? "bg-sub-50 text-sub-700 ring-sub-500/30"
                                 : "bg-ocean-100 text-ocean-700 ring-ocean-500/30"
                             }`}
-                            style={{ height: "56px", zIndex: 5 }}
-                            title={ev.isHoliday ? "Libur" : undefined}
+                            style={{ top: `${topPx}px`, height: `${heightPx}px`, zIndex: 5 }}
+                            title={`${ev.name} · ${timeLabel}`}
                           >
-                            <div className="font-bold text-[11px] truncate flex items-center gap-1">
-                              {ev.isHoliday && <Icon name="flag" className="w-3 h-3" />}
-                              {ev.isSub && !ev.isHoliday && <Icon name="refresh" className="w-3 h-3" />}
-                              {ev.name}
+                            <div className="font-bold text-[11px] truncate flex items-center gap-1 leading-tight">
+                              {ev.isHoliday && <Icon name="flag" className="w-3 h-3 shrink-0" />}
+                              {ev.isSub && !ev.isHoliday && <Icon name="refresh" className="w-3 h-3 shrink-0" />}
+                              <span className="truncate">{ev.name}</span>
                             </div>
-                            <div className="text-[10px] opacity-80 truncate">
-                              {ev.isHoliday ? "Libur" : ev.isSub ? `Pengganti: ${ev.coach}` : ev.coach}
-                            </div>
+                            {heightPx >= 44 && (
+                              <div className="text-[10px] opacity-75 truncate leading-tight mt-0.5">
+                                {ev.isHoliday ? "Libur" : ev.isSub ? `Pengganti: ${ev.coach}` : ev.coach}
+                              </div>
+                            )}
+                            {heightPx >= 56 && (
+                              <div className="text-[10px] opacity-60 truncate font-mono leading-tight">{timeLabel}</div>
+                            )}
                           </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </React.Fragment>
-              ))}
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </Card>
@@ -1398,12 +1824,12 @@ function AdminAbsensiCoach({ branchId }: { branchId: string }) {
       .eq("branch_id", branchId).order("session_date", { ascending: false }).order("clock_in_time", { ascending: false }).limit(50);
     if (data) setRecords(data as unknown as AttendanceRow[]);
     setLoading(false);
-  }, [branchId, supabase]);
+  }, [branchId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     load();
     supabase.from("profiles").select("id, full_name").eq("branch_id", branchId).eq("role", "coach").then(({ data }) => { if (data) setCoaches(data as unknown as CoachProfile[]); });
-    supabase.from("classes").select("id, name, schedule_time, status, branch_id, capacity, enrolled, schedule_days, price_monthly, show_on_landing").eq("branch_id", branchId).eq("status", "active").then(({ data }) => { if (data) setClasses(data as unknown as ClassRow[]); });
+    supabase.from("classes").select("id, name, time_start, time_end, status, branch_id, capacity, enrolled, schedule_days, price_monthly, show_on_landing").eq("branch_id", branchId).eq("status", "active").then(({ data }) => { if (data) setClasses(data as unknown as ClassRow[]); });
   }, [load]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const saveManual = async () => {
@@ -1539,11 +1965,11 @@ function AdminPengumuman({ branchId }: { branchId: string }) {
       .eq("branch_id", branchId).order("created_at", { ascending: false });
     if (data) setAnnouncements(data as unknown as Announcement[]);
     setLoading(false);
-  }, [branchId, supabase]);
+  }, [branchId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     load();
-    supabase.from("classes").select("id, name, schedule_time, status, branch_id, capacity, enrolled, schedule_days, price_monthly, show_on_landing")
+    supabase.from("classes").select("id, name, time_start, time_end, status, branch_id, capacity, enrolled, schedule_days, price_monthly, show_on_landing")
       .eq("branch_id", branchId).eq("status", "active").order("name")
       .then(({ data }) => { if (data) setClasses(data as unknown as ClassRow[]); });
   }, [load]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1692,7 +2118,7 @@ function AdminIzin({ branchId }: { branchId: string }) {
         : ((l.member as { profile?: { full_name?: string } } | null)?.profile ?? null),
     })) as unknown as LeaveRow[]);
     setLoading(false);
-  }, [branchId, tab, supabase]);
+  }, [branchId, tab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     load();
@@ -1748,7 +2174,7 @@ function AdminIzin({ branchId }: { branchId: string }) {
       const { data, error } = await supabase.from("member_leaves").insert({ member_id: createForm.target_id, type: createForm.type, date_from: createForm.date_from, date_to: createForm.date_to, reason: createForm.reason || null, status: "approved", created_by_admin: true, reviewed_at: new Date().toISOString() }).select("id").single();
       if (error || !data) { setCreating(false); return toast.error("Gagal membuat izin", error?.message); }
       if (createForm.class_ids.length > 0) {
-        await supabase.from("member_leave_classes").insert(createForm.class_ids.map(cid => ({ member_leave_id: data.id, class_id: cid })));
+        await supabase.from("member_leave_classes").insert(createForm.class_ids.map(cid => ({ leave_id: data.id, class_id: cid })));
       }
     }
     setCreating(false);
@@ -1922,7 +2348,7 @@ function AdminPembayaran({ branchId }: { branchId: string }) {
       .eq("branch_id", branchId).order("created_at", { ascending: false }).limit(100);
     if (data) setBills(data as unknown as BillRow[]);
     setLoading(false);
-  }, [branchId, supabase]);
+  }, [branchId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { load(); }, [load]);
 
@@ -2069,7 +2495,7 @@ function AdminApprovement({ branchId }: { branchId: string }) {
         .then(({ data }) => { if (data) setCerts(data as unknown as CertRow[]); }),
     ]);
     setLoading(false);
-  }, [branchId, supabase]);
+  }, [branchId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { load(); }, [load]);
 
@@ -2149,7 +2575,7 @@ function AdminRapor({ branchId }: { branchId: string }) {
     const { data } = await supabase.from("rapor_periods").select("id, label, date_from, date_to, is_open, branch_id").eq("branch_id", branchId).order("date_from", { ascending: false });
     if (data) setPeriods(data as RaporPeriod[]);
     setLoading(false);
-  }, [branchId, supabase]);
+  }, [branchId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { load(); }, [load]);
 
@@ -2234,7 +2660,7 @@ function AdminSchoolPanel({ branchId }: { branchId: string }) {
     const { data } = await supabase.from("schools").select("id, name, email, profile_id").eq("branch_id", branchId).order("name");
     if (data) setSchools(data as School[]);
     setLoading(false);
-  }, [branchId, supabase]);
+  }, [branchId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { load(); }, [load]);
 
@@ -2372,43 +2798,79 @@ export default function AdminPage() {
   const [mobileNav, setMobileNav] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [branch, setBranch] = useState<Branch | null>(null);
+  const [resolvedBranchId, setResolvedBranchId] = useState("");
+  const [ownerPreview, setOwnerPreview] = useState<{ id: string; name: string } | null>(null);
 
   const loadBranch = useCallback(async (branchId: string) => {
     const { data } = await supabase.from("branches").select("id, name, city, address, lat, lng, wa_numbers, logo_url").eq("id", branchId).single();
     if (data) setBranch(data as Branch);
-  }, [supabase]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
+    // Check if owner navigated here to preview a branch
+    const raw = sessionStorage.getItem("ownerPreviewBranch");
+    if (raw) {
+      try {
+        const preview = JSON.parse(raw) as { id: string; name: string };
+        setOwnerPreview(preview);
+        setResolvedBranchId(preview.id);
+        loadBranch(preview.id);
+      } catch { /* ignore */ }
+    }
+
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (!user) { router.push("/login"); return; }
       setCurrentUser(user);
-      const branchId = user.user_metadata?.branch_id as string | undefined;
-      if (branchId) loadBranch(branchId);
+
+      // If owner preview is active, skip normal branch resolution
+      if (sessionStorage.getItem("ownerPreviewBranch")) return;
+
+      // Try branch_id from user_metadata first, fallback to profiles table
+      let branchId = user.user_metadata?.branch_id as string | undefined;
+      if (!branchId) {
+        const { data: profile } = await supabase.from("profiles").select("branch_id").eq("id", user.id).single();
+        branchId = profile?.branch_id ?? undefined;
+      }
+      if (branchId) {
+        setResolvedBranchId(branchId);
+        loadBranch(branchId);
+      }
     });
   }, [loadBranch]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const backToOwner = () => {
+    sessionStorage.removeItem("ownerPreviewBranch");
+    router.push("/owner");
+  };
 
   const logout = async () => {
     await supabase.auth.signOut();
     router.push("/login");
   };
 
-  const branchId = currentUser?.user_metadata?.branch_id as string ?? "";
+  const branchId = resolvedBranchId || (currentUser?.user_metadata?.branch_id as string ?? "");
 
-  const pages: Record<string, React.ReactNode> = {
-    dashboard: <AdminDashboard branchId={branchId} />,
-    activity:  <AdminClassActivity branchId={branchId} />,
-    classes:   <AdminClass branchId={branchId} />,
-    members:   <AdminMember branchId={branchId} />,
-    coaches:   <AdminCoach branchId={branchId} />,
-    absensi:   <AdminAbsensiCoach branchId={branchId} />,
-    announce:  <AdminPengumuman branchId={branchId} />,
-    izin:      <AdminIzin branchId={branchId} />,
-    approve:   <AdminApprovement branchId={branchId} />,
-    pay:       <AdminPembayaran branchId={branchId} />,
-    rapor:     <AdminRapor branchId={branchId} />,
-    school:    <AdminSchoolPanel branchId={branchId} />,
-    settings:  <AdminSettings branch={branch} onRefresh={() => branchId && loadBranch(branchId)} />,
-  };
+  function renderPage() {
+    if (!resolvedBranchId && active !== "settings") return (
+      <div className="flex items-center justify-center h-64 text-ink-mute">Memuat data cabang…</div>
+    );
+    switch (active) {
+      case "dashboard": return <AdminDashboard branchId={branchId} />;
+      case "activity":  return <AdminClassActivity branchId={branchId} />;
+      case "classes":   return <AdminClass branchId={branchId} />;
+      case "members":   return <AdminMember branchId={branchId} />;
+      case "coaches":   return <AdminCoach branchId={branchId} />;
+      case "absensi":   return <AdminAbsensiCoach branchId={branchId} />;
+      case "announce":  return <AdminPengumuman branchId={branchId} />;
+      case "izin":      return <AdminIzin branchId={branchId} />;
+      case "approve":   return <AdminApprovement branchId={branchId} />;
+      case "pay":       return <AdminPembayaran branchId={branchId} />;
+      case "rapor":     return <AdminRapor branchId={branchId} />;
+      case "school":    return <AdminSchoolPanel branchId={branchId} />;
+      case "settings":  return <AdminSettings branch={branch} onRefresh={() => branchId && loadBranch(branchId)} userId={currentUser?.id ?? ""} />;
+      default:          return null;
+    }
+  }
 
   const [title] = TITLES[active] ?? ["Admin", ""];
   const subTitle = active === "dashboard" ? branch?.name ?? "Admin Panel" : (TITLES[active]?.[1] ?? "");
@@ -2426,7 +2888,24 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="flex bg-paper-tint min-h-screen">
+    <div className="flex flex-col bg-paper-tint min-h-screen">
+      {ownerPreview && (
+        <div className="bg-ocean-800 text-white px-4 py-2.5 flex items-center gap-3 z-50 shrink-0">
+          <span className="w-6 h-6 rounded-full bg-white/15 flex items-center justify-center shrink-0">
+            <Icon name="shield" className="w-3.5 h-3.5 text-wave-200" />
+          </span>
+          <span className="text-sm font-semibold flex-1">
+            Mode pratinjau Owner — Admin Panel <span className="text-wave-200 font-bold">{ownerPreview.name}</span>
+          </span>
+          <button
+            onClick={backToOwner}
+            className="flex items-center gap-1.5 text-sm font-bold text-white bg-white/15 hover:bg-white/25 px-3 py-1.5 rounded-lg transition"
+          >
+            <Icon name="arrowL" className="w-4 h-4" /> Kembali ke Owner Panel
+          </button>
+        </div>
+      )}
+      <div className="flex flex-1 min-h-0">
       <Sidebar
         items={NAV_ITEMS}
         active={active}
@@ -2480,11 +2959,11 @@ export default function AdminPage() {
           }
         />
         <main className="flex-1 p-4 lg:p-7 anim-in pb-24 lg:pb-7">
-          {pages[active]}
+          {renderPage()}
         </main>
       </div>
+      </div>
 
-      <RoleSwitcher currentPath="/admin" />
     </div>
   );
 }

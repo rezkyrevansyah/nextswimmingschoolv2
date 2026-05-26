@@ -13,7 +13,6 @@ import Modal from "@/components/ui/Modal";
 import Sidebar, { type NavItem } from "@/components/layout/Sidebar";
 import Topbar from "@/components/layout/Topbar";
 import Bell from "@/components/layout/Bell";
-import RoleSwitcher from "@/components/layout/RoleSwitcher";
 import { fmtIDR } from "@/lib/utils";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
@@ -27,6 +26,7 @@ interface Branch {
   city: string;
   address: string;
   status: string;
+  wa_numbers?: string[];
   color?: string;
   member_count?: number;
   coach_count?: number;
@@ -51,7 +51,7 @@ interface ClassRow {
   enrolled: number;
   price_monthly: number;
   schedule_days: string[];
-  schedule_time: string;
+  time_start: string; time_end: string;
   branch?: { name: string } | null;
   class_coaches?: { profile: { full_name: string } | null }[];
 }
@@ -177,26 +177,34 @@ function Dashboard({ branches }: { branches: Branch[] }) {
 function Branches({ branches, onRefresh }: { branches: Branch[]; onRefresh: () => void }) {
   const toast = useToast();
   const confirm = useConfirm();
+  const router = useRouter();
   const supabase = createClient();
+
+  const openAdminPanel = (b: Branch) => {
+    sessionStorage.setItem("ownerPreviewBranch", JSON.stringify({ id: b.id, name: b.name }));
+    router.push("/admin");
+  };
   const [showAdd, setShowAdd] = useState(false);
   const [editItem, setEditItem] = useState<Branch | null>(null);
   const [name, setName] = useState("");
   const [city, setCity] = useState("");
   const [address, setAddress] = useState("");
+  const [waNumbers, setWaNumbers] = useState<string[]>([""]);
   const [saving, setSaving] = useState(false);
 
-  const openAdd = () => { setName(""); setCity(""); setAddress(""); setEditItem(null); setShowAdd(true); };
-  const openEdit = (b: Branch) => { setName(b.name); setCity(b.city); setAddress(b.address); setEditItem(b); setShowAdd(true); };
+  const openAdd = () => { setName(""); setCity(""); setAddress(""); setWaNumbers([""]); setEditItem(null); setShowAdd(true); };
+  const openEdit = (b: Branch) => { setName(b.name); setCity(b.city); setAddress(b.address); setWaNumbers(b.wa_numbers?.length ? b.wa_numbers : [""]); setEditItem(b); setShowAdd(true); };
 
   const save = async () => {
     if (!name || !city) return toast.error("Nama dan kota wajib diisi");
     setSaving(true);
+    const cleanWa = waNumbers.map(n => n.trim()).filter(Boolean);
     if (editItem) {
-      const { error } = await supabase.from("branches").update({ name, city, address }).eq("id", editItem.id);
+      const { error } = await supabase.from("branches").update({ name, city, address, wa_numbers: cleanWa }).eq("id", editItem.id);
       if (error) { toast.error("Gagal menyimpan", error.message); setSaving(false); return; }
       toast.success("Cabang diperbarui");
     } else {
-      const { error } = await supabase.from("branches").insert({ name, city, address, status: "active" });
+      const { error } = await supabase.from("branches").insert({ name, city, address, wa_numbers: cleanWa, status: "active" });
       if (error) { toast.error("Gagal membuat cabang", error.message); setSaving(false); return; }
       toast.success("Cabang baru dibuat");
     }
@@ -246,6 +254,7 @@ function Branches({ branches, onRefresh }: { branches: Branch[]; onRefresh: () =
                 <div className="p-2.5 rounded-xl bg-paper-tint"><div className="font-display font-bold text-lg text-ink">{b.class_count ?? 0}</div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Kelas</div></div>
               </div>
               <div className="mt-4 flex flex-wrap gap-2">
+                <Btn variant="primary" size="sm" icon="grid" onClick={() => openAdminPanel(b)}>Buka Admin Panel</Btn>
                 <Btn variant="ghost" size="sm" icon="edit" onClick={() => openEdit(b)}>Edit</Btn>
                 {b.status !== "archived" && (
                   <Btn variant="ghost" size="sm" icon="archive" onClick={() => archive(b)}>Arsip</Btn>
@@ -274,6 +283,21 @@ function Branches({ branches, onRefresh }: { branches: Branch[]; onRefresh: () =
           <Field label="Nama cabang" required><Input value={name} onChange={e => setName(e.target.value)} placeholder="Cabang Jakarta Selatan" /></Field>
           <Field label="Kota" required><Input value={city} onChange={e => setCity(e.target.value)} placeholder="Jakarta" /></Field>
           <Field label="Alamat"><Input value={address} onChange={e => setAddress(e.target.value)} placeholder="Jl. Sudirman No. 1" /></Field>
+          <Field label="Nomor WhatsApp Admin" hint="Dipakai di tombol hubungi admin. Format: 081234567890.">
+            <div className="space-y-2">
+              {waNumbers.map((num, i) => (
+                <div key={i} className="flex gap-2">
+                  <Input type="tel" value={num} onChange={e => setWaNumbers(prev => prev.map((n, j) => j === i ? e.target.value : n))} placeholder="081234567890" className="flex-1 font-mono" />
+                  {waNumbers.length > 1 && (
+                    <button onClick={() => setWaNumbers(prev => prev.filter((_, j) => j !== i))} className="w-9 h-9 rounded-lg text-ink-mute hover:text-danger-500 hover:bg-danger-50 flex items-center justify-center border border-line shrink-0">
+                      <Icon name="trash" className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              ))}
+              <Btn variant="ghost" size="sm" icon="plus" onClick={() => setWaNumbers(prev => [...prev, ""])}>Tambah nomor</Btn>
+            </div>
+          </Field>
         </div>
       </Modal>
     </div>
@@ -287,6 +311,7 @@ function Admins({ branches }: { branches: Branch[] }) {
   const [admins, setAdmins] = useState<AdminProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
+  const [editTarget, setEditTarget] = useState<AdminProfile | null>(null);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ full_name: "", email: "", phone: "", branch_id: "", password: "" });
 
@@ -303,22 +328,49 @@ function Admins({ branches }: { branches: Branch[] }) {
 
   useEffect(() => { load(); }, [load]);
 
-  const createAdmin = async () => {
-    if (!form.full_name || !form.email || !form.password || !form.branch_id) {
-      return toast.error("Semua field wajib diisi");
+  const openEdit = (a: AdminProfile) => {
+    setEditTarget(a);
+    setForm({ full_name: a.full_name, email: a.email, phone: a.phone ?? "", branch_id: a.branch_id ?? "", password: "" });
+    setShowAdd(true);
+  };
+
+  const saveAdmin = async () => {
+    if (editTarget) {
+      // Edit mode — update via server route to bypass RLS
+      if (!form.branch_id) return toast.error("Cabang wajib dipilih");
+      setSaving(true);
+      const res = await fetch(`/api/admin/users/${editTarget.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          profile: { full_name: form.full_name, phone: form.phone || null, branch_id: form.branch_id },
+        }),
+      });
+      setSaving(false);
+      const json = await res.json() as { error?: string };
+      if (!res.ok) return toast.error("Gagal menyimpan", json.error);
+      toast.success("Data admin diperbarui");
+      setShowAdd(false);
+      setEditTarget(null);
+      load();
+    } else {
+      // Create mode
+      if (!form.full_name || !form.email || !form.password || !form.branch_id) {
+        return toast.error("Semua field wajib diisi");
+      }
+      setSaving(true);
+      const res = await fetch("/api/admin/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...form, role: "admin" }),
+      });
+      const json = await res.json() as { error?: string };
+      if (!res.ok) { toast.error("Gagal membuat admin", json.error); setSaving(false); return; }
+      toast.success("Admin dibuat", "Akun langsung aktif");
+      setSaving(false);
+      setShowAdd(false);
+      load();
     }
-    setSaving(true);
-    const res = await fetch("/api/admin/users", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...form, role: "admin" }),
-    });
-    const json = await res.json() as { error?: string };
-    if (!res.ok) { toast.error("Gagal membuat admin", json.error); setSaving(false); return; }
-    toast.success("Admin dibuat", "Akun langsung aktif");
-    setSaving(false);
-    setShowAdd(false);
-    load();
   };
 
   const removeAdmin = async (a: AdminProfile) => {
@@ -368,7 +420,10 @@ function Admins({ branches }: { branches: Branch[] }) {
                   <td className="text-ink-soft">{a.branch?.name ?? "—"}</td>
                   <td><Status kind="active">Aktif</Status></td>
                   <td className="text-right px-5">
-                    <button onClick={() => removeAdmin(a)} className="text-ink-mute hover:text-danger-500 p-1.5"><Icon name="trash" className="w-4 h-4" /></button>
+                    <div className="flex items-center justify-end gap-1">
+                      <button onClick={() => openEdit(a)} className="text-ink-mute hover:text-ocean-600 p-1.5"><Icon name="edit" className="w-4 h-4" /></button>
+                      <button onClick={() => removeAdmin(a)} className="text-ink-mute hover:text-danger-500 p-1.5"><Icon name="trash" className="w-4 h-4" /></button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -380,17 +435,17 @@ function Admins({ branches }: { branches: Branch[] }) {
         )}
       </Card>
 
-      <Modal open={showAdd} onClose={() => setShowAdd(false)} title="Tambah Admin Cabang" size="sm"
+      <Modal open={showAdd} onClose={() => { setShowAdd(false); setEditTarget(null); }} title={editTarget ? "Edit Admin" : "Tambah Admin Cabang"} size="sm"
         footer={
           <>
-            <Btn variant="ghost" onClick={() => setShowAdd(false)}>Batal</Btn>
-            <Btn variant="primary" onClick={createAdmin} disabled={saving}>{saving ? "Membuat…" : "Buat Akun"}</Btn>
+            <Btn variant="ghost" onClick={() => { setShowAdd(false); setEditTarget(null); }}>Batal</Btn>
+            <Btn variant="primary" onClick={saveAdmin} disabled={saving}>{saving ? "Menyimpan…" : editTarget ? "Simpan" : "Buat Akun"}</Btn>
           </>
         }
       >
         <div className="space-y-4">
-          <Field label="Nama lengkap" required><Input value={form.full_name} onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))} /></Field>
-          <Field label="Email" required><Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} /></Field>
+          <Field label="Nama lengkap" required><Input value={form.full_name} onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))} disabled={!!editTarget} /></Field>
+          {!editTarget && <Field label="Email" required><Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} /></Field>}
           <Field label="Nomor WhatsApp"><Input type="tel" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="0812…" /></Field>
           <Field label="Cabang" required>
             <Select value={form.branch_id} onChange={e => setForm(f => ({ ...f, branch_id: e.target.value }))}>
@@ -398,9 +453,9 @@ function Admins({ branches }: { branches: Branch[] }) {
               {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
             </Select>
           </Field>
-          <Field label="Password awal" required hint="Admin bisa ganti setelah login">
+          {!editTarget && <Field label="Password awal" required hint="Admin bisa ganti setelah login">
             <Input type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder="Min. 8 karakter" />
-          </Field>
+          </Field>}
         </div>
       </Modal>
     </div>
@@ -416,7 +471,7 @@ function Classes({ branches }: { branches: Branch[] }) {
   useEffect(() => {
     const q = supabase
       .from("classes")
-      .select("id, name, branch_id, status, capacity, enrolled, price_monthly, schedule_days, schedule_time, branch:branches(name), class_coaches(profile:profiles(full_name))")
+      .select("id, name, branch_id, status, capacity, enrolled, price_monthly, schedule_days, time_start, time_end, branch:branches(name), class_coaches(profile:profiles(full_name))")
       .eq("status", "active")
       .order("name");
 
@@ -475,7 +530,7 @@ function Classes({ branches }: { branches: Branch[] }) {
                       </td>
                       <td className="text-ink-mute text-xs">
                         <div>{(c.schedule_days ?? []).join(", ")}</div>
-                        <div className="font-mono">{c.schedule_time}</div>
+                        <div className="font-mono">{c.time_start?.slice(0,5)}{c.time_end ? `–${c.time_end.slice(0,5)}` : ""}</div>
                       </td>
                       <td className="text-right">
                         <div className="font-mono font-semibold">{c.enrolled}/{c.capacity}</div>
@@ -511,7 +566,7 @@ function SettingsTarif({ branches }: { branches: Branch[] }) {
     if (!branchId) return;
     supabase
       .from("classes")
-      .select("id, name, schedule_days, schedule_time, branch_id, status, capacity, enrolled, price_monthly")
+      .select("id, name, schedule_days, time_start, time_end, branch_id, status, capacity, enrolled, price_monthly")
       .eq("branch_id", branchId)
       .eq("status", "active")
       .order("name")
@@ -565,12 +620,12 @@ function SettingsTarif({ branches }: { branches: Branch[] }) {
           {classes.map((c) => (
             <Card key={c.id} className="!p-4">
               <div className="font-semibold text-ink">{c.name}</div>
-              <div className="text-xs text-ink-mute mt-0.5 mb-3">{(c.schedule_days ?? []).join(", ")} · {c.schedule_time}</div>
+              <div className="text-xs text-ink-mute mt-0.5 mb-3">{(c.schedule_days ?? []).join(", ")} · {c.time_start?.slice(0,5)}{c.time_end ? `–${c.time_end.slice(0,5)}` : ""}</div>
               <Field label="Tarif umum (per sesi)">
                 <Input
                   type="number"
                   value={rates[c.id] ?? ""}
-                  onChange={e => setRates(r => ({ ...r, [c.id]: Number(e.target.value) }))}
+                  onChange={e => setRates(r => ({ ...r, [c.id]: e.target.value === "" ? "" : Number(e.target.value) }))}
                   className="font-mono"
                   placeholder="150000"
                 />
@@ -722,23 +777,32 @@ export default function OwnerPage() {
   const [userId, setUserId] = useState("");
 
   const loadBranches = useCallback(async () => {
-    const { data } = await supabase
-      .from("branches")
-      .select(`
-        id, name, city, address, status,
-        member_count:members(count),
-        coach_count:profiles(count),
-        class_count:classes(count)
-      `)
-      .order("name");
+    const [{ data: branchData }, { data: members }, { data: coaches }, { data: classes }] = await Promise.all([
+      supabase.from("branches").select("id, name, city, address, status, wa_numbers").order("name"),
+      supabase.from("members").select("id, branch_id").eq("status", "active"),
+      supabase.from("profiles").select("id, branch_id").eq("role", "coach"),
+      supabase.from("classes").select("id, branch_id").eq("status", "active"),
+    ]);
 
-    if (data) {
-      // Supabase returns counts as arrays [{count: N}] — flatten them
-      const flat = data.map((b: Record<string, unknown>) => ({
+    if (branchData) {
+      const memberMap = (members ?? []).reduce<Record<string, number>>((acc, m) => {
+        if (m.branch_id) acc[m.branch_id] = (acc[m.branch_id] ?? 0) + 1;
+        return acc;
+      }, {});
+      const coachMap = (coaches ?? []).reduce<Record<string, number>>((acc, c) => {
+        if (c.branch_id) acc[c.branch_id] = (acc[c.branch_id] ?? 0) + 1;
+        return acc;
+      }, {});
+      const classMap = (classes ?? []).reduce<Record<string, number>>((acc, c) => {
+        if (c.branch_id) acc[c.branch_id] = (acc[c.branch_id] ?? 0) + 1;
+        return acc;
+      }, {});
+
+      const flat = branchData.map((b) => ({
         ...b,
-        member_count: Array.isArray(b.member_count) ? (b.member_count[0] as { count: number })?.count ?? 0 : 0,
-        coach_count:  Array.isArray(b.coach_count)  ? (b.coach_count[0]  as { count: number })?.count ?? 0 : 0,
-        class_count:  Array.isArray(b.class_count)  ? (b.class_count[0]  as { count: number })?.count ?? 0 : 0,
+        member_count: memberMap[b.id] ?? 0,
+        coach_count:  coachMap[b.id]  ?? 0,
+        class_count:  classMap[b.id]  ?? 0,
       })) as Branch[];
       setBranches(flat);
     }
@@ -831,7 +895,6 @@ export default function OwnerPage() {
         </main>
       </div>
 
-      <RoleSwitcher currentPath="/owner" />
     </div>
   );
 }

@@ -4,9 +4,11 @@ import React from "react";
 interface LogoProps {
   size?: number;
   withWord?: boolean;
+  /** Use on dark backgrounds — renders text in white instead of ocean-700 */
+  dark?: boolean;
 }
 
-export default function Logo({ size = 32, withWord = false }: LogoProps) {
+export default function Logo({ size = 32, withWord = false, dark = false }: LogoProps) {
   return (
     <span className="inline-flex items-center gap-2">
       <Image
@@ -19,9 +21,15 @@ export default function Logo({ size = 32, withWord = false }: LogoProps) {
         priority
       />
       {withWord && (
-        <span className="font-display font-extrabold text-ocean-700 tracking-tight leading-none">
-          Next <span className="text-wave-500">Swimming</span> School
-        </span>
+        dark ? (
+          <span className="font-display font-extrabold text-white tracking-tight leading-none">
+            Next <span className="text-wave-300">Swimming</span> School
+          </span>
+        ) : (
+          <span className="font-display font-extrabold text-ocean-700 tracking-tight leading-none">
+            Next <span className="text-wave-500">Swimming</span> School
+          </span>
+        )
       )}
     </span>
   );

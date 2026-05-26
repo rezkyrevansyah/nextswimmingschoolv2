@@ -12,7 +12,6 @@ import Modal from "@/components/ui/Modal";
 import MobileNav from "@/components/layout/MobileNav";
 import type { NavItem as MobileNavItem } from "@/components/layout/Sidebar";
 import Bell from "@/components/layout/Bell";
-import RoleSwitcher from "@/components/layout/RoleSwitcher";
 import { fmtIDR, fmtDate, waLink } from "@/lib/utils";
 import { createClient } from "@/utils/supabase/client";
 
@@ -311,22 +310,22 @@ function MemberHome({
 
 function MemberSchedule({ memberId }: { memberId: string }) {
   const supabase = createClient();
-  const [classes, setClasses] = useState<{ id: string; name: string; schedule_days: string[]; schedule_time: string; location: string; coach_name: string }[]>([]);
+  const [classes, setClasses] = useState<{ id: string; name: string; schedule_days: string[]; time_start: string; time_end: string | null; location: string; coach_name: string }[]>([]);
   const [sessions, setSessions] = useState<{ date: string; day: string; time: string; class_id: string }[]>([]);
   const [holidayClassIds, setHolidayClassIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!memberId) return;
     supabase.from("member_classes")
-      .select("classes(id, name, schedule_days, time_start, location_name, class_coaches(profiles(full_name)))")
+      .select("classes(id, name, schedule_days, time_start, time_end, location_name, class_coaches(profiles(full_name)))")
       .eq("member_id", memberId)
       .then(async ({ data }) => {
         if (!data) return;
         const cls = data.map((mc) => {
-          const c = mc.classes as unknown as { id: string; name: string; schedule_days: string[]; time_start: string; location_name: string | null; class_coaches: { profiles: { full_name: string } | null }[] } | null;
+          const c = mc.classes as unknown as { id: string; name: string; schedule_days: string[]; time_start: string; time_end: string | null; location_name: string | null; class_coaches: { profiles: { full_name: string } | null }[] } | null;
           if (!c) return null;
           const firstCoach = c.class_coaches?.[0]?.profiles;
-          return { id: c.id, name: c.name, schedule_days: c.schedule_days ?? [], schedule_time: c.time_start, location: c.location_name ?? "—", coach_name: firstCoach?.full_name ? `Coach ${firstCoach.full_name.split(" ")[0]}` : "—" };
+          return { id: c.id, name: c.name, schedule_days: c.schedule_days ?? [], time_start: c.time_start, time_end: c.time_end ?? null, location: c.location_name ?? "—", coach_name: firstCoach?.full_name ? `Coach ${firstCoach.full_name.split(" ")[0]}` : "—" };
         }).filter(Boolean) as typeof classes;
         setClasses(cls);
 
@@ -350,7 +349,7 @@ function MemberSchedule({ memberId }: { memberId: string }) {
               const d = new Date(today);
               const diff = ((dayIdx - today.getDay()) + 7) % 7 + (w * 7);
               d.setDate(today.getDate() + diff);
-              upcoming.push({ date: d.toISOString().slice(0, 10), day, time: c.schedule_time ?? "—", class_id: c.id });
+              upcoming.push({ date: d.toISOString().slice(0, 10), day, time: c.time_start ? `${c.time_start.slice(0,5)}${c.time_end ? `–${c.time_end.slice(0,5)}` : ""}` : "—", class_id: c.id });
             }
           });
         });
@@ -381,7 +380,7 @@ function MemberSchedule({ memberId }: { memberId: string }) {
                 <span className="w-9 h-9 rounded-xl bg-ocean-50 text-ocean-700 flex items-center justify-center text-xs font-bold">{d.slice(0, 2)}</span>
                 <div className="flex-1 min-w-0">
                   <div className="font-semibold text-ink text-sm">{d}</div>
-                  <div className="text-xs text-ink-mute font-mono">{c.schedule_time} · {c.location}</div>
+                  <div className="text-xs text-ink-mute font-mono">{c.time_start?.slice(0,5)}{c.time_end ? `–${c.time_end.slice(0,5)}` : ""} · {c.location}</div>
                 </div>
               </div>
             ))}
@@ -1108,7 +1107,6 @@ export default function MemberPage() {
       <Shell active={active} setActive={setActive} name={memberName} branchName={branchName} userId={userId}>
         {pages[active]}
       </Shell>
-      <RoleSwitcher currentPath="/member" />
     </>
   );
 }

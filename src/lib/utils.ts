@@ -28,9 +28,11 @@ export const fmtTime = (d: string | Date): string =>
     minute: "2-digit",
   });
 
-/** Build WhatsApp deep link */
-export const waLink = (text = ""): string =>
-  `https://wa.me/62${WA_NUMBER.replace(/^0/, "")}?text=${encodeURIComponent(text)}`;
+/** Build WhatsApp deep link. If phone is provided, links to that number; otherwise defaults to admin WA. */
+export const waLink = (text = "", phone?: string | null): string => {
+  const num = phone ? phone.replace(/^0/, "").replace(/\D/g, "") : WA_NUMBER.replace(/^0/, "");
+  return `https://wa.me/62${num}?text=${encodeURIComponent(text)}`;
+};
 
 /** Merge class names (minimal, no extra dep needed) */
 export const cn = (...classes: (string | undefined | false | null)[]): string =>

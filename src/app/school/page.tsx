@@ -9,7 +9,6 @@ import Status from "@/components/ui/Status";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import Modal from "@/components/ui/Modal";
 import Bell from "@/components/layout/Bell";
-import RoleSwitcher from "@/components/layout/RoleSwitcher";
 import { waLink } from "@/lib/utils";
 import { createClient } from "@/utils/supabase/client";
 
@@ -372,7 +371,6 @@ export default function SchoolPage() {
         )}
       </Modal>
 
-      <RoleSwitcher currentPath="/school" />
     </div>
   );
 }

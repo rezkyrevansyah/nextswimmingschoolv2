@@ -24,18 +24,39 @@ export async function PATCH(
   if (!caller) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { userId } = await params;
-  const body = await req.json() as { password?: string; user_metadata?: Record<string, unknown> };
+  const body = await req.json() as {
+    password?: string;
+    user_metadata?: Record<string, unknown>;
+    profile?: { full_name?: string; phone?: string | null; branch_id?: string | null };
+  };
 
-  const updates: { password?: string; user_metadata?: Record<string, unknown> } = {};
-  if (body.password) updates.password = body.password;
-  if (body.user_metadata) updates.user_metadata = body.user_metadata;
-
-  if (Object.keys(updates).length === 0) {
-    return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
+  // Update profiles table (bypasses RLS via service key)
+  if (body.profile) {
+    const { error: profileError } = await supabaseAdmin
+      .from("profiles")
+      .update(body.profile)
+      .eq("id", userId);
+    if (profileError) return NextResponse.json({ error: profileError.message }, { status: 400 });
   }
 
-  const { error } = await supabaseAdmin.auth.admin.updateUserById(userId, updates);
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  // Update auth user (password / metadata)
+  const authUpdates: { password?: string; user_metadata?: Record<string, unknown> } = {};
+  if (body.password) authUpdates.password = body.password;
+  if (body.user_metadata) authUpdates.user_metadata = body.user_metadata;
+
+  // Also sync branch_id in auth metadata if profile update includes it
+  if (body.profile?.branch_id !== undefined) {
+    authUpdates.user_metadata = {
+      ...(body.user_metadata ?? {}),
+      branch_id: body.profile.branch_id,
+      ...(body.profile.full_name ? { full_name: body.profile.full_name } : {}),
+    };
+  }
+
+  if (Object.keys(authUpdates).length > 0) {
+    const { error } = await supabaseAdmin.auth.admin.updateUserById(userId, authUpdates);
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  }
 
   return NextResponse.json({ ok: true });
 }

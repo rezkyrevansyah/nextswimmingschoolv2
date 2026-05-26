@@ -8,9 +8,9 @@ import { waLink } from "@/lib/utils";
 
 const NAV_LINKS = [
   { id: "home",    label: "Beranda"      },
+  { id: "why",     label: "Mengapa Kami" },
   { id: "program", label: "Program"      },
   { id: "coach",   label: "Coach"        },
-  { id: "why",     label: "Mengapa Kami" },
   { id: "faq",     label: "FAQ"          },
 ];
 

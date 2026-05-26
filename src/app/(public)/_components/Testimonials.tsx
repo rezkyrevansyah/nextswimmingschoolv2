@@ -4,6 +4,8 @@ import Icon from "@/components/ui/Icon";
 import Avatar from "@/components/ui/Avatar";
 
 export default function Testimonials() {
+  const [first, featured, last] = [TESTIMONIALS[0], TESTIMONIALS[1], TESTIMONIALS[2]];
+
   return (
     <section className="bg-paper-tint">
       <div className="max-w-7xl mx-auto px-4 lg:px-8 py-20 lg:py-28">
@@ -13,34 +15,63 @@ export default function Testimonials() {
             Dipercaya oleh ratusan<br />keluarga di Indonesia.
           </h2>
         </div>
-        <div className="grid md:grid-cols-3 gap-5 mt-12">
-          {TESTIMONIALS.map((t, i) => (
-            <Card
-              key={t.id}
-              className={i === 1 ? "bg-ocean-700 text-white border-ocean-700 lg:scale-[1.04]" : ""}
-            >
+        <div className="grid md:grid-cols-3 gap-5 mt-12 items-center">
+          {/* Card biasa kiri */}
+          {first && (
+            <Card>
               <div className="flex gap-0.5">
                 {Array.from({ length: 5 }).map((_, k) => (
-                  <Icon
-                    key={k}
-                    name="star"
-                    className={`w-4 h-4 ${i === 1 ? "text-wave-200" : "text-amber-400"}`}
-                    strokeWidth={0}
-                  />
+                  <Icon key={k} name="star" className="w-4 h-4 text-amber-400" strokeWidth={0} />
                 ))}
               </div>
-              <p className={`mt-4 text-[15px] leading-relaxed ${i === 1 ? "text-white/90" : "text-ink-soft"}`}>
-                &ldquo;{t.text}&rdquo;
-              </p>
+              <p className="mt-4 text-[15px] leading-relaxed text-ink-soft">&ldquo;{first.text}&rdquo;</p>
               <div className="mt-5 pt-5 border-t border-line/40 flex items-center gap-3">
-                <Avatar name={t.name} size={36} />
+                <Avatar name={first.name} size={36} />
                 <div>
-                  <div className={`text-sm font-bold ${i === 1 ? "text-white" : "text-ink"}`}>{t.name}</div>
-                  <div className={`text-xs ${i === 1 ? "text-white/70" : "text-ink-mute"}`}>{t.role}</div>
+                  <div className="text-sm font-bold text-ink">{first.name}</div>
+                  <div className="text-xs text-ink-mute">{first.role}</div>
                 </div>
               </div>
             </Card>
-          ))}
+          )}
+
+          {/* Card featured tengah — ocean-700 */}
+          {featured && (
+            <div className="rounded-2xl border border-ocean-700 bg-ocean-700 p-6 lg:scale-[1.04] shadow-lift">
+              <div className="flex gap-0.5">
+                {Array.from({ length: 5 }).map((_, k) => (
+                  <Icon key={k} name="star" className="w-4 h-4 text-wave-200" strokeWidth={0} />
+                ))}
+              </div>
+              <p className="mt-4 text-[15px] leading-relaxed text-white/90">&ldquo;{featured.text}&rdquo;</p>
+              <div className="mt-5 pt-5 border-t border-white/20 flex items-center gap-3">
+                <Avatar name={featured.name} size={36} />
+                <div>
+                  <div className="text-sm font-bold text-white">{featured.name}</div>
+                  <div className="text-xs text-white/70">{featured.role}</div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Card biasa kanan */}
+          {last && (
+            <Card>
+              <div className="flex gap-0.5">
+                {Array.from({ length: 5 }).map((_, k) => (
+                  <Icon key={k} name="star" className="w-4 h-4 text-amber-400" strokeWidth={0} />
+                ))}
+              </div>
+              <p className="mt-4 text-[15px] leading-relaxed text-ink-soft">&ldquo;{last.text}&rdquo;</p>
+              <div className="mt-5 pt-5 border-t border-line/40 flex items-center gap-3">
+                <Avatar name={last.name} size={36} />
+                <div>
+                  <div className="text-sm font-bold text-ink">{last.name}</div>
+                  <div className="text-xs text-ink-mute">{last.role}</div>
+                </div>
+              </div>
+            </Card>
+          )}
         </div>
       </div>
     </section>

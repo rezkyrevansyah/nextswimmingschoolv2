@@ -13,7 +13,6 @@ import Modal from "@/components/ui/Modal";
 import MobileNav from "@/components/layout/MobileNav";
 import type { NavItem as MobileNavItem } from "@/components/layout/Sidebar";
 import Bell from "@/components/layout/Bell";
-import RoleSwitcher from "@/components/layout/RoleSwitcher";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
 import { fmtIDR, fmtDate, fmtDateLong, waLink } from "@/lib/utils";
@@ -36,7 +35,7 @@ const NAV_ITEMS: MobileNavItem[] = [
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 interface ClassRow {
-  id: string; name: string; schedule_days: string[]; schedule_time: string;
+  id: string; name: string; schedule_days: string[];
   time_start: string; time_end: string;
   capacity: number; enrolled: number; goals: string | null;
   member_classes?: { member: { id: string; profile: { full_name: string; birth_date: string | null; phone: string | null } | null } | null }[];
@@ -186,7 +185,7 @@ function ClockInFlow({ back, coachId, branchId, classes }: {
           </div>
           <Field label="Pilih kelas" required>
             <Select value={classId} onChange={e => setClassId(e.target.value)}>
-              {classes.map(c => <option key={c.id} value={c.id}>{c.name} — {c.schedule_time}</option>)}
+              {classes.map(c => <option key={c.id} value={c.id}>{c.name} — {c.time_start?.slice(0,5)}{c.time_end ? `–${c.time_end.slice(0,5)}` : ""}</option>)}
             </Select>
           </Field>
           <Card className="!p-3 mt-4 bg-paper-tint">
@@ -297,7 +296,7 @@ function LeaveForm({ back, coachId, branchId, classes }: { back: () => void; coa
           <Field label="Kelas terdampak">
             <Select value={classId} onChange={e => setClassId(e.target.value)}>
               <option value="">— pilih kelas —</option>
-              {classes.map(c => <option key={c.id} value={c.id}>{c.name} — {(c.schedule_days ?? []).join(", ")} {c.schedule_time}</option>)}
+              {classes.map(c => <option key={c.id} value={c.id}>{c.name} — {(c.schedule_days ?? []).join(", ")} {c.time_start?.slice(0,5)}{c.time_end ? `–${c.time_end.slice(0,5)}` : ""}</option>)}
             </Select>
           </Field>
           <Field label="Alasan / deskripsi"><Textarea rows={3} value={reason} onChange={e => setReason(e.target.value)} placeholder="Mis. Demam dan tidak fit" /></Field>
@@ -510,7 +509,7 @@ function CoachHome({ setOverlay, coachId, branchId, profile, classes, holidayCla
                         <div className="font-display font-bold text-ink">{c.name}</div>
                         {isHoliday && <Status kind="holiday">Libur</Status>}
                       </div>
-                      <div className="text-xs text-ink-mute mt-0.5 font-mono">{c.schedule_time} · {c.enrolled}/{c.capacity} member</div>
+                      <div className="text-xs text-ink-mute mt-0.5 font-mono">{c.time_start?.slice(0,5)}{c.time_end ? `–${c.time_end.slice(0,5)}` : ""} · {c.enrolled}/{c.capacity} member</div>
                       {!isHoliday && (
                         <div className="mt-3 flex flex-wrap gap-2">
                           {inWindow ? (
@@ -663,7 +662,7 @@ function CoachAbsensi({ setOverlay, coachId, branchId, classes, holidayClassIds 
                       <div className="font-display font-bold text-ink">{c.name}</div>
                       {isHoliday && <Status kind="holiday">Libur</Status>}
                     </div>
-                    <div className="text-xs text-ink-mute font-mono">{c.schedule_time}</div>
+                    <div className="text-xs text-ink-mute font-mono">{c.time_start?.slice(0,5)}{c.time_end ? `–${c.time_end.slice(0,5)}` : ""}</div>
                   </div>
                   {!isHoliday && (inWindow ? (
                     <Btn variant="primary" size="md" icon="camera" onClick={() => setOverlay("clockin")}>Clock-In</Btn>
@@ -867,7 +866,7 @@ function CoachKelas({ classes, coachId }: { classes: ClassRow[]; coachId: string
               <div className="flex-1 min-w-0">
                 <div className="font-display font-bold text-ink">{c.name}</div>
                 <div className="text-xs text-ink-mute mt-0.5">{(c.schedule_days ?? []).join(", ")}</div>
-                <div className="text-xs text-ocean-700 font-semibold mt-1.5 font-mono">{c.schedule_time}</div>
+                <div className="text-xs text-ocean-700 font-semibold mt-1.5 font-mono">{c.time_start?.slice(0,5)}{c.time_end ? `–${c.time_end.slice(0,5)}` : ""}</div>
                 <div className="mt-2 flex items-center gap-3 text-xs text-ink-mute">
                   <span className="inline-flex items-center gap-1"><Icon name="users" className="w-3.5 h-3.5" />{c.enrolled}/{c.capacity}</span>
                 </div>
@@ -1475,7 +1474,7 @@ export default function CoachPage() {
   }, [supabase]);
 
   const loadClasses = useCallback(async (profileId: string) => {
-    const { data } = await supabase.from("class_coaches").select("class:classes(id, name, schedule_days, schedule_time, time_start, time_end, capacity, enrolled, goals, member_classes(member:members(id, profile:profiles(full_name, birth_date, phone))))").eq("coach_id", profileId);
+    const { data } = await supabase.from("class_coaches").select("class:classes(id, name, schedule_days, time_start, time_end, capacity, enrolled, goals, member_classes(member:members(id, profile:profiles(full_name, birth_date, phone))))").eq("coach_id", profileId);
     if (!data) return;
     const rows = data.map((d: Record<string, unknown>) => d.class as ClassRow).filter(Boolean);
     setClasses(rows);
@@ -1592,7 +1591,6 @@ export default function CoachPage() {
       <Shell active={active} setActive={setActive} title={overlay ? "Clock-In" : title} sub={overlay ? "" : sub} user={user}>
         {content}
       </Shell>
-      <RoleSwitcher currentPath="/coach" />
     </>
   );
 }

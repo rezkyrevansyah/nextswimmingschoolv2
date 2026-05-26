@@ -1,17 +1,35 @@
 "use client";
 import Link from "next/link";
+import { useState, useEffect } from "react";
 import Btn from "@/components/ui/Btn";
 import Icon from "@/components/ui/Icon";
 import Avatar from "@/components/ui/Avatar";
 import Status from "@/components/ui/Status";
 import { waLink } from "@/lib/utils";
 
+interface Stats { branches: number; members: number; coaches: number; classes: number; }
+
 export default function Hero() {
+  const [stats, setStats] = useState<Stats | null>(null);
+
+  useEffect(() => {
+    fetch("/api/public/stats")
+      .then(r => r.json())
+      .then((d: Stats) => setStats(d))
+      .catch(() => {/* silently keep null — fallback shown */});
+  }, []);
+
   return (
     <section id="home" className="relative overflow-hidden">
-      <div className="absolute inset-0 water-bg opacity-[0.97]" />
-      <div className="caustics absolute inset-0" />
-      <div className="absolute inset-0" style={{ background: "radial-gradient(ellipse at 80% 0%, rgba(255,255,255,.18), transparent 60%)" }} />
+      {/* Background image */}
+      <div
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+        style={{ backgroundImage: "url('https://images.unsplash.com/photo-1530549387789-4c1017266635?w=1800&q=80&auto=format&fit=crop')" }}
+      />
+      {/* Dark blue gradient overlay — keeps text readable */}
+      <div className="absolute inset-0" style={{ background: "linear-gradient(135deg, rgba(3,28,74,0.88) 0%, rgba(5,45,110,0.80) 50%, rgba(2,20,55,0.75) 100%)" }} />
+      {/* Subtle caustics on top */}
+      <div className="caustics absolute inset-0 opacity-30" />
 
       <div className="relative max-w-7xl mx-auto px-4 lg:px-8 pt-16 pb-20 lg:pt-24 lg:pb-32">
         <div className="grid lg:grid-cols-2 gap-10 lg:gap-16 items-center">
@@ -19,7 +37,7 @@ export default function Hero() {
           <div className="text-white">
             <div className="inline-flex items-center gap-2 bg-white/15 backdrop-blur ring-1 ring-white/20 rounded-full px-3 py-1.5 text-[11px] uppercase tracking-widest font-bold mb-6">
               <span className="w-1.5 h-1.5 rounded-full bg-wave-300 animate-pulse" />
-              Sistem digital terintegrasi — 3 cabang aktif
+              Sistem digital terintegrasi — {stats?.branches ?? "…"} cabang aktif
             </div>
             <h1 className="font-display font-extrabold text-[40px] sm:text-5xl lg:text-[64px] leading-[1.02] tracking-tight">
               Belajar renang<br />lebih{" "}
@@ -121,14 +139,18 @@ export default function Hero() {
       {/* Trust strip */}
       <div className="relative bg-white/95 backdrop-blur border-t border-white/10">
         <div className="max-w-7xl mx-auto px-4 lg:px-8 py-5 grid grid-cols-2 lg:grid-cols-4 gap-5 text-center">
-          {[
-            ["3",    "Cabang aktif"],
-            ["340+", "Member terdaftar"],
-            ["19",   "Coach bersertifikat"],
-            ["28",   "Program & kelas"],
-          ].map(([n, l]) => (
+          {([
+            [stats?.branches,         "Cabang aktif"],
+            [stats?.members,          "Member terdaftar"],
+            [stats?.coaches,          "Coach bersertifikat"],
+            [stats?.classes,          "Program & kelas"],
+          ] as [number | undefined, string][]).map(([n, l]) => (
             <div key={l}>
-              <div className="font-display font-extrabold text-2xl lg:text-3xl text-ocean-700">{n}</div>
+              <div className="font-display font-extrabold text-2xl lg:text-3xl text-ocean-700">
+                {n == null
+                  ? <span className="inline-block w-10 h-7 rounded-lg bg-paper-deep animate-pulse" />
+                  : n}
+              </div>
               <div className="text-xs lg:text-sm text-ink-mute font-semibold">{l}</div>
             </div>
           ))}
