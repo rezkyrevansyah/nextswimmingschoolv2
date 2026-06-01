@@ -1,6 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
-import Link from "next/link";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Logo from "@/components/ui/Logo";
 import Icon from "@/components/ui/Icon";
@@ -82,6 +81,7 @@ function Dashboard({ branches }: { branches: Branch[] }) {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const supabase = createClient();
 
+   
   useEffect(() => {
     supabase
       .from("coach_invoices")
@@ -91,6 +91,7 @@ function Dashboard({ branches }: { branches: Branch[] }) {
       .limit(4)
       .then(({ data }) => { if (data) setInvoices(data as unknown as Invoice[]); });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+   
 
   const totalMembers = branches.reduce((a, b) => a + (b.member_count ?? 0), 0);
   const totalCoaches = branches.reduce((a, b) => a + (b.coach_count ?? 0), 0);
@@ -326,7 +327,9 @@ function Admins({ branches }: { branches: Branch[] }) {
     setLoading(false);
   }, [supabase]);
 
+  /* eslint-disable react-hooks/set-state-in-effect -- async data loader */
   useEffect(() => { load(); }, [load]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const openEdit = (a: AdminProfile) => {
     setEditTarget(a);
@@ -468,6 +471,7 @@ function Classes({ branches }: { branches: Branch[] }) {
   const [loading, setLoading] = useState(true);
   const [branchFilter, setBranchFilter] = useState("all");
 
+   
   useEffect(() => {
     const q = supabase
       .from("classes")
@@ -482,6 +486,7 @@ function Classes({ branches }: { branches: Branch[] }) {
       setLoading(false);
     });
   }, [branchFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+   
 
   return (
     <div className="space-y-5">
@@ -562,6 +567,7 @@ function SettingsTarif({ branches }: { branches: Branch[] }) {
   const [rates, setRates] = useState<Record<string, number>>({});
   const [saving, setSaving] = useState<string | null>(null);
 
+   
   useEffect(() => {
     if (!branchId) return;
     supabase
@@ -584,6 +590,7 @@ function SettingsTarif({ branches }: { branches: Branch[] }) {
         }
       });
   }, [branchId]); // eslint-disable-line react-hooks/exhaustive-deps
+   
 
   const saveRate = async (classId: string) => {
     const val = rates[classId];
@@ -650,10 +657,10 @@ function Invoices({ branches }: { branches: Branch[] }) {
   const [branchFilter, setBranchFilter] = useState("all");
   const [marking, setMarking] = useState<string | null>(null);
 
-  const totPending = invoices.filter(i => i.status === "pending").length;
   const totPaid    = invoices.filter(i => i.status === "paid");
   const totUnpaid  = invoices.filter(i => i.status !== "paid");
 
+  /* eslint-disable react-hooks/set-state-in-effect -- async data loader */
   useEffect(() => {
     setLoading(true);
     const q = supabase
@@ -666,6 +673,7 @@ function Invoices({ branches }: { branches: Branch[] }) {
       setLoading(false);
     });
   }, [branchFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const markPaid = async (id: string) => {
     setMarking(id);
@@ -808,12 +816,14 @@ export default function OwnerPage() {
     }
   }, [supabase]);
 
+  /* eslint-disable react-hooks/set-state-in-effect -- async data loader */
   useEffect(() => {
     loadBranches();
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user) { setProfile({ full_name: user.user_metadata?.full_name ?? "Owner" }); setUserId(user.id); }
     });
   }, [loadBranches]); // eslint-disable-line react-hooks/exhaustive-deps
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const logout = async () => {
     await supabase.auth.signOut();
@@ -831,17 +841,15 @@ export default function OwnerPage() {
 
   const [title, sub] = TITLES[active] ?? ["Owner", ""];
 
-  function Brand() {
-    return (
-      <div className="flex items-center gap-2.5">
-        <Logo size={36} />
-        <div className="min-w-0">
-          <div className="font-display font-extrabold text-[14px] text-ocean-700 leading-tight">Owner Panel</div>
-          <div className="text-[10px] text-ink-mute tracking-wide">{profile?.full_name ?? "Owner"} · Pemilik</div>
-        </div>
+  const brand = useMemo(() => (
+    <div className="flex items-center gap-2.5">
+      <Logo size={36} />
+      <div className="min-w-0">
+        <div className="font-display font-extrabold text-[14px] text-ocean-700 leading-tight">Owner Panel</div>
+        <div className="text-[10px] text-ink-mute tracking-wide">{profile?.full_name ?? "Owner"} · Pemilik</div>
       </div>
-    );
-  }
+    </div>
+  ), [profile?.full_name]);
 
   return (
     <div className="flex bg-paper-tint min-h-screen">
@@ -849,7 +857,7 @@ export default function OwnerPage() {
         items={NAV_ITEMS}
         active={active}
         onSelect={(id) => { setActive(id); setMobileNav(false); }}
-        brand={<Brand />}
+        brand={brand}
         footer={
           <button onClick={logout} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold text-ink-mute hover:bg-paper-tint">
             <Icon name="logout" className="w-4 h-4" /> Logout
@@ -862,7 +870,7 @@ export default function OwnerPage() {
         <div className="lg:hidden fixed inset-0 z-50">
           <div className="absolute inset-0 bg-ink/40" onClick={() => setMobileNav(false)} />
           <div className="absolute left-0 top-0 bottom-0 w-72 bg-white border-r border-line p-3 overflow-y-auto">
-            <div className="px-2 py-2 mb-2"><Brand /></div>
+            <div className="px-2 py-2 mb-2">{brand}</div>
             {NAV_ITEMS.map((it) =>
               it.section ? (
                 <div key={it.section} className="px-3 pt-3 pb-1 text-[10px] uppercase tracking-widest font-bold text-ink-faint">{it.section}</div>

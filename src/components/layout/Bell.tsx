@@ -20,6 +20,16 @@ interface DbNotif {
   created_at: string;
 }
 
+function relativeTime(iso: string) {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "Baru saja";
+  if (mins < 60) return `${mins} mnt lalu`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs} jam lalu`;
+  return `${Math.floor(hrs / 24)} hari lalu`;
+}
+
 export default function Bell({ items: staticItems, userId }: BellProps) {
   const [open, setOpen] = useState(false);
   const [dbItems, setDbItems] = useState<DbNotif[]>([]);
@@ -36,6 +46,7 @@ export default function Bell({ items: staticItems, userId }: BellProps) {
     if (data) setDbItems(data as DbNotif[]);
   }, [userId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /* eslint-disable react-hooks/set-state-in-effect -- async data loader + realtime */
   useEffect(() => {
     if (!userId) return;
     loadNotifs();
@@ -48,6 +59,7 @@ export default function Bell({ items: staticItems, userId }: BellProps) {
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [userId, loadNotifs]); // eslint-disable-line react-hooks/exhaustive-deps
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const markAllRead = async () => {
     if (userId) {
@@ -61,16 +73,6 @@ export default function Bell({ items: staticItems, userId }: BellProps) {
   const unread = useDb
     ? dbItems.filter((n) => !n.read).length
     : (staticItems ?? []).filter((n) => !n.read).length;
-
-  const relativeTime = (iso: string) => {
-    const diff = Date.now() - new Date(iso).getTime();
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return "Baru saja";
-    if (mins < 60) return `${mins} mnt lalu`;
-    const hrs = Math.floor(mins / 60);
-    if (hrs < 24) return `${hrs} jam lalu`;
-    return `${Math.floor(hrs / 24)} hari lalu`;
-  };
 
   return (
     <div className="relative">

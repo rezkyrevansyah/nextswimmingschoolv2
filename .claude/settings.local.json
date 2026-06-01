@@ -2,7 +2,15 @@
   "permissions": {
     "allow": [
       "Bash(find \"d:\\\\projects\\\\nextswimmingschoolv2\\\\NSS\" -type f -exec wc -l {} +)",
-      "Bash(du -sh \"d:\\\\projects\\\\nextswimmingschoolv2\\\\NSS\"/*)"
+      "Bash(du -sh \"d:\\\\projects\\\\nextswimmingschoolv2\\\\NSS\"/*)",
+      "Bash(npx eslint:*)",
+      "Bash(node -e ':*)",
+      "Bash(echo \"Exit: $?\")",
+      "Bash(echo \"BUILD_EXIT:$?\")",
+      "Bash(grep -E \"^D:\\\\\\\\\\\\\\\\|^src/\" /tmp/lint-output.txt)",
+      "Bash(grep:*)",
+      "Bash(node:*)",
+      "Bash(python3 -c ':*)"
     ]
   }
 }

@@ -1,6 +1,7 @@
 "use client";
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import Logo from "@/components/ui/Logo";
 import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
@@ -21,6 +22,17 @@ import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
 import type { User } from "@supabase/supabase-js";
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function calcAge(birthDate: string): number {
+  const birth = new Date(birthDate);
+  const today = new Date();
+  let age = today.getFullYear() - birth.getFullYear();
+  const m = today.getMonth() - birth.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+  return age;
+}
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -126,6 +138,7 @@ function AdminDashboard({ branchId }: { branchId: string }) {
     if (data) setRecentAttendance(data as unknown as AttendanceRow[]);
   }, [branchId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /* eslint-disable react-hooks/set-state-in-effect -- async data loader */
   useEffect(() => {
     if (!branchId) return;
     // Counts
@@ -174,6 +187,7 @@ function AdminDashboard({ branchId }: { branchId: string }) {
 
     return () => { supabase.removeChannel(channel); };
   }, [branchId, loadAttendance]); // eslint-disable-line react-hooks/exhaustive-deps
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   return (
     <div className="space-y-6">
@@ -209,7 +223,6 @@ function AdminDashboard({ branchId }: { branchId: string }) {
             <div className="grid sm:grid-cols-2 gap-3">
               {todayClasses.map((c) => {
                 const coaches = c.class_coaches?.map(cc => cc.profile?.full_name).filter(Boolean) ?? [];
-                const pct = c.enrolled / (c.capacity || 1);
                 return (
                   <div key={c.id} className="rounded-xl border border-line hover:border-ocean-200 hover:shadow-card p-3.5 transition">
                     <div className="flex items-center justify-between">
@@ -293,6 +306,7 @@ function AdminSettings({ branch, onRefresh, userId }: { branch: Branch | null; o
   };
 
   // Sync state when branch prop changes
+  /* eslint-disable react-hooks/set-state-in-effect -- sync form state from prop */
   useEffect(() => {
     if (branch) {
       setName(branch.name);
@@ -302,6 +316,7 @@ function AdminSettings({ branch, onRefresh, userId }: { branch: Branch | null; o
       setWaNumbers(branch.wa_numbers ?? []);
     }
   }, [branch?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const save = async () => {
     if (!branch) return;
@@ -328,7 +343,7 @@ function AdminSettings({ branch, onRefresh, userId }: { branch: Branch | null; o
           <SectionTitle sub="Wajib diisi pertama kali">Logo & Identitas Cabang</SectionTitle>
           <div className="flex items-center gap-5">
             <div className="w-24 h-24 rounded-2xl bg-paper-tint flex items-center justify-center border border-line overflow-hidden">
-              {branch?.logo_url ? <img src={branch.logo_url} alt="logo" className="w-full h-full object-cover" /> : <Logo size={64} />}
+              {branch?.logo_url ? <Image src={branch.logo_url} alt="logo" width={96} height={96} className="w-full h-full object-cover" /> : <Logo size={64} />}
             </div>
             <div>
               <div className="font-display font-bold text-ink">Logo Cabang</div>
@@ -423,11 +438,13 @@ function AdminClass({ branchId }: { branchId: string }) {
     if (data) setClasses(data as unknown as ClassRow[]);
   }, [branchId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /* eslint-disable react-hooks/set-state-in-effect -- async data loader */
   useEffect(() => {
     load();
     supabase.from("profiles").select("id, full_name").eq("branch_id", branchId).eq("role", "coach").order("full_name")
       .then(({ data }) => { if (data) setCoaches(data as unknown as CoachProfile[]); });
   }, [load]); // eslint-disable-line react-hooks/exhaustive-deps
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const openCreate = () => { setEditTarget(null); setForm(EMPTY_CLASS_FORM); setOpenForm(true); };
   const openEdit = (c: ClassRow) => {
@@ -440,21 +457,21 @@ function AdminClass({ branchId }: { branchId: string }) {
     if (!form.name || form.schedule_days.length === 0) return toast.error("Nama kelas dan hari wajib diisi");
     setSaving(true);
     if (editTarget) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await supabase.from("classes").update({
         name: form.name, schedule_days: form.schedule_days, time_start: form.time_start || null,
         time_end: form.time_end || null, capacity: Number(form.capacity) || 0, price_monthly: Number(form.price_monthly) || 0,
         show_landing: form.show_on_landing,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any).eq("id", editTarget.id);
       setSaving(false);
       if (error) return toast.error("Gagal update kelas", error.message);
       toast.success("Kelas diperbarui");
     } else {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await supabase.from("classes").insert({
         name: form.name, schedule_days: form.schedule_days, time_start: form.time_start || null,
         time_end: form.time_end || null, capacity: Number(form.capacity) || 0, price_monthly: Number(form.price_monthly) || 0,
         show_landing: form.show_on_landing, goal: form.goals, branch_id: branchId, status: "active", enrolled: 0,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any);
       setSaving(false);
       if (error) return toast.error("Gagal membuat kelas", error.message);
@@ -679,7 +696,9 @@ function AdminMember({ branchId }: { branchId: string }) {
     setLoading(false);
   }, [branchId, tab]);
 
+  /* eslint-disable react-hooks/set-state-in-effect -- async data loader */
   useEffect(() => { load(); }, [load]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {
     supabase.from("classes").select("id, name, capacity, enrolled, status, branch_id, schedule_days, time_start, time_end, price_monthly, show_on_landing").eq("branch_id", branchId).eq("status", "active")
@@ -879,7 +898,7 @@ function AdminMember({ branchId }: { branchId: string }) {
               {filtered.map((m) => {
                 const cls = m.member_classes?.map(mc => mc.class?.name).filter(Boolean).join(", ") ?? "—";
                 const fullName = m.profile?.full_name ?? "—";
-                const age = m.profile?.birth_date ? Math.floor((Date.now() - new Date(m.profile.birth_date).getTime()) / (1000 * 60 * 60 * 24 * 365)) : null;
+                const age = m.profile?.birth_date ? calcAge(m.profile.birth_date) : null;
                 return (
                   <tr key={m.id} className="hover:bg-paper-tint cursor-pointer" onClick={() => setDetail(m)}>
                     <td className="py-3.5 px-5">
@@ -1147,9 +1166,11 @@ function AdminCoach({ branchId }: { branchId: string }) {
     if (error) console.error("[AdminCoach] query error:", JSON.stringify(error));
     if (data) setCoaches(data as unknown as CoachFull[]);
     setLoading(false);
-  }, [branchId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [branchId]);
 
+  /* eslint-disable react-hooks/set-state-in-effect -- async data loader */
   useEffect(() => { load(); }, [load]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const isSuspended = (c: CoachFull) => !c.is_archived && !!c.suspend_until && new Date(c.suspend_until) >= new Date();
   const isArchived = (c: CoachFull) => !!c.is_archived;
@@ -1736,7 +1757,9 @@ function AdminClassActivity({ branchId }: { branchId: string }) {
     setLoading(false);
   }, [branchId, weekStart, weekEnd]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /* eslint-disable react-hooks/set-state-in-effect -- async data loader */
   useEffect(() => { load(); }, [load]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const addHoliday = async () => {
     if (!holidayForm.class_id || !holidayForm.holiday_date) return toast.error("Kelas dan tanggal wajib diisi");
@@ -1936,11 +1959,13 @@ function AdminAbsensiCoach({ branchId }: { branchId: string }) {
     setLoading(false);
   }, [branchId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /* eslint-disable react-hooks/set-state-in-effect -- async data loader */
   useEffect(() => {
     load();
     supabase.from("profiles").select("id, full_name").eq("branch_id", branchId).eq("role", "coach").then(({ data }) => { if (data) setCoaches(data as unknown as CoachProfile[]); });
     supabase.from("classes").select("id, name, time_start, time_end, status, branch_id, capacity, enrolled, schedule_days, price_monthly, show_on_landing").eq("branch_id", branchId).eq("status", "active").then(({ data }) => { if (data) setClasses(data as unknown as ClassRow[]); });
   }, [load]); // eslint-disable-line react-hooks/exhaustive-deps
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const saveManual = async () => {
     if (!form.coach_id || !form.class_id || !form.session_date) return toast.error("Coach, kelas, dan tanggal wajib diisi");
@@ -2077,12 +2102,14 @@ function AdminPengumuman({ branchId }: { branchId: string }) {
     setLoading(false);
   }, [branchId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /* eslint-disable react-hooks/set-state-in-effect -- async data loader */
   useEffect(() => {
     load();
     supabase.from("classes").select("id, name, time_start, time_end, status, branch_id, capacity, enrolled, schedule_days, price_monthly, show_on_landing")
       .eq("branch_id", branchId).eq("status", "active").order("name")
       .then(({ data }) => { if (data) setClasses(data as unknown as ClassRow[]); });
   }, [load]); // eslint-disable-line react-hooks/exhaustive-deps
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const toggleClass = (id: string) => {
     setForm(f => ({
@@ -2230,6 +2257,7 @@ function AdminIzin({ branchId }: { branchId: string }) {
     setLoading(false);
   }, [branchId, tab]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /* eslint-disable react-hooks/set-state-in-effect -- async data loader */
   useEffect(() => {
     load();
     supabase.from("profiles").select("id, full_name").eq("branch_id", branchId).eq("role", "coach").order("full_name")
@@ -2239,6 +2267,7 @@ function AdminIzin({ branchId }: { branchId: string }) {
     supabase.from("classes").select("id, name").eq("branch_id", branchId).order("name")
       .then(({ data }) => { if (data) setAllClasses(data as { id: string; name: string }[]); });
   }, [load]); // eslint-disable-line react-hooks/exhaustive-deps
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const decide = async (id: string, status: "approved" | "rejected") => {
     if (status === "approved" && tab === "coach") {
@@ -2460,7 +2489,9 @@ function AdminPembayaran({ branchId }: { branchId: string }) {
     setLoading(false);
   }, [branchId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /* eslint-disable react-hooks/set-state-in-effect -- async data loader */
   useEffect(() => { load(); }, [load]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const paid = bills.filter(b => b.status === "paid");
   const unpaid = bills.filter(b => b.status === "unpaid");
@@ -2607,7 +2638,9 @@ function AdminApprovement({ branchId }: { branchId: string }) {
     setLoading(false);
   }, [branchId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /* eslint-disable react-hooks/set-state-in-effect -- async data loader */
   useEffect(() => { load(); }, [load]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const reviewReg = async (id: string, status: "approved" | "rejected") => {
     const user = (await supabase.auth.getUser()).data.user;
@@ -2633,7 +2666,7 @@ function AdminApprovement({ branchId }: { branchId: string }) {
           {registrations.length === 0 ? <p className="text-ink-mute text-sm">Tidak ada pendaftaran baru.</p> : (
             <div className="space-y-3">
               {registrations.map((r) => {
-                const age = r.birth_date ? Math.floor((Date.now() - new Date(r.birth_date).getTime()) / (1000 * 60 * 60 * 24 * 365)) : null;
+                const age = r.birth_date ? calcAge(r.birth_date) : null;
                 return (
                   <div key={r.id} className="p-3 rounded-xl border border-line">
                     <div className="flex items-center gap-3"><Avatar name={r.full_name} size={42} /><div className="flex-1 min-w-0"><div className="font-semibold text-ink truncate">{r.full_name}</div><div className="text-xs text-ink-mute">{age ? `${age} thn` : ""} · {r.parent_name ?? r.phone}</div></div></div>
@@ -2655,7 +2688,7 @@ function AdminApprovement({ branchId }: { branchId: string }) {
               {certs.map((c) => (
                 <div key={c.id} className="p-3 rounded-xl border border-line">
                   <div className="flex items-center gap-3"><Avatar name={c.profile?.full_name ?? "?"} size={42} /><div className="flex-1 min-w-0"><div className="font-semibold text-ink truncate">{c.profile?.full_name}</div><div className="text-xs text-ink-mute">{c.title ?? c.name} — {c.issuer ?? "—"}</div></div></div>
-                  {c.photo_url && <a href={c.photo_url} target="_blank" rel="noreferrer" className="block mt-3"><img src={c.photo_url} alt="cert" className="w-full rounded-lg object-cover max-h-48" /></a>}
+                  {c.photo_url && <a href={c.photo_url} target="_blank" rel="noreferrer" className="block mt-3"><Image src={c.photo_url} alt="cert" width={400} height={192} className="w-full rounded-lg object-cover max-h-48" /></a>}
                   <div className="mt-3 flex gap-1.5">
                     <Btn variant="ghost" size="sm" className="text-danger-500" onClick={() => reviewCert(c.id, "rejected")}>Tolak</Btn>
                     <Btn variant="primary" size="sm" icon="check" className="ml-auto" onClick={() => reviewCert(c.id, "approved")}>Approve</Btn>
@@ -2687,7 +2720,9 @@ function AdminRapor({ branchId }: { branchId: string }) {
     setLoading(false);
   }, [branchId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /* eslint-disable react-hooks/set-state-in-effect -- async data loader */
   useEffect(() => { load(); }, [load]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const activePeriod = periods.find(p => p.is_open);
 
@@ -2772,7 +2807,9 @@ function AdminSchoolPanel({ branchId }: { branchId: string }) {
     setLoading(false);
   }, [branchId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /* eslint-disable react-hooks/set-state-in-effect -- async data loader */
   useEffect(() => { load(); }, [load]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const create = async () => {
     if (!form.name || !form.email || !form.password) return toast.error("Nama, email, dan password wajib diisi");
@@ -2916,6 +2953,7 @@ export default function AdminPage() {
     if (data) setBranch(data as Branch);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /* eslint-disable react-hooks/set-state-in-effect -- init from sessionStorage */
   useEffect(() => {
     // Check if owner navigated here to preview a branch
     const raw = sessionStorage.getItem("ownerPreviewBranch");
@@ -2947,6 +2985,7 @@ export default function AdminPage() {
       }
     });
   }, [loadBranch]); // eslint-disable-line react-hooks/exhaustive-deps
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const backToOwner = () => {
     sessionStorage.removeItem("ownerPreviewBranch");
@@ -2985,17 +3024,15 @@ export default function AdminPage() {
   const [title] = TITLES[active] ?? ["Admin", ""];
   const subTitle = active === "dashboard" ? branch?.name ?? "Admin Panel" : (TITLES[active]?.[1] ?? "");
 
-  function Brand() {
-    return (
-      <div className="flex items-center gap-2.5">
-        {branch?.logo_url ? <img src={branch.logo_url} alt="logo" className="w-9 h-9 rounded-lg object-cover" /> : <Logo size={36} />}
-        <div className="min-w-0">
-          <div className="font-display font-extrabold text-[14px] text-ocean-700 leading-tight">Admin Panel</div>
-          <div className="text-[10px] text-ink-mute tracking-wide truncate">{branch?.name ?? "Memuat…"}</div>
-        </div>
+  const brand = useMemo(() => (
+    <div className="flex items-center gap-2.5">
+      {branch?.logo_url ? <Image src={branch.logo_url} alt="logo" width={36} height={36} className="w-9 h-9 rounded-lg object-cover" /> : <Logo size={36} />}
+      <div className="min-w-0">
+        <div className="font-display font-extrabold text-[14px] text-ocean-700 leading-tight">Admin Panel</div>
+        <div className="text-[10px] text-ink-mute tracking-wide truncate">{branch?.name ?? "Memuat…"}</div>
       </div>
-    );
-  }
+    </div>
+  ), [branch]);
 
   return (
     <div className="flex flex-col bg-paper-tint min-h-screen">
@@ -3020,7 +3057,7 @@ export default function AdminPage() {
         items={NAV_ITEMS}
         active={active}
         onSelect={(id) => { setActive(id); setMobileNav(false); }}
-        brand={<Brand />}
+        brand={brand}
         footer={
           <div className="space-y-2">
             {branch && (
@@ -3040,7 +3077,7 @@ export default function AdminPage() {
         <div className="lg:hidden fixed inset-0 z-50">
           <div className="absolute inset-0 bg-ink/40" onClick={() => setMobileNav(false)} />
           <div className="absolute left-0 top-0 bottom-0 w-72 bg-white border-r border-line p-3 overflow-y-auto">
-            <div className="px-2 py-2 mb-2"><Brand /></div>
+            <div className="px-2 py-2 mb-2">{brand}</div>
             {NAV_ITEMS.map((it) =>
               it.section ? (
                 <div key={it.section} className="px-3 pt-3 pb-1 text-[10px] uppercase tracking-widest font-bold text-ink-faint">{it.section}</div>

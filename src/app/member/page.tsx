@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import Logo from "@/components/ui/Logo";
 import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
-import { Field, Input, Select, Textarea } from "@/components/ui/FormFields";
+import { Field, Input, Textarea } from "@/components/ui/FormFields";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import Status from "@/components/ui/Status";
 import Avatar from "@/components/ui/Avatar";
@@ -33,6 +33,15 @@ const ALL_ITEMS: MobileNavItem[] = [
   { id: "rapor",   label: "Rapor",   short: "Rapor", icon: "book"      },
   { id: "profile", label: "Profile", short: "Saya",  icon: "user"      },
 ];
+
+function calcAge(birthDate: string): number {
+  const birth = new Date(birthDate);
+  const today = new Date();
+  let age = today.getFullYear() - birth.getFullYear();
+  const m = today.getMonth() - birth.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+  return age;
+}
 
 // ── Shell ──────────────────────────────────────────────────────────────────────
 
@@ -100,6 +109,7 @@ function MemberHome({
   const [upcomingSessions, setUpcomingSessions] = useState<{ date: string; day: string; time: string; class_name: string; coach: string }[]>([]);
   const [privateReminder, setPrivateReminder] = useState<{ remaining: number; total: number } | null>(null);
 
+   
   useEffect(() => {
     if (!memberId) return;
     const now = new Date();
@@ -201,6 +211,7 @@ function MemberHome({
         setUpcomingSessions(sessions.slice(0, 4));
       });
   }, [memberId, branchId]); // eslint-disable-line react-hooks/exhaustive-deps
+   
 
   return (
     <div className="space-y-5">
@@ -314,6 +325,7 @@ function MemberSchedule({ memberId }: { memberId: string }) {
   const [sessions, setSessions] = useState<{ date: string; day: string; time: string; class_id: string }[]>([]);
   const [holidayClassIds, setHolidayClassIds] = useState<Set<string>>(new Set());
 
+   
   useEffect(() => {
     if (!memberId) return;
     supabase.from("member_classes")
@@ -357,6 +369,7 @@ function MemberSchedule({ memberId }: { memberId: string }) {
         setSessions(upcoming.slice(0, 8));
       });
   }, [memberId]); // eslint-disable-line react-hooks/exhaustive-deps
+   
 
   const monthNames = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agt", "Sep", "Okt", "Nov", "Des"];
 
@@ -423,6 +436,7 @@ function MemberAbsensi({ memberId }: { memberId: string }) {
   const [rows, setRows] = useState<{ id: string; session_date: string; status: string; notes: string | null; class_name: string; time: string }[]>([]);
   const [stats, setStats] = useState({ present: 0, excused: 0, sick: 0, absent: 0 });
 
+   
   useEffect(() => {
     if (!memberId) return;
     supabase.from("member_attendances")
@@ -445,6 +459,7 @@ function MemberAbsensi({ memberId }: { memberId: string }) {
         });
       });
   }, [memberId]); // eslint-disable-line react-hooks/exhaustive-deps
+   
 
   const monthNames = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agt", "Sep", "Okt", "Nov", "Des"];
 
@@ -492,6 +507,7 @@ function MemberBills({ memberId, memberName, branchId }: { memberId: string; mem
   const [history, setHistory] = useState<{ id: string; period_label: string; amount: number; paid_at: string; payment_method: string | null }[]>([]);
   const [adminWa, setAdminWa] = useState<string | null>(null);
 
+   
   useEffect(() => {
     if (!branchId) return;
     supabase.from("branches").select("wa_numbers").eq("id", branchId).single()
@@ -502,6 +518,7 @@ function MemberBills({ memberId, memberName, branchId }: { memberId: string; mem
         }
       });
   }, [branchId]); // eslint-disable-line react-hooks/exhaustive-deps
+   
 
   const load = useCallback(async () => {
     if (!memberId) return;
@@ -528,6 +545,7 @@ function MemberBills({ memberId, memberName, branchId }: { memberId: string; mem
     }
   }, [memberId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /* eslint-disable react-hooks/set-state-in-effect -- async data loader + realtime */
   useEffect(() => {
     load();
     const channel = supabase.channel(`bills:${memberId}`)
@@ -535,6 +553,7 @@ function MemberBills({ memberId, memberName, branchId }: { memberId: string; mem
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [load]); // eslint-disable-line react-hooks/exhaustive-deps
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const monthNames = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agt", "Sep", "Okt", "Nov", "Des"];
 
@@ -651,7 +670,9 @@ function MemberLeave({ memberId }: { memberId: string }) {
     }
   }, [memberId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /* eslint-disable react-hooks/set-state-in-effect -- async data loader */
   useEffect(() => { load(); }, [load]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const submit = async () => {
     if (!form.start_date || !form.type) return;
@@ -796,7 +817,9 @@ function MemberRapor({ memberId, memberName }: { memberId: string; memberName: s
     }));
   }, [memberId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /* eslint-disable react-hooks/set-state-in-effect -- async data loader */
   useEffect(() => { load(); }, [load]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const openRapor = (e: RaporEntryFull) => {
     setSelectedEntry(e);
@@ -932,6 +955,7 @@ function MemberProfile({ memberId, memberName }: { memberId: string; memberName:
   const [pwdSaving, setPwdSaving] = useState(false);
   const [pwdError, setPwdError] = useState("");
 
+   
   useEffect(() => {
     if (!memberId) return;
     // member row for date_start + qr_code
@@ -964,6 +988,7 @@ function MemberProfile({ memberId, memberName }: { memberId: string; memberName:
           .then(({ data: r }) => { if (r) setRegInfo({ parent_name: r.parent_name, parent_phone: r.parent_phone }); });
       });
   }, [memberId]); // eslint-disable-line react-hooks/exhaustive-deps
+   
 
   const saveProfile = async () => {
     if (!memberId || !profile) return;
@@ -985,7 +1010,7 @@ function MemberProfile({ memberId, memberName }: { memberId: string; memberName:
     setNewPwd(""); setConfirmPwd("");
   };
 
-  const age = profile?.birth_date ? Math.floor((Date.now() - new Date(profile.birth_date).getTime()) / (1000 * 60 * 60 * 24 * 365.25)) : null;
+  const age = profile?.birth_date ? calcAge(profile.birth_date) : null;
 
   return (
     <div className="space-y-5">
@@ -1063,6 +1088,7 @@ export default function MemberPage() {
   const [branchName, setBranchName] = useState("");
   const [userId, setUserId] = useState("");
 
+   
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
       const u = data.user;
@@ -1091,6 +1117,7 @@ export default function MemberPage() {
       }
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+   
 
   const pages: Record<TabId, React.ReactNode> = {
     home:     <MemberHome setActive={setActive} memberId={memberId} memberName={memberName} branchId={branchId} />,

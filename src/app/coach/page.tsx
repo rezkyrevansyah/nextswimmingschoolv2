@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
+
 import Logo from "@/components/ui/Logo";
 import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
@@ -19,7 +20,7 @@ import { fmtIDR, fmtDate, fmtDateLong, waLink } from "@/lib/utils";
 import { createClient } from "@/utils/supabase/client";
 import { useUpload } from "@/hooks/useUpload";
 import type { User } from "@supabase/supabase-js";
-import type { Html5QrcodeResult } from "html5-qrcode";
+
 
 type TabId = "home" | "absen" | "kelas" | "invoice" | "rapor" | "profile";
 
@@ -209,6 +210,7 @@ function ClockInFlow({ back, coachId, branchId, classes }: {
       {step === 2 && (
         <Card className="anim-in">
           {photoFile && (
+            // eslint-disable-next-line @next/next/no-img-element -- blob URL from camera capture, not suited for next/image
             <img src={URL.createObjectURL(photoFile)} alt="selfie preview" className="w-full aspect-square object-cover rounded-2xl" />
           )}
           <Card className="!p-3 mt-3 bg-paper-tint">
@@ -243,7 +245,7 @@ function ClockInFlow({ back, coachId, branchId, classes }: {
 
 // ── Leave form ─────────────────────────────────────────────────────────────────
 
-function LeaveForm({ back, coachId, branchId, classes }: { back: () => void; coachId: string; branchId: string; classes: ClassRow[] }) {
+function LeaveForm({ back, coachId, classes }: { back: () => void; coachId: string; branchId?: string; classes: ClassRow[] }) {
   const toast = useToast();
   const supabase = createClient();
   const [type, setType] = useState("sakit");
@@ -325,40 +327,6 @@ function QRScanner({ coachId, classes, onClose }: {
   const todayName = new Date().toLocaleDateString("id-ID", { weekday: "long" });
   const activeClassId = classes.find(c => (c.schedule_days ?? []).includes(todayName))?.id ?? classes[0]?.id ?? "";
 
-  useEffect(() => {
-    let html5QrCode: import("html5-qrcode").Html5Qrcode | null = null;
-
-    async function startScanner() {
-      const { Html5Qrcode } = await import("html5-qrcode");
-      html5QrCode = new Html5Qrcode(divId);
-      scannerRef.current = html5QrCode;
-      try {
-        await html5QrCode.start(
-          { facingMode: "environment" },
-          { fps: 10, qrbox: { width: 220, height: 220 } },
-          async (decodedText: string, _result: Html5QrcodeResult) => {
-            if (decodedText === lastScanned) return; // debounce same QR
-            setLastScanned(decodedText);
-            await markAttendance(decodedText);
-          },
-          undefined
-        );
-        setScanning(true);
-      } catch {
-        toast.error("Tidak bisa mengakses kamera", "Izinkan akses kamera di browser");
-      }
-    }
-
-    startScanner();
-
-    return () => {
-      if (html5QrCode?.isScanning) {
-        html5QrCode.stop().catch(() => {});
-      }
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   const markAttendance = async (qrCode: string) => {
     // Lookup member by qr_code
     const { data: member, error: mErr } = await supabase
@@ -394,6 +362,40 @@ function QRScanner({ coachId, classes, onClose }: {
     setTimeout(() => setLastScanned(null), 2500);
   };
 
+  useEffect(() => {
+    let html5QrCode: import("html5-qrcode").Html5Qrcode | null = null;
+
+    async function startScanner() {
+      const { Html5Qrcode } = await import("html5-qrcode");
+      html5QrCode = new Html5Qrcode(divId);
+      scannerRef.current = html5QrCode;
+      try {
+        await html5QrCode.start(
+          { facingMode: "environment" },
+          { fps: 10, qrbox: { width: 220, height: 220 } },
+          async (decodedText: string) => {
+            if (decodedText === lastScanned) return; // debounce same QR
+            setLastScanned(decodedText);
+            await markAttendance(decodedText);
+          },
+          undefined
+        );
+        setScanning(true);
+      } catch {
+        toast.error("Tidak bisa mengakses kamera", "Izinkan akses kamera di browser");
+      }
+    }
+
+    startScanner();
+
+    return () => {
+      if (html5QrCode?.isScanning) {
+        html5QrCode.stop().catch(() => {});
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <div className="max-w-sm mx-auto space-y-4">
       <button onClick={onClose} className="text-sm text-ink-mute hover:text-ocean-600 font-semibold inline-flex items-center gap-1">
@@ -424,9 +426,9 @@ function isInClockInWindow(timeStart: string, timeEnd: string): boolean {
   return nowMin >= startMin - 60 && nowMin <= endMin;
 }
 
-function CoachHome({ setOverlay, coachId, branchId, profile, classes, holidayClassIds }: {
+function CoachHome({ setOverlay, coachId, profile, classes, holidayClassIds }: {
   setOverlay: (v: string) => void;
-  coachId: string; branchId: string;
+  coachId: string; branchId?: string;
   profile: ProfileData | null;
   classes: ClassRow[];
   holidayClassIds: Set<string>;
@@ -435,6 +437,7 @@ function CoachHome({ setOverlay, coachId, branchId, profile, classes, holidayCla
   const [monthStats, setMonthStats] = useState({ present: 0, leave: 0, sub: 0 });
   const [subClasses, setSubClasses] = useState<{ classId: string; className: string; originalCoach: string }[]>([]);
 
+   
   useEffect(() => {
     if (!coachId) return;
     const now = new Date();
@@ -466,6 +469,7 @@ function CoachHome({ setOverlay, coachId, branchId, profile, classes, holidayCla
         setMonthStats(s => ({ ...s, sub: subs.length }));
       });
   }, [coachId]); // eslint-disable-line react-hooks/exhaustive-deps
+   
 
   const todayName = new Date().toLocaleDateString("id-ID", { weekday: "long" });
   const todayClasses = classes.filter(c => (c.schedule_days ?? []).includes(todayName));
@@ -582,9 +586,9 @@ function CoachHome({ setOverlay, coachId, branchId, profile, classes, holidayCla
 
 // ── Absensi ────────────────────────────────────────────────────────────────────
 
-function CoachAbsensi({ setOverlay, coachId, branchId, classes, holidayClassIds }: {
+function CoachAbsensi({ setOverlay, coachId, classes, holidayClassIds }: {
   setOverlay: (v: string) => void;
-  coachId: string; branchId: string; classes: ClassRow[]; holidayClassIds: Set<string>;
+  coachId: string; branchId?: string; classes: ClassRow[]; holidayClassIds: Set<string>;
 }) {
   const supabase = createClient();
   const toast = useToast();
@@ -598,6 +602,7 @@ function CoachAbsensi({ setOverlay, coachId, branchId, classes, holidayClassIds 
   const [saving, setSaving] = useState(false);
   const [attStatus, setAttStatus] = useState<Record<string, string>>({});
 
+  /* eslint-disable react-hooks/set-state-in-effect -- async data loader */
   useEffect(() => {
     if (!coachId) return;
     setLoading(true);
@@ -606,6 +611,7 @@ function CoachAbsensi({ setOverlay, coachId, branchId, classes, holidayClassIds 
       .eq("coach_id", coachId).order("session_date", { ascending: false }).order("clock_in_time", { ascending: false }).limit(20)
       .then(({ data }) => { if (data) setHistory(data as unknown as AttendanceRow[]); setLoading(false); });
   }, [coachId]); // eslint-disable-line react-hooks/exhaustive-deps
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const loadMembers = useCallback(async (classId: string, date: string) => {
     const { data } = await supabase.from("members")
@@ -622,9 +628,11 @@ function CoachAbsensi({ setOverlay, coachId, branchId, classes, holidayClassIds 
     }
   }, [supabase]);
 
+  /* eslint-disable react-hooks/set-state-in-effect -- async data loader */
   useEffect(() => {
     if (manualClassId && manualDate) loadMembers(manualClassId, manualDate);
   }, [manualClassId, manualDate, loadMembers]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const saveManualAtt = async () => {
     if (!manualClassId || !manualDate) return toast.error("Kelas dan tanggal wajib diisi");
@@ -776,6 +784,7 @@ function SpreadsheetModal({ classId, coachId, className, onClose }: {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  /* eslint-disable react-hooks/set-state-in-effect -- async data loader */
   useEffect(() => {
     setLoading(true);
     supabase.from("class_programs")
@@ -795,6 +804,7 @@ function SpreadsheetModal({ classId, coachId, className, onClose }: {
         setLoading(false);
       });
   }, [classId, month]); // eslint-disable-line react-hooks/exhaustive-deps
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const save = async () => {
     const filled = rows.filter(r => r.topic.trim());
@@ -961,9 +971,11 @@ function CoachInvoice({ coachId, branchId, profile }: { coachId: string; branchI
     setLoading(false);
   }, [coachId, monthFilter, supabase]);
 
+  /* eslint-disable react-hooks/set-state-in-effect -- async data loader */
   useEffect(() => { load(); }, [load]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
-  const toggle = (id: string) => { const s = new Set(selected); s.has(id) ? s.delete(id) : s.add(id); setSelected(s); };
+  const toggle = (id: string) => { const s = new Set(selected); if (s.has(id)) { s.delete(id); } else { s.add(id); } setSelected(s); };
   const total = sessions.filter(s => selected.has(s.id)).reduce((a, s) => a + s.rate_per_session, 0);
 
   const generate = async () => {
@@ -1101,6 +1113,7 @@ function CoachRapor({ coachId, branchId }: { coachId: string; branchId: string }
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
 
+   
   useEffect(() => {
     if (!branchId) return;
     supabase.from("rapor_periods").select("id, label, date_to").eq("branch_id", branchId).eq("is_open", true).single()
@@ -1113,6 +1126,7 @@ function CoachRapor({ coachId, branchId }: { coachId: string; branchId: string }
           .then(({ data: e }) => { if (e) setEntries(e as unknown as RaporEntry[]); setLoading(false); });
       });
   }, [coachId, branchId]); // eslint-disable-line react-hooks/exhaustive-deps
+   
 
   const openEntry = (e: RaporEntry) => {
     // Load criteria for this class
@@ -1453,6 +1467,16 @@ function CoachProfile({ profile, onRefresh }: { profile: ProfileData | null; onR
   );
 }
 
+function LockedNotice({ feature, reason }: { feature: string; reason: string }) {
+  return (
+    <Card className="!p-8 text-center border-dashed border-2">
+      <Icon name="lock" className="w-8 h-8 text-ink-faint mx-auto mb-3" />
+      <div className="font-display font-bold text-ink">{feature} tidak tersedia</div>
+      <p className="text-sm text-ink-mute mt-1">{reason}</p>
+    </Card>
+  );
+}
+
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 export default function CoachPage() {
@@ -1487,6 +1511,7 @@ export default function CoachPage() {
     }
   }, [supabase]);
 
+   
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data: { user: u } }) => {
       if (!u) { router.push("/login"); return; }
@@ -1495,6 +1520,7 @@ export default function CoachPage() {
       if (p) loadClasses(p.id);
     });
   }, [loadProfile, loadClasses]); // eslint-disable-line react-hooks/exhaustive-deps
+   
 
   const coachId = profile?.id ?? "";
   const branchId = user?.user_metadata?.branch_id as string ?? "";
@@ -1514,6 +1540,7 @@ export default function CoachPage() {
 
   // Suspend countdown hook — ticks every second
   const [suspendCountdown, setSuspendCountdown] = useState("");
+  /* eslint-disable react-hooks/set-state-in-effect -- timer-driven countdown */
   useEffect(() => {
     if (!isSuspended || !profile?.suspend_until) { setSuspendCountdown(""); return; }
     const tick = () => {
@@ -1528,7 +1555,8 @@ export default function CoachPage() {
     tick();
     const t = setInterval(tick, 1000);
     return () => clearInterval(t);
-  }, [isSuspended, profile?.suspend_until]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isSuspended, profile?.suspend_until]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Suspend/incomplete banners shown at the top of each tab's content
   const SuspendBanner = isSuspended ? (
@@ -1562,27 +1590,18 @@ export default function CoachPage() {
 
   // Lock active features when suspended or profile incomplete
   const locked = isSuspended || !isProfileComplete;
-
-  const LockedNotice = ({ feature }: { feature: string }) => (
-    <Card className="!p-8 text-center border-dashed border-2">
-      <Icon name="lock" className="w-8 h-8 text-ink-faint mx-auto mb-3" />
-      <div className="font-display font-bold text-ink">{feature} tidak tersedia</div>
-      <p className="text-sm text-ink-mute mt-1">
-        {isSuspended ? "Akun Anda sedang disuspend." : "Lengkapi profil Anda terlebih dahulu."}
-      </p>
-    </Card>
-  );
+  const lockReason = isSuspended ? "Akun Anda sedang disuspend." : "Lengkapi profil Anda terlebih dahulu.";
 
   const content = overlay === "clockin"
-    ? (locked ? <LockedNotice feature="Clock-In" /> : <ClockInFlow back={() => setOverlay(null)} coachId={coachId} branchId={branchId} classes={classes} />)
+    ? (locked ? <LockedNotice feature="Clock-In" reason={lockReason} /> : <ClockInFlow back={() => setOverlay(null)} coachId={coachId} branchId={branchId} classes={classes} />)
     : overlay === "leave"
     ? <LeaveForm back={() => setOverlay(null)} coachId={coachId} branchId={branchId} classes={classes} />
     : {
         home:    <>{SuspendBanner}{IncompleteBanner}<CoachHome setOverlay={setOverlay} coachId={coachId} branchId={branchId} profile={profile} classes={classes} holidayClassIds={holidayClassIds} /></>,
-        absen:   <>{SuspendBanner}{IncompleteBanner}{locked ? <LockedNotice feature="Absensi" /> : <CoachAbsensi setOverlay={setOverlay} coachId={coachId} branchId={branchId} classes={classes} holidayClassIds={holidayClassIds} />}</>,
+        absen:   <>{SuspendBanner}{IncompleteBanner}{locked ? <LockedNotice feature="Absensi" reason={lockReason} /> : <CoachAbsensi setOverlay={setOverlay} coachId={coachId} branchId={branchId} classes={classes} holidayClassIds={holidayClassIds} />}</>,
         kelas:   <CoachKelas classes={classes} coachId={coachId} />,
-        invoice: <>{SuspendBanner}{IncompleteBanner}{locked ? <LockedNotice feature="Invoice" /> : <CoachInvoice coachId={coachId} branchId={branchId} profile={profile} />}</>,
-        rapor:   <>{SuspendBanner}{IncompleteBanner}{locked ? <LockedNotice feature="Rapor" /> : <CoachRapor coachId={coachId} branchId={branchId} />}</>,
+        invoice: <>{SuspendBanner}{IncompleteBanner}{locked ? <LockedNotice feature="Invoice" reason={lockReason} /> : <CoachInvoice coachId={coachId} branchId={branchId} profile={profile} />}</>,
+        rapor:   <>{SuspendBanner}{IncompleteBanner}{locked ? <LockedNotice feature="Rapor" reason={lockReason} /> : <CoachRapor coachId={coachId} branchId={branchId} />}</>,
         profile: <CoachProfile profile={profile} onRefresh={() => user && loadProfile(user.id)} />,
       }[active];
 

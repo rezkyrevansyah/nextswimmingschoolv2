@@ -80,6 +80,7 @@ export default function SchoolPage() {
     setLoading(false);
   }, [activePeriod]); // eslint-disable-line react-hooks/exhaustive-deps
 
+   
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data }) => {
       const u = data.user;
@@ -120,11 +121,14 @@ export default function SchoolPage() {
       }
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+   
 
   // Re-load when activePeriod becomes available
+  /* eslint-disable react-hooks/set-state-in-effect -- async data loader */
   useEffect(() => {
     if (activePeriod && schoolId) load(schoolId, activePeriod.id);
   }, [activePeriod, schoolId, load]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const filtered = students.filter(
     (s) => !search || s.full_name.toLowerCase().includes(search.toLowerCase()) || s.class_name.toLowerCase().includes(search.toLowerCase())
