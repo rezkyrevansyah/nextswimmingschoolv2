@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import Logo from "@/components/ui/Logo";
 import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
@@ -82,7 +83,9 @@ function Shell({ children, active, setActive, name, branchName, userId }: {
             ))}
           </div>
           <Bell userId={userId} />
-          <Avatar name={name} size={36} />
+          <button onClick={() => setActive("profile")} title="Profile">
+            <Avatar name={name} size={36} />
+          </button>
         </div>
       </header>
       <main className="max-w-3xl mx-auto p-4 lg:p-7 anim-in">{children}</main>
@@ -153,7 +156,7 @@ function MemberHome({
       .eq("id", memberId)
       .single()
       .then(({ data }) => {
-        if (data && data.type === "private" && data.remaining_sessions != null && data.remaining_sessions <= 1) {
+        if (data && data.type === "private" && data.remaining_sessions != null && data.remaining_sessions <= 3) {
           setPrivateReminder({ remaining: data.remaining_sessions, total: data.total_sessions ?? 0 });
         }
       });
@@ -215,7 +218,7 @@ function MemberHome({
 
   return (
     <div className="space-y-5">
-      <Card className="bg-ocean-700 text-white border-ocean-700 relative overflow-hidden">
+      <div className="bg-ocean-700 text-white rounded-2xl border border-ocean-700 shadow-card p-5 relative overflow-hidden">
         <div className="caustics absolute inset-0 opacity-30" />
         <div className="relative">
           <div className="text-wave-200 text-[11px] uppercase tracking-widest font-bold">Selamat datang</div>
@@ -232,7 +235,7 @@ function MemberHome({
             </div>
           </div>
         </div>
-      </Card>
+      </div>
 
       {pendingBill && (
         <Card className="bg-warn-50 border-warn-500/20">
@@ -938,7 +941,7 @@ function MemberRapor({ memberId, memberName }: { memberId: string; memberName: s
 
 // ── Profile ────────────────────────────────────────────────────────────────────
 
-function MemberProfile({ memberId, memberName }: { memberId: string; memberName: string }) {
+function MemberProfile({ memberId, memberName, onLogout }: { memberId: string; memberName: string; onLogout: () => void }) {
   const supabase = createClient();
   const [profile, setProfile] = useState<{
     full_name: string; birth_date: string | null; gender: string | null;
@@ -1073,6 +1076,15 @@ function MemberProfile({ memberId, memberName }: { memberId: string; memberName:
           <Btn variant="primary" disabled={pwdSaving} onClick={changePwd}>Simpan password baru</Btn>
         </div>
       </Card>
+
+      <Card>
+        <button onClick={onLogout} className="w-full flex items-center gap-3 py-1 text-left group">
+          <span className="w-9 h-9 rounded-xl bg-danger-50 text-danger-500 flex items-center justify-center group-hover:bg-danger-100 transition-colors">
+            <Icon name="logout" className="w-4 h-4" />
+          </span>
+          <span className="font-semibold text-danger-600 group-hover:text-danger-700">Keluar dari akun</span>
+        </button>
+      </Card>
     </div>
   );
 }
@@ -1081,6 +1093,7 @@ function MemberProfile({ memberId, memberName }: { memberId: string; memberName:
 
 export default function MemberPage() {
   const supabase = createClient();
+  const router = useRouter();
   const [active, setActive] = useState<TabId>("home");
   const [memberId, setMemberId] = useState("");
   const [memberName, setMemberName] = useState("");
@@ -1119,6 +1132,11 @@ export default function MemberPage() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
    
 
+  const logout = async () => {
+    await supabase.auth.signOut();
+    router.push("/login");
+  };
+
   const pages: Record<TabId, React.ReactNode> = {
     home:     <MemberHome setActive={setActive} memberId={memberId} memberName={memberName} branchId={branchId} />,
     schedule: <MemberSchedule memberId={memberId} />,
@@ -1126,7 +1144,7 @@ export default function MemberPage() {
     bills:    <MemberBills memberId={memberId} memberName={memberName} branchId={branchId} />,
     leave:    <MemberLeave memberId={memberId} />,
     rapor:    <MemberRapor memberId={memberId} memberName={memberName} />,
-    profile:  <MemberProfile memberId={memberId} memberName={memberName} />,
+    profile:  <MemberProfile memberId={memberId} memberName={memberName} onLogout={logout} />,
   };
 
   return (

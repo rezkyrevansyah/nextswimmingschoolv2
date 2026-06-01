@@ -158,7 +158,7 @@ export default function SchoolPage() {
 
       <main className="max-w-6xl mx-auto p-4 lg:p-7 anim-in space-y-6">
         {/* Hero card */}
-        <Card className="bg-ocean-700 text-white border-ocean-700 relative overflow-hidden">
+        <div className="bg-ocean-700 text-white rounded-2xl border border-ocean-700 shadow-card p-5 relative overflow-hidden">
           <div className="caustics absolute inset-0 opacity-30" />
           <div className="absolute -right-12 -bottom-12 w-56 h-56 rounded-full bg-wave-500/30 blur-3xl" />
           <div className="relative grid lg:grid-cols-3 gap-5">
@@ -190,7 +190,7 @@ export default function SchoolPage() {
               </div>
             </div>
           </div>
-        </Card>
+        </div>
 
         {/* Students table */}
         <Card padded={false}>

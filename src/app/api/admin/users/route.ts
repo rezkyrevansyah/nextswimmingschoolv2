@@ -2,7 +2,7 @@
  * POST /api/admin/users
  * Body: { email, password, full_name, role, branch_id?, phone?,
  *         birth_date?, gender?, address?, health_notes?,
- *         member_type?, school_id?, class_id? }
+ *         member_type?, school_id?, class_id?, total_sessions? }
  * Creates a Supabase auth user + profile row + optional member row setup.
  * Only callable by admin or owner.
  */
@@ -35,6 +35,7 @@ export async function POST(req: NextRequest) {
     member_type?: string;
     school_id?: string;
     class_id?: string;
+    total_sessions?: number | null;
   };
 
   const { email, password, full_name, role, branch_id, phone } = body;
@@ -66,7 +67,7 @@ export async function POST(req: NextRequest) {
   // fall back to an explicit update so all fields (branch_id, role, etc.) are set.
   const profileData = {
     id: userId,
-    role,
+    role: role as "owner" | "admin" | "coach" | "member" | "school",
     full_name,
     email,
     phone: phone || null,
@@ -107,15 +108,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "branch_id required for member" }, { status: 400 });
     }
 
+    const isPrivateMember = body.member_type === "private";
     const { data: memberRow, error: memberError } = await db
       .from("members")
       .insert({
         profile_id: userId,
         branch_id,
-        type: body.member_type ?? "reguler",
+        type: (body.member_type ?? "reguler") as "reguler" | "private" | "school_affiliate",
         status: "active",
         school_id: body.school_id || null,
         date_start: new Date().toISOString().split("T")[0],
+        total_sessions: isPrivateMember ? (body.total_sessions ?? null) : null,
+        remaining_sessions: isPrivateMember ? (body.total_sessions ?? null) : null,
       })
       .select("id")
       .single();

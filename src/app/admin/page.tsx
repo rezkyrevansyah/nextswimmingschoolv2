@@ -21,6 +21,7 @@ import { fmtIDR, fmtDate, waLink } from "@/lib/utils";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
+import { useUpload } from "@/hooks/useUpload";
 import type { User } from "@supabase/supabase-js";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -39,7 +40,8 @@ function calcAge(birthDate: string): number {
 interface ClassRow {
   id: string; name: string; branch_id: string; status: string;
   capacity: number; enrolled: number; price_monthly: number;
-  schedule_days: string[]; time_start: string; time_end: string; show_on_landing: boolean;
+  price_per_session: number | null; class_type: string;
+  schedule_days: string[]; time_start: string | null; time_end: string | null; show_on_landing: boolean;
   branch?: { name: string } | null;
   class_coaches?: { profile: { full_name: string; id: string } | null }[];
 }
@@ -272,7 +274,7 @@ function AdminDashboard({ branchId }: { branchId: string }) {
 function AdminSettings({ branch, onRefresh, userId }: { branch: Branch | null; onRefresh: () => void; userId: string }) {
   const toast = useToast();
   const supabase = createClient();
-  const { upload, uploading } = { upload: { logo: async (file: File, id: string) => { const form = new FormData(); form.append("file", file); form.append("branchId", id); const res = await fetch("/api/upload/logo", { method: "POST", body: form }); const d = await res.json() as { url?: string }; return d.url ?? ""; } }, uploading: false };
+  const { upload, uploading } = useUpload();
   const [lat, setLat] = useState(branch?.lat?.toString() ?? "");
   const [lng, setLng] = useState(branch?.lng?.toString() ?? "");
   const [name, setName] = useState(branch?.name ?? "");
@@ -332,8 +334,12 @@ function AdminSettings({ branch, onRefresh, userId }: { branch: Branch | null; o
   const handleLogo = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !branch) return;
-    const url = await upload.logo(file, branch.id);
-    if (url) { toast.success("Logo diperbarui"); onRefresh(); }
+    try {
+      const url = await upload.logo(file, branch.id);
+      if (url) { toast.success("Logo diperbarui"); onRefresh(); }
+    } catch (err) {
+      toast.error("Gagal upload logo", err instanceof Error ? err.message : undefined);
+    }
   };
 
   return (
@@ -408,7 +414,7 @@ interface Criterion {
   id: string; label: string; kind: string; options: string[] | null; sort_order: number;
 }
 
-const EMPTY_CLASS_FORM = { name: "", schedule_days: [] as string[], time_start: "", time_end: "", capacity: "", price_monthly: "", show_on_landing: true, goals: "" };
+const EMPTY_CLASS_FORM = { name: "", class_type: "reguler", schedule_days: [] as string[], time_start: "", time_end: "", capacity: "", price_monthly: "", price_per_session: "", show_on_landing: true, goals: "" };
 const DAY_OPTS = ["Senin","Selasa","Rabu","Kamis","Jumat","Sabtu","Minggu"];
 
 function AdminClass({ branchId }: { branchId: string }) {
@@ -433,7 +439,7 @@ function AdminClass({ branchId }: { branchId: string }) {
 
   const load = useCallback(async () => {
     const { data } = await supabase.from("classes")
-      .select("id, name, branch_id, status, capacity, enrolled, price_monthly, schedule_days, time_start, time_end, show_on_landing, class_coaches(profile:profiles(full_name, id))")
+      .select("id, name, branch_id, status, capacity, enrolled, price_monthly, price_per_session, class_type, schedule_days, time_start, time_end, show_on_landing, class_coaches(profile:profiles(full_name, id))")
       .eq("branch_id", branchId).order("name");
     if (data) setClasses(data as unknown as ClassRow[]);
   }, [branchId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -449,30 +455,27 @@ function AdminClass({ branchId }: { branchId: string }) {
   const openCreate = () => { setEditTarget(null); setForm(EMPTY_CLASS_FORM); setOpenForm(true); };
   const openEdit = (c: ClassRow) => {
     setEditTarget(c);
-    setForm({ name: c.name, schedule_days: c.schedule_days ?? [], time_start: c.time_start ?? "", time_end: c.time_end ?? "", capacity: c.capacity ? String(c.capacity) : "", price_monthly: c.price_monthly ? String(c.price_monthly) : "", show_on_landing: c.show_on_landing ?? false, goals: "" });
+    setForm({ name: c.name, class_type: c.class_type ?? "reguler", schedule_days: c.schedule_days ?? [], time_start: c.time_start ?? "", time_end: c.time_end ?? "", capacity: c.capacity ? String(c.capacity) : "", price_monthly: c.price_monthly ? String(c.price_monthly) : "", price_per_session: c.price_per_session ? String(c.price_per_session) : "", show_on_landing: c.show_on_landing ?? false, goals: "" });
     setOpenForm(true);
   };
 
+  const isPrivate = form.class_type === "private";
+
   const saveClass = async () => {
-    if (!form.name || form.schedule_days.length === 0) return toast.error("Nama kelas dan hari wajib diisi");
+    if (!form.name) return toast.error("Nama kelas wajib diisi");
+    if (!isPrivate && form.schedule_days.length === 0) return toast.error("Hari sesi wajib diisi untuk kelas reguler");
     setSaving(true);
     if (editTarget) {
-      const { error } = await supabase.from("classes").update({
-        name: form.name, schedule_days: form.schedule_days, time_start: form.time_start || null,
-        time_end: form.time_end || null, capacity: Number(form.capacity) || 0, price_monthly: Number(form.price_monthly) || 0,
-        show_landing: form.show_on_landing,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } as any).eq("id", editTarget.id);
+      const updatePayload = {name: form.name, class_type: form.class_type, schedule_days: isPrivate ? (form.schedule_days.length > 0 ? form.schedule_days : []) : form.schedule_days, time_start: form.time_start || null, time_end: form.time_end || null, capacity: isPrivate ? 1 : (Number(form.capacity) || 0), price_monthly: isPrivate ? 0 : (Number(form.price_monthly) || 0), price_per_session: isPrivate ? (Number(form.price_per_session) || null) : null, show_landing: form.show_on_landing} as any;
+      const { error } = await supabase.from("classes").update(updatePayload).eq("id", editTarget.id);
       setSaving(false);
       if (error) return toast.error("Gagal update kelas", error.message);
       toast.success("Kelas diperbarui");
     } else {
-      const { error } = await supabase.from("classes").insert({
-        name: form.name, schedule_days: form.schedule_days, time_start: form.time_start || null,
-        time_end: form.time_end || null, capacity: Number(form.capacity) || 0, price_monthly: Number(form.price_monthly) || 0,
-        show_landing: form.show_on_landing, goal: form.goals, branch_id: branchId, status: "active", enrolled: 0,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } as any);
+      const insertPayload = {name: form.name, class_type: form.class_type, schedule_days: isPrivate ? (form.schedule_days.length > 0 ? form.schedule_days : []) : form.schedule_days, time_start: form.time_start || null, time_end: form.time_end || null, capacity: isPrivate ? 1 : (Number(form.capacity) || 0), price_monthly: isPrivate ? 0 : (Number(form.price_monthly) || 0), price_per_session: isPrivate ? (Number(form.price_per_session) || null) : null, show_landing: form.show_on_landing, goal: form.goals, branch_id: branchId, status: "active", enrolled: 0} as any;
+      const { error } = await supabase.from("classes").insert(insertPayload);
       setSaving(false);
       if (error) return toast.error("Gagal membuat kelas", error.message);
       toast.success("Kelas dibuat");
@@ -578,14 +581,41 @@ function AdminClass({ branchId }: { branchId: string }) {
       <Modal open={openForm} onClose={() => setOpenForm(false)} title={editTarget ? `Edit Kelas — ${editTarget.name}` : "Tambah Kelas Baru"} size="lg"
         footer={<><Btn variant="ghost" onClick={() => setOpenForm(false)}>Batal</Btn><Btn variant="primary" onClick={saveClass} disabled={saving}>{saving ? "Menyimpan…" : editTarget ? "Simpan perubahan" : "Simpan kelas"}</Btn></>}>
         <div className="space-y-4">
+          {/* Tipe kelas toggle — hanya saat create */}
+          {!editTarget && (
+            <Field label="Tipe kelas" required>
+              <div className="flex gap-2">
+                {[["reguler", "Reguler", "Kelas group, jadwal tetap"], ["private", "Private", "1-on-1, jadwal fleksibel"]].map(([val, label, desc]) => (
+                  <button key={val} type="button" onClick={() => setForm(f => ({ ...f, class_type: val, capacity: val === "private" ? "1" : f.capacity }))}
+                    className={`flex-1 p-3 rounded-xl border-2 text-left transition-colors ${form.class_type === val ? "border-ocean-500 bg-ocean-50" : "border-line hover:bg-paper-tint"}`}>
+                    <div className={`font-bold text-sm ${form.class_type === val ? "text-ocean-700" : "text-ink"}`}>{label}</div>
+                    <div className="text-xs text-ink-mute mt-0.5">{desc}</div>
+                  </button>
+                ))}
+              </div>
+            </Field>
+          )}
+          {isPrivate && (
+            <div className="bg-wave-50 border border-wave-100 rounded-xl p-3 text-sm text-wave-800 flex gap-2">
+              <Icon name="info" className="w-4 h-4 mt-0.5 shrink-0 text-wave-500" />
+              <span>Kelas private kapasitas otomatis 1. Hari sesi bersifat preferensi — absensi bisa dicatat kapan saja oleh coach.</span>
+            </div>
+          )}
           <div className="grid sm:grid-cols-2 gap-4">
-            <Field label="Nama kelas" required><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Mis. Tadpole — Pengenalan Air" /></Field>
-            <Field label="Kapasitas" required><Input type="number" value={form.capacity} onChange={e => setForm(f => ({ ...f, capacity: e.target.value }))} placeholder="15" min="1" /></Field>
-            <Field label="Harga/bulan" required><Input type="number" value={form.price_monthly} onChange={e => setForm(f => ({ ...f, price_monthly: e.target.value }))} className="font-mono" placeholder="550000" min="0" /></Field>
-            <Field label="Jam mulai" required><Input type="time" value={form.time_start} onChange={e => setForm(f => ({ ...f, time_start: e.target.value }))} /></Field>
-            <Field label="Jam selesai" required><Input type="time" value={form.time_end} onChange={e => setForm(f => ({ ...f, time_end: e.target.value }))} /></Field>
+            <Field label="Nama kelas" required className="sm:col-span-2"><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder={isPrivate ? "Mis. Private — Coach Salwa" : "Mis. Tadpole — Pengenalan Air"} /></Field>
+            {!isPrivate && (
+              <>
+                <Field label="Kapasitas" required><Input type="number" value={form.capacity} onChange={e => setForm(f => ({ ...f, capacity: e.target.value }))} placeholder="15" min="1" /></Field>
+                <Field label="Harga/bulan" required><Input type="number" value={form.price_monthly} onChange={e => setForm(f => ({ ...f, price_monthly: e.target.value }))} className="font-mono" placeholder="550000" min="0" /></Field>
+              </>
+            )}
+            {isPrivate && (
+              <Field label="Harga per sesi" hint="Rp per pertemuan"><Input type="number" value={form.price_per_session} onChange={e => setForm(f => ({ ...f, price_per_session: e.target.value }))} className="font-mono" placeholder="150000" min="0" /></Field>
+            )}
+            <Field label="Jam mulai"><Input type="time" value={form.time_start} onChange={e => setForm(f => ({ ...f, time_start: e.target.value }))} /></Field>
+            <Field label="Jam selesai"><Input type="time" value={form.time_end} onChange={e => setForm(f => ({ ...f, time_end: e.target.value }))} /></Field>
           </div>
-          <Field label="Hari sesi" required hint="Pilih satu atau lebih">
+          <Field label={isPrivate ? "Preferensi hari latihan" : "Hari sesi"} required={!isPrivate} hint={isPrivate ? "Opsional — hanya sebagai info" : "Pilih satu atau lebih"}>
             <div className="flex flex-wrap gap-2 mt-1">
               {DAY_OPTS.map(d => (
                 <button key={d} type="button" onClick={() => toggleDay(d)}
@@ -596,10 +626,12 @@ function AdminClass({ branchId }: { branchId: string }) {
             </div>
           </Field>
           {!editTarget && <Field label="Tujuan kelas"><Textarea rows={2} value={form.goals} onChange={e => setForm(f => ({ ...f, goals: e.target.value }))} placeholder="Mis. Pengenalan air, blowing bubbles." /></Field>}
-          <div className="flex items-center justify-between p-3 rounded-xl bg-ocean-50/50 border border-ocean-100">
-            <div><div className="font-semibold text-ink text-sm">Tampilkan di landing page</div><div className="text-xs text-ink-mute">Kelas akan muncul di section Swimming Programs.</div></div>
-            <Switch checked={form.show_on_landing} onChange={v => setForm(f => ({ ...f, show_on_landing: v }))} />
-          </div>
+          {!isPrivate && (
+            <div className="flex items-center justify-between p-3 rounded-xl bg-ocean-50/50 border border-ocean-100">
+              <div><div className="font-semibold text-ink text-sm">Tampilkan di landing page</div><div className="text-xs text-ink-mute">Kelas akan muncul di section Swimming Programs.</div></div>
+              <Switch checked={form.show_on_landing} onChange={v => setForm(f => ({ ...f, show_on_landing: v }))} />
+            </div>
+          )}
           {editTarget && coaches.length > 0 && (
             <div>
               <div className="text-xs font-bold uppercase tracking-widest text-ink-faint mb-2">Coach yang mengajar</div>
@@ -680,7 +712,10 @@ function AdminMember({ branchId }: { branchId: string }) {
   const [detail, setDetail] = useState<MemberRow | null>(null);
   const [saving, setSaving] = useState(false);
   const [classes, setClasses] = useState<ClassRow[]>([]);
-  const [form, setForm] = useState({ full_name: "", birth_date: "", gender: "", type: "reguler", phone: "", phone_owner: "self", parent_name: "", parent_phone: "", address: "", health_notes: "", class_id: "", school_id: "", email: "", password: "" });
+  const [form, setForm] = useState({ full_name: "", birth_date: "", gender: "", type: "reguler", phone: "", phone_owner: "self", parent_name: "", parent_phone: "", address: "", health_notes: "", class_id: "", school_id: "", email: "", password: "", jumlah_sesi: "" });
+  const [openAddSesi, setOpenAddSesi] = useState(false);
+  const [addSesiForm, setAddSesiForm] = useState({ jumlah: "", generate_bill: false });
+  const [savingAddSesi, setSavingAddSesi] = useState(false);
   const [schoolsList, setSchoolsList] = useState<School[]>([]);
 
   const load = useCallback(async () => {
@@ -690,7 +725,7 @@ function AdminMember({ branchId }: { branchId: string }) {
     const sel = "id, profile_id, type, status, date_start, qr_code, school_id, remaining_sessions, total_sessions, suspend_until, suspend_reason, profile:profiles(full_name, birth_date, phone, gender, address, health_notes, email), member_classes(class:classes(id, name))";
     let q = db.from("members").select(sel).eq("branch_id", branchId).order("created_at", { ascending: false });
     if (tab === "suspended") q = db.from("members").select(sel).eq("branch_id", branchId).eq("status", "suspended") as typeof q;
-    else if (tab !== "all") q = q.eq("type", tab);
+    else if (tab !== "all") q = q.eq("type", tab as "reguler" | "private" | "school_affiliate");
     const { data } = await q;
     if (data) setMembers(data as unknown as MemberRow[]);
     setLoading(false);
@@ -701,7 +736,7 @@ function AdminMember({ branchId }: { branchId: string }) {
   /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {
-    supabase.from("classes").select("id, name, capacity, enrolled, status, branch_id, schedule_days, time_start, time_end, price_monthly, show_on_landing").eq("branch_id", branchId).eq("status", "active")
+    supabase.from("classes").select("id, name, capacity, enrolled, status, branch_id, schedule_days, time_start, time_end, price_monthly, price_per_session, class_type, show_on_landing").eq("branch_id", branchId).eq("status", "active")
       .then(({ data }) => { if (data) setClasses(data as unknown as ClassRow[]); });
     supabase.from("schools").select("id, name").eq("branch_id", branchId).order("name")
       .then(({ data }) => { if (data) setSchoolsList(data as School[]); });
@@ -709,6 +744,7 @@ function AdminMember({ branchId }: { branchId: string }) {
 
   const createMember = async () => {
     if (!form.full_name || !form.email || !form.password) return toast.error("Nama, email, dan password wajib diisi");
+    if (form.type === "private" && !form.jumlah_sesi) return toast.error("Jumlah sesi wajib diisi untuk member private");
     // Capacity check
     if (form.class_id) {
       const cls = classes.find(c => c.id === form.class_id);
@@ -729,6 +765,7 @@ function AdminMember({ branchId }: { branchId: string }) {
         member_type: form.type,
         school_id: form.type === "school_affiliate" ? form.school_id : null,
         class_id: form.class_id || null,
+        total_sessions: form.type === "private" ? (Number(form.jumlah_sesi) || null) : null,
       }),
     });
     const json = await res.json() as { user_id?: string; error?: string };
@@ -854,6 +891,48 @@ function AdminMember({ branchId }: { branchId: string }) {
     load();
   };
 
+  const doAddSesi = async () => {
+    if (!detail) return;
+    const jumlah = Number(addSesiForm.jumlah);
+    if (!jumlah || jumlah < 1) return toast.error("Jumlah sesi tidak valid");
+    setSavingAddSesi(true);
+    const db = createClient();
+    const newTotal = (detail.total_sessions ?? 0) + jumlah;
+    const newRemaining = (detail.remaining_sessions ?? 0) + jumlah;
+    const { error } = await db.from("members")
+      .update({ total_sessions: newTotal, remaining_sessions: newRemaining })
+      .eq("id", detail.id);
+    if (error) { setSavingAddSesi(false); return toast.error("Gagal menambah sesi", error.message); }
+
+    if (addSesiForm.generate_bill) {
+      const cls = detail.member_classes?.[0]?.class;
+      const classRow = cls ? classes.find(c => c.id === cls.id) : null;
+      const pricePerSession = classRow?.price_per_session ?? 0;
+      if (pricePerSession > 0) {
+        await db.from("bills").insert({
+          member_id: detail.id, branch_id: branchId,
+          period_label: `Tambah ${jumlah} sesi`,
+          type: "session_pack" as "monthly",
+          amount: pricePerSession * jumlah,
+          discount: 0,
+          total: pricePerSession * jumlah,
+          status: "unpaid",
+        });
+      }
+    }
+
+    setSavingAddSesi(false);
+    toast.success(`${jumlah} sesi ditambahkan`);
+    setOpenAddSesi(false);
+    setAddSesiForm({ jumlah: "", generate_bill: false });
+    // Refresh detail
+    const { data } = await db.from("members")
+      .select("id, profile_id, type, status, date_start, qr_code, school_id, remaining_sessions, total_sessions, suspend_until, suspend_reason, profile:profiles(full_name, birth_date, phone, gender, address, health_notes, email), member_classes(class:classes(id, name))")
+      .eq("id", detail.id).single();
+    if (data) setDetail(data as unknown as MemberRow);
+    load();
+  };
+
   const stats = {
     all:     members.length,
     reguler: members.filter(m => m.type === "reguler").length,
@@ -867,7 +946,7 @@ function AdminMember({ branchId }: { branchId: string }) {
     <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div><h2 className="font-display font-bold text-2xl">Manajemen Member</h2><p className="text-ink-mute text-sm mt-0.5">CRUD member, suspend, dan reset password.</p></div>
-        <div className="flex gap-2"><Btn variant="primary" icon="plus" onClick={() => { setForm({ full_name: "", birth_date: "", gender: "", type: "reguler", phone: "", phone_owner: "self", parent_name: "", parent_phone: "", address: "", health_notes: "", class_id: "", school_id: "", email: "", password: "" }); setOpenCreate(true); }}>Tambah Member</Btn></div>
+        <div className="flex gap-2"><Btn variant="primary" icon="plus" onClick={() => { setForm({ full_name: "", birth_date: "", gender: "", type: "reguler", phone: "", phone_owner: "self", parent_name: "", parent_phone: "", address: "", health_notes: "", class_id: "", school_id: "", email: "", password: "", jumlah_sesi: "" }); setOpenCreate(true); }}>Tambah Member</Btn></div>
       </div>
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Stat label="Total aktif"       value={stats.all}     icon="users"   tone="ocean" />
@@ -917,44 +996,88 @@ function AdminMember({ branchId }: { branchId: string }) {
         )}
       </Card>
 
-      <Modal open={!!detail} onClose={() => setDetail(null)} title={detail?.profile?.full_name ?? ""} size="lg"
+      <Modal open={!!detail} onClose={() => setDetail(null)} title={detail?.profile?.full_name ?? ""} size="xl"
         footer={
           <>
             <Btn variant="ghost" onClick={() => setDetail(null)}>Tutup</Btn>
             <Btn variant="outline" icon="edit" onClick={() => detail && openEdit(detail)}>Edit Data</Btn>
             <Btn variant="outline" icon="refresh" onClick={() => { setOpenResetPwd(true); setNewPwd(""); }}>Reset Password</Btn>
+            {detail?.type === "private" && (
+              <Btn variant="accent" icon="plus" onClick={() => { setOpenAddSesi(true); setAddSesiForm({ jumlah: "", generate_bill: false }); }}>Tambah Sesi</Btn>
+            )}
             {detail?.status !== "suspended"
               ? <Btn variant="ghost" className="text-warn-600" onClick={() => { setSuspendMemberTarget(detail); setSuspendMemberForm({ reason: "", until: "" }); }}>Suspend</Btn>
               : <Btn variant="soft" size="sm" icon="check" onClick={() => detail && liftSuspendMember(detail)}>Akhiri Suspend</Btn>
             }
           </>
         }>
-        {detail && (
-          <div className="grid md:grid-cols-3 gap-5">
-            <div className="text-center">
-              <div className="mx-auto"><Avatar name={detail.profile?.full_name ?? ""} size={96} /></div>
-              <div className="font-display font-bold text-lg text-ink mt-3">{detail.profile?.full_name ?? "—"}</div>
-              <div className="mt-4 flex justify-center"><QRBox value={detail.qr_code ?? detail.id} size={120} /></div>
-              <a href={waLink(`QR absensi ${detail.profile?.full_name ?? ""}`)} target="_blank" rel="noreferrer" className="mt-3 inline-flex"><Btn variant="wa" size="sm" icon="whatsapp">Kirim QR ke WA</Btn></a>
-            </div>
-            <div className="md:col-span-2 space-y-4">
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Tipe</div><div className="font-semibold text-ink">{detail.type}</div></div>
-                <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Sejak</div><div className="font-semibold text-ink">{fmtDate(detail.date_start)}</div></div>
-                <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Sisa sesi</div><div className="font-semibold text-ink">{detail.remaining_sessions ?? "—"}</div></div>
-                <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">No HP</div><div className="font-semibold text-ink font-mono text-xs">{detail.profile?.phone ?? "—"}</div></div>
-                {detail.status === "suspended" && <div className="col-span-2"><div className="text-[10px] uppercase tracking-widest font-bold text-warn-500">Suspend s.d.</div><div className="font-semibold text-warn-700">{fmtDate(detail.suspend_until ?? "")}</div></div>}
+        {detail && (() => {
+          const p = detail.profile;
+          const age = p?.birth_date ? calcAge(p.birth_date) : null;
+          return (
+            <div className="grid md:grid-cols-3 gap-5">
+              {/* Left: avatar + QR */}
+              <div className="text-center">
+                <div className="mx-auto"><Avatar name={p?.full_name ?? ""} size={96} /></div>
+                <div className="font-display font-bold text-lg text-ink mt-3">{p?.full_name ?? "—"}</div>
+                {age && <div className="text-xs text-ink-mute">{age} tahun</div>}
+                <div className="mt-4 flex justify-center"><QRBox value={detail.qr_code ?? detail.id} size={120} /></div>
+                <div className="text-[9px] text-ink-faint font-mono mt-1 break-all">{detail.qr_code ?? detail.id}</div>
+                {p?.phone ? (
+                  <a href={`https://wa.me/62${p.phone.replace(/^0/, "").replace(/\D/g, "")}?text=${encodeURIComponent(`Halo ${p.full_name}, `)}`} target="_blank" rel="noreferrer" className="mt-3 inline-flex">
+                    <Btn variant="wa" size="sm" icon="whatsapp">Hubungi Member</Btn>
+                  </a>
+                ) : (
+                  <div className="mt-3 text-xs text-ink-faint">No HP tidak tersedia</div>
+                )}
               </div>
-              <div className="pt-3 border-t border-line">
-                <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-2">Kelas yang diikuti</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {detail.member_classes?.map((mc, i) => mc.class && <span key={i} className="px-2 py-1 rounded-lg bg-ocean-50 text-ocean-700 text-xs font-semibold">{mc.class.name}</span>)}
-                  {(detail.member_classes?.length ?? 0) === 0 && <span className="text-xs text-warn-600 font-semibold">Belum assign ke kelas</span>}
+
+              {/* Right: detail info */}
+              <div className="md:col-span-2 space-y-4 text-sm">
+                {/* Row 1: Tipe / Sejak / Sisa Sesi / Jenis Kelamin */}
+                <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                  <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Tipe</div><div className="font-semibold text-ink capitalize">{detail.type === "reguler" ? "Reguler" : detail.type === "private" ? "Private" : "Afiliasi Sekolah"}</div></div>
+                  <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Sejak</div><div className="font-semibold text-ink">{fmtDate(detail.date_start)}</div></div>
+                  <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Sisa sesi</div><div className="font-semibold text-ink">{detail.remaining_sessions != null ? `${detail.remaining_sessions} / ${detail.total_sessions ?? "—"}` : "—"}</div></div>
+                  <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Jenis kelamin</div><div className="font-semibold text-ink">{p?.gender === "male" ? "Laki-laki" : p?.gender === "female" ? "Perempuan" : "—"}</div></div>
+                  <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Tanggal lahir</div><div className="font-semibold text-ink">{p?.birth_date ? fmtDate(p.birth_date) : "—"}</div></div>
+                  <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Email</div><div className="font-semibold text-ink text-xs break-all">{p?.email ?? "—"}</div></div>
+                </div>
+
+                {/* Contact */}
+                <div className="pt-3 border-t border-line grid grid-cols-2 gap-x-4 gap-y-3">
+                  <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">No HP</div><div className="font-semibold text-ink font-mono text-xs">{p?.phone ?? "—"}</div></div>
+                </div>
+
+                {/* Address & health */}
+                {(p?.address || p?.health_notes) && (
+                  <div className="pt-3 border-t border-line space-y-2">
+                    {p?.address && <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-0.5">Alamat</div><div className="text-ink-soft leading-snug">{p.address}</div></div>}
+                    {p?.health_notes && <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-0.5">Catatan kesehatan</div><div className="text-ink-soft leading-snug">{p.health_notes}</div></div>}
+                  </div>
+                )}
+
+                {/* Suspend info */}
+                {detail.status === "suspended" && (
+                  <div className="pt-3 border-t border-line bg-warn-50 rounded-xl px-3 py-2">
+                    <div className="text-[10px] uppercase tracking-widest font-bold text-warn-500">Suspend s.d.</div>
+                    <div className="font-semibold text-warn-700">{fmtDate(detail.suspend_until ?? "")}</div>
+                    {detail.suspend_reason && <div className="text-xs text-warn-600 mt-0.5">{detail.suspend_reason}</div>}
+                  </div>
+                )}
+
+                {/* Classes */}
+                <div className="pt-3 border-t border-line">
+                  <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-2">Kelas yang diikuti</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {detail.member_classes?.map((mc, i) => mc.class && <span key={i} className="px-2 py-1 rounded-lg bg-ocean-50 text-ocean-700 text-xs font-semibold">{mc.class.name}</span>)}
+                    {(detail.member_classes?.length ?? 0) === 0 && <span className="text-xs text-warn-600 font-semibold">Belum assign ke kelas</span>}
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
       </Modal>
 
       {/* Edit member modal */}
@@ -1062,12 +1185,17 @@ function AdminMember({ branchId }: { branchId: string }) {
               </Select>
             </Field>
           )}
-          <Field label="Assign kelas">
+          <Field label="Assign kelas" hint={form.type === "private" ? "Hanya kelas private" : "Hanya kelas reguler"}>
             <Select value={form.class_id} onChange={e => setForm(f => ({ ...f, class_id: e.target.value }))}>
               <option value="">— pilih kelas —</option>
-              {classes.map(c => <option key={c.id} value={c.id}>{c.name} ({c.enrolled}/{c.capacity})</option>)}
+              {classes.filter(c => c.class_type === form.type || (form.type === "school_affiliate" && c.class_type === "reguler")).map(c => <option key={c.id} value={c.id}>{c.name} ({c.enrolled}/{c.capacity})</option>)}
             </Select>
           </Field>
+          {form.type === "private" && (
+            <Field label="Jumlah sesi" required hint={`Harga/sesi: ${classes.find(c => c.id === form.class_id)?.price_per_session ? fmtIDR(classes.find(c => c.id === form.class_id)!.price_per_session!) : "—"}`}>
+              <Input type="number" min="1" value={form.jumlah_sesi} onChange={e => setForm(f => ({ ...f, jumlah_sesi: e.target.value }))} placeholder="Mis. 8" />
+            </Field>
+          )}
           <Field label="No HP / WA member">
             <Input type="tel" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} />
           </Field>
@@ -1103,6 +1231,34 @@ function AdminMember({ branchId }: { branchId: string }) {
           <Field label="Suspend berakhir" required hint="Member otomatis aktif kembali setelah tanggal ini">
             <Input type="date" value={suspendMemberForm.until} onChange={e => setSuspendMemberForm(f => ({ ...f, until: e.target.value }))} min={new Date().toISOString().slice(0, 10)} />
           </Field>
+        </div>
+      </Modal>
+
+      {/* Tambah Sesi modal */}
+      <Modal open={openAddSesi} onClose={() => setOpenAddSesi(false)} title={`Tambah Sesi — ${detail?.profile?.full_name ?? ""}`} size="sm"
+        footer={<><Btn variant="ghost" onClick={() => setOpenAddSesi(false)}>Batal</Btn><Btn variant="primary" onClick={doAddSesi} disabled={savingAddSesi}>{savingAddSesi ? "Menyimpan…" : "Tambah Sesi"}</Btn></>}>
+        <div className="space-y-4">
+          <Field label="Jumlah sesi yang ditambahkan" required>
+            <Input type="number" min="1" value={addSesiForm.jumlah} onChange={e => setAddSesiForm(f => ({ ...f, jumlah: e.target.value }))} placeholder="Mis. 8" />
+          </Field>
+          <div className="flex items-center justify-between p-3 rounded-xl bg-ocean-50/50 border border-ocean-100">
+            <div><div className="font-semibold text-ink text-sm">Generate tagihan</div><div className="text-xs text-ink-mute">Buat tagihan otomatis berdasarkan harga per sesi.</div></div>
+            <Switch checked={addSesiForm.generate_bill} onChange={v => setAddSesiForm(f => ({ ...f, generate_bill: v }))} />
+          </div>
+          {addSesiForm.generate_bill && detail?.member_classes?.[0]?.class && (() => {
+            const classRow = classes.find(c => c.id === detail.member_classes![0].class!.id);
+            const pricePerSession = classRow?.price_per_session;
+            const jumlah = Number(addSesiForm.jumlah) || 0;
+            return pricePerSession ? (
+              <div className="bg-paper-tint rounded-xl p-3 text-sm">
+                <div className="text-ink-mute">Tagihan yang akan dibuat:</div>
+                <div className="font-bold text-ink mt-1">{fmtIDR(pricePerSession * jumlah)}</div>
+                <div className="text-xs text-ink-mute">{jumlah} sesi × {fmtIDR(pricePerSession)}</div>
+              </div>
+            ) : (
+              <div className="text-xs text-warn-600">Harga per sesi belum diset di kelas ini.</div>
+            );
+          })()}
         </div>
       </Modal>
     </div>
@@ -2473,12 +2629,12 @@ function AdminIzin({ branchId }: { branchId: string }) {
 function AdminPembayaran({ branchId }: { branchId: string }) {
   const supabase = createClient();
   const toast = useToast();
-  const confirm = useConfirm();
   const [bills, setBills] = useState<BillRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [verifying, setVerifying] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [genMonth, setGenMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  const [openGenModal, setOpenGenModal] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -2516,9 +2672,7 @@ function AdminPembayaran({ branchId }: { branchId: string }) {
 
   const generateTagihan = async () => {
     const label = fmtMonth(genMonth);
-    const yes = await confirm(`Generate tagihan bulanan untuk periode "${label}"? Member yang sudah memiliki tagihan bulan ini tidak akan di-generate ulang.`);
-    if (!yes) return;
-
+    setOpenGenModal(false);
     setGenerating(true);
     try {
       // 1. Get all active reguler members with their class price
@@ -2561,7 +2715,8 @@ function AdminPembayaran({ branchId }: { branchId: string }) {
         return;
       }
 
-      const { error } = await supabase.from("bills").insert(rows);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await supabase.from("bills").insert(rows as any);
       if (error) { toast.error("Gagal generate tagihan", error.message); setGenerating(false); return; }
       toast.success(`${rows.length} tagihan berhasil digenerate`, `Periode ${label}`);
       load();
@@ -2575,8 +2730,7 @@ function AdminPembayaran({ branchId }: { branchId: string }) {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div><h2 className="font-display font-bold text-2xl">Pembayaran</h2><p className="text-ink-mute text-sm mt-0.5">Verifikasi pembayaran masuk & generate tagihan bulanan.</p></div>
         <div className="flex items-center gap-2 flex-wrap">
-          <Input type="month" value={genMonth} onChange={e => setGenMonth(e.target.value)} className="font-mono text-sm w-40" />
-          <Btn variant="primary" icon="invoice" onClick={generateTagihan} disabled={generating}>{generating ? "Generating…" : "Generate Tagihan"}</Btn>
+          <Btn variant="primary" icon="invoice" onClick={() => setOpenGenModal(true)} disabled={generating}>{generating ? "Generating…" : "Generate Tagihan"}</Btn>
         </div>
       </div>
       <div className="grid sm:grid-cols-4 gap-4">
@@ -2614,6 +2768,23 @@ function AdminPembayaran({ branchId }: { branchId: string }) {
           </table>
         )}
       </Card>
+
+      {/* Generate Tagihan Modal */}
+      <Modal open={openGenModal} onClose={() => setOpenGenModal(false)} title="Generate Tagihan Bulanan" size="sm"
+        footer={<><Btn variant="ghost" onClick={() => setOpenGenModal(false)}>Batal</Btn><Btn variant="primary" icon="invoice" onClick={generateTagihan} disabled={generating}>{generating ? "Generating…" : "Generate"}</Btn></>}>
+        <div className="space-y-4">
+          <div className="bg-ocean-50 border border-ocean-100 rounded-xl p-3.5 text-sm text-ocean-800 flex gap-2.5">
+            <Icon name="info" className="w-4 h-4 mt-0.5 shrink-0 text-ocean-500" />
+            <span>Generate tagihan bulanan untuk semua member reguler aktif. Member yang sudah punya tagihan periode ini akan dilewati otomatis.</span>
+          </div>
+          <Field label="Periode tagihan" required>
+            <Input type="month" value={genMonth} onChange={e => setGenMonth(e.target.value)} className="font-mono" />
+          </Field>
+          <div className="bg-paper-tint rounded-xl px-3.5 py-3 text-sm text-ink-soft">
+            Tagihan akan digenerate untuk periode: <span className="font-semibold text-ink">{fmtMonth(genMonth)}</span>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
@@ -2730,7 +2901,7 @@ function AdminRapor({ branchId }: { branchId: string }) {
     if (!form.label || !form.date_from || !form.date_to) return toast.error("Semua field wajib diisi");
     setSaving(true);
     const user = (await supabase.auth.getUser()).data.user;
-    const { error } = await supabase.from("rapor_periods").insert({ branch_id: branchId, label: form.label, date_from: form.date_from, date_to: form.date_to, is_open: true, created_by: user?.id });
+    const { error } = await supabase.from("rapor_periods").insert({ branch_id: branchId, label: form.label, date_from: form.date_from, date_to: form.date_to, is_open: true, created_by: user?.id ?? null });
     setSaving(false);
     if (error) return toast.error("Gagal membuat periode", error.message);
     toast.success("Periode rapor dibuka");
@@ -2751,7 +2922,7 @@ function AdminRapor({ branchId }: { branchId: string }) {
         <Btn variant="primary" icon="plus" onClick={() => { setForm({ label: "", date_from: "", date_to: "" }); setOpenAdd(true); }}>Buka Periode Baru</Btn>
       </div>
       {activePeriod && (
-        <Card className="bg-ocean-700 text-white border-ocean-700 relative overflow-hidden">
+        <div className="bg-ocean-700 text-white rounded-2xl border border-ocean-700 shadow-card p-5 relative overflow-hidden">
           <div className="absolute -right-20 -bottom-20 w-72 h-72 rounded-full bg-wave-500/30 blur-3xl" />
           <div className="relative">
             <div className="flex items-center gap-2 text-wave-200 text-xs font-bold uppercase tracking-widest"><span className="w-2 h-2 rounded-full bg-wave-300 animate-pulse" /> Periode aktif</div>
@@ -2761,7 +2932,7 @@ function AdminRapor({ branchId }: { branchId: string }) {
               <Btn variant="outline" size="sm" onClick={() => closePeriod(activePeriod.id)}>Tutup periode</Btn>
             </div>
           </div>
-        </Card>
+        </div>
       )}
       {!loading && periods.length === 0 && <p className="text-ink-mute">Belum ada periode rapor.</p>}
       {periods.filter(p => !p.is_open).length > 0 && (

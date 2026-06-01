@@ -39,6 +39,7 @@ interface ClassRow {
   id: string; name: string; schedule_days: string[];
   time_start: string; time_end: string;
   capacity: number; enrolled: number; goals: string | null;
+  class_type?: string;
   member_classes?: { member: { id: string; profile: { full_name: string; birth_date: string | null; phone: string | null } | null } | null }[];
 }
 
@@ -476,7 +477,7 @@ function CoachHome({ setOverlay, coachId, profile, classes, holidayClassIds }: {
 
   return (
     <div className="space-y-5">
-      <Card className="bg-ocean-700 text-white border-ocean-700 relative overflow-hidden">
+      <div className="bg-ocean-700 text-white rounded-2xl border border-ocean-700 shadow-card p-5 relative overflow-hidden">
         <div className="caustics absolute inset-0 opacity-30" />
         <div className="relative">
           <div className="text-wave-200 text-[11px] uppercase tracking-widest font-bold">Selamat siang</div>
@@ -491,7 +492,7 @@ function CoachHome({ setOverlay, coachId, profile, classes, holidayClassIds }: {
             ))}
           </div>
         </div>
-      </Card>
+      </div>
 
       <div>
         <SectionTitle sub={fmtDateLong(new Date())}>Kelas hari ini</SectionTitle>
@@ -602,6 +603,14 @@ function CoachAbsensi({ setOverlay, coachId, classes, holidayClassIds }: {
   const [saving, setSaving] = useState(false);
   const [attStatus, setAttStatus] = useState<Record<string, string>>({});
 
+  // Private session recording
+  const [openPrivate, setOpenPrivate] = useState(false);
+  const [privateClassId, setPrivateClassId] = useState("");
+  const [privateDate, setPrivateDate] = useState(new Date().toISOString().split("T")[0]);
+  const [privateNote, setPrivateNote] = useState("");
+  const [savingPrivate, setSavingPrivate] = useState(false);
+  const privateClasses = classes.filter(c => c.class_type === "private");
+
   /* eslint-disable react-hooks/set-state-in-effect -- async data loader */
   useEffect(() => {
     if (!coachId) return;
@@ -643,6 +652,29 @@ function CoachAbsensi({ setOverlay, coachId, classes, holidayClassIds }: {
     if (error) return toast.error("Gagal menyimpan", error.message);
     toast.success("Absensi member disimpan");
     setOpenManual(false);
+  };
+
+  const savePrivateSession = async () => {
+    if (!privateClassId || !privateDate) return toast.error("Kelas dan tanggal wajib diisi");
+    setSavingPrivate(true);
+    // Get member_id for this private class (capacity=1, so 1 member)
+    const { data: mcData } = await supabase.from("member_classes").select("member_id").eq("class_id", privateClassId).limit(1);
+    const memberId = mcData?.[0]?.member_id;
+    if (!memberId) { setSavingPrivate(false); return toast.error("Tidak ada member di kelas ini"); }
+    // Check for duplicate (same class + date)
+    const { data: dupCheck } = await supabase.from("member_attendances").select("id").eq("class_id", privateClassId).eq("member_id", memberId).eq("session_date", privateDate).limit(1);
+    if (dupCheck && dupCheck.length > 0) { setSavingPrivate(false); return toast.error("Sesi di tanggal ini sudah dicatat"); }
+    // Insert attendance
+    const { error: attErr } = await supabase.from("member_attendances").insert({ class_id: privateClassId, member_id: memberId, session_date: privateDate, status: "hadir", method: "manual" });
+    if (attErr) { setSavingPrivate(false); return toast.error("Gagal mencatat sesi", attErr.message); }
+    // Decrement remaining_sessions
+    const { data: memberRow } = await supabase.from("members").select("remaining_sessions").eq("id", memberId).single();
+    const remaining = memberRow?.remaining_sessions ?? 0;
+    await supabase.from("members").update({ remaining_sessions: Math.max(0, remaining - 1) }).eq("id", memberId);
+    setSavingPrivate(false);
+    toast.success("Sesi private dicatat", `Sisa sesi: ${Math.max(0, remaining - 1)}`);
+    setOpenPrivate(false);
+    setPrivateClassId(""); setPrivateDate(new Date().toISOString().split("T")[0]); setPrivateNote("");
   };
 
   const todayName = new Date().toLocaleDateString("id-ID", { weekday: "long" });
@@ -687,7 +719,7 @@ function CoachAbsensi({ setOverlay, coachId, classes, holidayClassIds }: {
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className={`grid gap-3 ${privateClasses.length > 0 ? "grid-cols-3" : "grid-cols-2"}`}>
         <Card className="bg-ocean-50 border-ocean-100">
           <Icon name="qr" className="w-8 h-8 text-ocean-600 mb-2" />
           <div className="font-display font-bold text-ink">Scan QR Member</div>
@@ -700,6 +732,14 @@ function CoachAbsensi({ setOverlay, coachId, classes, holidayClassIds }: {
           <p className="text-xs text-ink-mute mt-1">Checklist member per kelas</p>
           <Btn variant="soft" size="sm" className="mt-3 w-full" onClick={() => setOpenManual(true)}>Pilih kelas</Btn>
         </Card>
+        {privateClasses.length > 0 && (
+          <Card className="bg-wave-50 border-wave-100">
+            <Icon name="sparkle" className="w-8 h-8 text-wave-600 mb-2" />
+            <div className="font-display font-bold text-ink">Sesi Private</div>
+            <p className="text-xs text-ink-mute mt-1">Catat sesi 1-on-1, kurangi sisa sesi</p>
+            <Btn variant="soft" size="sm" className="mt-3 w-full" onClick={() => setOpenPrivate(true)}>Catat sesi</Btn>
+          </Card>
+        )}
       </div>
 
       <Card padded={false}>
@@ -735,7 +775,7 @@ function CoachAbsensi({ setOverlay, coachId, classes, holidayClassIds }: {
             <Field label="Kelas" required>
               <Select value={manualClassId} onChange={e => setManualClassId(e.target.value)}>
                 <option value="">Pilih kelas…</option>
-                {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                {classes.filter(c => c.class_type !== "private").map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </Select>
             </Field>
             <Field label="Tanggal sesi" required><Input type="date" value={manualDate} onChange={e => setManualDate(e.target.value)} /></Field>
@@ -756,6 +796,28 @@ function CoachAbsensi({ setOverlay, coachId, classes, holidayClassIds }: {
               ))}
             </div>
           )}
+        </div>
+      </Modal>
+
+      <Modal open={openPrivate} onClose={() => setOpenPrivate(false)} title="Catat Sesi Private"
+        footer={<><Btn variant="ghost" onClick={() => setOpenPrivate(false)}>Batal</Btn><Btn variant="primary" onClick={savePrivateSession} disabled={savingPrivate}>{savingPrivate ? "Menyimpan…" : "Catat Sesi"}</Btn></>}>
+        <div className="space-y-4">
+          <div className="bg-wave-50 border border-wave-100 rounded-xl p-3 text-sm text-wave-800 flex gap-2">
+            <Icon name="info" className="w-4 h-4 mt-0.5 shrink-0 text-wave-500" />
+            <span>Mencatat sesi ini akan otomatis mengurangi sisa sesi member sebanyak 1.</span>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Kelas private" required>
+              <Select value={privateClassId} onChange={e => setPrivateClassId(e.target.value)}>
+                <option value="">Pilih kelas…</option>
+                {privateClasses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </Select>
+            </Field>
+            <Field label="Tanggal sesi" required><Input type="date" value={privateDate} onChange={e => setPrivateDate(e.target.value)} max={new Date().toISOString().split("T")[0]} /></Field>
+          </div>
+          <Field label="Catatan" hint="Opsional — materi, kondisi member, dll.">
+            <Textarea rows={2} value={privateNote} onChange={e => setPrivateNote(e.target.value)} placeholder="Mis. Latihan gaya dada, progress baik." />
+          </Field>
         </div>
       </Modal>
     </div>
@@ -1008,14 +1070,14 @@ function CoachInvoice({ coachId, branchId, profile }: { coachId: string; branchI
 
   return (
     <div className="space-y-5">
-      <Card className="bg-ocean-700 text-white border-ocean-700 relative overflow-hidden">
+      <div className="bg-ocean-700 text-white rounded-2xl border border-ocean-700 shadow-card p-5 relative overflow-hidden">
         <div className="caustics absolute inset-0 opacity-30" />
         <div className="relative">
           <div className="text-wave-200 text-[11px] uppercase tracking-widest font-bold">Generate invoice</div>
           <h2 className="font-display font-bold text-2xl mt-0.5">{new Date(monthFilter + "-01").toLocaleDateString("id-ID", { month: "long", year: "numeric" })}</h2>
           <p className="text-white/80 text-sm mt-1">Pilih sesi yang ingin dimasukkan ke invoice.</p>
         </div>
-      </Card>
+      </div>
       <div className="flex items-center justify-between gap-3">
         <Input type="month" value={monthFilter} onChange={e => setMonthFilter(e.target.value)} className="!w-44 font-mono" />
         <button onClick={() => setSelected(new Set(sessions.map(s => s.id)))} className="text-sm font-bold text-ocean-600 hover:text-ocean-700">Pilih semua</button>
@@ -1158,14 +1220,14 @@ function CoachRapor({ coachId, branchId }: { coachId: string; branchId: string }
   return (
     <div className="space-y-5">
       {period ? (
-        <Card className="bg-ocean-700 text-white border-ocean-700 relative overflow-hidden">
+        <div className="bg-ocean-700 text-white rounded-2xl border border-ocean-700 shadow-card p-5 relative overflow-hidden">
           <div className="absolute -right-12 -bottom-12 w-44 h-44 rounded-full bg-wave-500/30 blur-2xl" />
           <div className="relative">
             <div className="text-wave-200 text-[11px] uppercase tracking-widest font-bold flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-wave-300 animate-pulse" /> Periode aktif</div>
             <div className="font-display font-bold text-2xl mt-0.5">{period.label}</div>
             <p className="text-white/80 text-sm mt-1">{entries.filter(e => e.locked).length}/{entries.length} member sudah diisi</p>
           </div>
-        </Card>
+        </div>
       ) : (
         <Card><p className="text-ink-mute">Tidak ada periode rapor aktif.</p></Card>
       )}
@@ -1498,7 +1560,7 @@ export default function CoachPage() {
   }, [supabase]);
 
   const loadClasses = useCallback(async (profileId: string) => {
-    const { data } = await supabase.from("class_coaches").select("class:classes(id, name, schedule_days, time_start, time_end, capacity, enrolled, goals, member_classes(member:members(id, profile:profiles(full_name, birth_date, phone))))").eq("coach_id", profileId);
+    const { data } = await supabase.from("class_coaches").select("class:classes(id, name, schedule_days, time_start, time_end, capacity, enrolled, goals, class_type, member_classes(member:members(id, profile:profiles(full_name, birth_date, phone))))").eq("coach_id", profileId);
     if (!data) return;
     const rows = data.map((d: Record<string, unknown>) => d.class as ClassRow).filter(Boolean);
     setClasses(rows);
