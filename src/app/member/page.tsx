@@ -1366,7 +1366,47 @@ export default function MemberPage() {
   const [locked, setLocked] = useState(false);
   const [lockChecked, setLockChecked] = useState(false);
   const [memberAvatarUrl, setMemberAvatarUrl] = useState<string | null>(null);
+  const [suspendUntil, setSuspendUntil] = useState<string | null>(null);
+  const [suspendReason, setSuspendReason] = useState<string | null>(null);
+  const [suspendCountdown, setSuspendCountdown] = useState("");
 
+  const isSuspended = suspendUntil ? new Date(suspendUntil) >= new Date() : false;
+
+  // Countdown ticker for suspend
+  useEffect(() => {
+    if (!isSuspended || !suspendUntil) { setSuspendCountdown(""); return; }
+    const tick = () => {
+      const diff = new Date(suspendUntil).getTime() - Date.now();
+      if (diff <= 0) { setSuspendCountdown("Segera aktif kembali…"); return; }
+      const days = Math.floor(diff / 86400000);
+      const hrs  = Math.floor((diff % 86400000) / 3600000);
+      const mins = Math.floor((diff % 3600000) / 60000);
+      const secs = Math.floor((diff % 60000) / 1000);
+      setSuspendCountdown(`${days}h ${hrs}j ${mins}m ${secs}d`);
+    };
+    tick();
+    const t = setInterval(tick, 1000);
+    return () => clearInterval(t);
+  }, [isSuspended, suspendUntil]);
+
+  const SuspendBanner = isSuspended ? (
+    <div className="bg-danger-50 border border-danger-300 rounded-2xl p-4 mb-4">
+      <div className="flex items-start gap-3">
+        <span className="w-10 h-10 rounded-xl bg-danger-100 text-danger-600 flex items-center justify-center shrink-0 animate-pulse">
+          <Icon name="warning" className="w-5 h-5" />
+        </span>
+        <div className="flex-1">
+          <div className="font-display font-bold text-danger-700 text-base">Akun Anda sedang disuspend</div>
+          {suspendReason && <p className="text-sm text-danger-600 mt-1">Alasan: {suspendReason}</p>}
+          <div className="mt-2 flex items-center gap-2">
+            <span className="text-xs text-danger-500 font-semibold">Aktif kembali dalam:</span>
+            <span className="bg-danger-100 text-danger-700 font-mono text-xs font-bold px-2 py-0.5 rounded-lg">{suspendCountdown}</span>
+          </div>
+          <p className="text-xs text-danger-500 mt-1">Semua fitur tidak dapat diakses selama masa suspend. Hubungi admin cabang jika ada pertanyaan.</p>
+        </div>
+      </div>
+    </div>
+  ) : null;
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -1379,13 +1419,16 @@ export default function MemberPage() {
 
       // Load member record by profile_id (= auth uid)
       supabase.from("members")
-        .select("id, profile:profiles(full_name, is_profile_complete, avatar_url)")
+        .select("id, suspend_until, suspend_reason, profile:profiles(full_name, is_profile_complete, avatar_url)")
         .eq("profile_id", u.id)
         .single()
         .then(({ data: m }) => {
           if (m) {
             setMemberId(m.id);
-            const prof = (m as unknown as { profile: { full_name: string; is_profile_complete: boolean | null; avatar_url: string | null } | null }).profile;
+            const rec = m as unknown as { id: string; suspend_until: string | null; suspend_reason: string | null; profile: { full_name: string; is_profile_complete: boolean | null; avatar_url: string | null } | null };
+            setSuspendUntil(rec.suspend_until ?? null);
+            setSuspendReason(rec.suspend_reason ?? null);
+            const prof = rec.profile;
             setMemberName(prof?.full_name ?? "");
             setMemberAvatarUrl(prof?.avatar_url ?? null);
             // Lock if profile incomplete AND no avatar
@@ -1414,12 +1457,12 @@ export default function MemberPage() {
   const onProfileComplete = () => setLocked(false);
 
   const pages: Record<TabId, React.ReactNode> = {
-    home:     <MemberHome setActive={setActive} memberId={memberId} memberName={memberName} branchId={branchId} />,
-    schedule: <MemberSchedule memberId={memberId} />,
-    absen:    <MemberAbsensi memberId={memberId} />,
-    bills:    <MemberBills memberId={memberId} memberName={memberName} branchId={branchId} />,
-    leave:    <MemberLeave memberId={memberId} />,
-    rapor:    <MemberRapor memberId={memberId} memberName={memberName} />,
+    home:     <>{SuspendBanner}<MemberHome setActive={setActive} memberId={memberId} memberName={memberName} branchId={branchId} /></>,
+    schedule: <>{SuspendBanner}<MemberSchedule memberId={memberId} /></>,
+    absen:    <>{SuspendBanner}<MemberAbsensi memberId={memberId} /></>,
+    bills:    <>{SuspendBanner}<MemberBills memberId={memberId} memberName={memberName} branchId={branchId} /></>,
+    leave:    <>{SuspendBanner}<MemberLeave memberId={memberId} /></>,
+    rapor:    <>{SuspendBanner}<MemberRapor memberId={memberId} memberName={memberName} /></>,
     profile:  <MemberProfile memberId={memberId} memberName={memberName} onLogout={logout} onProfileComplete={onProfileComplete} onAvatarChange={url => setMemberAvatarUrl(url)} />,
   };
 
