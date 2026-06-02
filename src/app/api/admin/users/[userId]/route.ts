@@ -27,7 +27,7 @@ export async function PATCH(
   const body = await req.json() as {
     password?: string;
     user_metadata?: Record<string, unknown>;
-    profile?: { full_name?: string; phone?: string | null; branch_id?: string | null };
+    profile?: Record<string, unknown>;
   };
 
   // Update profiles table (bypasses RLS via service key)

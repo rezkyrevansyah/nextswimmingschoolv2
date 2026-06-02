@@ -1,5 +1,6 @@
 "use client";
 import React, { useEffect } from "react";
+import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 import Icon from "./Icon";
 
@@ -33,12 +34,12 @@ export default function Modal({ open, onClose, title, children, footer, size = "
 
   if (!open) return null;
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[90] flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className="absolute inset-0 bg-ink/40 backdrop-blur-sm anim-in" onClick={onClose} />
+      <div className="absolute inset-0 bg-ink/40 backdrop-blur-sm" onClick={onClose} />
       <div
         className={cn(
-          "relative anim-in w-full bg-white sm:rounded-2xl rounded-t-3xl shadow-lift border border-line max-h-[92vh] flex flex-col",
+          "relative w-full bg-white sm:rounded-2xl rounded-t-3xl shadow-lift border border-line max-h-[92vh] flex flex-col",
           SIZE_CLASSES[size]
         )}
       >
@@ -58,6 +59,7 @@ export default function Modal({ open, onClose, title, children, footer, size = "
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

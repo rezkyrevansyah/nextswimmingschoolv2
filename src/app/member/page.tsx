@@ -14,7 +14,10 @@ import MobileNav from "@/components/layout/MobileNav";
 import type { NavItem as MobileNavItem } from "@/components/layout/Sidebar";
 import Bell from "@/components/layout/Bell";
 import { fmtIDR, fmtDate, waLink } from "@/lib/utils";
+import { printSingleRapor, type PrintCriterion } from "@/lib/printRapor";
 import { createClient } from "@/utils/supabase/client";
+import { useUpload } from "@/hooks/useUpload";
+import PhotoLightbox from "@/components/ui/PhotoLightbox";
 
 type TabId = "home" | "schedule" | "absen" | "bills" | "leave" | "rapor" | "profile";
 
@@ -46,13 +49,14 @@ function calcAge(birthDate: string): number {
 
 // ── Shell ──────────────────────────────────────────────────────────────────────
 
-function Shell({ children, active, setActive, name, branchName, userId }: {
+function Shell({ children, active, setActive, name, branchName, userId, avatarUrl }: {
   children: React.ReactNode;
   active: TabId;
   setActive: (id: TabId) => void;
   name: string;
   branchName: string;
   userId: string;
+  avatarUrl?: string | null;
 }) {
   const title = active === "home" ? `Hai, ${name || "…"}` : {
     schedule: "Jadwal", absen: "Absensi", bills: "Tagihan",
@@ -84,7 +88,7 @@ function Shell({ children, active, setActive, name, branchName, userId }: {
           </div>
           <Bell userId={userId} />
           <button onClick={() => setActive("profile")} title="Profile">
-            <Avatar name={name} size={36} />
+            <Avatar name={name} src={avatarUrl ?? undefined} size={36} />
           </button>
         </div>
       </header>
@@ -107,12 +111,14 @@ function MemberHome({
   const supabase = createClient();
   const [monthAttend, setMonthAttend] = useState({ present: 0, total: 0 });
   const [activeClasses, setActiveClasses] = useState(0);
+  const [memberInfo, setMemberInfo] = useState<{ type: string; remaining_sessions: number | null; total_sessions: number | null } | null>(null);
   const [pendingBill, setPendingBill] = useState<{ period: string; amount: number; class_name: string } | null>(null);
   const [latestAnnouncement, setLatestAnnouncement] = useState<{ title: string; body: string } | null>(null);
-  const [upcomingSessions, setUpcomingSessions] = useState<{ date: string; day: string; time: string; class_name: string; coach: string }[]>([]);
+  const [upcomingSessions, setUpcomingSessions] = useState<{ date: string; day: string; time: string; class_name: string; coach: string; class_id: string }[]>([]);
+  const [approvedLeaves, setApprovedLeaves] = useState<{ date_from: string; date_to: string; class_ids: Set<string> }[]>([]);
   const [privateReminder, setPrivateReminder] = useState<{ remaining: number; total: number } | null>(null);
 
-   
+
   useEffect(() => {
     if (!memberId) return;
     const now = new Date();
@@ -131,7 +137,7 @@ function MemberHome({
 
     // Active classes
     supabase.from("member_classes")
-      .select("id", { count: "exact" })
+      .select("class_id", { count: "exact" })
       .eq("member_id", memberId)
       .then(({ count }) => setActiveClasses(count ?? 0));
 
@@ -150,14 +156,17 @@ function MemberHome({
         }
       });
 
-    // Private session reminder
+    // Member info (type, sessions) — used for private stat display & reminder
     supabase.from("members")
       .select("type, remaining_sessions, total_sessions")
       .eq("id", memberId)
       .single()
       .then(({ data }) => {
-        if (data && data.type === "private" && data.remaining_sessions != null && data.remaining_sessions <= 3) {
-          setPrivateReminder({ remaining: data.remaining_sessions, total: data.total_sessions ?? 0 });
+        if (data) {
+          setMemberInfo({ type: data.type, remaining_sessions: data.remaining_sessions, total_sessions: data.total_sessions });
+          if (data.type === "private" && data.remaining_sessions != null && data.remaining_sessions <= 3) {
+            setPrivateReminder({ remaining: data.remaining_sessions, total: data.total_sessions ?? 0 });
+          }
         }
       });
 
@@ -177,9 +186,23 @@ function MemberHome({
         if (match) setLatestAnnouncement({ title: match.title, body: match.body });
       });
 
+    // Approved leaves for home schedule filtering
+    supabase.from("member_leaves")
+      .select("date_from, date_to, member_leave_classes(class_id)")
+      .eq("member_id", memberId)
+      .eq("status", "approved")
+      .then(({ data }) => {
+        if (!data) return;
+        setApprovedLeaves((data as unknown as { date_from: string; date_to: string; member_leave_classes: { class_id: string }[] }[]).map(l => ({
+          date_from: l.date_from,
+          date_to: l.date_to,
+          class_ids: new Set(l.member_leave_classes.map(lc => lc.class_id)),
+        })));
+      });
+
     // Upcoming sessions from member_classes → classes (days + time_start)
     supabase.from("member_classes")
-      .select("classes(id, name, schedule_days, time_start, class_coaches(profiles(full_name)))")
+      .select("classes(id, name, schedule_days, time_start, time_end, schedule_times, class_coaches(profile:profiles(full_name)))")
       .eq("member_id", memberId)
       .then(({ data }) => {
         if (!data) return;
@@ -187,13 +210,16 @@ function MemberHome({
         const today = new Date();
         const dayNames = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
         data.forEach((mc) => {
-          const cls = mc.classes as unknown as { id: string; name: string; schedule_days: string[]; time_start: string; class_coaches: { profiles: { full_name: string } | null }[] } | null;
+          const cls = mc.classes as unknown as { id: string; name: string; schedule_days: string[]; time_start: string | null; time_end: string | null; schedule_times?: { day: string; time_start: string; time_end: string }[] | null; class_coaches: { profile: { full_name: string } | null }[] } | null;
           if (!cls || !cls.schedule_days) return;
-          const firstCoach = cls.class_coaches?.[0]?.profiles;
-          const coachName = firstCoach?.full_name ? `Coach ${firstCoach.full_name.split(" ")[0]}` : "—";
+          const firstCoach = cls.class_coaches?.[0]?.profile;
+          const coachName = firstCoach?.full_name ?? "—";
           cls.schedule_days.forEach((day) => {
             const dayIdx = dayNames.indexOf(day);
             if (dayIdx === -1) return;
+            const slot = cls.schedule_times?.find(s => s.day === day);
+            const timeStart = slot?.time_start || cls.time_start || "";
+            const timeEnd   = slot?.time_end   || cls.time_end   || "";
             for (let offset = 0; offset <= 14; offset++) {
               const d = new Date(today);
               d.setDate(today.getDate() + offset);
@@ -201,9 +227,10 @@ function MemberHome({
                 sessions.push({
                   date: d.toISOString().slice(0, 10),
                   day,
-                  time: cls.time_start ?? "—",
+                  time: timeStart ? `${timeStart.slice(0,5)}${timeEnd ? `–${timeEnd.slice(0,5)}` : ""}` : "—",
                   class_name: cls.name,
                   coach: coachName,
+                  class_id: cls.id,
                 });
                 break;
               }
@@ -214,6 +241,9 @@ function MemberHome({
         setUpcomingSessions(sessions.slice(0, 4));
       });
   }, [memberId, branchId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const isSessionOnLeave = (date: string, classId: string) =>
+    approvedLeaves.some(l => date >= l.date_from && date <= l.date_to && (l.class_ids.size === 0 || l.class_ids.has(classId)));
    
 
   return (
@@ -227,11 +257,20 @@ function MemberHome({
           <div className="mt-4 grid grid-cols-2 gap-2">
             <div className="bg-white/10 backdrop-blur ring-1 ring-white/15 rounded-xl p-3">
               <div className="text-[10px] uppercase tracking-widest font-bold text-wave-200">Hadir bln ini</div>
-              <div className="font-display font-bold text-2xl mt-0.5">{monthAttend.present} <span className="text-xs text-wave-200">/{monthAttend.total}</span></div>
+              <div className="font-display font-bold text-2xl mt-0.5">{monthAttend.present}</div>
             </div>
             <div className="bg-white/10 backdrop-blur ring-1 ring-white/15 rounded-xl p-3">
-              <div className="text-[10px] uppercase tracking-widest font-bold text-wave-200">Kelas aktif</div>
-              <div className="font-display font-bold text-2xl mt-0.5">{activeClasses}</div>
+              {memberInfo?.type === "private" ? (
+                <>
+                  <div className="text-[10px] uppercase tracking-widest font-bold text-wave-200">Sisa sesi</div>
+                  <div className="font-display font-bold text-2xl mt-0.5">{memberInfo.remaining_sessions ?? "—"}</div>
+                </>
+              ) : (
+                <>
+                  <div className="text-[10px] uppercase tracking-widest font-bold text-wave-200">Kelas aktif</div>
+                  <div className="font-display font-bold text-2xl mt-0.5">{activeClasses}</div>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -297,16 +336,20 @@ function MemberHome({
               const dateNum = d.getDate();
               const monthNames = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agt", "Sep", "Okt", "Nov", "Des"];
               const monthShort = monthNames[d.getMonth()];
+              const onLeave = isSessionOnLeave(s.date, s.class_id);
               return (
-                <Card key={i} className="!p-3">
+                <Card key={i} className={`!p-3${onLeave ? " opacity-60" : ""}`}>
                   <div className="flex items-center gap-3">
                     <div className="w-14 text-center shrink-0">
                       <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{dayShort}</div>
-                      <div className="font-display font-bold text-xl text-ocean-700">{dateNum}</div>
+                      <div className={`font-display font-bold text-xl ${onLeave ? "text-ink-mute" : "text-ocean-700"}`}>{dateNum}</div>
                       <div className="text-[10px] text-ink-mute">{monthShort}</div>
                     </div>
                     <div className="flex-1 min-w-0 pl-3 border-l border-line">
-                      <div className="font-semibold text-ink text-sm truncate">{s.class_name}</div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <div className="font-semibold text-ink text-sm truncate">{s.class_name}</div>
+                        {onLeave && <span className="text-[10px] font-bold uppercase tracking-wide text-warn-600 bg-warn-50 px-1.5 py-0.5 rounded shrink-0">Izin</span>}
+                      </div>
                       <div className="text-xs text-ink-mute font-mono mt-0.5">{s.time} · {s.coach}</div>
                     </div>
                   </div>
@@ -324,23 +367,40 @@ function MemberHome({
 
 function MemberSchedule({ memberId }: { memberId: string }) {
   const supabase = createClient();
-  const [classes, setClasses] = useState<{ id: string; name: string; schedule_days: string[]; time_start: string; time_end: string | null; location: string; coach_name: string }[]>([]);
-  const [sessions, setSessions] = useState<{ date: string; day: string; time: string; class_id: string }[]>([]);
+  const [classes, setClasses] = useState<{ id: string; name: string; schedule_days: string[]; time_start: string | null; time_end: string | null; schedule_times?: { day: string; time_start: string; time_end: string }[] | null; location: string; coach_name: string | null; coach_phone: string | null }[]>([]);
+  const [sessions, setSessions] = useState<{ date: string; day: string; time: string; class_id: string; onLeave?: boolean }[]>([]);
   const [holidayClassIds, setHolidayClassIds] = useState<Set<string>>(new Set());
+  // approved leave intervals: { date_from, date_to, class_ids }
+  const [leaveIntervals, setLeaveIntervals] = useState<{ date_from: string; date_to: string; class_ids: Set<string> }[]>([]);
 
-   
+
   useEffect(() => {
     if (!memberId) return;
+
+    // Load approved leaves for this member
+    supabase.from("member_leaves")
+      .select("date_from, date_to, member_leave_classes(class_id)")
+      .eq("member_id", memberId)
+      .eq("status", "approved")
+      .then(({ data }) => {
+        if (!data) return;
+        setLeaveIntervals((data as unknown as { date_from: string; date_to: string; member_leave_classes: { class_id: string }[] }[]).map(l => ({
+          date_from: l.date_from,
+          date_to: l.date_to,
+          class_ids: new Set(l.member_leave_classes.map(lc => lc.class_id)),
+        })));
+      });
+
     supabase.from("member_classes")
-      .select("classes(id, name, schedule_days, time_start, time_end, location_name, class_coaches(profiles(full_name)))")
+      .select("classes(id, name, schedule_days, time_start, time_end, schedule_times, location_name, class_coaches(profile:profiles(full_name, phone)))")
       .eq("member_id", memberId)
       .then(async ({ data }) => {
         if (!data) return;
         const cls = data.map((mc) => {
-          const c = mc.classes as unknown as { id: string; name: string; schedule_days: string[]; time_start: string; time_end: string | null; location_name: string | null; class_coaches: { profiles: { full_name: string } | null }[] } | null;
+          const c = mc.classes as unknown as { id: string; name: string; schedule_days: string[]; time_start: string | null; time_end: string | null; schedule_times?: { day: string; time_start: string; time_end: string }[] | null; location_name: string | null; class_coaches: { profile: { full_name: string; phone: string | null } | null }[] } | null;
           if (!c) return null;
-          const firstCoach = c.class_coaches?.[0]?.profiles;
-          return { id: c.id, name: c.name, schedule_days: c.schedule_days ?? [], time_start: c.time_start, time_end: c.time_end ?? null, location: c.location_name ?? "—", coach_name: firstCoach?.full_name ? `Coach ${firstCoach.full_name.split(" ")[0]}` : "—" };
+          const firstCoach = c.class_coaches?.[0]?.profile;
+          return { id: c.id, name: c.name, schedule_days: c.schedule_days ?? [], time_start: c.time_start, time_end: c.time_end ?? null, schedule_times: c.schedule_times ?? null, location: c.location_name ?? "—", coach_name: firstCoach?.full_name ?? null, coach_phone: firstCoach?.phone ?? null };
         }).filter(Boolean) as typeof classes;
         setClasses(cls);
 
@@ -360,11 +420,15 @@ function MemberSchedule({ memberId }: { memberId: string }) {
           c.schedule_days.forEach((day) => {
             const dayIdx = dayNames.indexOf(day);
             if (dayIdx === -1) return;
+            const slot = c.schedule_times?.find(s => s.day === day) ?? null;
+            const ts = slot?.time_start || c.time_start || "";
+            const te = slot?.time_end   || c.time_end   || "";
+            const timeLabel = ts ? `${ts.slice(0,5)}${te ? `–${te.slice(0,5)}` : ""}` : "—";
             for (let w = 0; w < 4; w++) {
               const d = new Date(today);
               const diff = ((dayIdx - today.getDay()) + 7) % 7 + (w * 7);
               d.setDate(today.getDate() + diff);
-              upcoming.push({ date: d.toISOString().slice(0, 10), day, time: c.time_start ? `${c.time_start.slice(0,5)}${c.time_end ? `–${c.time_end.slice(0,5)}` : ""}` : "—", class_id: c.id });
+              upcoming.push({ date: d.toISOString().slice(0, 10), day, time: timeLabel, class_id: c.id });
             }
           });
         });
@@ -372,6 +436,10 @@ function MemberSchedule({ memberId }: { memberId: string }) {
         setSessions(upcoming.slice(0, 8));
       });
   }, [memberId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Derive which sessions are on leave (runs whenever sessions or leaveIntervals change)
+  const isOnLeave = (date: string, classId: string) =>
+    leaveIntervals.some(l => date >= l.date_from && date <= l.date_to && (l.class_ids.size === 0 || l.class_ids.has(classId)));
    
 
   const monthNames = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agt", "Sep", "Okt", "Nov", "Des"];
@@ -385,10 +453,24 @@ function MemberSchedule({ memberId }: { memberId: string }) {
         <Card key={c.id} padded={false} className={`overflow-hidden${isHoliday ? " opacity-70" : ""}`}>
           <div className="p-5 bg-ocean-700 text-white">
             <div className="flex items-center gap-2.5 flex-wrap">
-              <div className="font-display font-bold text-xl">{c.name}</div>
+              <div className="font-display font-bold text-xl flex-1 min-w-0">{c.name}</div>
               {isHoliday && <Status kind="holiday" className="border-white/30">Libur Hari Ini</Status>}
             </div>
-            <div className="text-wave-200 text-sm mt-0.5">{c.coach_name}</div>
+            <div className="mt-2 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 min-w-0">
+                {c.coach_name
+                  ? <><Avatar name={c.coach_name} size={24} className="shrink-0" /><span className="text-wave-200 text-sm truncate">{c.coach_name}</span></>
+                  : <span className="text-wave-200/60 text-sm">Belum ada coach</span>
+                }
+              </div>
+              {c.coach_phone && (
+                <a href={waLink(`Halo Coach, saya ingin bertanya mengenai kelas ${c.name}.`, c.coach_phone)} target="_blank" rel="noreferrer"
+                  className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition-colors">
+                  <Icon name="whatsapp" className="w-3.5 h-3.5" />
+                  Chat Coach
+                </a>
+              )}
+            </div>
           </div>
           <div className="divide-y divide-line">
             {c.schedule_days.map((d, i) => (
@@ -396,7 +478,12 @@ function MemberSchedule({ memberId }: { memberId: string }) {
                 <span className="w-9 h-9 rounded-xl bg-ocean-50 text-ocean-700 flex items-center justify-center text-xs font-bold">{d.slice(0, 2)}</span>
                 <div className="flex-1 min-w-0">
                   <div className="font-semibold text-ink text-sm">{d}</div>
-                  <div className="text-xs text-ink-mute font-mono">{c.time_start?.slice(0,5)}{c.time_end ? `–${c.time_end.slice(0,5)}` : ""} · {c.location}</div>
+                  {(() => {
+                    const slot = c.schedule_times?.find(s => s.day === d) ?? null;
+                    const ts = slot?.time_start || c.time_start || "";
+                    const te = slot?.time_end   || c.time_end   || "";
+                    return <div className="text-xs text-ink-mute font-mono">{ts.slice(0,5)}{te ? `–${te.slice(0,5)}` : ""} · {c.location}</div>;
+                  })()}
                 </div>
               </div>
             ))}
@@ -413,11 +500,15 @@ function MemberSchedule({ memberId }: { memberId: string }) {
               const d = new Date(s.date + "T00:00:00");
               const dateStr = `${d.getDate()} ${monthNames[d.getMonth()]} ${d.getFullYear()}`;
               const cls = classes.find((c) => c.id === s.class_id);
+              const onLeave = isOnLeave(s.date, s.class_id);
               return (
-                <div key={i} className="px-5 py-3 flex items-center gap-3">
+                <div key={i} className={`px-5 py-3 flex items-center gap-3 ${onLeave ? "opacity-50" : ""}`}>
                   <div className="font-mono font-semibold text-sm text-ink w-28">{dateStr}</div>
                   <div className="text-xs text-ink-mute">{s.day} · {s.time}</div>
-                  <div className="ml-auto text-xs text-ink-soft truncate max-w-24">{cls?.name ?? ""}</div>
+                  <div className="ml-auto flex items-center gap-2">
+                    {onLeave && <span className="text-[10px] font-bold uppercase tracking-wide text-warn-600 bg-warn-50 px-1.5 py-0.5 rounded">Izin</span>}
+                    <span className="text-xs text-ink-soft truncate max-w-24">{cls?.name ?? ""}</span>
+                  </div>
                 </div>
               );
             })}
@@ -772,8 +863,10 @@ function MemberLeave({ memberId }: { memberId: string }) {
 
 interface RaporEntryFull {
   id: string; period: string; class_name: string; coach_id: string; coach_name: string;
-  scores: Record<string, number>; notes: string | null;
+  class_id: string;
+  scores: Record<string, number | string>; notes: string | null;
   review_stars: number | null; review_message: string | null; review_id: string | null;
+  criteria: PrintCriterion[];
 }
 
 function MemberRapor({ memberId, memberName }: { memberId: string; memberName: string }) {
@@ -800,6 +893,18 @@ function MemberRapor({ memberId, memberName }: { memberId: string; memberName: s
       : { data: [] };
     const reviewMap = new Map((reviews ?? []).map((r) => [r.rapor_id, r]));
 
+    // Load class_criteria for all unique class_ids
+    const classIds = [...new Set(data.map((e) => e.class_id).filter(Boolean))];
+    const { data: criteriaRows } = classIds.length
+      ? await supabase.from("class_criteria").select("id, class_id, label, kind").in("class_id", classIds).order("sort_order")
+      : { data: [] };
+    const criteriaByClass = new Map<string, PrintCriterion[]>();
+    for (const c of (criteriaRows ?? [])) {
+      const list = criteriaByClass.get(c.class_id) ?? [];
+      list.push({ id: c.id, label: c.label, kind: c.kind as PrintCriterion["kind"] });
+      criteriaByClass.set(c.class_id, list);
+    }
+
     setEntries(data.map((e) => {
       const p = e.rapor_periods as unknown as { label: string } | null;
       const cls = e.classes as unknown as { name: string } | null;
@@ -809,13 +914,15 @@ function MemberRapor({ memberId, memberName }: { memberId: string; memberName: s
         id: e.id,
         period: p?.label ?? "—",
         class_name: cls?.name ?? "—",
+        class_id: e.class_id,
         coach_id: e.coach_id,
-        coach_name: prof?.full_name ? `Coach ${prof.full_name.split(" ")[0]}` : "—",
-        scores: (e.scores as unknown as Record<string, number>) ?? {},
+        coach_name: prof?.full_name ?? "—",
+        scores: (e.scores as unknown as Record<string, number | string>) ?? {},
         notes: e.notes,
         review_stars: review?.stars ?? null,
         review_message: review?.message ?? null,
         review_id: review?.id ?? null,
+        criteria: criteriaByClass.get(e.class_id) ?? [],
       };
     }));
   }, [memberId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -849,7 +956,7 @@ function MemberRapor({ memberId, memberName }: { memberId: string; memberName: s
   return (
     <div className="space-y-5">
       {latest && (
-        <Card className="bg-ocean-700 text-white border-ocean-700 relative overflow-hidden">
+        <div className="bg-ocean-700 text-white rounded-2xl border border-ocean-700 shadow-card p-5 relative overflow-hidden">
           <div className="caustics absolute inset-0 opacity-30" />
           <div className="relative flex items-center gap-3">
             <span className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center"><Icon name="book" className="w-7 h-7" /></span>
@@ -860,7 +967,7 @@ function MemberRapor({ memberId, memberName }: { memberId: string; memberName: s
             </div>
             <Btn variant="accent" size="sm" className="ml-auto" onClick={() => openRapor(latest)}>Buka</Btn>
           </div>
-        </Card>
+        </div>
       )}
 
       {entries.length > 1 && (
@@ -885,34 +992,56 @@ function MemberRapor({ memberId, memberName }: { memberId: string; memberName: s
       )}
 
       <Modal open={open} onClose={() => setOpen(false)} title={`Rapor — ${selectedEntry?.period ?? ""}`} size="lg"
-        footer={<Btn variant="primary" onClick={() => setOpen(false)}>Tutup</Btn>}>
+        footer={
+          <div className="flex gap-2 justify-end">
+            {selectedEntry && (
+              <Btn variant="outline" size="sm" icon="download"
+                onClick={() => printSingleRapor({
+                  full_name: memberName,
+                  class_name: selectedEntry.class_name,
+                  coach_name: selectedEntry.coach_name,
+                  period_label: selectedEntry.period,
+                  scores: selectedEntry.scores,
+                  notes: selectedEntry.notes,
+                  criteria: selectedEntry.criteria,
+                })}>
+                Cetak / PDF
+              </Btn>
+            )}
+            <Btn variant="primary" onClick={() => setOpen(false)}>Tutup</Btn>
+          </div>
+        }>
         {selectedEntry && (
           <div className="space-y-4">
             <Card className="!p-3 bg-paper-tint">
               <div className="flex items-center gap-3"><Avatar name={memberName} size={42} /><div><div className="font-semibold text-ink">{memberName}</div><div className="text-xs text-ink-mute">{selectedEntry.class_name} · {selectedEntry.coach_name}</div></div></div>
             </Card>
             <div className="space-y-3">
-              {Object.entries(selectedEntry.scores).map(([key, val]) => {
-                const numVal = typeof val === "number" ? val : null;
-                const strVal = typeof val === "string" ? val : null;
-                // Detect max: if key looks numeric and value is ≤100 render as bar
-                const isScore = numVal !== null;
-                const max = numVal !== null && numVal <= 10 ? 10 : 100;
-                return (
-                  <div key={key}>
-                    <div className="flex justify-between text-sm">
-                      <span className="font-semibold text-ink capitalize">{key.replace(/_/g, " ")}</span>
-                      {isScore && <span className="font-mono font-bold text-ocean-700">{numVal}/{max}</span>}
-                    </div>
-                    {isScore && (
-                      <div className="h-2 mt-1.5 bg-paper-deep rounded-full overflow-hidden">
-                        <div className={`h-full ${numVal / max > 0.7 ? "bg-ok-500" : numVal / max > 0.4 ? "bg-wave-500" : "bg-warn-500"}`} style={{ width: `${(numVal / max) * 100}%` }} />
+              {(() => {
+                const criteriaMap = new Map(selectedEntry.criteria.map(c => [c.id, c]));
+                return Object.entries(selectedEntry.scores).map(([key, val]) => {
+                  const crit = criteriaMap.get(key);
+                  const label = crit?.label ?? key.replace(/_/g, " ");
+                  const numVal = typeof val === "number" ? val : null;
+                  const strVal = typeof val === "string" ? val : null;
+                  const isScore = numVal !== null;
+                  const max = crit?.kind === "score_10" ? 10 : crit?.kind === "score_100" ? 100 : (numVal !== null && numVal <= 10 ? 10 : 100);
+                  return (
+                    <div key={key}>
+                      <div className="flex justify-between text-sm">
+                        <span className="font-semibold text-ink capitalize">{label}</span>
+                        {isScore && <span className="font-mono font-bold text-ocean-700">{numVal}/{max}</span>}
                       </div>
-                    )}
-                    {strVal && <p className="text-sm text-ink-soft bg-paper-tint px-3 py-1.5 rounded-lg mt-1">{strVal}</p>}
-                  </div>
-                );
-              })}
+                      {isScore && (
+                        <div className="h-2 mt-1.5 bg-paper-deep rounded-full overflow-hidden">
+                          <div className={`h-full ${numVal / max > 0.7 ? "bg-ok-500" : numVal / max > 0.4 ? "bg-wave-500" : "bg-warn-500"}`} style={{ width: `${(numVal / max) * 100}%` }} />
+                        </div>
+                      )}
+                      {strVal && <p className="text-sm text-ink-soft bg-paper-tint px-3 py-1.5 rounded-lg mt-1">{strVal}</p>}
+                    </div>
+                  );
+                });
+              })()}
               {selectedEntry.notes && (
                 <div>
                   <div className="font-semibold text-ink text-sm mb-1">Catatan coach</div>
@@ -920,18 +1049,20 @@ function MemberRapor({ memberId, memberName }: { memberId: string; memberName: s
                 </div>
               )}
             </div>
-            <Card className="bg-wave-50 border-wave-100">
-              <div className="font-display font-bold text-ink mb-2">Review untuk {selectedEntry.coach_name}</div>
-              <div className="flex items-center gap-1 mb-3">
+            <div className="bg-wave-50 border border-wave-100 rounded-2xl p-5">
+              <div className="font-display font-bold text-ink mb-1">Review untuk {selectedEntry.coach_name}</div>
+              <p className="text-xs text-ink-mute mb-3">Berikan penilaian jujur untuk membantu perkembangan pelatih.</p>
+              <div className="flex items-center gap-0.5 mb-3">
                 {Array.from({ length: 5 }).map((_, k) => (
-                  <button key={k} onClick={() => setReviewRating(k + 1)}>
-                    <Icon name="star" className={`w-7 h-7 ${k < reviewRating ? "text-amber-400" : "text-ink-faint"}`} strokeWidth={0} />
+                  <button key={k} onClick={() => setReviewRating(k + 1)} className="p-1 rounded-lg hover:bg-wave-100 transition-colors">
+                    <Icon name="star" className={`w-8 h-8 transition-colors ${k < reviewRating ? "text-amber-400" : "text-line"}`} strokeWidth={1.5} fill={k < reviewRating ? "currentColor" : "none"} />
                   </button>
                 ))}
+                <span className="ml-2 text-sm font-semibold text-ink-soft">{["", "Kurang", "Cukup", "Baik", "Sangat Baik", "Luar Biasa"][reviewRating]}</span>
               </div>
-              <Textarea rows={2} placeholder="Tulis review Anda (opsional)" value={reviewText} onChange={(e) => setReviewText(e.target.value)} />
-              <Btn variant="primary" size="sm" className="mt-3" disabled={saving} onClick={saveReview}>Simpan review</Btn>
-            </Card>
+              <Textarea rows={2} placeholder="Tulis ulasan Anda (opsional)" value={reviewText} onChange={(e) => setReviewText(e.target.value)} />
+              <Btn variant="primary" size="sm" className="mt-3" disabled={saving} onClick={saveReview}>{saving ? "Menyimpan…" : selectedEntry.review_id ? "Perbarui review" : "Simpan review"}</Btn>
+            </div>
           </div>
         )}
       </Modal>
@@ -941,12 +1072,14 @@ function MemberRapor({ memberId, memberName }: { memberId: string; memberName: s
 
 // ── Profile ────────────────────────────────────────────────────────────────────
 
-function MemberProfile({ memberId, memberName, onLogout }: { memberId: string; memberName: string; onLogout: () => void }) {
+function MemberProfile({ memberId, memberName, onLogout, onProfileComplete, onAvatarChange }: { memberId: string; memberName: string; onLogout: () => void; onProfileComplete?: () => void; onAvatarChange?: (url: string) => void }) {
   const supabase = createClient();
+  const { upload } = useUpload();
   const [profile, setProfile] = useState<{
     full_name: string; birth_date: string | null; gender: string | null;
     phone: string | null; address: string | null; health_notes: string | null;
     date_start: string | null; qr_code: string | null;
+    avatar_url: string | null;
   } | null>(null);
   const [regInfo, setRegInfo] = useState<{ parent_name: string | null; parent_phone: string | null } | null>(null);
   const [editPhone, setEditPhone] = useState("");
@@ -957,6 +1090,12 @@ function MemberProfile({ memberId, memberName, onLogout }: { memberId: string; m
   const [confirmPwd, setConfirmPwd] = useState("");
   const [pwdSaving, setPwdSaving] = useState(false);
   const [pwdError, setPwdError] = useState("");
+  const [showNewPwd, setShowNewPwd] = useState(false);
+  const [showConfirmPwd, setShowConfirmPwd] = useState(false);
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [avatarSaving, setAvatarSaving] = useState(false);
+  const [photoView, setPhotoView] = useState<string | null>(null);
 
    
   useEffect(() => {
@@ -970,7 +1109,7 @@ function MemberProfile({ memberId, memberName, onLogout }: { memberId: string; m
         if (!m) return;
         // profile row for personal data
         supabase.from("profiles")
-          .select("full_name, birth_date, gender, phone, address, health_notes")
+          .select("full_name, birth_date, gender, phone, address, health_notes, avatar_url")
           .eq("id", m.profile_id)
           .single()
           .then(({ data: p }) => {
@@ -1002,6 +1141,22 @@ function MemberProfile({ memberId, memberName, onLogout }: { memberId: string; m
     setSaving(false);
   };
 
+  const uploadAvatar = async () => {
+    if (!avatarFile) return;
+    setAvatarSaving(true);
+    try {
+      const url = await upload.avatar(avatarFile);
+      setProfile(p => p ? { ...p, avatar_url: url } : p);
+      onAvatarChange?.(url);
+      setAvatarFile(null);
+      setAvatarPreview(null);
+      onProfileComplete?.();
+    } catch {
+      // silent fail
+    }
+    setAvatarSaving(false);
+  };
+
   const changePwd = async () => {
     setPwdError("");
     if (newPwd !== confirmPwd) { setPwdError("Password tidak cocok"); return; }
@@ -1019,11 +1174,26 @@ function MemberProfile({ memberId, memberName, onLogout }: { memberId: string; m
     <div className="space-y-5">
       <Card>
         <div className="flex items-start gap-4">
-          <Avatar name={memberName} size={72} />
+          {/* Avatar — click to view lightbox; use hidden input ref for picking */}
+          <button type="button" onClick={() => setPhotoView("open")} className="relative inline-block shrink-0 cursor-zoom-in group">
+            <Avatar
+              name={memberName}
+              src={avatarPreview ?? profile?.avatar_url ?? undefined}
+              size={72}
+            />
+            <div className="absolute bottom-0 right-0 w-5 h-5 rounded-full bg-ocean-600 text-white flex items-center justify-center shadow-sm pointer-events-none">
+              <Icon name="camera" className="w-3 h-3" />
+            </div>
+          </button>
           <div className="flex-1 min-w-0">
             <div className="font-display font-bold text-xl text-ink">{profile?.full_name ?? memberName}</div>
             <div className="text-sm text-ocean-700 font-semibold">{age != null ? `${age} thn · ` : ""}Member</div>
             {profile?.date_start && <div className="text-xs text-ink-mute mt-1">Member sejak {fmtDate(profile.date_start)}</div>}
+            {avatarFile && (
+              <Btn variant="primary" size="sm" className="mt-2" disabled={avatarSaving} onClick={uploadAvatar}>
+                {avatarSaving ? "Mengupload…" : "Upload foto"}
+              </Btn>
+            )}
           </div>
         </div>
         {(regInfo?.parent_name || regInfo?.parent_phone) && (
@@ -1037,7 +1207,10 @@ function MemberProfile({ memberId, memberName, onLogout }: { memberId: string; m
       </Card>
 
       <Card className="text-center">
-        <SectionTitle sub="Print sebagai kartu absensi — QR tidak pernah berubah">QR Code Absensi</SectionTitle>
+        <div className="mb-4">
+          <h2 className="font-display font-bold text-xl text-ink leading-tight">QR Code Absensi</h2>
+          <p className="text-sm text-ink-mute mt-0.5">Print sebagai kartu absensi — QR tidak pernah berubah</p>
+        </div>
         <div className="flex justify-center my-4">
           <QRBox
             value={profile?.qr_code ?? `NSS-M-${memberId.slice(0, 8).toUpperCase()}`}
@@ -1070,8 +1243,24 @@ function MemberProfile({ memberId, memberName, onLogout }: { memberId: string; m
       <Card>
         <SectionTitle>Ganti password</SectionTitle>
         <div className="space-y-3">
-          <Field label="Password baru"><Input type="password" value={newPwd} onChange={(e) => setNewPwd(e.target.value)} /></Field>
-          <Field label="Konfirmasi password"><Input type="password" value={confirmPwd} onChange={(e) => setConfirmPwd(e.target.value)} /></Field>
+          <Field label="Password baru">
+            <div className="relative">
+              <Input type={showNewPwd ? "text" : "password"} value={newPwd} onChange={(e) => setNewPwd(e.target.value)} className="pr-10" />
+              <button type="button" tabIndex={-1} onClick={() => setShowNewPwd(v => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-mute hover:text-ink transition-colors">
+                <Icon name={showNewPwd ? "eye-off" : "eye"} className="w-4 h-4" />
+              </button>
+            </div>
+          </Field>
+          <Field label="Konfirmasi password">
+            <div className="relative">
+              <Input type={showConfirmPwd ? "text" : "password"} value={confirmPwd} onChange={(e) => setConfirmPwd(e.target.value)} className="pr-10" />
+              <button type="button" tabIndex={-1} onClick={() => setShowConfirmPwd(v => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-mute hover:text-ink transition-colors">
+                <Icon name={showConfirmPwd ? "eye-off" : "eye"} className="w-4 h-4" />
+              </button>
+            </div>
+          </Field>
           {pwdError && <p className="text-xs text-danger-600">{pwdError}</p>}
           <Btn variant="primary" disabled={pwdSaving} onClick={changePwd}>Simpan password baru</Btn>
         </div>
@@ -1085,6 +1274,80 @@ function MemberProfile({ memberId, memberName, onLogout }: { memberId: string; m
           <span className="font-semibold text-danger-600 group-hover:text-danger-700">Keluar dari akun</span>
         </button>
       </Card>
+
+      {photoView && (
+        <PhotoLightbox
+          src={avatarPreview ?? profile?.avatar_url ?? null}
+          name={memberName}
+          onClose={() => setPhotoView(null)}
+          onChangePick={e => {
+            const f = e.target.files?.[0] ?? null;
+            setAvatarFile(f);
+            setAvatarPreview(f ? URL.createObjectURL(f) : null);
+            setPhotoView(null);
+          }}
+          uploading={avatarSaving}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── Profile Completion Gate ────────────────────────────────────────────────────
+
+function ProfileGate({ memberName, onComplete, onLogout }: { memberName: string; onComplete: () => void; onLogout: () => void }) {
+  const { upload, uploading } = useUpload();
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [error, setError] = useState("");
+
+  const handleUpload = async () => {
+    if (!avatarFile) return setError("Pilih foto terlebih dahulu");
+    setError("");
+    try {
+      await upload.avatar(avatarFile);
+      onComplete();
+    } catch {
+      setError("Gagal upload foto, coba lagi");
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-paper-tint flex flex-col items-center justify-center px-4 py-12">
+      <Logo size={48} withWord />
+      <div className="w-full max-w-xs mt-8 space-y-5">
+        <div className="text-center space-y-1">
+          <h1 className="font-display font-bold text-2xl text-ink">Lengkapi Profil</h1>
+          <p className="text-sm text-ink-mute">Upload foto profil untuk mulai menggunakan aplikasi.</p>
+        </div>
+        <Card className="flex flex-col items-center gap-4">
+          <label className="cursor-pointer group relative inline-block">
+            <Avatar
+              name={memberName || "?"}
+              src={avatarPreview ?? undefined}
+              size={112}
+              className="ring-2 ring-dashed ring-line group-hover:ring-ocean-400 transition-all"
+            />
+            <div className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-ocean-600 text-white flex items-center justify-center shadow-md">
+              <Icon name="camera" className="w-4 h-4" />
+            </div>
+            <input type="file" accept="image/*" className="sr-only" onChange={e => {
+              const f = e.target.files?.[0] ?? null;
+              setAvatarFile(f);
+              setAvatarPreview(f ? URL.createObjectURL(f) : null);
+            }} />
+          </label>
+          <div className="text-center">
+            <p className="text-sm text-ink-soft">Klik foto untuk memilih gambar</p>
+            <p className="text-xs text-ink-faint mt-0.5">Format: JPG / PNG · Maks. 5 MB</p>
+          </div>
+          {error && <p className="text-xs text-danger-600 text-center">{error}</p>}
+          <Btn variant="primary" className="w-full" disabled={uploading || !avatarFile} onClick={handleUpload}>
+            {uploading ? "Mengupload…" : "Simpan & Lanjutkan"}
+          </Btn>
+          <button onClick={onLogout} className="text-xs text-ink-mute hover:text-danger-600 transition-colors">Keluar dari akun</button>
+        </Card>
+      </div>
     </div>
   );
 }
@@ -1100,8 +1363,11 @@ export default function MemberPage() {
   const [branchId, setBranchId] = useState("");
   const [branchName, setBranchName] = useState("");
   const [userId, setUserId] = useState("");
+  const [locked, setLocked] = useState(false);
+  const [lockChecked, setLockChecked] = useState(false);
+  const [memberAvatarUrl, setMemberAvatarUrl] = useState<string | null>(null);
 
-   
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
       const u = data.user;
@@ -1113,13 +1379,20 @@ export default function MemberPage() {
 
       // Load member record by profile_id (= auth uid)
       supabase.from("members")
-        .select("id, profile:profiles(full_name)")
+        .select("id, profile:profiles(full_name, is_profile_complete, avatar_url)")
         .eq("profile_id", u.id)
         .single()
         .then(({ data: m }) => {
           if (m) {
             setMemberId(m.id);
-            setMemberName((m as unknown as { profile: { full_name: string } | null }).profile?.full_name ?? "");
+            const prof = (m as unknown as { profile: { full_name: string; is_profile_complete: boolean | null; avatar_url: string | null } | null }).profile;
+            setMemberName(prof?.full_name ?? "");
+            setMemberAvatarUrl(prof?.avatar_url ?? null);
+            // Lock if profile incomplete AND no avatar
+            const complete = prof?.is_profile_complete === true;
+            const hasAvatar = !!(prof?.avatar_url);
+            setLocked(!complete && !hasAvatar);
+            setLockChecked(true);
           }
         });
 
@@ -1130,12 +1403,15 @@ export default function MemberPage() {
       }
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-   
+
 
   const logout = async () => {
     await supabase.auth.signOut();
     router.push("/login");
   };
+
+  // Called when member finishes uploading avatar from profile tab
+  const onProfileComplete = () => setLocked(false);
 
   const pages: Record<TabId, React.ReactNode> = {
     home:     <MemberHome setActive={setActive} memberId={memberId} memberName={memberName} branchId={branchId} />,
@@ -1144,13 +1420,18 @@ export default function MemberPage() {
     bills:    <MemberBills memberId={memberId} memberName={memberName} branchId={branchId} />,
     leave:    <MemberLeave memberId={memberId} />,
     rapor:    <MemberRapor memberId={memberId} memberName={memberName} />,
-    profile:  <MemberProfile memberId={memberId} memberName={memberName} onLogout={logout} />,
+    profile:  <MemberProfile memberId={memberId} memberName={memberName} onLogout={logout} onProfileComplete={onProfileComplete} onAvatarChange={url => setMemberAvatarUrl(url)} />,
   };
+
+  // Profile completion gate — shown before lockChecked is done to avoid flash
+  if (lockChecked && locked) {
+    return <ProfileGate memberName={memberName} onComplete={onProfileComplete} onLogout={logout} />;
+  }
 
   return (
     <>
-      <Shell active={active} setActive={setActive} name={memberName} branchName={branchName} userId={userId}>
-        {pages[active]}
+      <Shell active={active} setActive={setActive} name={memberName} branchName={branchName} userId={userId} avatarUrl={memberAvatarUrl}>
+        {lockChecked ? pages[active] : <div className="p-10 text-center text-ink-mute">Memuat…</div>}
       </Shell>
     </>
   );

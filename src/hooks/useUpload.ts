@@ -40,6 +40,10 @@ export function useUpload() {
     avatar: (file: File) =>
       run(() => postForm("/api/upload/avatar", { file })),
 
+    /** Profile picture uploaded by admin for another profile */
+    avatarForProfile: (file: File, profileId: string) =>
+      run(() => postForm("/api/upload/avatar", { file, profile_id: profileId })),
+
     /** Coach clock-in selfie */
     selfie: (file: File, classId: string, date: string) =>
       run(() => postForm("/api/upload/selfie", { file, classId, date })),

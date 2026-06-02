@@ -10,7 +10,10 @@ import { Card, SectionTitle } from "@/components/ui/Card";
 import Modal from "@/components/ui/Modal";
 import Bell from "@/components/layout/Bell";
 import { waLink } from "@/lib/utils";
+import { printSingleRapor, printSchoolRekap, type PrintCriterion } from "@/lib/printRapor";
 import { createClient } from "@/utils/supabase/client";
+
+interface Criterion extends PrintCriterion {}
 
 interface Student {
   id: string;
@@ -20,8 +23,9 @@ interface Student {
   period_id: string | null;
   period_label: string | null;
   entry_id: string | null;
-  scores: Record<string, number>;
+  scores: Record<string, number | string>;
   notes: string | null;
+  criteria: Criterion[];
 }
 
 export default function SchoolPage() {
@@ -36,9 +40,8 @@ export default function SchoolPage() {
   const [open, setOpen] = useState<Student | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const load = useCallback(async (sId: string, pid: string) => {
+  const load = useCallback(async (sId: string, pid: string, periodLabel: string) => {
     if (!sId || !pid) return;
-    // Load members affiliated to this school with rapor entries for the active period
     const { data } = await supabase
       .from("members")
       .select(`
@@ -47,7 +50,8 @@ export default function SchoolPage() {
         member_classes(
           classes(
             id, name,
-            class_coaches(profile:profiles(full_name))
+            class_coaches(profile:profiles(full_name)),
+            class_criteria(id, label, kind, options, sort_order)
           )
         ),
         rapor_entries(
@@ -56,38 +60,41 @@ export default function SchoolPage() {
       `)
       .eq("school_id", sId);
 
-    if (!data) return;
+    if (!data) { setLoading(false); return; }
+
     const rows: Student[] = data.map((m) => {
       const profile = (m.profile as unknown as { full_name: string } | null);
-      const mc = (m.member_classes as unknown as { classes: { id: string; name: string; class_coaches: { profile: { full_name: string } | null }[] } | null }[])?.[0];
+      const mc = (m.member_classes as unknown as { classes: { id: string; name: string; class_coaches: { profile: { full_name: string } | null }[]; class_criteria: { id: string; label: string; kind: string; options: string[] | null; sort_order: number }[] } | null }[])?.[0];
       const cls = mc?.classes;
       const firstCoach = cls?.class_coaches?.[0]?.profile;
-      const entry = (m.rapor_entries as unknown as { id: string; scores: Record<string, number>; notes: string | null; period_id: string }[])
+      const entry = (m.rapor_entries as unknown as { id: string; scores: Record<string, number | string>; notes: string | null; period_id: string }[])
         ?.find((e) => e.period_id === pid);
+      const criteria: Criterion[] = [...(cls?.class_criteria ?? [])]
+        .sort((a, b) => a.sort_order - b.sort_order)
+        .map(c => ({ id: c.id, label: c.label, kind: c.kind as Criterion["kind"] }));
       return {
         id: m.id,
         full_name: profile?.full_name ?? "—",
         class_name: cls?.name ?? "—",
-        coach_name: firstCoach?.full_name ? `Coach ${firstCoach.full_name.split(" ")[0]}` : "—",
+        coach_name: firstCoach?.full_name ?? "—",
         period_id: pid,
-        period_label: activePeriod?.label ?? null,
+        period_label: periodLabel,
         entry_id: entry?.id ?? null,
         scores: entry?.scores ?? {},
         notes: entry?.notes ?? null,
+        criteria,
       };
     });
     setStudents(rows);
     setLoading(false);
-  }, [activePeriod]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-   
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data }) => {
       const u = data.user;
       if (!u) return;
       setUserId(u.id);
 
-      // Load school profile by user_id
       const { data: school } = await supabase
         .from("schools")
         .select("id, name, branch_id")
@@ -98,12 +105,10 @@ export default function SchoolPage() {
       setSchoolId(school.id);
       setSchoolName(school.name);
 
-      // Load admin WA for the branch
       const { data: branch } = await supabase.from("branches").select("wa_numbers").eq("id", school.branch_id).single();
       const waNumbers = (branch as unknown as { wa_numbers: string[] } | null)?.wa_numbers;
       if (waNumbers && waNumbers.length > 0) setAdminWaPhone(waNumbers[0]);
 
-      // Load active rapor period for the branch
       const { data: period } = await supabase
         .from("rapor_periods")
         .select("id, label, date_from, date_to")
@@ -115,20 +120,12 @@ export default function SchoolPage() {
 
       if (period) {
         setActivePeriod(period);
-        await load(school.id, period.id);
+        await load(school.id, period.id, period.label);
       } else {
         setLoading(false);
       }
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-   
-
-  // Re-load when activePeriod becomes available
-  /* eslint-disable react-hooks/set-state-in-effect -- async data loader */
-  useEffect(() => {
-    if (activePeriod && schoolId) load(schoolId, activePeriod.id);
-  }, [activePeriod, schoolId, load]);
-  /* eslint-enable react-hooks/set-state-in-effect */
 
   const filtered = students.filter(
     (s) => !search || s.full_name.toLowerCase().includes(search.toLowerCase()) || s.class_name.toLowerCase().includes(search.toLowerCase())
@@ -137,13 +134,39 @@ export default function SchoolPage() {
   const totalDone = students.filter((s) => s.entry_id !== null).length;
   const totalPending = students.filter((s) => s.entry_id === null).length;
 
+  const handlePrintAll = () => {
+    printSchoolRekap(
+      schoolName,
+      activePeriod?.label ?? "—",
+      students.map(s => ({
+        full_name: s.full_name,
+        class_name: s.class_name,
+        coach_name: s.coach_name,
+        period_label: s.period_label ?? "—",
+        scores: s.scores,
+        notes: s.notes,
+        criteria: s.criteria,
+      }))
+    );
+  };
+
+  const handlePrintOne = (s: Student) => {
+    printSingleRapor({
+      full_name: s.full_name,
+      class_name: s.class_name,
+      coach_name: s.coach_name,
+      period_label: s.period_label ?? "—",
+      scores: s.scores,
+      notes: s.notes,
+      criteria: s.criteria,
+    });
+  };
+
   return (
     <div className="min-h-screen bg-paper-tint">
       <header className="bg-white border-b border-line">
         <div className="max-w-6xl mx-auto px-4 lg:px-7 h-16 flex items-center gap-3">
-          <Link href="/">
-            <Logo size={32} />
-          </Link>
+          <Link href="/"><Logo size={32} /></Link>
           <div className="min-w-0 flex-1">
             <h1 className="font-display font-bold text-base text-ink leading-tight truncate">School Panel</h1>
             <p className="text-xs text-ink-mute truncate">{schoolName}</p>
@@ -156,8 +179,8 @@ export default function SchoolPage() {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto p-4 lg:p-7 anim-in space-y-6">
-        {/* Hero card */}
+      <main className="max-w-6xl mx-auto p-4 lg:p-7 space-y-6">
+        {/* Hero */}
         <div className="bg-ocean-700 text-white rounded-2xl border border-ocean-700 shadow-card p-5 relative overflow-hidden">
           <div className="caustics absolute inset-0 opacity-30" />
           <div className="absolute -right-12 -bottom-12 w-56 h-56 rounded-full bg-wave-500/30 blur-3xl" />
@@ -171,8 +194,17 @@ export default function SchoolPage() {
               </h2>
               {activePeriod && (
                 <p className="text-white/80 mt-2 max-w-lg">
-                  Berlaku {activePeriod.date_from} – {activePeriod.date_to}. Anda dapat melihat rapor seluruh siswa afiliasi sekolah Anda di Next Swimming School.
+                  Berlaku {activePeriod.date_from} – {activePeriod.date_to}. Anda dapat melihat rapor seluruh siswa afiliasi sekolah Anda.
                 </p>
+              )}
+              {totalDone > 0 && (
+                <button
+                  onClick={handlePrintAll}
+                  className="mt-4 inline-flex items-center gap-2 bg-white/15 hover:bg-white/25 backdrop-blur border border-white/20 text-white text-sm font-semibold px-4 py-2 rounded-xl transition"
+                >
+                  <Icon name="print" className="w-4 h-4" />
+                  Cetak Rekap Semua Siswa
+                </button>
               )}
             </div>
             <div className="grid grid-cols-3 lg:grid-cols-1 gap-3">
@@ -239,15 +271,8 @@ export default function SchoolPage() {
                       </td>
                       <td className="text-right px-5">
                         <div className="inline-flex gap-1.5">
-                          <Btn
-                            variant="soft"
-                            size="sm"
-                            icon="eye"
-                            disabled={!s.entry_id}
-                            onClick={() => setOpen(s)}
-                          >
-                            Lihat
-                          </Btn>
+                          <Btn variant="soft" size="sm" icon="eye" disabled={!s.entry_id} onClick={() => setOpen(s)}>Lihat</Btn>
+                          <Btn variant="ghost" size="sm" icon="print" disabled={!s.entry_id} onClick={() => handlePrintOne(s)}>Cetak</Btn>
                         </div>
                       </td>
                     </tr>
@@ -274,8 +299,8 @@ export default function SchoolPage() {
               </p>
               <a
                 href={adminWaPhone
-                    ? `https://wa.me/62${adminWaPhone.replace(/^0/, "")}?text=${encodeURIComponent(`Halo dari ${schoolName} — ingin konsultasi soal program afiliasi.`)}`
-                    : waLink(`Halo dari ${schoolName} — ingin konsultasi soal program afiliasi.`)}
+                  ? `https://wa.me/62${adminWaPhone.replace(/^0/, "")}?text=${encodeURIComponent(`Halo dari ${schoolName} — ingin konsultasi soal program afiliasi.`)}`
+                  : waLink(`Halo dari ${schoolName} — ingin konsultasi soal program afiliasi.`)}
                 target="_blank"
                 rel="noreferrer"
                 className="mt-3 inline-flex"
@@ -287,7 +312,7 @@ export default function SchoolPage() {
         </Card>
       </main>
 
-      {/* Rapor modal */}
+      {/* Rapor detail modal */}
       <Modal
         open={!!open}
         onClose={() => setOpen(null)}
@@ -295,41 +320,15 @@ export default function SchoolPage() {
         size="lg"
         footer={
           <div className="flex gap-2">
-            <Btn variant="ghost" icon="print" onClick={() => {
-              const el = document.getElementById("rapor-print-area");
-              if (!el) return;
-              const w = window.open("", "_blank", "width=700,height=900");
-              if (!w) return;
-              w.document.write(`<!DOCTYPE html><html><head><title>Rapor — ${open?.full_name ?? ""}</title>
-                <style>
-                  body{font-family:sans-serif;padding:32px;color:#0f172a;max-width:600px;margin:auto}
-                  h1{font-size:20px;font-weight:700;margin-bottom:4px}
-                  .sub{color:#64748b;font-size:13px;margin-bottom:24px}
-                  .row{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
-                  .label{font-size:14px;font-weight:600}
-                  .val{font-family:monospace;font-weight:700;color:#0369a1}
-                  .bar-bg{height:8px;background:#e2e8f0;border-radius:4px;overflow:hidden;margin-top:4px}
-                  .bar{height:100%;border-radius:4px}
-                  .note{background:#f8fafc;padding:12px;border-radius:8px;font-size:13px;color:#475569;margin-top:16px}
-                  .note-label{font-weight:700;font-size:13px;margin-bottom:6px}
-                  footer{margin-top:40px;border-top:1px solid #e2e8f0;padding-top:12px;font-size:11px;color:#94a3b8}
-                </style></head><body>${el.innerHTML}
-                <footer>Dicetak dari Next Swimming School · ${new Date().toLocaleDateString("id-ID", { dateStyle: "long" })}</footer>
-                </body></html>`);
-              w.document.close();
-              w.focus();
-              w.print();
-            }}>Cetak / Unduh PDF</Btn>
+            <Btn variant="ghost" icon="print" onClick={() => open && handlePrintOne(open)}>
+              Cetak / PDF
+            </Btn>
             <Btn variant="primary" onClick={() => setOpen(null)}>Tutup</Btn>
           </div>
         }
       >
         {open && (
-          <div id="rapor-print-area" className="space-y-4">
-            <div>
-              <h1 style={{ fontWeight: 700, fontSize: 18 }}>Rapor Siswa — {open.full_name}</h1>
-              <p className="text-xs text-ink-mute">{open.class_name} · {open.coach_name} · {open.period_label}</p>
-            </div>
+          <div className="space-y-4">
             <Card className="!p-3 bg-paper-tint">
               <div className="flex items-center gap-3">
                 <Avatar name={open.full_name} size={42} />
@@ -340,27 +339,52 @@ export default function SchoolPage() {
               </div>
             </Card>
             <div className="space-y-3">
-              {[
-                { t: "Teknik gaya bebas", key: "freestyle",    max: 10 },
-                { t: "Teknik gaya dada",  key: "breaststroke", max: 10 },
-                { t: "Daya tahan",        key: "endurance",    max: 100 },
-              ].map((a) => {
-                const val = open.scores[a.key];
-                return val != null ? (
-                  <div key={a.t}>
-                    <div className="flex justify-between text-sm">
-                      <span className="font-semibold text-ink">{a.t}</span>
-                      <span className="font-mono font-bold text-ocean-700">{val}/{a.max}</span>
-                    </div>
-                    <div className="h-2 mt-1.5 bg-paper-deep rounded-full overflow-hidden">
-                      <div
-                        className={`h-full ${val / a.max > 0.7 ? "bg-ok-500" : val / a.max > 0.4 ? "bg-wave-500" : "bg-warn-500"}`}
-                        style={{ width: `${(val / a.max) * 100}%` }}
-                      />
-                    </div>
-                  </div>
-                ) : null;
-              })}
+              {/* Render scores using criteria labels */}
+              {open.criteria.length > 0
+                ? open.criteria.map(c => {
+                    const val = open.scores[c.id];
+                    if (val == null) return null;
+                    const numVal = typeof val === "number" ? val : null;
+                    const strVal = typeof val === "string" ? val : null;
+                    const max = c.kind === "score_10" ? 10 : c.kind === "score_100" ? 100 : null;
+                    return (
+                      <div key={c.id}>
+                        <div className="flex justify-between text-sm">
+                          <span className="font-semibold text-ink">{c.label}</span>
+                          {numVal != null && max && <span className="font-mono font-bold text-ocean-700">{numVal}/{max}</span>}
+                        </div>
+                        {numVal != null && max && (
+                          <div className="h-2 mt-1.5 bg-paper-deep rounded-full overflow-hidden">
+                            <div
+                              className={`h-full ${numVal / max > 0.7 ? "bg-ok-500" : numVal / max > 0.4 ? "bg-wave-500" : "bg-warn-500"}`}
+                              style={{ width: `${(numVal / max) * 100}%` }}
+                            />
+                          </div>
+                        )}
+                        {strVal && <p className="text-sm text-ink-soft bg-paper-tint px-3 py-1.5 rounded-lg mt-1">{strVal}</p>}
+                      </div>
+                    );
+                  })
+                : Object.entries(open.scores).map(([key, val]) => {
+                    const numVal = typeof val === "number" ? val : null;
+                    const strVal = typeof val === "string" ? val : null;
+                    const max = numVal !== null && numVal <= 10 ? 10 : 100;
+                    return (
+                      <div key={key}>
+                        <div className="flex justify-between text-sm">
+                          <span className="font-semibold text-ink capitalize">{key.replace(/_/g, " ")}</span>
+                          {numVal != null && <span className="font-mono font-bold text-ocean-700">{numVal}/{max}</span>}
+                        </div>
+                        {numVal != null && (
+                          <div className="h-2 mt-1.5 bg-paper-deep rounded-full overflow-hidden">
+                            <div className={`h-full ${numVal / max > 0.7 ? "bg-ok-500" : numVal / max > 0.4 ? "bg-wave-500" : "bg-warn-500"}`} style={{ width: `${(numVal / max) * 100}%` }} />
+                          </div>
+                        )}
+                        {strVal && <p className="text-sm text-ink-soft bg-paper-tint px-3 py-1.5 rounded-lg mt-1">{strVal}</p>}
+                      </div>
+                    );
+                  })
+              }
               {open.notes && (
                 <div>
                   <div className="font-semibold text-ink text-sm mb-1">Catatan coach</div>
@@ -374,7 +398,6 @@ export default function SchoolPage() {
           </div>
         )}
       </Modal>
-
     </div>
   );
 }
