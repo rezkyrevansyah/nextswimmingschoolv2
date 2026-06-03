@@ -86,6 +86,7 @@ CREATE TABLE public.classes (
   class_type text NOT NULL DEFAULT 'reguler'::text CHECK (class_type = ANY (ARRAY['reguler'::text, 'private'::text])),
   price_per_session integer,
   schedule_times jsonb,
+  spreadsheet_url text,
   CONSTRAINT classes_pkey PRIMARY KEY (id),
   CONSTRAINT classes_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branches(id)
 );
@@ -301,7 +302,7 @@ CREATE TABLE public.coach_invoice_items (
 );
 CREATE TABLE public.coach_rates (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
-  coach_id uuid NOT NULL,
+  coach_id uuid,
   class_id uuid NOT NULL,
   rate integer NOT NULL,
   set_by uuid,

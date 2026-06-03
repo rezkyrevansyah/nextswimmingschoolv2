@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import Logo from "@/components/ui/Logo";
 import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
-import { Field, Input, Select } from "@/components/ui/FormFields";
+import { Field, Input, Select, Textarea } from "@/components/ui/FormFields";
 import { Card, SectionTitle, Stat } from "@/components/ui/Card";
 import Status from "@/components/ui/Status";
 import Avatar from "@/components/ui/Avatar";
@@ -51,6 +51,10 @@ interface ClassRow {
   price_monthly: number;
   schedule_days: string[];
   time_start: string; time_end: string;
+  goals: string | null;
+  description: string | null;
+  spreadsheet_url?: string | null;
+  spreadsheet_filled?: boolean;
   branch?: { name: string } | null;
   class_coaches?: { profile: { full_name: string } | null }[];
 }
@@ -62,6 +66,11 @@ interface CoachRate {
   rate_per_session: number;
 }
 
+interface InvoiceItem {
+  id: string; class_id: string; session_count: number; rate: number;
+  class?: { name: string } | null;
+}
+
 interface Invoice {
   id: string;
   invoice_number: string;
@@ -70,9 +79,10 @@ interface Invoice {
   status: string;
   bank_info: string | null;
   submitted_at: string;
+  paid_at?: string | null;
   branch?: { name: string } | null;
   coach?: { full_name: string } | null;
-  items_count?: number;
+  coach_invoice_items?: InvoiceItem[];
 }
 
 // ── Sub-pages ──────────────────────────────────────────────────────────────────
@@ -465,186 +475,448 @@ function Admins({ branches }: { branches: Branch[] }) {
   );
 }
 
+interface Criterion {
+  id: string; label: string; kind: string; options: string[] | null; sort_order: number;
+}
+const kindLabel: Record<string, string> = { score_10: "Nilai 1–10", score_100: "Nilai 1–100", choice: "Pilihan ganda", text: "Teks bebas" };
+
 function Classes({ branches }: { branches: Branch[] }) {
   const supabase = createClient();
+  const toast = useToast();
+  const confirm = useConfirm();
   const [classes, setClasses] = useState<ClassRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [branchFilter, setBranchFilter] = useState("all");
+  const [editTarget, setEditTarget] = useState<ClassRow | null>(null);
+  const [editForm, setEditForm] = useState({ goals: "", description: "" });
+  const [saving, setSaving] = useState(false);
 
-   
-  useEffect(() => {
-    const q = supabase
+  // Criteria (aspek penilaian)
+  const [criteriaClass, setCriteriaClass] = useState<ClassRow | null>(null);
+  const [criteria, setCriteria] = useState<Criterion[]>([]);
+  const [loadingCriteria, setLoadingCriteria] = useState(false);
+  const [criterionForm, setCriterionForm] = useState({ label: "", kind: "score_10", options: "" });
+  const [savingCriterion, setSavingCriterion] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const { data } = await supabase
       .from("classes")
-      .select("id, name, branch_id, status, capacity, enrolled, price_monthly, schedule_days, time_start, time_end, branch:branches(name), class_coaches(profile:profiles(full_name))")
+      .select("id, name, branch_id, status, capacity, enrolled, price_monthly, schedule_days, time_start, time_end, goals, description, spreadsheet_url, spreadsheet_filled, branch:branches(name), class_coaches(profile:profiles(full_name))")
       .eq("status", "active")
+      .order("branch_id")
       .order("name");
+    if (data) setClasses(data as unknown as ClassRow[]);
+    setLoading(false);
+  }, [supabase]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    if (branchFilter !== "all") q.eq("branch_id", branchFilter);
+  useEffect(() => { load(); }, [load]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    q.then(({ data }) => {
-      if (data) setClasses(data as unknown as ClassRow[]);
-      setLoading(false);
+  const openEdit = (c: ClassRow) => {
+    setEditTarget(c);
+    setEditForm({ goals: c.goals ?? "", description: c.description ?? "" });
+  };
+
+  const saveEdit = async () => {
+    if (!editTarget) return;
+    setSaving(true);
+    const { error } = await supabase.from("classes")
+      .update({ goals: editForm.goals.trim() || null, description: editForm.description.trim() || null })
+      .eq("id", editTarget.id);
+    setSaving(false);
+    if (error) return toast.error("Gagal menyimpan", error.message);
+    toast.success("Kelas diperbarui");
+    setEditTarget(null);
+    load();
+  };
+
+  const openCriteria = async (c: ClassRow) => {
+    setCriteriaClass(c);
+    setLoadingCriteria(true);
+    const { data } = await supabase.from("class_criteria").select("id, label, kind, options, sort_order").eq("class_id", c.id).order("sort_order");
+    setCriteria((data ?? []) as Criterion[]);
+    setLoadingCriteria(false);
+  };
+
+  const addCriterion = async () => {
+    if (!criteriaClass || !criterionForm.label) return toast.error("Label wajib diisi");
+    setSavingCriterion(true);
+    const opts = criterionForm.kind === "choice" ? criterionForm.options.split("\n").map(s => s.trim()).filter(Boolean) : null;
+    const { error } = await supabase.from("class_criteria").insert({
+      class_id: criteriaClass.id, label: criterionForm.label, kind: criterionForm.kind,
+      options: opts, sort_order: criteria.length,
     });
-  }, [branchFilter]); // eslint-disable-line react-hooks/exhaustive-deps
-   
+    setSavingCriterion(false);
+    if (error) return toast.error("Gagal menambah aspek", error.message);
+    toast.success("Aspek penilaian ditambahkan");
+    setCriterionForm({ label: "", kind: "score_10", options: "" });
+    const { data } = await supabase.from("class_criteria").select("id, label, kind, options, sort_order").eq("class_id", criteriaClass.id).order("sort_order");
+    setCriteria((data ?? []) as Criterion[]);
+  };
+
+  const deleteCriterion = async (id: string) => {
+    const yes = await confirm("Hapus aspek penilaian ini? Data rapor yang sudah diisi tidak akan terpengaruh.");
+    if (!yes) return;
+    await supabase.from("class_criteria").delete().eq("id", id);
+    setCriteria(prev => prev.filter(c => c.id !== id));
+    toast.success("Aspek penilaian dihapus");
+  };
+
+  // Group by branch
+  const grouped = branches.map(b => ({
+    branch: b,
+    classes: classes.filter(c => c.branch_id === b.id),
+  })).filter(g => g.classes.length > 0);
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h2 className="font-display font-bold text-2xl">Semua Kelas — Lintas Cabang</h2>
-          <p className="text-ink-mute text-sm mt-0.5">View-only. CRUD kelas dilakukan oleh admin cabang masing-masing.</p>
-        </div>
-        <div className="flex gap-2">
-          <Select value={branchFilter} onChange={e => setBranchFilter(e.target.value)} className="!w-44">
-            <option value="all">Semua cabang</option>
-            {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-          </Select>
-        </div>
+    <div className="space-y-6">
+      <div>
+        <h2 className="font-display font-bold text-2xl">Semua Kelas</h2>
+        <p className="text-ink-mute text-sm mt-0.5">Owner dapat mengedit tujuan dan deskripsi kelas. Konfigurasi lainnya dikelola admin cabang.</p>
       </div>
-      <Card padded={false}>
-        {loading ? (
-          <div className="p-10 text-center text-ink-mute">Memuat data…</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-[11px] uppercase tracking-widest text-ink-faint font-bold border-b border-line">
-                  <th className="text-left py-3 px-5 font-bold">Kelas</th>
-                  <th className="text-left py-3 font-bold">Cabang</th>
-                  <th className="text-left py-3 font-bold">Coach</th>
-                  <th className="text-left py-3 font-bold">Jadwal</th>
-                  <th className="text-right py-3 font-bold">Kapasitas</th>
-                  <th className="text-right py-3 pr-5 font-bold">Harga/bln</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-line">
-                {classes.map((c) => {
-                  const coaches = c.class_coaches?.map(cc => cc.profile?.full_name).filter(Boolean) ?? [];
-                  const pct = c.enrolled / (c.capacity || 1);
-                  return (
-                    <tr key={c.id} className="hover:bg-paper-tint">
-                      <td className="py-3.5 px-5 font-semibold text-ink">{c.name}</td>
-                      <td className="text-ink-soft">{c.branch?.name}</td>
-                      <td>
-                        <div className="flex items-center gap-2">
-                          {coaches.length > 0 ? (
-                            <><Avatar name={coaches[0]!} size={26} /><span className="text-ink-soft text-xs">{coaches[0]}</span></>
-                          ) : <span className="text-ink-faint text-xs">—</span>}
+
+      {loading ? (
+        <Card><div className="py-10 text-center text-ink-mute text-sm">Memuat data…</div></Card>
+      ) : grouped.length === 0 ? (
+        <Card><div className="py-10 text-center text-ink-mute text-sm">Belum ada kelas aktif.</div></Card>
+      ) : (
+        grouped.map(({ branch, classes: bClasses }) => (
+          <div key={branch.id} className="space-y-3">
+            <div className="flex items-center gap-3">
+              <div className="font-display font-bold text-lg text-ink">{branch.name}</div>
+              <div className="text-xs text-ink-faint font-semibold">{bClasses.length} kelas</div>
+            </div>
+            <div className="grid sm:grid-cols-2 gap-3">
+              {bClasses.map((c) => {
+                const coaches = c.class_coaches?.map(cc => cc.profile?.full_name).filter(Boolean) ?? [];
+                const pct = c.enrolled / (c.capacity || 1);
+                return (
+                  <Card key={c.id} className="space-y-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="font-display font-bold text-ink">{c.name}</div>
+                        <div className="text-xs text-ink-mute mt-0.5">
+                          {(c.schedule_days ?? []).join(", ")}
+                          {c.time_start && <span className="font-mono"> · {c.time_start.slice(0,5)}{c.time_end ? `–${c.time_end.slice(0,5)}` : ""}</span>}
                         </div>
-                      </td>
-                      <td className="text-ink-mute text-xs">
-                        <div>{(c.schedule_days ?? []).join(", ")}</div>
-                        <div className="font-mono">{c.time_start?.slice(0,5)}{c.time_end ? `–${c.time_end.slice(0,5)}` : ""}</div>
-                      </td>
-                      <td className="text-right">
-                        <div className="font-mono font-semibold">{c.enrolled}/{c.capacity}</div>
-                        <div className="w-20 h-1 bg-paper-deep rounded-full ml-auto mt-1 overflow-hidden">
-                          <div className={`h-full ${pct >= 1 ? "bg-danger-500" : pct > 0.7 ? "bg-warn-500" : "bg-ok-500"}`} style={{ width: `${Math.min(pct * 100, 100)}%` }} />
-                        </div>
-                      </td>
-                      <td className="text-right font-mono font-semibold pr-5">{fmtIDR(c.price_monthly)}</td>
-                    </tr>
-                  );
-                })}
-                {classes.length === 0 && (
-                  <tr><td colSpan={6} className="text-center py-10 text-ink-mute">Tidak ada kelas</td></tr>
-                )}
-              </tbody>
-            </table>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Btn variant="ghost" size="sm" icon="book" onClick={() => openCriteria(c)}>Aspek</Btn>
+                        <Btn variant="ghost" size="sm" icon="edit" onClick={() => openEdit(c)}>Edit</Btn>
+                      </div>
+                    </div>
+
+                    {/* Goals & Description */}
+                    {(c.goals || c.description) ? (
+                      <div className="space-y-1.5">
+                        {c.goals && (
+                          <div>
+                            <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Tujuan</div>
+                            <p className="text-xs text-ink-soft mt-0.5">{c.goals}</p>
+                          </div>
+                        )}
+                        {c.description && (
+                          <div>
+                            <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Deskripsi</div>
+                            <p className="text-xs text-ink-soft mt-0.5">{c.description}</p>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-ink-faint italic">Tujuan & deskripsi belum diisi.</p>
+                    )}
+
+                    <div className="border-t border-line pt-3 flex items-center justify-between gap-3 flex-wrap">
+                      <div className="flex items-center gap-3 text-xs text-ink-mute">
+                        {coaches.length > 0
+                          ? <><Avatar name={coaches[0]!} size={20} /><span>{coaches[0]}</span></>
+                          : <span className="text-ink-faint">Belum ada coach</span>
+                        }
+                      </div>
+                      <div className="flex items-center gap-3 text-xs">
+                        <span className={`font-mono font-semibold ${pct >= 1 ? "text-danger-600" : pct > 0.7 ? "text-warn-600" : "text-ok-600"}`}>
+                          {c.enrolled}/{c.capacity}
+                        </span>
+                        {c.spreadsheet_filled && c.spreadsheet_url
+                          ? <a href={c.spreadsheet_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-ok-600 font-semibold hover:underline"><Icon name="link" className="w-3 h-3" />Spreadsheet</a>
+                          : <span className="text-warn-500 font-semibold">Belum ada spreadsheet</span>
+                        }
+                      </div>
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
           </div>
-        )}
-      </Card>
+        ))
+      )}
+
+      {/* Edit modal — goals & description only */}
+      <Modal open={!!editTarget} onClose={() => setEditTarget(null)}
+        title={`Edit Kelas — ${editTarget?.name ?? ""}`} size="md"
+        footer={<><Btn variant="ghost" onClick={() => setEditTarget(null)}>Batal</Btn><Btn variant="primary" onClick={saveEdit} disabled={saving}>{saving ? "Menyimpan…" : "Simpan"}</Btn></>}>
+        <div className="space-y-4">
+          <div className="p-3 rounded-xl bg-ocean-50 border border-ocean-100 text-xs text-ocean-800">
+            Owner hanya dapat mengedit tujuan dan deskripsi kelas. Untuk mengubah jadwal, kapasitas, atau harga — gunakan admin panel cabang.
+          </div>
+          <Field label="Tujuan kelas" hint="Opsional — tampil di coach page dan member page">
+            <Textarea rows={2} value={editForm.goals}
+              onChange={e => setEditForm(f => ({ ...f, goals: e.target.value }))}
+              placeholder="Mis. Pengenalan air, membangun rasa percaya diri di air, blowing bubbles." />
+          </Field>
+          <Field label="Deskripsi kelas" hint="Opsional — tampil di coach page dan member page">
+            <Textarea rows={3} value={editForm.description}
+              onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))}
+              placeholder="Mis. Kelas ini dirancang untuk anak usia 4–6 tahun yang baru pertama kali belajar renang dengan pendekatan bermain yang menyenangkan." />
+          </Field>
+        </div>
+      </Modal>
+
+      {/* Criteria modal */}
+      <Modal open={!!criteriaClass} onClose={() => { setCriteriaClass(null); setCriterionForm({ label: "", kind: "score_10", options: "" }); }}
+        title={`Aspek Penilaian — ${criteriaClass?.name ?? ""}`} size="lg"
+        footer={<Btn variant="ghost" onClick={() => { setCriteriaClass(null); setCriterionForm({ label: "", kind: "score_10", options: "" }); }}>Tutup</Btn>}>
+        <div className="space-y-5">
+          {loadingCriteria ? <div className="text-ink-mute text-sm text-center py-6">Memuat…</div> : (
+            <>
+              {criteria.length > 0 ? (
+                <div className="space-y-2">
+                  {criteria.map((cr, i) => (
+                    <div key={cr.id} className="flex items-center gap-3 p-3 rounded-xl border border-line hover:bg-paper-tint">
+                      <span className="w-6 h-6 rounded-full bg-ocean-50 text-ocean-700 text-xs font-bold flex items-center justify-center shrink-0">{i + 1}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-ink text-sm">{cr.label}</div>
+                        <div className="text-xs text-ink-mute">{kindLabel[cr.kind] ?? cr.kind}{cr.options && ` · ${cr.options.join(", ")}`}</div>
+                      </div>
+                      <button onClick={() => deleteCriterion(cr.id)} className="w-7 h-7 rounded-lg hover:bg-danger-50 text-ink-faint hover:text-danger-500 flex items-center justify-center shrink-0"><Icon name="x" className="w-3.5 h-3.5" /></button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-ink-mute">Belum ada aspek penilaian. Tambahkan di bawah.</p>
+              )}
+              <div className="border-t border-line pt-4 space-y-3">
+                <div className="text-xs font-bold uppercase tracking-widest text-ink-faint">Tambah Aspek Baru</div>
+                <div className="grid sm:grid-cols-2 gap-3">
+                  <Field label="Label aspek" required><Input value={criterionForm.label} onChange={e => setCriterionForm(f => ({ ...f, label: e.target.value }))} placeholder="Mis. Teknik gaya bebas" /></Field>
+                  <Field label="Tipe penilaian">
+                    <Select value={criterionForm.kind} onChange={e => setCriterionForm(f => ({ ...f, kind: e.target.value }))}>
+                      <option value="score_10">Nilai 1–10</option>
+                      <option value="score_100">Nilai 1–100</option>
+                      <option value="choice">Pilihan ganda</option>
+                      <option value="text">Teks bebas</option>
+                    </Select>
+                  </Field>
+                </div>
+                {criterionForm.kind === "choice" && (
+                  <Field label="Pilihan jawaban" hint="Satu pilihan per baris">
+                    <Textarea rows={3} value={criterionForm.options} onChange={e => setCriterionForm(f => ({ ...f, options: e.target.value }))} placeholder={"Sangat Baik\nBaik\nCukup\nPerlu Latihan"} />
+                  </Field>
+                )}
+                <Btn variant="primary" size="sm" icon="plus" onClick={addCriterion} disabled={savingCriterion}>{savingCriterion ? "Menyimpan…" : "Tambah Aspek"}</Btn>
+              </div>
+            </>
+          )}
+        </div>
+      </Modal>
     </div>
   );
+}
+
+interface TarifClassRow {
+  id: string; name: string;
+  schedule_days: string[]; time_start: string | null; time_end: string | null;
+  class_coaches: { profile: { id: string; full_name: string } | null }[];
 }
 
 function SettingsTarif({ branches }: { branches: Branch[] }) {
   const toast = useToast();
   const supabase = createClient();
   const [branchId, setBranchId] = useState(branches[0]?.id ?? "");
-  const [classes, setClasses] = useState<ClassRow[]>([]);
-  const [rates, setRates] = useState<Record<string, number>>({});
+  const [classes, setClasses] = useState<TarifClassRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  // tarif umum: classId → rate string
+  const [generalRates, setGeneralRates] = useState<Record<string, string>>({});
+  // tarif khusus: `${classId}:${coachId}` → rate string
+  const [coachRates, setCoachRates] = useState<Record<string, string>>({});
+  // saving key: classId for general, `${classId}:${coachId}` for coach-specific
   const [saving, setSaving] = useState<string | null>(null);
 
-   
-  useEffect(() => {
-    if (!branchId) return;
-    supabase
+  const loadData = useCallback(async (bid: string) => {
+    setLoading(true);
+    // Load classes with their coaches
+    const { data: clsData } = await supabase
       .from("classes")
-      .select("id, name, schedule_days, time_start, time_end, branch_id, status, capacity, enrolled, price_monthly")
-      .eq("branch_id", branchId)
+      .select("id, name, schedule_days, time_start, time_end, class_coaches(profile:profiles(id, full_name))")
+      .eq("branch_id", bid)
       .eq("status", "active")
-      .order("name")
-      .then(({ data }) => { if (data) setClasses(data as unknown as ClassRow[]); });
+      .order("name");
+    if (clsData) setClasses(clsData as unknown as TarifClassRow[]);
 
-    supabase
-      .from("coach_rates")
-      .select("id, class_id, coach_id, rate_per_session")
-      .is("coach_id", null)
-      .then(({ data }) => {
-        if (data) {
-          const map: Record<string, number> = {};
-          (data as CoachRate[]).forEach(r => { map[r.class_id] = r.rate_per_session; });
-          setRates(map);
-        }
-      });
-  }, [branchId]); // eslint-disable-line react-hooks/exhaustive-deps
-   
+    // Load all rates for classes in this branch at once
+    const classIds = (clsData ?? []).map((c: { id: string }) => c.id);
+    if (classIds.length > 0) {
+      const { data: rateData } = await supabase
+        .from("coach_rates")
+        .select("class_id, coach_id, rate_per_session")
+        .in("class_id", classIds);
+      if (rateData) {
+        const gen: Record<string, string> = {};
+        const cch: Record<string, string> = {};
+        (rateData as CoachRate[]).forEach(r => {
+          if (!r.coach_id) {
+            gen[r.class_id] = String(r.rate_per_session ?? "");
+          } else {
+            cch[`${r.class_id}:${r.coach_id}`] = String(r.rate_per_session ?? "");
+          }
+        });
+        setGeneralRates(gen);
+        setCoachRates(cch);
+      }
+    } else {
+      setGeneralRates({});
+      setCoachRates({});
+    }
+    setLoading(false);
+  }, [supabase]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const saveRate = async (classId: string) => {
-    const val = rates[classId];
-    if (!val) return toast.error("Masukkan nominal tarif");
-    setSaving(classId);
-    const { data: existing } = await supabase.from("coach_rates").select("id").eq("class_id", classId).is("coach_id", null).single();
+  useEffect(() => { if (branchId) loadData(branchId); }, [branchId, loadData]);
+
+  const saveGeneral = async (classId: string) => {
+    const val = Number(generalRates[classId]);
+    if (!val || val <= 0) return toast.error("Masukkan nominal tarif yang valid");
+    const key = classId;
+    setSaving(key);
+    const { data: existing } = await supabase.from("coach_rates").select("id").eq("class_id", classId).is("coach_id", null).maybeSingle();
     const op = existing
       ? supabase.from("coach_rates").update({ rate_per_session: val }).eq("id", existing.id)
       : supabase.from("coach_rates").insert({ class_id: classId, coach_id: null, rate_per_session: val });
     const { error } = await op;
     setSaving(null);
     if (error) return toast.error("Gagal menyimpan", error.message);
-    toast.success("Tarif disimpan");
+    toast.success("Tarif umum disimpan");
+  };
+
+  const saveCoachRate = async (classId: string, coachId: string) => {
+    const key = `${classId}:${coachId}`;
+    const rawVal = coachRates[key];
+    // empty = clear the override
+    if (!rawVal || rawVal === "") {
+      setSaving(key);
+      await supabase.from("coach_rates").delete().eq("class_id", classId).eq("coach_id", coachId);
+      setSaving(null);
+      setCoachRates(prev => { const n = { ...prev }; delete n[key]; return n; });
+      toast.success("Tarif khusus dihapus — akan pakai tarif umum");
+      return;
+    }
+    const val = Number(rawVal);
+    if (!val || val <= 0) return toast.error("Masukkan nominal tarif yang valid");
+    setSaving(key);
+    const { data: existing } = await supabase.from("coach_rates").select("id").eq("class_id", classId).eq("coach_id", coachId).maybeSingle();
+    const op = existing
+      ? supabase.from("coach_rates").update({ rate_per_session: val }).eq("id", existing.id)
+      : supabase.from("coach_rates").insert({ class_id: classId, coach_id: coachId, rate_per_session: val });
+    const { error } = await op;
+    setSaving(null);
+    if (error) return toast.error("Gagal menyimpan", error.message);
+    toast.success("Tarif khusus disimpan");
   };
 
   return (
     <div className="space-y-5">
       <div>
         <h2 className="font-display font-bold text-2xl">Settings Tarif Coach</h2>
-        <p className="text-ink-mute text-sm mt-0.5">Set tarif per sesi per kelas.</p>
+        <p className="text-ink-mute text-sm mt-0.5">Set tarif umum per sesi per kelas, dan opsional tarif khusus per coach yang override tarif umum.</p>
       </div>
-      <Card>
-        <div className="flex flex-wrap items-center gap-3 mb-5">
-          <span className="text-sm font-semibold text-ink-soft">Cabang:</span>
-          <div className="flex gap-1.5 flex-wrap">
-            {branches.map((b) => (
-              <button key={b.id} onClick={() => setBranchId(b.id)} className={`px-3 py-1.5 text-xs font-bold rounded-lg ${branchId === b.id ? "bg-ocean-700 text-white" : "bg-paper-tint text-ink-soft hover:bg-paper-deep"}`}>
-                {b.name}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {classes.map((c) => (
-            <Card key={c.id} className="!p-4">
-              <div className="font-semibold text-ink">{c.name}</div>
-              <div className="text-xs text-ink-mute mt-0.5 mb-3">{(c.schedule_days ?? []).join(", ")} · {c.time_start?.slice(0,5)}{c.time_end ? `–${c.time_end.slice(0,5)}` : ""}</div>
-              <Field label="Tarif umum (per sesi)">
-                <Input
-                  type="number"
-                  value={rates[c.id] ?? ""}
-                  onChange={e => setRates(r => ({ ...r, [c.id]: e.target.value === "" ? "" : Number(e.target.value) }))}
-                  className="font-mono"
-                  placeholder="150000"
-                />
-              </Field>
-              <Btn variant="soft" size="sm" className="mt-2 w-full" onClick={() => saveRate(c.id)} disabled={saving === c.id}>
-                {saving === c.id ? "Menyimpan…" : "Simpan tarif"}
-              </Btn>
-            </Card>
+
+      {/* Branch selector */}
+      {branches.length > 1 && (
+        <div className="flex flex-wrap items-center gap-2">
+          {branches.map((b) => (
+            <button key={b.id} onClick={() => setBranchId(b.id)}
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors ${branchId === b.id ? "bg-ocean-700 text-white" : "bg-paper-tint text-ink-soft hover:bg-paper-deep"}`}>
+              {b.name}
+            </button>
           ))}
-          {classes.length === 0 && <p className="text-ink-mute text-sm col-span-3">Tidak ada kelas untuk cabang ini.</p>}
         </div>
-      </Card>
+      )}
+
+      {loading ? (
+        <Card><div className="py-10 text-center text-ink-mute text-sm">Memuat data…</div></Card>
+      ) : classes.length === 0 ? (
+        <Card><div className="py-10 text-center text-ink-mute text-sm">Tidak ada kelas aktif untuk cabang ini.</div></Card>
+      ) : (
+        <div className="space-y-4">
+          {classes.map((c) => {
+            const coaches = (c.class_coaches ?? []).map(cc => cc.profile).filter(Boolean) as { id: string; full_name: string }[];
+            return (
+              <Card key={c.id} className="space-y-4">
+                {/* Class header */}
+                <div>
+                  <div className="font-display font-bold text-ink">{c.name}</div>
+                  <div className="text-xs text-ink-mute mt-0.5">
+                    {(c.schedule_days ?? []).join(", ")}
+                    {c.time_start && <span className="font-mono"> · {c.time_start.slice(0,5)}{c.time_end ? `–${c.time_end.slice(0,5)}` : ""}</span>}
+                  </div>
+                </div>
+
+                {/* Tarif umum */}
+                <div className="flex items-end gap-2">
+                  <div className="flex-1">
+                    <Field label="Tarif umum (per sesi)" hint="Berlaku untuk semua coach di kelas ini, kecuali yang punya tarif khusus">
+                      <Input
+                        type="number"
+                        value={generalRates[c.id] ?? ""}
+                        onChange={e => setGeneralRates(r => ({ ...r, [c.id]: e.target.value }))}
+                        className="font-mono"
+                        placeholder="150000"
+                      />
+                    </Field>
+                  </div>
+                  <Btn variant="soft" size="sm" onClick={() => saveGeneral(c.id)} disabled={saving === c.id}>
+                    {saving === c.id ? "…" : "Simpan"}
+                  </Btn>
+                </div>
+
+                {/* Tarif khusus per coach */}
+                {coaches.length > 0 && (
+                  <div className="border-t border-line pt-3 space-y-2">
+                    <div className="text-xs font-bold uppercase tracking-widest text-ink-faint">Tarif Khusus per Coach <span className="normal-case font-normal text-ink-faint">(opsional — override tarif umum)</span></div>
+                    {coaches.map(coach => {
+                      const key = `${c.id}:${coach.id}`;
+                      const isSaving = saving === key;
+                      return (
+                        <div key={coach.id} className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 w-36 shrink-0">
+                            <Avatar name={coach.full_name} size={24} />
+                            <span className="text-xs text-ink-soft truncate">{coach.full_name}</span>
+                          </div>
+                          <div className="flex-1">
+                            <Input
+                              type="number"
+                              value={coachRates[key] ?? ""}
+                              onChange={e => setCoachRates(r => ({ ...r, [key]: e.target.value }))}
+                              className="font-mono text-sm"
+                              placeholder={generalRates[c.id] ? `Pakai umum (${Number(generalRates[c.id]).toLocaleString("id-ID")})` : "Belum ada tarif umum"}
+                            />
+                          </div>
+                          <Btn variant="soft" size="sm" onClick={() => saveCoachRate(c.id, coach.id)} disabled={isSaving}>
+                            {isSaving ? "…" : coachRates[key] ? "Simpan" : "Hapus"}
+                          </Btn>
+                        </div>
+                      );
+                    })}
+                    <p className="text-[11px] text-ink-faint">Kosongkan input untuk menghapus tarif khusus dan kembali ke tarif umum.</p>
+                  </div>
+                )}
+
+                {coaches.length === 0 && (
+                  <p className="text-xs text-ink-faint italic">Belum ada coach di kelas ini.</p>
+                )}
+              </Card>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -656,16 +928,17 @@ function Invoices({ branches }: { branches: Branch[] }) {
   const [loading, setLoading] = useState(true);
   const [branchFilter, setBranchFilter] = useState("all");
   const [marking, setMarking] = useState<string | null>(null);
+  const [detail, setDetail] = useState<Invoice | null>(null);
 
-  const totPaid    = invoices.filter(i => i.status === "paid");
-  const totUnpaid  = invoices.filter(i => i.status !== "paid");
+  const totPaid   = invoices.filter(i => i.status === "paid");
+  const totUnpaid = invoices.filter(i => i.status !== "paid");
 
   /* eslint-disable react-hooks/set-state-in-effect -- async data loader */
   useEffect(() => {
     setLoading(true);
     const q = supabase
       .from("coach_invoices")
-      .select("id, invoice_number, period_label, total_amount, status, bank_info, submitted_at, branch:branches(name), coach:profiles!coach_invoices_coach_id_fkey(full_name)")
+      .select("id, invoice_number, period_label, total_amount, status, bank_info, submitted_at, paid_at, branch:branches(name), coach:profiles!coach_invoices_coach_id_fkey(full_name), coach_invoice_items(id, class_id, session_count, rate, class:classes(name))")
       .order("submitted_at", { ascending: false });
     if (branchFilter !== "all") q.eq("branch_id", branchFilter);
     q.then(({ data }) => {
@@ -680,8 +953,43 @@ function Invoices({ branches }: { branches: Branch[] }) {
     const { error } = await supabase.from("coach_invoices").update({ status: "paid", paid_at: new Date().toISOString() }).eq("id", id);
     setMarking(null);
     if (error) return toast.error("Gagal update", error.message);
-    setInvoices(prev => prev.map(i => i.id === id ? { ...i, status: "paid" } : i));
+    setInvoices(prev => prev.map(i => i.id === id ? { ...i, status: "paid", paid_at: new Date().toISOString() } : i));
+    if (detail?.id === id) setDetail(prev => prev ? { ...prev, status: "paid", paid_at: new Date().toISOString() } : prev);
     toast.success("Invoice ditandai lunas");
+  };
+
+  const printInvoice = (iv: Invoice) => {
+    const w = window.open("", "_blank", "width=700,height=900");
+    if (!w) return;
+    // Group items by class
+    const itemMap: Record<string, { name: string; sessions: number; rate: number }> = {};
+    (iv.coach_invoice_items ?? []).forEach(item => {
+      if (!itemMap[item.class_id]) itemMap[item.class_id] = { name: item.class?.name ?? item.class_id, sessions: 0, rate: item.rate };
+      itemMap[item.class_id].sessions += item.session_count;
+    });
+    const itemRows = Object.values(itemMap).map(item =>
+      `<div class="row"><span>${item.name}</span><span>${item.sessions} sesi × Rp ${item.rate.toLocaleString("id-ID")} = <b>Rp ${(item.sessions * item.rate).toLocaleString("id-ID")}</b></span></div>`
+    ).join("");
+    w.document.write(`<!DOCTYPE html><html><head><title>${iv.invoice_number}</title>
+      <style>body{font-family:sans-serif;padding:32px;color:#0f172a;max-width:640px;margin:auto}
+      h1{font-size:22px;font-weight:700;margin-bottom:2px}.sub{font-size:13px;color:#64748b;margin-bottom:20px}
+      .section{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94a3b8;margin:20px 0 6px}
+      .meta{background:#f8fafc;border-radius:8px;padding:12px 16px;font-size:13px;line-height:1.8}
+      .row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #e2e8f0;font-size:13px}
+      .total{display:flex;justify-content:space-between;padding:12px 0;font-weight:700;font-size:16px;border-top:2px solid #0f172a;margin-top:4px}
+      .badge{display:inline-block;padding:2px 10px;border-radius:4px;font-size:11px;font-weight:700;background:${iv.status === "paid" ? "#dcfce7" : "#fef9c3"};color:${iv.status === "paid" ? "#166534" : "#854d0e"}}
+      footer{margin-top:40px;border-top:1px solid #e2e8f0;padding-top:12px;font-size:11px;color:#94a3b8;text-align:center}
+      </style></head><body>
+      <h1>Invoice Coach</h1>
+      <div class="sub">${iv.invoice_number} &nbsp;·&nbsp; <span class="badge">${iv.status === "paid" ? "Lunas" : "Pending"}</span></div>
+      <div class="section">Informasi</div>
+      <div class="meta"><b>Periode:</b> ${iv.period_label}<br/><b>Coach:</b> ${iv.coach?.full_name ?? "—"}<br/><b>Cabang:</b> ${iv.branch?.name ?? "—"}<br/><b>Rekening:</b> ${iv.bank_info ?? "—"}${iv.paid_at ? `<br/><b>Dibayar:</b> ${new Date(iv.paid_at).toLocaleDateString("id-ID", { dateStyle: "long" })}` : ""}</div>
+      <div class="section">Rincian Kelas</div>
+      ${itemRows || '<div class="row"><span style="color:#94a3b8">Tidak ada rincian</span></div>'}
+      <div class="total"><span>Total</span><span>Rp ${iv.total_amount.toLocaleString("id-ID")}</span></div>
+      <footer>Next Swimming School &nbsp;·&nbsp; Dicetak ${new Date().toLocaleDateString("id-ID", { dateStyle: "long" })}</footer>
+      </body></html>`);
+    w.document.close(); w.focus(); w.print();
   };
 
   return (
@@ -691,61 +999,117 @@ function Invoices({ branches }: { branches: Branch[] }) {
           <h2 className="font-display font-bold text-2xl">Invoice Coach</h2>
           <p className="text-ink-mute text-sm mt-0.5">Semua invoice yang di-generate coach dari coach page.</p>
         </div>
-        <div className="flex gap-2">
-          <Select value={branchFilter} onChange={e => setBranchFilter(e.target.value)} className="!w-44">
-            <option value="all">Semua cabang</option>
-            {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-          </Select>
-        </div>
+        <Select value={branchFilter} onChange={e => setBranchFilter(e.target.value)} className="!w-44">
+          <option value="all">Semua cabang</option>
+          {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+        </Select>
       </div>
+
       <div className="grid sm:grid-cols-3 gap-4">
-        <Stat label="Total invoice"   value={invoices.length}                     icon="invoice" tone="ocean" />
-        <Stat label="Belum dibayar"   value={fmtIDR(totUnpaid.reduce((a,i) => a + i.total_amount, 0))} icon="warning" tone="warn" sub={`${totUnpaid.length} invoice`} />
-        <Stat label="Sudah dibayar"   value={fmtIDR(totPaid.reduce((a,i) => a + i.total_amount, 0))}  icon="check"   tone="ok"   sub={`${totPaid.length} invoice`} />
+        <Stat label="Total invoice"  value={invoices.length}                                              icon="invoice" tone="ocean" />
+        <Stat label="Belum dibayar"  value={fmtIDR(totUnpaid.reduce((a, i) => a + i.total_amount, 0))}   icon="warning" tone="warn"  sub={`${totUnpaid.length} invoice`} />
+        <Stat label="Sudah dibayar"  value={fmtIDR(totPaid.reduce((a, i) => a + i.total_amount, 0))}     icon="check"   tone="ok"    sub={`${totPaid.length} invoice`} />
       </div>
+
       <Card padded={false}>
         {loading ? (
           <div className="p-10 text-center text-ink-mute">Memuat data…</div>
+        ) : invoices.length === 0 ? (
+          <div className="p-10 text-center text-ink-mute">Tidak ada invoice.</div>
         ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-[11px] uppercase tracking-widest text-ink-faint font-bold border-b border-line">
-                <th className="text-left py-3 px-5 font-bold">No. Invoice</th>
-                <th className="text-left py-3 font-bold">Coach</th>
-                <th className="text-left py-3 font-bold">Cabang</th>
-                <th className="text-left py-3 font-bold">Periode</th>
-                <th className="text-right py-3 font-bold">Total</th>
-                <th className="text-left py-3 font-bold">Rekening</th>
-                <th className="text-left py-3 font-bold">Status</th>
-                <th className="px-5" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-line">
-              {invoices.map((iv) => (
-                <tr key={iv.id} className="hover:bg-paper-tint">
-                  <td className="py-3.5 px-5 font-mono text-xs font-bold text-ocean-700">{iv.invoice_number}</td>
-                  <td>{iv.coach?.full_name ?? "—"}</td>
-                  <td className="text-ink-mute">{iv.branch?.name ?? "—"}</td>
-                  <td className="text-ink-mute">{iv.period_label}</td>
-                  <td className="text-right font-mono font-bold">{fmtIDR(iv.total_amount)}</td>
-                  <td className="text-ink-mute text-xs">{iv.bank_info ?? "—"}</td>
-                  <td><Status kind={iv.status === "paid" ? "paid" : iv.status === "pending" ? "pending" : "unpaid"}>{iv.status === "paid" ? "Lunas" : iv.status === "pending" ? "Menunggu" : "Belum"}</Status></td>
-                  <td className="px-5">
-                    {iv.status !== "paid" && (
-                      <Btn variant="soft" size="sm" onClick={() => markPaid(iv.id)} disabled={marking === iv.id}>
-                        {marking === iv.id ? "…" : "Tandai Lunas"}
-                      </Btn>
-                    )}
-                  </td>
-                </tr>
-              ))}
-              {invoices.length === 0 && (
-                <tr><td colSpan={8} className="text-center py-10 text-ink-mute">Tidak ada invoice</td></tr>
-              )}
-            </tbody>
-          </table>
+          <div className="divide-y divide-line">
+            {invoices.map((iv) => (
+              <div key={iv.id} className="flex items-center gap-3 px-5 py-3.5 hover:bg-paper-tint">
+                <span className="w-9 h-9 rounded-xl bg-ocean-50 text-ocean-700 flex items-center justify-center shrink-0">
+                  <Icon name="invoice" className="w-5 h-5" />
+                </span>
+                <div className="flex-1 min-w-0 cursor-pointer" onClick={() => setDetail(iv)}>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-mono text-xs font-bold text-ocean-700">{iv.invoice_number}</span>
+                    <Status kind={iv.status === "paid" ? "paid" : "pending"}>{iv.status === "paid" ? "Lunas" : "Pending"}</Status>
+                  </div>
+                  <div className="text-xs text-ink-mute mt-0.5">
+                    {iv.coach?.full_name ?? "—"} · {iv.branch?.name ?? "—"} · {iv.period_label}
+                  </div>
+                </div>
+                <div className="font-mono font-bold text-sm shrink-0">{fmtIDR(iv.total_amount)}</div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button onClick={() => printInvoice(iv)} className="w-8 h-8 rounded-lg border border-line hover:bg-paper-tint flex items-center justify-center text-ink-mute hover:text-ocean-600" title="Cetak PDF">
+                    <Icon name="print" className="w-4 h-4" />
+                  </button>
+                  {iv.status !== "paid" && (
+                    <Btn variant="soft" size="sm" onClick={() => markPaid(iv.id)} disabled={marking === iv.id}>
+                      {marking === iv.id ? "…" : "Lunas"}
+                    </Btn>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
         )}
       </Card>
+
+      {/* Detail modal */}
+      <Modal open={!!detail} onClose={() => setDetail(null)} title={detail?.invoice_number ?? "Detail Invoice"} size="md"
+        footer={
+          <div className="flex items-center gap-2 justify-between w-full">
+            <Btn variant="ghost" icon="print" onClick={() => detail && printInvoice(detail)}>Cetak PDF</Btn>
+            <div className="flex gap-2">
+              {detail?.status !== "paid" && (
+                <Btn variant="primary" onClick={() => detail && markPaid(detail.id)} disabled={marking === detail?.id}>
+                  {marking === detail?.id ? "Menyimpan…" : "Tandai Lunas"}
+                </Btn>
+              )}
+              <Btn variant="ghost" onClick={() => setDetail(null)}>Tutup</Btn>
+            </div>
+          </div>
+        }>
+        {detail && (
+          <div className="space-y-4">
+            {/* Meta */}
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Coach</div><div className="font-semibold">{detail.coach?.full_name ?? "—"}</div></div>
+              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Cabang</div><div className="font-semibold">{detail.branch?.name ?? "—"}</div></div>
+              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Periode</div><div>{detail.period_label}</div></div>
+              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Status</div><Status kind={detail.status === "paid" ? "paid" : "pending"}>{detail.status === "paid" ? "Lunas" : "Pending"}</Status></div>
+              <div className="col-span-2"><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Rekening</div><div className="font-mono text-sm">{detail.bank_info ?? "—"}</div></div>
+              {detail.paid_at && <div className="col-span-2"><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Dibayar pada</div><div>{new Date(detail.paid_at).toLocaleDateString("id-ID", { dateStyle: "long" })}</div></div>}
+            </div>
+
+            {/* Items breakdown */}
+            <div className="border-t border-line pt-4">
+              <div className="text-xs font-bold uppercase tracking-widest text-ink-faint mb-2">Rincian Kelas</div>
+              {(detail.coach_invoice_items ?? []).length === 0 ? (
+                <p className="text-sm text-ink-mute">Tidak ada rincian.</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {/* Group by class */}
+                  {(() => {
+                    const map: Record<string, { name: string; sessions: number; rate: number }> = {};
+                    (detail.coach_invoice_items ?? []).forEach(item => {
+                      if (!map[item.class_id]) map[item.class_id] = { name: item.class?.name ?? item.class_id, sessions: 0, rate: item.rate };
+                      map[item.class_id].sessions += item.session_count;
+                    });
+                    return Object.values(map).map((item, i) => (
+                      <div key={i} className="flex items-center justify-between py-2 border-b border-line text-sm">
+                        <div>
+                          <div className="font-semibold text-ink">{item.name}</div>
+                          <div className="text-xs text-ink-mute">{item.sessions} sesi × {fmtIDR(item.rate)}</div>
+                        </div>
+                        <div className="font-mono font-bold">{fmtIDR(item.sessions * item.rate)}</div>
+                      </div>
+                    ));
+                  })()}
+                  <div className="flex items-center justify-between pt-2 font-bold text-sm">
+                    <span>Total</span>
+                    <span className="font-mono text-ocean-700 text-base">{fmtIDR(detail.total_amount)}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }
@@ -827,7 +1191,7 @@ export default function OwnerPage() {
 
   const logout = async () => {
     await supabase.auth.signOut();
-    router.push("/login");
+    window.location.href = "/login";
   };
 
   const pages: Record<string, React.ReactNode> = {

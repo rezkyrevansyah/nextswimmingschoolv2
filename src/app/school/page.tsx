@@ -58,7 +58,8 @@ export default function SchoolPage() {
           id, scores, notes, period_id
         )
       `)
-      .eq("school_id", sId);
+      .eq("school_id", sId)
+      .eq("type", "school_affiliate");
 
     if (!data) { setLoading(false); return; }
 

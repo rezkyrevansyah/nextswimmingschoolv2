@@ -175,14 +175,20 @@ function MemberHome({
       .then(async ({ data: mcData }) => {
         const classIds = (mcData ?? []).map((mc) => (mc as unknown as { class_id: string }).class_id);
         // Fetch all active announcements for the branch
+        const today = new Date().toISOString().slice(0, 10);
         const { data: allAnns } = await supabase.from("announcements")
-          .select("title, body, target_all, announcement_classes(class_id)")
+          .select("title, body, target_all, valid_from, valid_until, announcement_classes(class_id)")
           .eq("branch_id", branchId).eq("active", true)
           .order("created_at", { ascending: false }).limit(20);
         if (!allAnns) return;
+        // Filter: valid_from <= today AND (valid_until is null OR valid_until >= today)
         // Show first announcement that is target_all OR has a matching class
-        const match = (allAnns as unknown as { title: string; body: string; target_all: boolean; announcement_classes: { class_id: string }[] }[])
-          .find((a) => a.target_all || a.announcement_classes.some((ac) => classIds.includes(ac.class_id)));
+        const match = (allAnns as unknown as { title: string; body: string; target_all: boolean; valid_from: string | null; valid_until: string | null; announcement_classes: { class_id: string }[] }[])
+          .find((a) => {
+            if (a.valid_from && a.valid_from > today) return false;
+            if (a.valid_until && a.valid_until < today) return false;
+            return a.target_all || a.announcement_classes.some((ac) => classIds.includes(ac.class_id));
+          });
         if (match) setLatestAnnouncement({ title: match.title, body: match.body });
       });
 
@@ -367,7 +373,7 @@ function MemberHome({
 
 function MemberSchedule({ memberId }: { memberId: string }) {
   const supabase = createClient();
-  const [classes, setClasses] = useState<{ id: string; name: string; schedule_days: string[]; time_start: string | null; time_end: string | null; schedule_times?: { day: string; time_start: string; time_end: string }[] | null; location: string; coach_name: string | null; coach_phone: string | null }[]>([]);
+  const [classes, setClasses] = useState<{ id: string; name: string; schedule_days: string[]; time_start: string | null; time_end: string | null; schedule_times?: { day: string; time_start: string; time_end: string }[] | null; location: string; goals: string | null; description: string | null; coach_name: string | null; coach_phone: string | null }[]>([]);
   const [sessions, setSessions] = useState<{ date: string; day: string; time: string; class_id: string; onLeave?: boolean }[]>([]);
   const [holidayClassIds, setHolidayClassIds] = useState<Set<string>>(new Set());
   // approved leave intervals: { date_from, date_to, class_ids }
@@ -392,15 +398,15 @@ function MemberSchedule({ memberId }: { memberId: string }) {
       });
 
     supabase.from("member_classes")
-      .select("classes(id, name, schedule_days, time_start, time_end, schedule_times, location_name, class_coaches(profile:profiles(full_name, phone)))")
+      .select("classes(id, name, schedule_days, time_start, time_end, schedule_times, location_name, goals, description, class_coaches(profile:profiles(full_name, phone)))")
       .eq("member_id", memberId)
       .then(async ({ data }) => {
         if (!data) return;
         const cls = data.map((mc) => {
-          const c = mc.classes as unknown as { id: string; name: string; schedule_days: string[]; time_start: string | null; time_end: string | null; schedule_times?: { day: string; time_start: string; time_end: string }[] | null; location_name: string | null; class_coaches: { profile: { full_name: string; phone: string | null } | null }[] } | null;
+          const c = mc.classes as unknown as { id: string; name: string; schedule_days: string[]; time_start: string | null; time_end: string | null; schedule_times?: { day: string; time_start: string; time_end: string }[] | null; location_name: string | null; goals: string | null; description: string | null; class_coaches: { profile: { full_name: string; phone: string | null } | null }[] } | null;
           if (!c) return null;
           const firstCoach = c.class_coaches?.[0]?.profile;
-          return { id: c.id, name: c.name, schedule_days: c.schedule_days ?? [], time_start: c.time_start, time_end: c.time_end ?? null, schedule_times: c.schedule_times ?? null, location: c.location_name ?? "—", coach_name: firstCoach?.full_name ?? null, coach_phone: firstCoach?.phone ?? null };
+          return { id: c.id, name: c.name, schedule_days: c.schedule_days ?? [], time_start: c.time_start, time_end: c.time_end ?? null, schedule_times: c.schedule_times ?? null, location: c.location_name ?? "—", goals: c.goals ?? null, description: c.description ?? null, coach_name: firstCoach?.full_name ?? null, coach_phone: firstCoach?.phone ?? null };
         }).filter(Boolean) as typeof classes;
         setClasses(cls);
 
@@ -472,6 +478,22 @@ function MemberSchedule({ memberId }: { memberId: string }) {
               )}
             </div>
           </div>
+          {(c.goals || c.description) && (
+            <div className="px-5 py-3 border-b border-line space-y-2">
+              {c.goals && (
+                <div>
+                  <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Tujuan</div>
+                  <p className="text-xs text-ink-soft mt-0.5">{c.goals}</p>
+                </div>
+              )}
+              {c.description && (
+                <div>
+                  <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Deskripsi</div>
+                  <p className="text-xs text-ink-soft mt-0.5">{c.description}</p>
+                </div>
+              )}
+            </div>
+          )}
           <div className="divide-y divide-line">
             {c.schedule_days.map((d, i) => (
               <div key={i} className="px-5 py-3.5 flex items-center gap-3">
@@ -549,7 +571,7 @@ function MemberAbsensi({ memberId }: { memberId: string }) {
           present: mapped.filter((r) => r.status === "hadir").length,
           excused: mapped.filter((r) => r.status === "izin").length,
           sick: mapped.filter((r) => r.status === "sakit").length,
-          absent: mapped.filter((r) => r.status === "absent").length,
+          absent: mapped.filter((r) => r.status === "tidak_hadir" || r.status === "absent").length,
         });
       });
   }, [memberId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -574,14 +596,16 @@ function MemberAbsensi({ memberId }: { memberId: string }) {
             const dateStr = `${d.getDate()} ${monthNames[d.getMonth()]} ${d.getFullYear()}`;
             return (
               <div key={r.id} className="px-5 py-3 flex items-center gap-3">
-                <span className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${r.status === "hadir" ? "bg-ok-50 text-ok-600" : r.status === "absent" ? "bg-danger-50 text-danger-500" : "bg-warn-50 text-warn-600"}`}>
-                  <Icon name={r.status === "hadir" ? "check" : r.status === "absent" ? "x" : "info"} className="w-4 h-4" strokeWidth={2.5} />
+                <span className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${r.status === "hadir" ? "bg-ok-50 text-ok-600" : (r.status === "tidak_hadir" || r.status === "absent") ? "bg-danger-50 text-danger-500" : "bg-warn-50 text-warn-600"}`}>
+                  <Icon name={r.status === "hadir" ? "check" : (r.status === "tidak_hadir" || r.status === "absent") ? "x" : "info"} className="w-4 h-4" strokeWidth={2.5} />
                 </span>
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-semibold text-ink">{r.class_name}</div>
                   <div className="text-xs text-ink-mute font-mono">{dateStr} · {r.time}{r.notes ? ` · ${r.notes}` : ""}</div>
                 </div>
-                <Status kind={r.status === "hadir" ? "present" : r.status === "absent" ? "absent" : r.status === "izin" ? "excused" : "sick"}>{r.status === "hadir" ? "Hadir" : r.status === "absent" ? "Absen" : r.status === "izin" ? "Izin" : "Sakit"}</Status>
+                <Status kind={r.status === "hadir" ? "present" : (r.status === "tidak_hadir" || r.status === "absent") ? "absent" : r.status === "izin" ? "excused" : "sick"}>
+                  {r.status === "hadir" ? "Hadir" : (r.status === "tidak_hadir" || r.status === "absent") ? "Absen" : r.status === "izin" ? "Izin" : "Sakit"}
+                </Status>
               </div>
             );
           })}
@@ -597,7 +621,7 @@ function MemberAbsensi({ memberId }: { memberId: string }) {
 function MemberBills({ memberId, memberName, branchId }: { memberId: string; memberName: string; branchId: string }) {
   const supabase = createClient();
   const [tab, setTab] = useState("active");
-  const [activeBills, setActiveBills] = useState<{ id: string; period_label: string; amount: number; discount: number; discount_reason: string | null; total: number; class_name: string; due_date: string | null }[]>([]);
+  const [activeBills, setActiveBills] = useState<{ id: string; period_label: string; amount: number; discount: number; discount_reason: string | null; total: number; class_name: string; type: string; sessions_total: number | null; sessions_used: number }[]>([]);
   const [history, setHistory] = useState<{ id: string; period_label: string; amount: number; paid_at: string; payment_method: string | null }[]>([]);
   const [adminWa, setAdminWa] = useState<string | null>(null);
 
@@ -617,7 +641,7 @@ function MemberBills({ memberId, memberName, branchId }: { memberId: string; mem
   const load = useCallback(async () => {
     if (!memberId) return;
     const [actRes, hisRes] = await Promise.all([
-      supabase.from("bills").select("id, period_label, amount, discount, discount_reason, total, classes(name)").eq("member_id", memberId).eq("status", "unpaid").order("created_at", { ascending: false }),
+      supabase.from("bills").select("id, period_label, amount, discount, discount_reason, total, type, sessions_total, sessions_used, classes(name)").eq("member_id", memberId).in("status", ["unpaid", "partial"]).order("created_at", { ascending: false }),
       supabase.from("bills").select("id, period_label, amount, total, paid_at, paid_method").eq("member_id", memberId).eq("status", "paid").order("paid_at", { ascending: false }),
     ]);
     if (actRes.data) {
@@ -627,7 +651,10 @@ function MemberBills({ memberId, memberName, branchId }: { memberId: string; mem
           id: b.id, period_label: b.period_label,
           amount: bx.amount ?? 0, discount: bx.discount ?? 0, discount_reason: bx.discount_reason ?? null,
           total: bx.total ?? bx.amount ?? 0,
-          due_date: null, class_name: bx.classes?.name ?? "—",
+          class_name: bx.classes?.name ?? "—",
+          type: (b as unknown as { type: string }).type ?? "monthly",
+          sessions_total: (b as unknown as { sessions_total: number | null }).sessions_total ?? null,
+          sessions_used: (b as unknown as { sessions_used: number }).sessions_used ?? 0,
         };
       }));
     }
@@ -684,8 +711,12 @@ function MemberBills({ memberId, memberName, branchId }: { memberId: string; mem
                 )}
                 <div className="flex justify-between font-display font-bold text-xl text-ink pt-2 border-t border-warn-500/20"><span>Total</span><span className="font-mono text-ocean-700">{fmtIDR(b.total)}</span></div>
               </div>
-              {b.due_date && (
-                <div className="mt-2 text-xs text-warn-700 font-semibold">Jatuh tempo: {fmtDate(b.due_date)}</div>
+              {b.type === "session_pack" && b.sessions_total != null && (
+                <div className={`mt-3 flex items-center gap-2 px-3 py-2 rounded-xl border text-sm font-semibold ${(b.sessions_total - b.sessions_used) <= 1 ? "bg-warn-50 border-warn-300 text-warn-800" : "bg-paper-tint border-line text-ink-soft"}`}>
+                  <Icon name="calendar" className="w-4 h-4 shrink-0" />
+                  <span>Sisa sesi: <strong>{b.sessions_total - b.sessions_used}</strong> dari {b.sessions_total} sesi</span>
+                  {(b.sessions_total - b.sessions_used) <= 1 && <span className="ml-auto text-warn-700 font-bold text-xs">Hampir habis!</span>}
+                </div>
               )}
               {adminWa && (
                 <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded-xl bg-white border border-warn-500/20">
@@ -862,7 +893,7 @@ function MemberLeave({ memberId }: { memberId: string }) {
 // ── Rapor ──────────────────────────────────────────────────────────────────────
 
 interface RaporEntryFull {
-  id: string; period: string; class_name: string; coach_id: string; coach_name: string;
+  id: string; period: string; period_id: string; class_name: string; coach_id: string; coach_name: string;
   class_id: string;
   scores: Record<string, number | string>; notes: string | null;
   review_stars: number | null; review_message: string | null; review_id: string | null;
@@ -913,6 +944,7 @@ function MemberRapor({ memberId, memberName }: { memberId: string; memberName: s
       return {
         id: e.id,
         period: p?.label ?? "—",
+        period_id: e.period_id,
         class_name: cls?.name ?? "—",
         class_id: e.class_id,
         coach_id: e.coach_id,
@@ -940,6 +972,9 @@ function MemberRapor({ memberId, memberName }: { memberId: string; memberName: s
 
   const saveReview = async () => {
     if (!selectedEntry) return;
+    // Check period still open before allowing review submit/edit
+    const { data: periodCheck } = await supabase.from("rapor_periods").select("is_open").eq("id", selectedEntry.period_id).single();
+    if (!periodCheck?.is_open) return toast.error("Periode rapor sudah ditutup", "Review tidak bisa diedit setelah periode berakhir.");
     setSaving(true);
     if (selectedEntry.review_id) {
       await supabase.from("member_reviews").update({ stars: reviewRating, message: reviewText }).eq("id", selectedEntry.review_id);
@@ -1450,7 +1485,7 @@ export default function MemberPage() {
 
   const logout = async () => {
     await supabase.auth.signOut();
-    router.push("/login");
+    window.location.href = "/login";
   };
 
   // Called when member finishes uploading avatar from profile tab

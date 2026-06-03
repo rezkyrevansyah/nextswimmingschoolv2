@@ -113,6 +113,8 @@ export type Database = {
           paid_method: string | null
           period_label: string
           proof_url: string | null
+          sessions_total: number | null
+          sessions_used: number
           status: Database["public"]["Enums"]["payment_status"]
           total: number | null
           type: Database["public"]["Enums"]["bill_type"]
@@ -132,6 +134,8 @@ export type Database = {
           paid_method?: string | null
           period_label: string
           proof_url?: string | null
+          sessions_total?: number | null
+          sessions_used?: number
           status?: Database["public"]["Enums"]["payment_status"]
           total?: number | null
           type?: Database["public"]["Enums"]["bill_type"]
@@ -151,6 +155,8 @@ export type Database = {
           paid_method?: string | null
           period_label?: string
           proof_url?: string | null
+          sessions_total?: number | null
+          sessions_used?: number
           status?: Database["public"]["Enums"]["payment_status"]
           total?: number | null
           type?: Database["public"]["Enums"]["bill_type"]

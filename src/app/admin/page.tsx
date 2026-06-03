@@ -47,6 +47,10 @@ interface ClassRow {
   schedule_days: string[]; time_start: string | null; time_end: string | null;
   schedule_times?: ScheduleSlot[] | null;
   show_on_landing: boolean;
+  goals?: string | null;
+  description?: string | null;
+  spreadsheet_url?: string | null;
+  spreadsheet_filled?: boolean;
   branch?: { name: string } | null;
   class_coaches?: { profile: { full_name: string; id: string } | null }[];
 }
@@ -95,6 +99,8 @@ interface AttendanceRow {
 interface LeaveRow {
   id: string; type: string; reason: string | null;
   date_from: string; date_to: string; status: string;
+  coach_id?: string | null;
+  member_id?: string | null;
   profile?: { full_name: string; role: string } | null;
   leave_classes?: { class: { name: string } | null }[];
   substitute_profile?: { full_name: string } | null;
@@ -102,16 +108,19 @@ interface LeaveRow {
 
 interface BillRow {
   id: string; member_id: string; period_label: string; amount: number;
-  discount: number; total: number; status: string;
-  paid_at: string | null; proof_url: string | null;
+  discount: number; discount_reason: string | null; total: number; status: string;
+  type: string; sessions_total: number | null; sessions_used: number;
+  paid_at: string | null; paid_method: string | null; proof_url: string | null;
+  admin_notes: string | null;
   member?: { profile: { full_name: string } | null } | null;
+  class?: { name: string } | null;
 }
 
 interface RegistrationRow {
   id: string; full_name: string; birth_date: string | null; gender: string | null;
   phone: string | null; phone_owner: string | null; parent_name: string | null;
   parent_phone: string | null; address: string | null; health_notes: string | null;
-  status: string; created_at: string;
+  status: string; created_at: string; branch_id?: string | null;
 }
 
 interface CertRow {
@@ -147,74 +156,98 @@ interface Branch {
 function AdminDashboard({ branchId }: { branchId: string }) {
   const supabase = createClient();
   const [stats, setStats] = useState({ members: 0, coaches: 0, classes: 0, pending: 0, coachLeaves: 0, memberLeaves: 0 });
-  const [todayClasses, setTodayClasses] = useState<ClassRow[]>([]);
-  const [recentAttendance, setRecentAttendance] = useState<AttendanceRow[]>([]);
+  const [todayClasses, setTodayClasses] = useState<(ClassRow & { is_holiday?: boolean })[]>([]);
+  const [recentCoachAtt, setRecentCoachAtt] = useState<AttendanceRow[]>([]);
+  const [recentMemberAtt, setRecentMemberAtt] = useState<{ id: string; member_name: string; class_name: string; status: string; session_date: string }[]>([]);
   const [classesWithoutCoach, setClassesWithoutCoach] = useState<{ id: string; name: string }[]>([]);
+  const [overdueCount, setOverdueCount] = useState(0);
 
   const loadAttendance = useCallback(async () => {
     if (!branchId) return;
     const today = new Date().toISOString().split("T")[0];
-    const { data } = await supabase.from("coach_attendances")
-      .select("id, session_date, clock_in_time, status, is_manual, profile:profiles!coach_attendances_coach_id_fkey(full_name), class:classes(name)")
-      .eq("branch_id", branchId).eq("session_date", today)
-      .order("clock_in_at", { ascending: false }).limit(8);
-    if (data) setRecentAttendance(data as unknown as AttendanceRow[]);
+    const [coachRes, memberRes] = await Promise.all([
+      supabase.from("coach_attendances")
+        .select("id, session_date, clock_in_time, status, is_manual, profile:profiles!coach_attendances_coach_id_fkey(full_name), class:classes(name)")
+        .eq("branch_id", branchId).eq("session_date", today)
+        .order("clock_in_at", { ascending: false }).limit(6),
+      supabase.from("member_attendances")
+        .select("id, session_date, status, member:members(profile:profiles(full_name)), class:classes(name)")
+        .eq("session_date", today).eq("status", "hadir")
+        .order("created_at", { ascending: false }).limit(6),
+    ]);
+    if (coachRes.data) setRecentCoachAtt(coachRes.data as unknown as AttendanceRow[]);
+    if (memberRes.data) setRecentMemberAtt((memberRes.data as unknown as { id: string; session_date: string; status: string; member: { profile: { full_name: string } | null } | null; class: { name: string } | null }[])
+      .map(r => ({ id: r.id, member_name: r.member?.profile?.full_name ?? "—", class_name: r.class?.name ?? "—", status: r.status, session_date: r.session_date })));
   }, [branchId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* eslint-disable react-hooks/set-state-in-effect -- async data loader */
   useEffect(() => {
     if (!branchId) return;
-    // Counts
+    const today = new Date().toISOString().split("T")[0];
+    const now = new Date();
+
+    // Counts — coach aktif = not archived AND not suspended
     Promise.all([
       supabase.from("members").select("id", { count: "exact" }).eq("branch_id", branchId).eq("status", "active"),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (supabase.from("profiles") as any).select("id", { count: "exact" }).eq("branch_id", branchId).eq("role", "coach").eq("is_archived", false),
+      (supabase.from("profiles") as any).select("id, suspend_until").eq("branch_id", branchId).eq("role", "coach").eq("is_archived", false),
       supabase.from("classes").select("id", { count: "exact" }).eq("branch_id", branchId).eq("status", "active"),
       supabase.from("registrations").select("id", { count: "exact" }).eq("branch_id", branchId).eq("status", "pending"),
-      // coach_leaves has no branch_id — join via profiles to filter by branch
       supabase.from("coach_leaves").select("id, profile:profiles!coach_leaves_coach_id_fkey(branch_id)").eq("status", "pending"),
-      // member_leaves has no branch_id — join via members to filter by branch
       supabase.from("member_leaves").select("id, member:members!member_leaves_member_id_fkey(branch_id)").eq("status", "pending"),
-    ]).then(([m, c, k, reg, cl, ml]) => {
+      supabase.from("certifications").select("id", { count: "exact" }).eq("status", "pending"),
+    ]).then(([m, c, k, reg, cl, ml, cert]) => {
+      // Coach aktif = not archived AND (no suspend_until OR suspend_until < today)
+      const activeCoaches = ((c.data ?? []) as { suspend_until: string | null }[])
+        .filter(p => !p.suspend_until || p.suspend_until < today).length;
       const coachLeaveCount = ((cl.data ?? []) as unknown as { profile?: { branch_id?: string | null } | null }[])
         .filter(r => r.profile?.branch_id === branchId).length;
       const memberLeaveCount = ((ml.data ?? []) as unknown as { member?: { branch_id?: string | null } | null }[])
         .filter(r => r.member?.branch_id === branchId).length;
-      setStats({ members: m.count ?? 0, coaches: c.count ?? 0, classes: k.count ?? 0, pending: reg.count ?? 0, coachLeaves: coachLeaveCount, memberLeaves: memberLeaveCount });
+      const totalPending = (reg.count ?? 0) + (cert.count ?? 0) + coachLeaveCount + memberLeaveCount;
+      setStats({ members: m.count ?? 0, coaches: activeCoaches, classes: k.count ?? 0, pending: totalPending, coachLeaves: coachLeaveCount, memberLeaves: memberLeaveCount });
     });
 
-    // Today's classes
-    const today = new Date().toLocaleDateString("id-ID", { weekday: "long" });
-    supabase.from("classes").select("id, name, time_start, time_end, capacity, enrolled, class_coaches(profile:profiles(full_name, id))")
-      .eq("branch_id", branchId).eq("status", "active").contains("schedule_days", [today]).limit(6)
-      .then(({ data }) => { if (data) setTodayClasses(data as unknown as ClassRow[]); });
+    // Today's classes + holiday status
+    const todayName = new Date().toLocaleDateString("id-ID", { weekday: "long" });
+    Promise.all([
+      supabase.from("classes").select("id, name, time_start, time_end, capacity, enrolled, class_coaches(profile:profiles(full_name, id))")
+        .eq("branch_id", branchId).eq("status", "active").contains("schedule_days", [todayName]).limit(6),
+      supabase.from("class_holidays").select("class_id").lte("date_from", today).gte("date_to", today),
+    ]).then(([classRes, holidayRes]) => {
+      if (!classRes.data) return;
+      const holidayClassIds = new Set((holidayRes.data ?? []).map(h => h.class_id));
+      setTodayClasses((classRes.data as unknown as ClassRow[]).map(c => ({ ...c, is_holiday: holidayClassIds.has(c.id) })));
+    });
 
-    // Alert: classes with no active coach (all coaches suspended or no coach assigned)
+    // Alert: classes with no active coach
     supabase.from("classes").select("id, name, class_coaches(coach:profiles(id, suspend_until))")
       .eq("branch_id", branchId).eq("status", "active")
       .then(({ data }) => {
         if (!data) return;
-        const now = new Date();
         const noActiveCoach = data.filter((c) => {
           const coaches = (c as unknown as { class_coaches: { coach: { id: string; suspend_until: string | null } | null }[] }).class_coaches ?? [];
-          if (coaches.length === 0) return true; // no coach assigned
-          return coaches.every((cc) => {
-            const suspUntil = cc.coach?.suspend_until;
-            return suspUntil != null && new Date(suspUntil) >= now;
+          if (coaches.length === 0) return true;
+          return coaches.every(cc => {
+            const su = cc.coach?.suspend_until;
+            return su != null && new Date(su) >= now;
           });
         });
         setClassesWithoutCoach(noActiveCoach.map(c => ({ id: c.id, name: c.name })));
       });
 
-    // Initial attendance load
+    // Alert: overdue unpaid bills (unpaid bills older than 30 days)
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    supabase.from("bills").select("id", { count: "exact" })
+      .eq("branch_id", branchId).eq("status", "unpaid").lt("created_at", thirtyDaysAgo)
+      .then(({ count }) => setOverdueCount(count ?? 0));
+
     loadAttendance();
 
-    // Realtime: new coach clock-ins → refresh attendance panel
+    // Realtime: new attendances → refresh
     const channel = supabase.channel(`live_att:${branchId}`)
-      .on("postgres_changes", {
-        event: "INSERT", schema: "public", table: "coach_attendances",
-        filter: `branch_id=eq.${branchId}`,
-      }, () => { loadAttendance(); })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "coach_attendances", filter: `branch_id=eq.${branchId}` }, () => loadAttendance())
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "member_attendances" }, () => loadAttendance())
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
@@ -223,6 +256,7 @@ function AdminDashboard({ branchId }: { branchId: string }) {
 
   return (
     <div className="space-y-6">
+      {/* Warning section */}
       {classesWithoutCoach.length > 0 && (
         <Card className="bg-danger-50 border-danger-300">
           <div className="flex items-start gap-3">
@@ -239,11 +273,23 @@ function AdminDashboard({ branchId }: { branchId: string }) {
           </div>
         </Card>
       )}
+      {overdueCount > 0 && (
+        <Card className="bg-warn-50 border-warn-300">
+          <div className="flex items-start gap-3">
+            <span className="w-10 h-10 rounded-xl bg-warn-100 text-warn-600 flex items-center justify-center shrink-0"><Icon name="invoice" className="w-5 h-5" /></span>
+            <div className="flex-1">
+              <div className="font-display font-bold text-warn-700">Tagihan belum dibayar ({overdueCount})</div>
+              <p className="text-sm text-warn-600 mt-0.5">Ada {overdueCount} tagihan yang sudah lebih dari 30 hari belum dibayar. Cek menu Pembayaran untuk detail.</p>
+            </div>
+          </div>
+        </Card>
+      )}
+
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Stat label="Member aktif"  value={stats.members} icon="users"   tone="ocean" />
         <Stat label="Coach aktif"   value={stats.coaches} icon="swim"    tone="wave"  />
         <Stat label="Kelas aktif"   value={stats.classes} icon="grid"    tone="ocean" />
-        <Stat label="Approvement"   value={stats.pending} icon="warning" tone="warn"  sub="Menunggu review" />
+        <Stat label="Approvement"   value={stats.pending} icon="warning" tone="warn"  sub="Semua yang pending" />
       </div>
       <div className="grid sm:grid-cols-2 gap-4">
         <Stat label="Izin coach"  value={stats.coachLeaves} icon="calendar" tone="warn" sub="Menunggu persetujuan" />
@@ -259,20 +305,26 @@ function AdminDashboard({ branchId }: { branchId: string }) {
             <div className="grid sm:grid-cols-2 gap-3">
               {todayClasses.map((c) => {
                 const coaches = c.class_coaches?.map(cc => cc.profile?.full_name).filter(Boolean) ?? [];
+                const isHoliday = (c as unknown as { is_holiday?: boolean }).is_holiday;
                 return (
-                  <div key={c.id} className="rounded-xl border border-line hover:border-ocean-200 hover:shadow-card p-3.5 transition">
+                  <div key={c.id} className={`rounded-xl border p-3.5 transition ${isHoliday ? "border-line bg-paper-tint opacity-60" : "border-line hover:border-ocean-200 hover:shadow-card"}`}>
                     <div className="flex items-center justify-between">
                       <div className="font-semibold text-ink text-sm">{c.name}</div>
-                      <Status kind="active" className="!text-[10px]">{c.time_start?.slice(0,5)}{c.time_end ? `–${c.time_end.slice(0,5)}` : ""}</Status>
+                      {isHoliday
+                        ? <span className="px-2 py-0.5 rounded-full bg-archive-100 text-archive-600 text-[10px] font-bold">LIBUR</span>
+                        : <Status kind="active" className="!text-[10px]">{c.time_start?.slice(0,5)}{c.time_end ? `–${c.time_end.slice(0,5)}` : ""}</Status>
+                      }
                     </div>
                     <div className="text-xs text-ink-mute mt-1">{c.time_start?.slice(0,5)}{c.time_end ? `–${c.time_end.slice(0,5)}` : ""} · {coaches[0] ?? "—"}</div>
-                    <div className="mt-2.5 flex items-center justify-between">
-                      <div className="flex -space-x-1.5">
-                        {Array.from({ length: Math.min(4, c.enrolled) }).map((_, k) => <Avatar key={k} name={`M${k + 1}`} size={22} ring />)}
-                        {c.enrolled > 4 && <span className="ml-2 text-[10px] font-bold text-ink-mute self-center">+{c.enrolled - 4}</span>}
+                    {!isHoliday && (
+                      <div className="mt-2.5 flex items-center justify-between">
+                        <div className="flex -space-x-1.5">
+                          {Array.from({ length: Math.min(4, c.enrolled) }).map((_, k) => <Avatar key={k} name={`M${k + 1}`} size={22} ring />)}
+                          {c.enrolled > 4 && <span className="ml-2 text-[10px] font-bold text-ink-mute self-center">+{c.enrolled - 4}</span>}
+                        </div>
+                        <span className="text-[10px] font-mono text-ink-mute">{c.enrolled}/{c.capacity}</span>
                       </div>
-                      <span className="text-[10px] font-mono text-ink-mute">{c.enrolled}/{c.capacity}</span>
-                    </div>
+                    )}
                   </div>
                 );
               })}
@@ -282,20 +334,32 @@ function AdminDashboard({ branchId }: { branchId: string }) {
 
         <Card>
           <SectionTitle sub="Real-time">Live Attendance</SectionTitle>
-          <div className="space-y-2.5">
-            {recentAttendance.map((a) => (
-              <div key={a.id} className="flex items-start gap-3 p-2.5 rounded-xl hover:bg-paper-tint">
-                <span className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${a.is_manual ? "bg-manual-50 text-manual-500" : "bg-wave-50 text-wave-600"}`}>
-                  <Icon name={a.is_manual ? "edit" : "camera"} className="w-4 h-4" />
+          <div className="space-y-1">
+            {recentCoachAtt.length === 0 && recentMemberAtt.length === 0 && <p className="text-ink-mute text-sm">Belum ada absensi hari ini.</p>}
+            {recentCoachAtt.map((a) => (
+              <div key={`c-${a.id}`} className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-paper-tint">
+                <span className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${a.is_manual ? "bg-manual-50 text-manual-500" : "bg-wave-50 text-wave-600"}`}>
+                  <Icon name="swim" className="w-3.5 h-3.5" />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <div className="text-sm font-semibold text-ink truncate">{a.profile?.full_name}</div>
-                  <div className="text-[11px] text-ink-mute">{a.class?.name}</div>
+                  <div className="text-xs font-semibold text-ink truncate">{a.profile?.full_name}</div>
+                  <div className="text-[10px] text-ink-mute">Coach · {a.class?.name}</div>
                 </div>
                 <span className="text-[10px] font-mono text-ink-faint">{a.clock_in_time?.slice(0, 5)}</span>
               </div>
             ))}
-            {recentAttendance.length === 0 && <p className="text-ink-mute text-sm">Belum ada absensi hari ini.</p>}
+            {recentMemberAtt.map((a) => (
+              <div key={`m-${a.id}`} className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-paper-tint">
+                <span className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-ok-50 text-ok-600">
+                  <Icon name="users" className="w-3.5 h-3.5" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-semibold text-ink truncate">{a.member_name}</div>
+                  <div className="text-[10px] text-ink-mute">Member · {a.class_name}</div>
+                </div>
+                <span className="text-[10px] font-mono text-ink-faint text-ok-500">Hadir</span>
+              </div>
+            ))}
           </div>
         </Card>
       </div>
@@ -448,7 +512,7 @@ interface Criterion {
   id: string; label: string; kind: string; options: string[] | null; sort_order: number;
 }
 
-const EMPTY_CLASS_FORM = { name: "", class_type: "reguler", schedule_days: [] as string[], schedule_times: [] as ScheduleSlot[], same_time_all: true, time_start: "", time_end: "", capacity: "", price_monthly: "", price_per_session: "", show_on_landing: true, goals: "" };
+const EMPTY_CLASS_FORM = { name: "", class_type: "reguler", schedule_days: [] as string[], schedule_times: [] as ScheduleSlot[], same_time_all: true, time_start: "", time_end: "", capacity: "", price_monthly: "", price_per_session: "", show_on_landing: true, goals: "", description: "" };
 const DAY_OPTS = ["Senin","Selasa","Rabu","Kamis","Jumat","Sabtu","Minggu"];
 
 function AdminClass({ branchId }: { branchId: string }) {
@@ -474,7 +538,7 @@ function AdminClass({ branchId }: { branchId: string }) {
 
   const load = useCallback(async () => {
     const { data } = await supabase.from("classes")
-      .select("id, name, branch_id, status, capacity, enrolled, price_monthly, price_per_session, class_type, schedule_days, time_start, time_end, schedule_times, show_on_landing, class_coaches(profile:profiles(full_name, id))")
+      .select("id, name, branch_id, status, capacity, enrolled, price_monthly, price_per_session, class_type, schedule_days, time_start, time_end, schedule_times, show_on_landing, goals, description, spreadsheet_url, spreadsheet_filled, class_coaches(profile:profiles(full_name, id))")
       .eq("branch_id", branchId).order("name");
     if (data) setClasses(data as unknown as ClassRow[]);
   }, [branchId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -504,7 +568,7 @@ function AdminClass({ branchId }: { branchId: string }) {
       capacity: c.capacity ? String(c.capacity) : "",
       price_monthly: c.price_monthly ? String(c.price_monthly) : "",
       price_per_session: c.price_per_session ? String(c.price_per_session) : "",
-      show_on_landing: c.show_on_landing ?? false, goals: "",
+      show_on_landing: c.show_on_landing ?? false, goals: c.goals ?? "", description: c.description ?? "",
     });
     setOpenForm(true);
   };
@@ -524,14 +588,14 @@ function AdminClass({ branchId }: { branchId: string }) {
 
     if (editTarget) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const updatePayload = { name: form.name, class_type: form.class_type, schedule_days: days, schedule_times: scheduleTimes.length > 0 ? scheduleTimes : null, time_start: firstSlot?.time_start || form.time_start || null, time_end: firstSlot?.time_end || form.time_end || null, capacity: isPrivate ? 1 : (Number(form.capacity) || 0), price_monthly: isPrivate ? 0 : (Number(form.price_monthly) || 0), price_per_session: isPrivate ? (Number(form.price_per_session) || null) : null, show_landing: form.show_on_landing } as any;
+      const updatePayload = { name: form.name, class_type: form.class_type, schedule_days: days, schedule_times: scheduleTimes.length > 0 ? scheduleTimes : null, time_start: firstSlot?.time_start || form.time_start || null, time_end: firstSlot?.time_end || form.time_end || null, capacity: isPrivate ? 1 : (Number(form.capacity) || 0), price_monthly: isPrivate ? 0 : (Number(form.price_monthly) || 0), price_per_session: isPrivate ? (Number(form.price_per_session) || null) : null, show_landing: form.show_on_landing, goals: form.goals.trim() || null, description: form.description.trim() || null } as any;
       const { error } = await supabase.from("classes").update(updatePayload).eq("id", editTarget.id);
       setSaving(false);
       if (error) return toast.error("Gagal update kelas", error.message);
       toast.success("Kelas diperbarui");
     } else {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const insertPayload = { name: form.name, class_type: form.class_type, schedule_days: days, schedule_times: scheduleTimes.length > 0 ? scheduleTimes : null, time_start: firstSlot?.time_start || form.time_start || null, time_end: firstSlot?.time_end || form.time_end || null, capacity: isPrivate ? 1 : (Number(form.capacity) || 0), price_monthly: isPrivate ? 0 : (Number(form.price_monthly) || 0), price_per_session: isPrivate ? (Number(form.price_per_session) || null) : null, show_landing: form.show_on_landing, goal: form.goals, branch_id: branchId, status: "active", enrolled: 0 } as any;
+      const insertPayload = { name: form.name, class_type: form.class_type, schedule_days: days, schedule_times: scheduleTimes.length > 0 ? scheduleTimes : null, time_start: firstSlot?.time_start || form.time_start || null, time_end: firstSlot?.time_end || form.time_end || null, capacity: isPrivate ? 1 : (Number(form.capacity) || 0), price_monthly: isPrivate ? 0 : (Number(form.price_monthly) || 0), price_per_session: isPrivate ? (Number(form.price_per_session) || null) : null, show_landing: form.show_on_landing, goals: form.goals.trim() || null, description: form.description.trim() || null, branch_id: branchId, status: "active", enrolled: 0 } as any;
       const { error } = await supabase.from("classes").insert(insertPayload);
       setSaving(false);
       if (error) return toast.error("Gagal membuat kelas", error.message);
@@ -668,7 +732,19 @@ function AdminClass({ branchId }: { branchId: string }) {
                     <div className={`h-full ${pct >= 1 ? "bg-danger-500" : pct > 0.7 ? "bg-warn-500" : "bg-ok-500"}`} style={{ width: `${Math.min(pct * 100, 100)}%` }} />
                   </div>
                 </div>
-                <div className="mt-4 pt-4 border-t border-line flex items-center justify-between">
+                <div className="mt-3 flex items-center gap-1.5">
+                  {c.spreadsheet_filled && c.spreadsheet_url ? (
+                    <a href={c.spreadsheet_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
+                      className="inline-flex items-center gap-1 text-[10px] font-semibold text-ok-600 hover:underline">
+                      <Icon name="link" className="w-3 h-3" />Spreadsheet
+                    </a>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-warn-500">
+                      <Icon name="warning" className="w-3 h-3" />Belum ada spreadsheet
+                    </span>
+                  )}
+                </div>
+                <div className="mt-3 pt-3 border-t border-line flex items-center justify-between">
                   <div className="font-display font-bold text-ocean-700">{fmtIDR(c.price_monthly)}<span className="text-xs text-ink-mute font-semibold">/bln</span></div>
                   <div className="flex gap-1">
                     {archived ? (
@@ -821,7 +897,8 @@ function AdminClass({ branchId }: { branchId: string }) {
               </div>
             )}
           </Field>
-          {!editTarget && <Field label="Tujuan kelas"><Textarea rows={2} value={form.goals} onChange={e => setForm(f => ({ ...f, goals: e.target.value }))} placeholder="Mis. Pengenalan air, blowing bubbles." /></Field>}
+          <Field label="Tujuan kelas" hint="Tampil di coach page dan member page"><Textarea rows={2} value={form.goals} onChange={e => setForm(f => ({ ...f, goals: e.target.value }))} placeholder="Mis. Pengenalan air, membangun rasa percaya diri di air." /></Field>
+          <Field label="Deskripsi kelas" hint="Opsional — tampil di coach page dan member page"><Textarea rows={3} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Mis. Kelas ini dirancang untuk anak usia 4–6 tahun yang baru pertama kali belajar renang..." /></Field>
           {!isPrivate && (
             <div className="flex items-center justify-between p-3 rounded-xl bg-ocean-50/50 border border-ocean-100">
               <div><div className="font-semibold text-ink text-sm">Tampilkan di landing page</div><div className="text-xs text-ink-mute">Kelas akan muncul di section Swimming Programs.</div></div>
@@ -839,6 +916,29 @@ function AdminClass({ branchId }: { branchId: string }) {
                 ))}
                 {(editTarget.class_coaches?.length ?? 0) === 0 && <span className="text-xs text-warn-600 font-semibold">Belum ada coach assigned</span>}
               </div>
+            </div>
+          )}
+          {editTarget && (
+            <div className="border-t border-line pt-4 space-y-2">
+              <div className="text-xs font-bold uppercase tracking-widest text-ink-faint">Spreadsheet Program</div>
+              {editTarget.spreadsheet_filled && editTarget.spreadsheet_url ? (
+                <div className="flex items-center gap-3 p-3 rounded-xl bg-ok-50 border border-ok-200">
+                  <Icon name="link" className="w-4 h-4 text-ok-600 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs text-ok-700 font-semibold">Sudah diisi coach</div>
+                    <a href={editTarget.spreadsheet_url} target="_blank" rel="noreferrer"
+                      className="text-xs text-ocean-600 hover:underline truncate block max-w-xs">{editTarget.spreadsheet_url}</a>
+                  </div>
+                  <a href={editTarget.spreadsheet_url} target="_blank" rel="noreferrer">
+                    <Btn variant="soft" size="sm" icon="link">Buka</Btn>
+                  </a>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 p-3 rounded-xl bg-warn-50 border border-warn-200 text-sm text-warn-700">
+                  <Icon name="warning" className="w-4 h-4 shrink-0 text-warn-500" />
+                  Spreadsheet program belum diisi oleh coach.
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -2815,11 +2915,16 @@ function AdminAbsensiCoach({ branchId }: { branchId: string }) {
     if (!form.coach_id || !form.class_id || !form.session_date) return toast.error("Coach, kelas, dan tanggal wajib diisi");
     setSaving(true);
     const user = (await supabase.auth.getUser()).data.user;
+    const clockInTime = form.clock_in_time || new Date().toTimeString().slice(0, 8);
     if (editTarget) {
       const { error } = await supabase.from("coach_attendances").update({
         coach_id: form.coach_id, class_id: form.class_id,
-        session_date: form.session_date, clock_in_time: form.clock_in_time || null,
+        session_date: form.session_date,
+        clock_in_time: clockInTime,
+        is_manual: true,
+        manual_by: user?.id ?? null,
         manual_note: form.note || null,
+        status: "present",
       }).eq("id", editTarget.id);
       setSaving(false);
       if (error) return toast.error("Gagal menyimpan", error.message);
@@ -2827,7 +2932,9 @@ function AdminAbsensiCoach({ branchId }: { branchId: string }) {
     } else {
       const { error } = await supabase.from("coach_attendances").insert({
         branch_id: branchId, coach_id: form.coach_id, class_id: form.class_id,
-        session_date: form.session_date, is_manual: true, manual_by: user?.id || null,
+        session_date: form.session_date,
+        clock_in_time: clockInTime,
+        is_manual: true, manual_by: user?.id ?? null,
         manual_note: form.note || null, status: "present",
       });
       setSaving(false);
@@ -2969,7 +3076,7 @@ function AdminPengumuman({ branchId }: { branchId: string }) {
   const [openAdd, setOpenAdd] = useState(false);
   const [saving, setSaving] = useState(false);
   const [classes, setClasses] = useState<ClassRow[]>([]);
-  const [form, setForm] = useState({ title: "", body: "", target: "all", valid_until: "", class_ids: [] as string[] });
+  const [form, setForm] = useState({ title: "", body: "", target: "all", valid_from: "", valid_until: "", class_ids: [] as string[] });
 
   const load = useCallback(async () => {
     const { data } = await supabase.from("announcements")
@@ -3003,15 +3110,32 @@ function AdminPengumuman({ branchId }: { branchId: string }) {
     const { data: ann, error } = await supabase.from("announcements").insert({
       branch_id: branchId, title: form.title, body: form.body,
       target_all: form.target === "all", active: true,
+      valid_from: form.valid_from || new Date().toISOString().slice(0, 10),
       valid_until: form.valid_until || null, created_by: user?.id,
     }).select("id").single();
     if (error || !ann) { setSaving(false); return toast.error("Gagal membuat pengumuman", error?.message); }
     if (form.target === "class" && form.class_ids.length > 0) {
       await supabase.from("announcement_classes").insert(form.class_ids.map(class_id => ({ announcement_id: ann.id, class_id })));
     }
+    // Send notifications to targeted members
+    const today = new Date().toISOString().slice(0, 10);
+    let targetMemberIds: string[] = [];
+    if (form.target === "all") {
+      const { data: mRows } = await supabase.from("members").select("id").eq("branch_id", branchId).eq("status", "active");
+      targetMemberIds = (mRows ?? []).map(m => m.id);
+    } else if (form.class_ids.length > 0) {
+      const { data: mcRows } = await supabase.from("member_classes").select("member_id").in("class_id", form.class_ids);
+      targetMemberIds = [...new Set((mcRows ?? []).map(mc => mc.member_id))];
+    }
+    if (targetMemberIds.length > 0) {
+      await supabase.from("notifications").insert(
+        targetMemberIds.map(uid => ({ user_id: uid, title: "Pengumuman baru", body: `${form.title}: ${form.body.slice(0, 80)}${form.body.length > 80 ? "…" : ""}`, icon: "bell", kind: "info", created_at: today }))
+      );
+    }
     setSaving(false);
     toast.success("Pengumuman dibuat");
     setOpenAdd(false);
+    setForm({ title: "", body: "", target: "all", valid_from: "", valid_until: "", class_ids: [] });
     load();
   };
 
@@ -3040,7 +3164,7 @@ function AdminPengumuman({ branchId }: { branchId: string }) {
     <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div><h2 className="font-display font-bold text-2xl">Pengumuman</h2><p className="text-ink-mute text-sm mt-0.5">Tampil di home member page sebagai banner.</p></div>
-        <Btn variant="primary" icon="plus" onClick={() => { setForm({ title: "", body: "", target: "all", valid_until: "", class_ids: [] }); setOpenAdd(true); }}>Buat Pengumuman</Btn>
+        <Btn variant="primary" icon="plus" onClick={() => { setForm({ title: "", body: "", target: "all", valid_from: "", valid_until: "", class_ids: [] }); setOpenAdd(true); }}>Buat Pengumuman</Btn>
       </div>
       {loading ? <div className="text-ink-mute text-sm">Memuat…</div> : (
         <div className="grid lg:grid-cols-2 gap-5">
@@ -3084,8 +3208,9 @@ function AdminPengumuman({ branchId }: { branchId: string }) {
                 <option value="class">Per kelas</option>
               </Select>
             </Field>
-            <Field label="Berlaku s/d"><Input type="date" value={form.valid_until} onChange={e => setForm(f => ({ ...f, valid_until: e.target.value }))} /></Field>
+            <Field label="Berlaku mulai" hint="Kosong = hari ini"><Input type="date" value={form.valid_from} onChange={e => setForm(f => ({ ...f, valid_from: e.target.value }))} /></Field>
           </div>
+          <Field label="Berlaku s/d" hint="Opsional — kosong = tampil sampai dihapus manual"><Input type="date" value={form.valid_until} onChange={e => setForm(f => ({ ...f, valid_until: e.target.value }))} /></Field>
           {form.target === "class" && (
             <Field label="Pilih kelas" hint="Bisa pilih lebih dari satu">
               <div className="flex flex-wrap gap-2 mt-1">
@@ -3131,14 +3256,14 @@ function AdminIzin({ branchId }: { branchId: string }) {
     let data: Record<string, unknown>[] | null = null;
     if (tab === "coach") {
       const { data: d } = await supabase.from("coach_leaves")
-        .select("id, type, reason, date_from, date_to, status, substitute_id, substitute_profile:profiles!coach_leaves_substitute_id_fkey(full_name), coach:profiles!coach_leaves_coach_id_fkey(full_name, role, branch_id)")
+        .select("id, coach_id, type, reason, date_from, date_to, status, substitute_id, substitute_profile:profiles!coach_leaves_substitute_id_fkey(full_name), coach:profiles!coach_leaves_coach_id_fkey(full_name, role, branch_id)")
         .order("created_at", { ascending: false });
       data = (d as Record<string, unknown>[] | null)?.filter(
         l => (l.coach as { branch_id?: string } | null)?.branch_id === branchId
       ) ?? null;
     } else {
       const { data: d } = await supabase.from("member_leaves")
-        .select("id, type, reason, date_from, date_to, status, member:members(branch_id, profile:profiles(full_name))")
+        .select("id, member_id, type, reason, date_from, date_to, status, member:members(branch_id, profile:profiles(full_name))")
         .order("created_at", { ascending: false });
       data = (d as Record<string, unknown>[] | null)?.filter(
         l => (l.member as { branch_id?: string } | null)?.branch_id === branchId
@@ -3156,8 +3281,15 @@ function AdminIzin({ branchId }: { branchId: string }) {
   /* eslint-disable react-hooks/set-state-in-effect -- async data loader */
   useEffect(() => {
     load();
-    supabase.from("profiles").select("id, full_name").eq("branch_id", branchId).eq("role", "coach").order("full_name")
-      .then(({ data }) => { if (data) setAllCoaches(data as unknown as CoachProfile[]); });
+    const today = new Date().toISOString().split("T")[0];
+    // Only load non-suspended coaches for substitute dropdown (per PRD)
+    supabase.from("profiles").select("id, full_name, suspend_until").eq("branch_id", branchId).eq("role", "coach").order("full_name")
+      .then(({ data }) => {
+        if (!data) return;
+        const active = (data as (CoachProfile & { suspend_until: string | null })[])
+          .filter(c => !c.suspend_until || c.suspend_until < today);
+        setAllCoaches(active);
+      });
     supabase.from("members").select("id, profile:profiles(full_name)").eq("branch_id", branchId).eq("status", "active")
       .then(({ data }) => { if (data) setAllMembers(data.map((m: Record<string, unknown>) => ({ id: m.id as string, full_name: ((m.profile as { full_name?: string } | null)?.full_name ?? "—") }))); });
     supabase.from("classes").select("id, name").eq("branch_id", branchId).order("name")
@@ -3214,6 +3346,16 @@ function AdminIzin({ branchId }: { branchId: string }) {
     // Auto-create member attendance records when member leave approved
     if (status === "approved" && tab === "member") {
       await autoCreateMemberAttendances(id);
+      const leave = leaves.find(l => l.id === id);
+      if (leave?.member_id) {
+        await supabase.from("notifications").insert({
+          user_id: leave.member_id,
+          title: "Izin disetujui",
+          body: `Izin Anda (${fmtDate(leave.date_from)} – ${fmtDate(leave.date_to)}) telah disetujui.`,
+          icon: "check",
+          kind: "success",
+        });
+      }
     }
     toast.success(status === "approved" ? "Izin disetujui" : "Izin ditolak");
     load();
@@ -3228,6 +3370,25 @@ function AdminIzin({ branchId }: { branchId: string }) {
     const { error } = await supabase.from(table as "coach_leaves").update(upd).eq("id", rejectTarget.id);
     setRejecting(false);
     if (error) return toast.error("Gagal menolak izin", error.message);
+    // Notify coach/member when leave is rejected
+    if (tab === "coach" && rejectTarget.coach_id) {
+      await supabase.from("notifications").insert({
+        user_id: rejectTarget.coach_id,
+        title: "Izin ditolak",
+        body: `Izin Anda (${fmtDate(rejectTarget.date_from)} – ${fmtDate(rejectTarget.date_to)}) telah ditolak${rejectReason.trim() ? `: "${rejectReason.trim()}"` : "."}`,
+        icon: "x",
+        kind: "warn",
+      });
+    }
+    if (tab === "member" && rejectTarget.member_id) {
+      await supabase.from("notifications").insert({
+        user_id: rejectTarget.member_id,
+        title: "Izin ditolak",
+        body: `Izin Anda (${fmtDate(rejectTarget.date_from)} – ${fmtDate(rejectTarget.date_to)}) telah ditolak${rejectReason.trim() ? `: "${rejectReason.trim()}"` : "."}`,
+        icon: "x",
+        kind: "warn",
+      });
+    }
     toast.success("Izin ditolak");
     setRejectTarget(null);
     load();
@@ -3272,6 +3433,14 @@ function AdminIzin({ branchId }: { branchId: string }) {
         // Auto-create attendance records
         await autoCreateMemberAttendances(data.id);
       }
+      // Notify member that admin created an approved leave for them
+      await supabase.from("notifications").insert({
+        user_id: createForm.target_id,
+        title: "Izin dicatat oleh admin",
+        body: `Admin telah mencatat izin Anda (${fmtDate(createForm.date_from)} – ${fmtDate(createForm.date_to)}) dan sudah disetujui.`,
+        icon: "check",
+        kind: "info",
+      });
     }
     setCreating(false);
     setOpenCreate(false);
@@ -3287,38 +3456,63 @@ function AdminIzin({ branchId }: { branchId: string }) {
     const { error } = await supabase.from("coach_leaves").update(upd).eq("id", approveTarget.id);
     if (error) { setApproving(false); return toast.error("Gagal menyetujui izin", error.message); }
 
-    // Auto-create coach_attendances for substitute on each session date × each affected class
-    if (substituteId) {
-      const { data: leaveDetail } = await supabase
-        .from("coach_leaves")
-        .select("coach_id, date_from, date_to, coach_leave_classes(class_id, class:classes(schedule_days))")
-        .eq("id", approveTarget.id)
-        .single();
-      if (leaveDetail) {
-        const detail = leaveDetail as unknown as {
-          coach_id: string; date_from: string; date_to: string;
-          coach_leave_classes: { class_id: string; class: { schedule_days: string[] } | null }[];
-        };
-        const dayNames = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
-        const from = new Date(detail.date_from);
-        const to   = new Date(detail.date_to);
-        const rows: { branch_id: string; coach_id: string; class_id: string; session_date: string; status: string; is_manual: boolean; manual_by: string | null }[] = [];
-        const adminId = (await supabase.auth.getUser()).data.user?.id ?? null;
-        for (const lc of detail.coach_leave_classes) {
-          const scheduleDays: string[] = lc.class?.schedule_days ?? [];
-          const d = new Date(from);
-          while (d <= to) {
-            const dayName = dayNames[d.getDay()];
-            if (scheduleDays.length === 0 || scheduleDays.includes(dayName)) {
-              rows.push({ branch_id: branchId, coach_id: substituteId, class_id: lc.class_id, session_date: d.toISOString().slice(0, 10), status: "present", is_manual: true, manual_by: adminId });
-            }
-            d.setDate(d.getDate() + 1);
+    // Fetch leave detail for substitute attendance + notifications
+    const { data: leaveDetail } = await supabase
+      .from("coach_leaves")
+      .select("coach_id, date_from, date_to, coach_leave_classes(class_id, class:classes(name, schedule_days))")
+      .eq("id", approveTarget.id)
+      .single();
+
+    const detail = leaveDetail as unknown as {
+      coach_id: string; date_from: string; date_to: string;
+      coach_leave_classes: { class_id: string; class: { name: string; schedule_days: string[] } | null }[];
+    } | null;
+
+    // Auto-create coach_attendances for substitute
+    if (substituteId && detail) {
+      const dayNames = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
+      const from = new Date(detail.date_from);
+      const to   = new Date(detail.date_to);
+      const rows: { branch_id: string; coach_id: string; class_id: string; session_date: string; status: string; is_manual: boolean; manual_by: string | null }[] = [];
+      const adminId = (await supabase.auth.getUser()).data.user?.id ?? null;
+      for (const lc of detail.coach_leave_classes) {
+        const scheduleDays: string[] = lc.class?.schedule_days ?? [];
+        const d = new Date(from);
+        while (d <= to) {
+          const dayName = dayNames[d.getDay()];
+          if (scheduleDays.length === 0 || scheduleDays.includes(dayName)) {
+            rows.push({ branch_id: branchId, coach_id: substituteId, class_id: lc.class_id, session_date: d.toISOString().slice(0, 10), status: "present", is_manual: true, manual_by: adminId });
           }
-        }
-        if (rows.length > 0) {
-          await supabase.from("coach_attendances").upsert(rows, { onConflict: "coach_id,class_id,session_date" });
+          d.setDate(d.getDate() + 1);
         }
       }
+      if (rows.length > 0) {
+        await supabase.from("coach_attendances").upsert(rows, { onConflict: "coach_id,class_id,session_date" });
+      }
+    }
+
+    // Notify coach that leave was approved
+    if (detail?.coach_id) {
+      const classNames = detail.coach_leave_classes.map(lc => lc.class?.name).filter(Boolean).join(", ");
+      await supabase.from("notifications").insert({
+        user_id: detail.coach_id,
+        title: "Izin disetujui",
+        body: `Izin Anda${classNames ? ` untuk ${classNames}` : ""} (${detail.date_from === detail.date_to ? detail.date_from : `${detail.date_from} – ${detail.date_to}`}) telah disetujui.`,
+        icon: "check",
+        kind: "success",
+      });
+    }
+
+    // Notify substitute coach that they've been assigned
+    if (substituteId && detail) {
+      const classNames = detail.coach_leave_classes.map(lc => lc.class?.name).filter(Boolean).join(", ");
+      await supabase.from("notifications").insert({
+        user_id: substituteId,
+        title: "Anda ditambahkan sebagai coach pengganti",
+        body: `Anda menggantikan coach untuk kelas ${classNames || "—"} pada ${detail.date_from === detail.date_to ? detail.date_from : `${detail.date_from} – ${detail.date_to}`}.`,
+        icon: "refresh",
+        kind: "info",
+      });
     }
 
     setApproving(false);
@@ -3465,45 +3659,130 @@ function AdminIzin({ branchId }: { branchId: string }) {
 function AdminPembayaran({ branchId }: { branchId: string }) {
   const supabase = createClient();
   const toast = useToast();
+  const upload = useUpload();
   const [bills, setBills] = useState<BillRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [verifying, setVerifying] = useState<string | null>(null);
+  const [tab, setTab] = useState<"unpaid" | "paid" | "all">("unpaid");
   const [generating, setGenerating] = useState(false);
   const [genMonth, setGenMonth] = useState(() => new Date().toISOString().slice(0, 7));
   const [openGenModal, setOpenGenModal] = useState(false);
 
+  // Verifikasi modal
+  const [verifyTarget, setVerifyTarget] = useState<BillRow | null>(null);
+  const [verifyForm, setVerifyForm] = useState({ paid_at: new Date().toISOString().slice(0, 10), paid_method: "transfer", proof_file: null as File | null });
+  const [verifying, setVerifying] = useState(false);
+
+  // Tambah tagihan manual modal
+  const [openAdd, setOpenAdd] = useState(false);
+  const [addForm, setAddForm] = useState({ member_id: "", class_id: "", type: "monthly", period_label: "", amount: "", discount: "", discount_reason: "", admin_notes: "", sessions_total: "" });
+  const [addMembers, setAddMembers] = useState<{ id: string; full_name: string; type: string }[]>([]);
+  const [addClasses, setAddClasses] = useState<{ id: string; name: string; price_monthly: number; price_per_session: number | null }[]>([]);
+  const [saving, setSaving] = useState(false);
+
   const load = useCallback(async () => {
     setLoading(true);
     const { data } = await supabase.from("bills")
-      .select("id, member_id, period_label, amount, discount, total, status, paid_at, proof_url, member:members(profile:profiles(full_name))")
-      .eq("branch_id", branchId).order("created_at", { ascending: false }).limit(100);
+      .select("id, member_id, period_label, amount, discount, discount_reason, total, status, type, sessions_total, sessions_used, paid_at, paid_method, proof_url, admin_notes, member:members(profile:profiles(full_name)), class:classes(name)")
+      .eq("branch_id", branchId).order("created_at", { ascending: false }).limit(200);
     if (data) setBills(data as unknown as BillRow[]);
     setLoading(false);
   }, [branchId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* eslint-disable react-hooks/set-state-in-effect -- async data loader */
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+    // Load members + classes for manual add form
+    supabase.from("members").select("id, type, profile:profiles(full_name)").eq("branch_id", branchId).eq("status", "active")
+      .then(({ data }) => {
+        if (data) setAddMembers((data as unknown as { id: string; type: string; profile: { full_name: string } | null }[])
+          .map(m => ({ id: m.id, full_name: m.profile?.full_name ?? "—", type: m.type })));
+      });
+    supabase.from("classes").select("id, name, price_monthly, price_per_session").eq("branch_id", branchId).eq("status", "active").order("name")
+      .then(({ data }) => { if (data) setAddClasses(data as unknown as { id: string; name: string; price_monthly: number; price_per_session: number | null }[]); });
+  }, [load]); // eslint-disable-line react-hooks/exhaustive-deps
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  const paid = bills.filter(b => b.status === "paid");
-  const unpaid = bills.filter(b => b.status === "unpaid");
-  const schoolCovered = bills.filter(b => b.status === "school_covered");
-
-  const verify = async (id: string) => {
-    setVerifying(id);
-    const user = (await supabase.auth.getUser()).data.user;
-    const { error } = await supabase.from("bills").update({ status: "paid", paid_at: new Date().toISOString(), verified_by: user?.id ?? null }).eq("id", id);
-    setVerifying(null);
-    if (error) return toast.error("Gagal verifikasi", error.message);
-    setBills(prev => prev.map(b => b.id === id ? { ...b, status: "paid" } : b));
-    toast.success("Pembayaran terverifikasi");
-  };
-
-  // Format "2026-05" → "Mei 2026"
   const fmtMonth = (ym: string) => {
     const [y, m] = ym.split("-");
-    const d = new Date(Number(y), Number(m) - 1, 1);
-    return d.toLocaleDateString("id-ID", { month: "long", year: "numeric" });
+    return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString("id-ID", { month: "long", year: "numeric" });
+  };
+
+  const openVerify = (b: BillRow) => {
+    setVerifyTarget(b);
+    setVerifyForm({ paid_at: new Date().toISOString().slice(0, 10), paid_method: "transfer", proof_file: null });
+  };
+
+  const confirmVerify = async () => {
+    if (!verifyTarget) return;
+    setVerifying(true);
+    let proof_url: string | null = verifyTarget.proof_url ?? null;
+    if (verifyForm.proof_file) {
+      const res = await upload["payment-proof"](verifyForm.proof_file);
+      if (res.url) proof_url = res.url;
+    }
+    const user = (await supabase.auth.getUser()).data.user;
+    const { error } = await supabase.from("bills").update({
+      status: "paid",
+      paid_at: new Date(verifyForm.paid_at).toISOString(),
+      paid_method: verifyForm.paid_method,
+      proof_url,
+      verified_by: user?.id ?? null,
+    }).eq("id", verifyTarget.id);
+    setVerifying(false);
+    if (error) return toast.error("Gagal verifikasi", error.message);
+    // Notify member
+    await supabase.from("notifications").insert({
+      user_id: verifyTarget.member_id,
+      title: "Tagihan diverifikasi",
+      body: `Pembayaran tagihan ${verifyTarget.period_label} Anda telah diverifikasi lunas via ${verifyForm.paid_method}.`,
+      icon: "check",
+      kind: "success",
+    });
+    toast.success("Pembayaran terverifikasi");
+    setVerifyTarget(null);
+    load();
+  };
+
+  const saveManualBill = async () => {
+    if (!addForm.member_id || !addForm.period_label || !addForm.amount) return toast.error("Member, periode, dan nominal wajib diisi");
+    setSaving(true);
+    const amount = Number(addForm.amount) || 0;
+    const discount = Number(addForm.discount) || 0;
+    const total = amount - discount;
+    const isSessionPack = addForm.type === "session_pack";
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const row: any = {
+      member_id: addForm.member_id,
+      branch_id: branchId,
+      class_id: addForm.class_id || null,
+      type: addForm.type,
+      period_label: addForm.period_label,
+      amount,
+      discount,
+      discount_reason: addForm.discount_reason || null,
+      total,
+      status: "unpaid",
+      admin_notes: addForm.admin_notes || null,
+    };
+    if (isSessionPack && addForm.sessions_total) {
+      row.sessions_total = Number(addForm.sessions_total);
+      row.sessions_used = 0;
+    }
+    const { error } = await supabase.from("bills").insert(row);
+    setSaving(false);
+    if (error) return toast.error("Gagal membuat tagihan", error.message);
+    // Notify member
+    await supabase.from("notifications").insert({
+      user_id: addForm.member_id,
+      title: "Tagihan baru",
+      body: `Tagihan ${addForm.period_label} sebesar ${fmtIDR(total)} telah dibuat. Hubungi admin untuk konfirmasi pembayaran.`,
+      icon: "invoice",
+      kind: "info",
+    });
+    toast.success("Tagihan berhasil dibuat");
+    setOpenAdd(false);
+    setAddForm({ member_id: "", class_id: "", type: "monthly", period_label: "", amount: "", discount: "", discount_reason: "", admin_notes: "", sessions_total: "" });
+    load();
   };
 
   const generateTagihan = async () => {
@@ -3511,99 +3790,183 @@ function AdminPembayaran({ branchId }: { branchId: string }) {
     setOpenGenModal(false);
     setGenerating(true);
     try {
-      // 1. Get all active reguler members with their class price
       const { data: members, error: mErr } = await supabase
-        .from("members")
-        .select("id, member_classes(class:classes(id, price_monthly))")
-        .eq("branch_id", branchId)
-        .eq("status", "active")
-        .eq("type", "reguler");
-
+        .from("members").select("id, member_classes(class:classes(id, price_monthly))")
+        .eq("branch_id", branchId).eq("status", "active").eq("type", "reguler");
       if (mErr || !members) { toast.error("Gagal memuat member", mErr?.message); setGenerating(false); return; }
-
-      // 2. Get existing bills for this period
-      const { data: existing } = await supabase
-        .from("bills").select("member_id").eq("branch_id", branchId).eq("period_label", label);
+      const { data: existing } = await supabase.from("bills").select("member_id").eq("branch_id", branchId).eq("period_label", label);
       const existingIds = new Set((existing ?? []).map(b => b.member_id));
-
-      // 3. Build insert rows — skip members who already have a bill this period
-      const rows: { member_id: string; branch_id: string; class_id: string | null; type: string; period_label: string; amount: number; discount: number; total: number; status: string }[] = [];
+      const rows: Record<string, unknown>[] = [];
       for (const m of members as unknown as { id: string; member_classes: { class: { id: string; price_monthly: number } | null }[] }[]) {
         if (existingIds.has(m.id)) continue;
         const cls = m.member_classes?.[0]?.class;
         const amount = cls?.price_monthly ?? 0;
-        rows.push({
-          member_id: m.id,
-          branch_id: branchId,
-          class_id: cls?.id ?? null,
-          type: "monthly",
-          period_label: label,
-          amount,
-          discount: 0,
-          total: amount,
-          status: "unpaid",
-        });
+        rows.push({ member_id: m.id, branch_id: branchId, class_id: cls?.id ?? null, type: "monthly", period_label: label, amount, discount: 0, total: amount, status: "unpaid" });
       }
-
-      if (rows.length === 0) {
-        toast.success("Semua member reguler sudah memiliki tagihan untuk periode ini");
-        setGenerating(false);
-        return;
-      }
-
+      if (rows.length === 0) { toast.success("Semua member reguler sudah memiliki tagihan untuk periode ini"); setGenerating(false); return; }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await supabase.from("bills").insert(rows as any);
       if (error) { toast.error("Gagal generate tagihan", error.message); setGenerating(false); return; }
+      // Notify all members
+      for (const row of rows) {
+        await supabase.from("notifications").insert({ user_id: row.member_id as string, title: "Tagihan baru", body: `Tagihan ${label} sebesar ${fmtIDR(row.total as number)} telah dibuat.`, icon: "invoice", kind: "info" });
+      }
       toast.success(`${rows.length} tagihan berhasil digenerate`, `Periode ${label}`);
       load();
-    } finally {
-      setGenerating(false);
-    }
+    } finally { setGenerating(false); }
   };
+
+  const paidBills = bills.filter(b => b.status === "paid");
+  const unpaidBills = bills.filter(b => b.status === "unpaid" || b.status === "partial");
+  const displayBills = tab === "unpaid" ? unpaidBills : tab === "paid" ? paidBills : bills;
+
+  const statusLabel = (s: string) => ({ paid: "Lunas", unpaid: "Belum Bayar", partial: "Sebagian", school_covered: "Sekolah", free: "Gratis" }[s] ?? s);
+  const statusKind = (s: string): "paid" | "unpaid" | "school_covered" | "pending" => ({ paid: "paid", unpaid: "unpaid", partial: "pending", school_covered: "school_covered", free: "paid" }[s] as "paid" | "unpaid" | "school_covered" | "pending" ?? "unpaid");
 
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <div><h2 className="font-display font-bold text-2xl">Pembayaran</h2><p className="text-ink-mute text-sm mt-0.5">Verifikasi pembayaran masuk & generate tagihan bulanan.</p></div>
+        <div><h2 className="font-display font-bold text-2xl">Pembayaran</h2><p className="text-ink-mute text-sm mt-0.5">Verifikasi pembayaran masuk & kelola tagihan.</p></div>
         <div className="flex items-center gap-2 flex-wrap">
+          <Btn variant="ghost" icon="plus" onClick={() => setOpenAdd(true)}>Tambah Tagihan</Btn>
           <Btn variant="primary" icon="invoice" onClick={() => setOpenGenModal(true)} disabled={generating}>{generating ? "Generating…" : "Generate Tagihan"}</Btn>
         </div>
       </div>
-      <div className="grid sm:grid-cols-4 gap-4">
-        <Stat label="Tagihan bulan ini"  value={bills.length} icon="invoice" tone="ocean" />
-        <Stat label="Sudah lunas"        value={paid.length} icon="check"   tone="ok"  sub={fmtIDR(paid.reduce((a,b) => a + b.total, 0))} />
-        <Stat label="Belum dibayar"      value={unpaid.length} icon="warning" tone="warn" sub={fmtIDR(unpaid.reduce((a,b) => a + b.total, 0))} />
-        <Stat label="Ditanggung sekolah" value={schoolCovered.length} icon="school" tone="ocean" />
+
+      <div className="grid sm:grid-cols-3 gap-4">
+        <Stat label="Belum dibayar" value={unpaidBills.length} icon="warning" tone="warn" sub={fmtIDR(unpaidBills.reduce((a, b) => a + (b.total ?? 0), 0))} />
+        <Stat label="Sudah lunas"   value={paidBills.length}   icon="check"   tone="ok"   sub={fmtIDR(paidBills.reduce((a, b) => a + (b.total ?? 0), 0))} />
+        <Stat label="Total tagihan" value={bills.length}       icon="invoice" tone="ocean" />
       </div>
+
+      {/* Tab filter */}
+      <div className="flex gap-1.5 bg-paper-tint rounded-xl p-1 w-fit">
+        {([["unpaid", "Belum Bayar"], ["paid", "Sudah Lunas"], ["all", "Semua"]] as const).map(([id, l]) => (
+          <button key={id} onClick={() => setTab(id)} className={`px-3 py-1.5 text-xs font-bold rounded-lg ${tab === id ? "bg-white text-ocean-700 shadow-sm" : "text-ink-mute hover:text-ink-soft"}`}>{l}</button>
+        ))}
+      </div>
+
       <Card padded={false}>
         {loading ? <div className="p-10 text-center text-ink-mute">Memuat data…</div> : (
           <table className="w-full text-sm">
             <thead><tr className="text-[11px] uppercase tracking-widest text-ink-faint font-bold border-b border-line">
               <th className="text-left py-3 px-5 font-bold">Member</th>
-              <th className="text-left py-3 font-bold">Periode</th><th className="text-right py-3 font-bold">Bruto</th>
-              <th className="text-right py-3 font-bold">Diskon</th><th className="text-right py-3 font-bold">Total</th>
-              <th className="text-left py-3 font-bold">Status</th><th className="px-5" />
+              <th className="text-left py-3 font-bold">Periode</th>
+              <th className="text-left py-3 font-bold">Kelas</th>
+              <th className="text-right py-3 font-bold">Total</th>
+              <th className="text-left py-3 font-bold">Status</th>
+              <th className="px-5" />
             </tr></thead>
             <tbody className="divide-y divide-line">
-              {bills.map((b) => (
+              {displayBills.map((b) => (
                 <tr key={b.id} className="hover:bg-paper-tint">
                   <td className="py-3.5 px-5 font-semibold">{b.member?.profile?.full_name ?? "—"}</td>
                   <td className="text-ink-soft">{b.period_label}</td>
-                  <td className="text-right font-mono text-ink-mute">{fmtIDR(b.amount)}</td>
-                  <td className="text-right font-mono text-ink-mute">{b.discount > 0 ? `-${fmtIDR(b.discount)}` : "—"}</td>
-                  <td className="text-right font-mono font-bold">{fmtIDR(b.total)}</td>
-                  <td><Status kind={b.status as "paid" | "unpaid" | "school_covered"}>{b.status === "paid" ? "Lunas" : b.status === "unpaid" ? "Belum" : "Sekolah"}</Status></td>
-                  <td className="px-5">
-                    {b.status === "unpaid" && <Btn variant="soft" size="sm" icon="check" onClick={() => verify(b.id)} disabled={verifying === b.id}>{verifying === b.id ? "…" : "Verifikasi"}</Btn>}
+                  <td className="text-ink-mute text-xs">{b.class?.name ?? "—"}{b.type === "session_pack" && b.sessions_total ? ` · ${b.sessions_used}/${b.sessions_total} sesi` : ""}</td>
+                  <td className="text-right font-mono font-bold">
+                    {fmtIDR(b.total ?? b.amount)}
+                    {b.discount > 0 && <div className="text-xs text-ok-600 font-normal">-{fmtIDR(b.discount)}</div>}
+                  </td>
+                  <td><Status kind={statusKind(b.status)}>{statusLabel(b.status)}</Status></td>
+                  <td className="px-5 flex items-center gap-1.5 py-3.5">
+                    {(b.status === "unpaid" || b.status === "partial") && <Btn variant="soft" size="sm" icon="check" onClick={() => openVerify(b)}>Verifikasi</Btn>}
                     {b.proof_url && <a href={b.proof_url} target="_blank" rel="noreferrer"><Btn variant="ghost" size="sm" icon="eye">Bukti</Btn></a>}
+                    {b.status === "paid" && b.paid_at && <span className="text-xs text-ink-mute">{new Date(b.paid_at).toLocaleDateString("id-ID")}{b.paid_method ? ` · ${b.paid_method}` : ""}</span>}
                   </td>
                 </tr>
               ))}
-              {bills.length === 0 && <tr><td colSpan={7} className="py-10 text-center text-ink-mute">Tidak ada tagihan</td></tr>}
+              {displayBills.length === 0 && <tr><td colSpan={6} className="py-10 text-center text-ink-mute">Tidak ada tagihan</td></tr>}
             </tbody>
           </table>
         )}
       </Card>
+
+      {/* Verifikasi Pembayaran Modal */}
+      <Modal open={!!verifyTarget} onClose={() => setVerifyTarget(null)} title="Verifikasi Pembayaran" size="sm"
+        footer={<><Btn variant="ghost" onClick={() => setVerifyTarget(null)}>Batal</Btn><Btn variant="primary" icon="check" onClick={confirmVerify} disabled={verifying}>{verifying ? "Menyimpan…" : "Verifikasi Lunas"}</Btn></>}>
+        {verifyTarget && (
+          <div className="space-y-4">
+            <Card className="!p-3 bg-paper-tint">
+              <div className="font-semibold text-ink text-sm">{verifyTarget.member?.profile?.full_name ?? "—"}</div>
+              <div className="text-xs text-ink-mute mt-0.5">{verifyTarget.period_label} · {fmtIDR(verifyTarget.total ?? verifyTarget.amount)}</div>
+            </Card>
+            <Field label="Tanggal pembayaran" required>
+              <Input type="date" value={verifyForm.paid_at} onChange={e => setVerifyForm(f => ({ ...f, paid_at: e.target.value }))} />
+            </Field>
+            <Field label="Metode pembayaran" required>
+              <Select value={verifyForm.paid_method} onChange={e => setVerifyForm(f => ({ ...f, paid_method: e.target.value }))}>
+                <option value="transfer">Transfer</option>
+                <option value="tunai">Tunai</option>
+                <option value="lainnya">Lainnya</option>
+              </Select>
+            </Field>
+            <Field label="Bukti transfer" hint="Opsional untuk pembayaran tunai.">
+              <Input type="file" accept="image/*,application/pdf" onChange={e => setVerifyForm(f => ({ ...f, proof_file: e.target.files?.[0] ?? null }))} />
+            </Field>
+          </div>
+        )}
+      </Modal>
+
+      {/* Tambah Tagihan Manual Modal */}
+      <Modal open={openAdd} onClose={() => setOpenAdd(false)} title="Tambah Tagihan" size="sm"
+        footer={<><Btn variant="ghost" onClick={() => setOpenAdd(false)}>Batal</Btn><Btn variant="primary" icon="plus" onClick={saveManualBill} disabled={saving}>{saving ? "Menyimpan…" : "Buat Tagihan"}</Btn></>}>
+        <div className="space-y-4">
+          <Field label="Member" required>
+            <Select value={addForm.member_id} onChange={e => {
+              const m = addMembers.find(x => x.id === e.target.value);
+              setAddForm(f => ({ ...f, member_id: e.target.value, type: m?.type === "private" ? "session_pack" : "monthly" }));
+            }}>
+              <option value="">— pilih member —</option>
+              {addMembers.map(m => <option key={m.id} value={m.id}>{m.full_name} ({m.type})</option>)}
+            </Select>
+          </Field>
+          <Field label="Kelas">
+            <Select value={addForm.class_id} onChange={e => {
+              const cls = addClasses.find(c => c.id === e.target.value);
+              const isSession = addForm.type === "session_pack";
+              setAddForm(f => ({ ...f, class_id: e.target.value, amount: String(isSession ? (cls?.price_per_session ?? 0) : (cls?.price_monthly ?? 0)) }));
+            }}>
+              <option value="">— pilih kelas —</option>
+              {addClasses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </Select>
+          </Field>
+          <Field label="Tipe tagihan" required>
+            <Select value={addForm.type} onChange={e => setAddForm(f => ({ ...f, type: e.target.value }))}>
+              <option value="monthly">Bulanan</option>
+              <option value="session_pack">Paket Sesi</option>
+              <option value="custom">Custom</option>
+            </Select>
+          </Field>
+          {addForm.type === "session_pack" && (
+            <Field label="Jumlah sesi dalam paket" required>
+              <Input type="number" min={1} value={addForm.sessions_total} onChange={e => setAddForm(f => ({ ...f, sessions_total: e.target.value }))} placeholder="Mis. 8" />
+            </Field>
+          )}
+          <Field label="Periode / nama paket" required>
+            <Input value={addForm.period_label} onChange={e => setAddForm(f => ({ ...f, period_label: e.target.value }))} placeholder={addForm.type === "monthly" ? "Mis. Juni 2026" : "Mis. Paket 8 Sesi Juli"} />
+          </Field>
+          <Field label="Nominal tagihan" required>
+            <Input type="number" min={0} value={addForm.amount} onChange={e => setAddForm(f => ({ ...f, amount: e.target.value }))} placeholder="0" />
+          </Field>
+          <Field label="Diskon" hint="Opsional.">
+            <Input type="number" min={0} value={addForm.discount} onChange={e => setAddForm(f => ({ ...f, discount: e.target.value }))} placeholder="0" />
+          </Field>
+          {Number(addForm.discount) > 0 && (
+            <Field label="Alasan diskon">
+              <Input value={addForm.discount_reason} onChange={e => setAddForm(f => ({ ...f, discount_reason: e.target.value }))} placeholder="Mis. Beasiswa / keringanan" />
+            </Field>
+          )}
+          {Number(addForm.amount) > 0 && (
+            <div className="flex justify-between text-sm font-semibold px-1">
+              <span className="text-ink-mute">Total yang harus dibayar</span>
+              <span className="text-ink font-mono">{fmtIDR(Number(addForm.amount) - Number(addForm.discount || 0))}</span>
+            </div>
+          )}
+          <Field label="Catatan admin" hint="Opsional.">
+            <Textarea rows={2} value={addForm.admin_notes} onChange={e => setAddForm(f => ({ ...f, admin_notes: e.target.value }))} placeholder="Catatan internal…" />
+          </Field>
+        </div>
+      </Modal>
 
       {/* Generate Tagihan Modal */}
       <Modal open={openGenModal} onClose={() => setOpenGenModal(false)} title="Generate Tagihan Bulanan" size="sm"
@@ -3631,10 +3994,17 @@ function AdminApprovement({ branchId }: { branchId: string }) {
   const supabase = createClient();
   const toast = useToast();
   const confirm = useConfirm();
+  const upload = useUpload();
   const [registrations, setRegistrations] = useState<RegistrationRow[]>([]);
   const [certs, setCerts] = useState<CertRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [detailReg, setDetailReg] = useState<RegistrationRow | null>(null);
+  const [editReg, setEditReg] = useState<RegistrationRow | null>(null);
+  const [editRegForm, setEditRegForm] = useState<Partial<RegistrationRow>>({});
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [approveTarget, setApproveTarget] = useState<RegistrationRow | null>(null);
+  const [proofFile, setProofFile] = useState<File | null>(null);
   const [approvingId, setApprovingId] = useState<string | null>(null);
   // Reject with reason — cert
   const [rejectCertTarget, setRejectCertTarget] = useState<CertRow | null>(null);
@@ -3666,6 +4036,48 @@ function AdminApprovement({ branchId }: { branchId: string }) {
   useEffect(() => { load(); }, [load]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
+  const openEditReg = (r: RegistrationRow) => {
+    setEditReg(r);
+    setEditRegForm({ full_name: r.full_name, birth_date: r.birth_date, gender: r.gender, phone: r.phone, phone_owner: r.phone_owner, parent_name: r.parent_name, parent_phone: r.parent_phone, address: r.address, health_notes: r.health_notes });
+  };
+
+  const saveEditReg = async () => {
+    if (!editReg) return;
+    setSavingEdit(true);
+    const { error } = await supabase.from("registrations").update({
+      full_name: editRegForm.full_name ?? editReg.full_name,
+      birth_date: editRegForm.birth_date ?? null,
+      gender: editRegForm.gender ?? null,
+      phone: editRegForm.phone ?? null,
+      phone_owner: editRegForm.phone_owner ?? null,
+      parent_name: editRegForm.parent_name ?? null,
+      parent_phone: editRegForm.parent_phone ?? null,
+      address: editRegForm.address ?? null,
+      health_notes: editRegForm.health_notes ?? null,
+    }).eq("id", editReg.id);
+    setSavingEdit(false);
+    if (error) return toast.error("Gagal menyimpan", error.message);
+    toast.success("Data registrasi diperbarui");
+    setEditReg(null);
+    load();
+  };
+
+  const deleteReg = async (r: RegistrationRow) => {
+    const ok = await confirm({ title: `Hapus registrasi "${r.full_name}"?`, body: "Tindakan tidak bisa dibatalkan.", confirmLabel: "Hapus" });
+    if (!ok) return;
+    setDeletingId(r.id);
+    await supabase.from("registrations").delete().eq("id", r.id);
+    setDeletingId(null);
+    setDetailReg(null);
+    toast.success("Registrasi dihapus");
+    load();
+  };
+
+  const openApproveReg = (r: RegistrationRow) => {
+    setApproveTarget(r);
+    setProofFile(null);
+  };
+
   const rejectReg = (r: RegistrationRow) => {
     setRejectRegTarget(r);
     setRegRejectReason("");
@@ -3684,10 +4096,17 @@ function AdminApprovement({ branchId }: { branchId: string }) {
     load();
   };
 
-  const approveReg = async (r: RegistrationRow) => {
-    const yes = await confirm({ title: `Approve "${r.full_name}"?`, body: "Akun member akan dibuat secara otomatis dengan password sementara. Admin dapat melengkapi data dan mengirim credential via WhatsApp di menu Member.", confirmLabel: "Approve & Buat Akun" });
-    if (!yes) return;
+  const confirmApproveReg = async () => {
+    const r = approveTarget;
+    if (!r) return;
     setApprovingId(r.id);
+
+    // Upload bukti transfer jika ada
+    let proofUrl: string | null = null;
+    if (proofFile) {
+      const res = await upload["payment-proof"](proofFile);
+      if (res.url) proofUrl = res.url;
+    }
 
     // Buat email sementara dari nama (tanpa spasi, lowercase) + timestamp
     const tempSlug = r.full_name.toLowerCase().replace(/\s+/g, ".").replace(/[^a-z0-9.]/g, "");
@@ -3712,6 +4131,7 @@ function AdminApprovement({ branchId }: { branchId: string }) {
         school_id: null,
         class_id: null,
         total_sessions: null,
+        proof_url: proofUrl,
       }),
     });
 
@@ -3722,12 +4142,16 @@ function AdminApprovement({ branchId }: { branchId: string }) {
       return;
     }
 
-    // Update status registrasi
+    // Update status registrasi + simpan bukti transfer
     const user = (await supabase.auth.getUser()).data.user;
-    await supabase.from("registrations").update({ status: "approved", reviewed_by: user?.id, reviewed_at: new Date().toISOString() }).eq("id", r.id);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const upd: any = { status: "approved", reviewed_by: user?.id, reviewed_at: new Date().toISOString() };
+    if (proofUrl) upd.proof_url = proofUrl;
+    await supabase.from("registrations").update(upd).eq("id", r.id);
 
     toast.success("Pendaftaran diapprove", "Member masuk ke menu Member — lengkapi data & kirim credential.");
     setApprovingId(null);
+    setApproveTarget(null);
     setDetailReg(null);
     load();
   };
@@ -3773,12 +4197,14 @@ function AdminApprovement({ branchId }: { branchId: string }) {
                       </div>
                       <Icon name="chevron-right" className="w-4 h-4 text-ink-faint shrink-0" />
                     </button>
-                    <div className="mt-3 flex gap-1.5">
+                    <div className="mt-3 flex gap-1.5 flex-wrap">
+                      <Btn variant="ghost" size="sm" icon="edit" onClick={() => openEditReg(r)}>Edit</Btn>
+                      <Btn variant="ghost" size="sm" className="text-danger-500" onClick={() => deleteReg(r)} disabled={deletingId === r.id}>Hapus</Btn>
                       <Btn variant="ghost" size="sm" className="text-danger-500" onClick={() => rejectReg(r)}>Tolak</Btn>
                       <a href={waLink(`Halo ${r.full_name}, terima kasih telah mendaftar di Next Swimming School. Kami sedang memproses pendaftaran Anda.`, contactPhone)} target="_blank" rel="noreferrer">
                         <Btn variant="wa" size="sm" icon="whatsapp">Chat WA</Btn>
                       </a>
-                      <Btn variant="primary" size="sm" icon="check" className="ml-auto" disabled={isApproving} onClick={() => approveReg(r)}>
+                      <Btn variant="primary" size="sm" icon="check" className="ml-auto" disabled={isApproving} onClick={() => openApproveReg(r)}>
                         {isApproving ? "Memproses…" : "Approve"}
                       </Btn>
                     </div>
@@ -3810,7 +4236,9 @@ function AdminApprovement({ branchId }: { branchId: string }) {
       {/* Detail Registrasi Modal */}
       <Modal open={!!detailReg} onClose={() => setDetailReg(null)} title="Detail Pendaftaran" size="sm"
         footer={
-          <div className="flex gap-2 w-full">
+          <div className="flex gap-2 w-full flex-wrap">
+            <Btn variant="ghost" icon="edit" onClick={() => detailReg && openEditReg(detailReg)}>Edit</Btn>
+            <Btn variant="ghost" className="text-danger-500" onClick={() => detailReg && deleteReg(detailReg)}>Hapus</Btn>
             <Btn variant="ghost" className="text-danger-500" onClick={() => detailReg && rejectReg(detailReg)}>Tolak</Btn>
             <div className="flex-1" />
             {detailReg && (
@@ -3818,7 +4246,7 @@ function AdminApprovement({ branchId }: { branchId: string }) {
                 <Btn variant="wa" icon="whatsapp">Chat WA</Btn>
               </a>
             )}
-            <Btn variant="primary" icon="check" disabled={!!approvingId} onClick={() => detailReg && approveReg(detailReg)}>
+            <Btn variant="primary" icon="check" disabled={!!approvingId} onClick={() => detailReg && openApproveReg(detailReg)}>
               {approvingId ? "Memproses…" : "Approve"}
             </Btn>
           </div>
@@ -3891,6 +4319,56 @@ function AdminApprovement({ branchId }: { branchId: string }) {
             <Textarea rows={3} value={regRejectReason} onChange={e => setRegRejectReason(e.target.value)} placeholder="Jelaskan alasan penolakan pendaftaran ini…" />
           </Field>
         </div>
+      </Modal>
+
+      {/* ── Edit Registrasi Modal ── */}
+      <Modal open={!!editReg} onClose={() => setEditReg(null)} title="Edit Data Registrasi" size="sm"
+        footer={<><Btn variant="ghost" onClick={() => setEditReg(null)}>Batal</Btn><Btn variant="primary" onClick={saveEditReg} disabled={savingEdit}>{savingEdit ? "Menyimpan…" : "Simpan"}</Btn></>}>
+        <div className="space-y-4">
+          <Field label="Nama lengkap" required><Input value={editRegForm.full_name ?? ""} onChange={e => setEditRegForm(f => ({ ...f, full_name: e.target.value }))} /></Field>
+          <div className="grid sm:grid-cols-2 gap-4">
+            <Field label="Tanggal lahir"><Input type="date" value={editRegForm.birth_date ?? ""} onChange={e => setEditRegForm(f => ({ ...f, birth_date: e.target.value }))} /></Field>
+            <Field label="Jenis kelamin">
+              <Select value={editRegForm.gender ?? ""} onChange={e => setEditRegForm(f => ({ ...f, gender: e.target.value }))}>
+                <option value="">—</option>
+                <option value="male">Laki-laki</option>
+                <option value="female">Perempuan</option>
+              </Select>
+            </Field>
+          </div>
+          <Field label="No. HP"><Input value={editRegForm.phone ?? ""} onChange={e => setEditRegForm(f => ({ ...f, phone: e.target.value }))} /></Field>
+          <Field label="Pemilik HP">
+            <Select value={editRegForm.phone_owner ?? "self"} onChange={e => setEditRegForm(f => ({ ...f, phone_owner: e.target.value }))}>
+              <option value="self">Sendiri</option>
+              <option value="parent">Orang tua / wali</option>
+            </Select>
+          </Field>
+          {editRegForm.phone_owner === "parent" && <>
+            <Field label="Nama orang tua"><Input value={editRegForm.parent_name ?? ""} onChange={e => setEditRegForm(f => ({ ...f, parent_name: e.target.value }))} /></Field>
+            <Field label="No. HP orang tua"><Input value={editRegForm.parent_phone ?? ""} onChange={e => setEditRegForm(f => ({ ...f, parent_phone: e.target.value }))} /></Field>
+          </>}
+          <Field label="Alamat"><Textarea rows={2} value={editRegForm.address ?? ""} onChange={e => setEditRegForm(f => ({ ...f, address: e.target.value }))} /></Field>
+          <Field label="Catatan kesehatan / alergi"><Input value={editRegForm.health_notes ?? ""} onChange={e => setEditRegForm(f => ({ ...f, health_notes: e.target.value }))} /></Field>
+        </div>
+      </Modal>
+
+      {/* ── Approve + Bukti Transfer Modal ── */}
+      <Modal open={!!approveTarget} onClose={() => setApproveTarget(null)} title="Approve Pendaftaran" size="sm"
+        footer={<><Btn variant="ghost" onClick={() => setApproveTarget(null)}>Batal</Btn><Btn variant="primary" icon="check" onClick={confirmApproveReg} disabled={!!approvingId}>{approvingId ? "Memproses…" : "Approve & Buat Akun"}</Btn></>}>
+        {approveTarget && (
+          <div className="space-y-4">
+            <Card className="!p-3 bg-paper-tint">
+              <div className="font-semibold text-ink text-sm">{approveTarget.full_name}</div>
+              <div className="text-xs text-ink-mute mt-0.5">{approveTarget.phone ?? "—"}</div>
+            </Card>
+            <Field label="Bukti transfer" hint="Upload bukti transfer sebelum approve. Opsional jika belum ada.">
+              <Input type="file" accept="image/*,application/pdf" onChange={e => setProofFile(e.target.files?.[0] ?? null)} />
+            </Field>
+            <div className="bg-ocean-50 border border-ocean-100 rounded-xl p-3 text-xs text-ocean-800">
+              Akun member akan dibuat otomatis dengan password sementara. Lengkapi data & kirim credential via WhatsApp dari menu Member.
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   );
@@ -4456,7 +4934,7 @@ export default function AdminPage() {
 
   const logout = async () => {
     await supabase.auth.signOut();
-    router.push("/login");
+    window.location.href = "/login";
   };
 
   const branchId = resolvedBranchId || (currentUser?.user_metadata?.branch_id as string ?? "");

@@ -39,9 +39,12 @@ const NAV_ITEMS: MobileNavItem[] = [
 interface ClassRow {
   id: string; name: string; schedule_days: string[];
   time_start: string; time_end: string;
-  capacity: number; enrolled: number; goals: string | null;
+  capacity: number; enrolled: number;
+  goals: string | null; description: string | null;
   class_type?: string;
-  member_classes?: { member: { id: string; profile: { full_name: string; birth_date: string | null; phone: string | null } | null } | null }[];
+  spreadsheet_filled?: boolean;
+  spreadsheet_url?: string | null;
+  member_classes?: { member: { id: string; profile: { full_name: string; birth_date: string | null; phone: string | null; gender: string | null; address: string | null; health_notes: string | null } | null } | null }[];
 }
 
 interface AttendanceRow {
@@ -57,11 +60,15 @@ interface MemberAttRow {
 }
 
 interface InvoiceSession {
-  id: string; session_date: string; class_id: string; rate_per_session: number; class?: { name: string } | null;
+  id: string; session_date: string; class_id: string; rate_per_session: number;
+  rate_set: boolean;
+  class?: { name: string } | null;
 }
 
 interface PastInvoice {
   id: string; invoice_number: string; period_label: string; total_amount: number; status: string;
+  bank_info: string | null;
+  coach_invoice_items?: { class_id: string; session_count: number; rate: number; class?: { name: string } | null }[];
 }
 
 interface RaporEntry {
@@ -122,6 +129,16 @@ function Shell({ children, active, onNav, title, sub, user, avatarUrl }: {
 
 // ── Clock-In flow ──────────────────────────────────────────────────────────────
 
+/** Haversine formula — returns distance in meters */
+function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371000;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+}
+
 function ClockInFlow({ back, coachId, branchId, classes, preselectedClassId }: {
   back: () => void;
   coachId: string; branchId: string;
@@ -135,16 +152,32 @@ function ClockInFlow({ back, coachId, branchId, classes, preselectedClassId }: {
   const [classId, setClassId] = useState(preselectedClassId ?? classes[0]?.id ?? "");
   const [gpsStatus, setGpsStatus] = useState<"checking" | "ok" | "error">("checking");
   const [coords, setCoords] = useState<GeolocationCoordinates | null>(null);
+  const [branchCoords, setBranchCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [distanceMeters, setDistanceMeters] = useState<number | null>(null);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  // Load branch coordinates
+  useEffect(() => {
+    supabase.from("branches").select("lat, lng").eq("id", branchId).single()
+      .then(({ data }) => { if (data?.lat && data?.lng) setBranchCoords({ lat: data.lat, lng: data.lng }); });
+  }, [branchId, supabase]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Get GPS
   useEffect(() => {
     navigator.geolocation.getCurrentPosition(
       (pos) => { setCoords(pos.coords); setGpsStatus("ok"); },
       () => setGpsStatus("error"),
-      { timeout: 8000 }
+      { timeout: 8000, enableHighAccuracy: true }
     );
   }, []);
+
+  // Compute distance whenever both coords are available
+  useEffect(() => {
+    if (coords && branchCoords) {
+      setDistanceMeters(haversineMeters(coords.latitude, coords.longitude, branchCoords.lat, branchCoords.lng));
+    }
+  }, [coords, branchCoords]);
 
   const handleCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -171,15 +204,29 @@ function ClockInFlow({ back, coachId, branchId, classes, preselectedClassId }: {
       session_date: today, clock_in_time: nowTime,
       status: "present", is_manual: false,
       selfie_url: selfieUrl,
+      distance_meters: distanceMeters,
     });
 
     setSubmitting(false);
     if (error) { toast.error("Gagal menyimpan absensi", error.message); return; }
-    toast.success("Absensi Berhasil", "Data tersimpan ke history & admin panel");
+    toast.success("Absensi Berhasil!", "Data tersimpan ke history & admin panel");
     setStep(3);
   };
 
   const selectedClass = classes.find(c => c.id === classId);
+
+  const distLabel = distanceMeters != null
+    ? distanceMeters < 1000
+      ? `${distanceMeters} m dari cabang`
+      : `${(distanceMeters / 1000).toFixed(1)} km dari cabang`
+    : branchCoords == null
+      ? "Koordinat cabang belum diset"
+      : "Menghitung jarak…";
+
+  const distColor = distanceMeters == null ? "text-ink-mute"
+    : distanceMeters <= 500 ? "text-ok-600"
+    : distanceMeters <= 2000 ? "text-warn-600"
+    : "text-danger-600";
 
   return (
     <div className="space-y-4 max-w-md mx-auto">
@@ -198,13 +245,17 @@ function ClockInFlow({ back, coachId, branchId, classes, preselectedClassId }: {
             </Select>
           </Field>
           <Card className="!p-3 mt-4 bg-paper-tint">
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div><div className="text-ink-faint font-bold uppercase tracking-widest">GPS</div>
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div>
+                <div className="text-ink-faint font-bold uppercase tracking-widest mb-0.5">GPS</div>
                 <div className={`font-semibold ${gpsStatus === "ok" ? "text-ok-600" : gpsStatus === "error" ? "text-danger-500" : "text-warn-600"}`}>
                   {gpsStatus === "ok" ? "✓ Terdeteksi" : gpsStatus === "error" ? "✗ Gagal" : "Mendeteksi…"}
                 </div>
               </div>
-              <div><div className="text-ink-faint font-bold uppercase tracking-widest">Kelas</div><div className="font-semibold text-ink">{selectedClass?.name ?? "—"}</div></div>
+              <div>
+                <div className="text-ink-faint font-bold uppercase tracking-widest mb-0.5">Jarak ke Cabang</div>
+                <div className={`font-semibold ${distColor}`}>{distLabel}</div>
+              </div>
             </div>
           </Card>
           <label className="block mt-4">
@@ -218,15 +269,20 @@ function ClockInFlow({ back, coachId, branchId, classes, preselectedClassId }: {
       {step === 2 && (
         <Card className="anim-in">
           {photoFile && (
-            // eslint-disable-next-line @next/next/no-img-element -- blob URL from camera capture, not suited for next/image
+            // eslint-disable-next-line @next/next/no-img-element -- blob URL from camera capture
             <img src={URL.createObjectURL(photoFile)} alt="selfie preview" className="w-full aspect-square object-cover rounded-2xl" />
           )}
-          <Card className="!p-3 mt-3 bg-paper-tint">
+          <Card className="!p-3 mt-3 bg-paper-tint space-y-2">
             <div className="flex items-center gap-2 text-sm">
-              <Icon name="pin" className="w-4 h-4 text-ocean-600" />
-              <span className="font-semibold">{coords ? `${coords.latitude.toFixed(4)}, ${coords.longitude.toFixed(4)}` : "Koordinat tidak tersedia"}</span>
+              <Icon name="pin" className="w-4 h-4 text-ocean-600 shrink-0" />
+              <span className={`font-semibold ${distColor}`}>{distLabel}</span>
               <Status kind={gpsStatus === "ok" ? "active" : "inactive"} className="ml-auto">{gpsStatus === "ok" ? "GPS OK" : "No GPS"}</Status>
             </div>
+            {coords && (
+              <div className="text-[11px] text-ink-faint font-mono">
+                {coords.latitude.toFixed(5)}, {coords.longitude.toFixed(5)}
+              </div>
+            )}
           </Card>
           <div className="grid grid-cols-2 gap-2 mt-4">
             <label>
@@ -242,6 +298,9 @@ function ClockInFlow({ back, coachId, branchId, classes, preselectedClassId }: {
           <div className="w-20 h-20 rounded-full bg-ok-50 text-ok-600 mx-auto flex items-center justify-center mb-3"><Icon name="check" className="w-10 h-10" strokeWidth={3} /></div>
           <h2 className="font-display font-bold text-xl text-ink">Absensi Berhasil!</h2>
           <p className="text-ink-mute text-sm mt-1">Sekarang Anda bisa scan QR member yang hadir.</p>
+          {distanceMeters != null && (
+            <p className={`text-sm font-semibold mt-1 ${distColor}`}>{distLabel}</p>
+          )}
           <div className="mt-5">
             <Btn variant="outline" size="lg" className="w-full" onClick={back}>Kembali ke Home</Btn>
           </div>
@@ -342,13 +401,20 @@ function LeaveForm({ back, coachId, branchId, classes }: { back: () => void; coa
 
   useEffect(() => {
     if (!branchId) return;
+    const today = new Date().toISOString().split("T")[0];
     supabase.from("profiles")
-      .select("id, full_name")
+      .select("id, full_name, suspend_until")
       .eq("branch_id", branchId)
       .eq("role", "coach")
       .neq("id", coachId)
       .order("full_name")
-      .then(({ data }) => { if (data) setCoachList(data as { id: string; full_name: string }[]); });
+      .then(({ data }) => {
+        if (!data) return;
+        // Filter out suspended coaches per PRD
+        const active = (data as { id: string; full_name: string; suspend_until: string | null }[])
+          .filter(c => !c.suspend_until || c.suspend_until < today);
+        setCoachList(active);
+      });
   }, [branchId, coachId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const submit = async () => {
@@ -433,10 +499,10 @@ function QRScanner({ coachId, classes, onClose }: {
   const activeClassId = classes.find(c => (c.schedule_days ?? []).includes(todayName))?.id ?? classes[0]?.id ?? "";
 
   const markAttendance = async (qrCode: string) => {
-    // Lookup member by qr_code
+    // Lookup member by qr_code, join profile for suspend check
     const { data: member, error: mErr } = await supabase
       .from("members")
-      .select("id, profile:profiles(full_name)")
+      .select("id, status, suspend_until, profile:profiles(full_name)")
       .eq("qr_code", qrCode)
       .single();
 
@@ -446,9 +512,19 @@ function QRScanner({ coachId, classes, onClose }: {
       return;
     }
 
+    const typedMember = member as { id: string; status: string; suspend_until: string | null; profile: { full_name: string } | null };
+    const name = typedMember.profile?.full_name ?? "Member";
+
+    // Block suspended members
     const today = new Date().toISOString().split("T")[0];
+    if (typedMember.status === "suspended" || (typedMember.suspend_until && typedMember.suspend_until >= today)) {
+      toast.error(`${name} sedang disuspend`, "Member tidak bisa diabsen selama masa suspend");
+      setTimeout(() => setLastScanned(null), 2500);
+      return;
+    }
+
     const { error } = await supabase.from("member_attendances").upsert({
-      member_id: member.id,
+      member_id: typedMember.id,
       class_id: activeClassId,
       session_date: today,
       status: "hadir",
@@ -456,7 +532,6 @@ function QRScanner({ coachId, classes, onClose }: {
       marked_by: coachId,
     }, { onConflict: "class_id,member_id,session_date" });
 
-    const name = (member as { id: string; profile: { full_name: string } | null }).profile?.full_name ?? "Member";
     if (error) {
       toast.error(`Gagal absen ${name}`, error.message);
     } else {
@@ -531,8 +606,9 @@ function isInClockInWindow(timeStart: string, timeEnd: string): boolean {
   return nowMin >= startMin - 60 && nowMin <= endMin;
 }
 
-function CoachHome({ setOverlay, coachId, profile, classes, holidayClassIds }: {
+function CoachHome({ setOverlay, setActive, coachId, profile, classes, holidayClassIds }: {
   setOverlay: (v: string) => void;
+  setActive: (tab: string) => void;
   coachId: string; branchId?: string;
   profile: ProfileData | null;
   classes: ClassRow[];
@@ -543,6 +619,9 @@ function CoachHome({ setOverlay, coachId, profile, classes, holidayClassIds }: {
   const [subClasses, setSubClasses] = useState<{ classId: string; className: string; originalCoach: string }[]>([]);
   // Class IDs the coach is on leave for today (clock-in blocked)
   const [leaveClassIds, setLeaveClassIds] = useState<Set<string>>(new Set());
+
+  // Classes with unfilled spreadsheet program
+  const unfilledClasses = classes.filter(c => c.spreadsheet_filled === false);
 
    
   useEffect(() => {
@@ -599,6 +678,28 @@ function CoachHome({ setOverlay, coachId, profile, classes, holidayClassIds }: {
 
   return (
     <div className="space-y-5">
+      {unfilledClasses.length > 0 && (
+        <div className="rounded-2xl border border-warn-200 bg-warn-50 p-4 flex gap-3 items-start">
+          <span className="w-9 h-9 rounded-xl bg-warn-100 text-warn-600 flex items-center justify-center shrink-0 mt-0.5">
+            <Icon name="alert" className="w-5 h-5" />
+          </span>
+          <div className="flex-1 min-w-0">
+            <div className="font-bold text-warn-800 text-sm">Spreadsheet program belum diisi</div>
+            <p className="text-warn-700 text-xs mt-0.5 leading-relaxed">
+              {unfilledClasses.length === 1
+                ? <>Kelas <span className="font-semibold">{unfilledClasses[0].name}</span> belum memiliki program bulanan.</>
+                : <>{unfilledClasses.length} kelas belum memiliki program bulanan: <span className="font-semibold">{unfilledClasses.map(c => c.name).join(", ")}</span>.</>
+              }
+            </p>
+            <button
+              className="mt-2 text-xs font-semibold text-warn-700 underline underline-offset-2 hover:text-warn-900"
+              onClick={() => setActive("kelas")}
+            >
+              Buka menu Kelas untuk mengisi →
+            </button>
+          </div>
+        </div>
+      )}
       <div className="bg-ocean-700 text-white rounded-2xl border border-ocean-700 shadow-card p-5 relative overflow-hidden">
         <div className="caustics absolute inset-0 opacity-30" />
         <div className="relative">
@@ -797,16 +898,28 @@ function CoachAbsensi({ setOverlay, coachId, classes, holidayClassIds }: {
   };
 
   const loadMembers = useCallback(async (classId: string, date: string) => {
+    const memberIds = await supabase.from("member_classes").select("member_id").eq("class_id", classId)
+      .then(r => r.data?.map(m => m.member_id) ?? []);
+    if (memberIds.length === 0) { setMemberAtt([]); setAttStatus({}); return; }
+
     const { data } = await supabase.from("members")
-      .select("id, profile:profiles(full_name, birth_date)")
-      .in("id",
-        (await supabase.from("member_classes").select("member_id").eq("class_id", classId).then(r => r.data?.map(m => m.member_id) ?? []))
-      );
+      .select("id, status, suspend_until, profile:profiles(full_name, birth_date)")
+      .in("id", memberIds);
+
     if (data) {
-      const rows = data.map(m => ({ id: "", member_id: m.id, session_date: date, status: "hadir", member: (m as { profile: { full_name: string; birth_date: string | null } | null }).profile }));
+      // Filter out suspended members
+      const today = new Date().toISOString().split("T")[0];
+      const active = data.filter((m: Record<string, unknown>) => {
+        const status = m.status as string;
+        const suspendUntil = m.suspend_until as string | null;
+        if (status === "suspended") return false;
+        if (suspendUntil && suspendUntil >= today) return false;
+        return true;
+      });
+      const rows = active.map(m => ({ id: "", member_id: m.id as string, session_date: date, status: "hadir", member: (m as { profile: { full_name: string; birth_date: string | null } | null }).profile }));
       setMemberAtt(rows as unknown as MemberAttRow[]);
       const init: Record<string, string> = {};
-      data.forEach(m => { init[m.id] = "hadir"; });
+      active.forEach(m => { init[m.id as string] = "hadir"; });
       setAttStatus(init);
     }
   }, [supabase]);
@@ -845,12 +958,32 @@ function CoachAbsensi({ setOverlay, coachId, classes, holidayClassIds }: {
     // Insert attendance
     const { error: attErr } = await supabase.from("member_attendances").insert({ class_id: privateClassId, member_id: memberId, session_date: privateDate, status: "hadir", method: "manual" });
     if (attErr) { setSavingPrivate(false); return toast.error("Gagal mencatat sesi", attErr.message); }
-    // Decrement remaining_sessions
+    // Decrement remaining_sessions on members table
     const { data: memberRow } = await supabase.from("members").select("remaining_sessions").eq("id", memberId).single();
     const remaining = memberRow?.remaining_sessions ?? 0;
-    await supabase.from("members").update({ remaining_sessions: Math.max(0, remaining - 1) }).eq("id", memberId);
+    const newRemaining = Math.max(0, remaining - 1);
+    await supabase.from("members").update({ remaining_sessions: newRemaining }).eq("id", memberId);
+    // Increment sessions_used on the active session_pack bill for this member+class
+    const { data: activeBill } = await supabase.from("bills")
+      .select("id, sessions_total, sessions_used")
+      .eq("member_id", memberId).eq("class_id", privateClassId).eq("type", "session_pack").eq("status", "paid")
+      .order("created_at", { ascending: false }).limit(1).maybeSingle();
+    if (activeBill) {
+      const newUsed = (activeBill.sessions_used ?? 0) + 1;
+      await supabase.from("bills").update({ sessions_used: newUsed }).eq("id", activeBill.id);
+      // Send reminder when only 1 session left
+      if (activeBill.sessions_total != null && (activeBill.sessions_total - newUsed) <= 1) {
+        await supabase.from("notifications").insert({
+          user_id: memberId,
+          title: "Sesi hampir habis",
+          body: `Sisa sesi paket Anda tinggal ${activeBill.sessions_total - newUsed} sesi lagi. Hubungi admin untuk perpanjangan paket.`,
+          icon: "warning",
+          kind: "warn",
+        });
+      }
+    }
     setSavingPrivate(false);
-    toast.success("Sesi private dicatat", `Sisa sesi: ${Math.max(0, remaining - 1)}`);
+    toast.success("Sesi private dicatat", `Sisa sesi: ${newRemaining}`);
     setOpenPrivate(false);
     setPrivateClassId(""); setPrivateDate(new Date().toISOString().split("T")[0]); setPrivateNote("");
   };
@@ -1032,95 +1165,49 @@ function CoachAbsensi({ setOverlay, coachId, classes, holidayClassIds }: {
 
 // ── Spreadsheet Program ────────────────────────────────────────────────────────
 
-interface ProgramRow { id?: string; week: number; topic: string; description: string }
-
-function SpreadsheetModal({ classId, coachId, className, onClose }: {
-  classId: string; coachId: string; className: string; onClose: () => void;
+function SpreadsheetModal({ classId, className, currentUrl, onClose, onSaved }: {
+  classId: string; className: string; currentUrl?: string | null; onClose: () => void; onSaved?: () => void;
 }) {
   const supabase = createClient();
   const toast = useToast();
-  const [month, setMonth] = useState(() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-  });
-  const [rows, setRows] = useState<ProgramRow[]>([
-    { week: 1, topic: "", description: "" },
-    { week: 2, topic: "", description: "" },
-    { week: 3, topic: "", description: "" },
-    { week: 4, topic: "", description: "" },
-  ]);
-  const [loading, setLoading] = useState(false);
+  const [url, setUrl] = useState(currentUrl ?? "");
   const [saving, setSaving] = useState(false);
 
-  /* eslint-disable react-hooks/set-state-in-effect -- async data loader */
-  useEffect(() => {
-    setLoading(true);
-    supabase.from("class_programs")
-      .select("id, week, topic, description")
-      .eq("class_id", classId)
-      .eq("month", month)
-      .order("week")
-      .then(({ data }) => {
-        if (data && data.length > 0) {
-          setRows([1, 2, 3, 4].map(w => {
-            const existing = data.find(r => r.week === w);
-            return { week: w, topic: existing?.topic ?? "", description: existing?.description ?? "", id: existing?.id };
-          }));
-        } else {
-          setRows([1, 2, 3, 4].map(w => ({ week: w, topic: "", description: "" })));
-        }
-        setLoading(false);
-      });
-  }, [classId, month]); // eslint-disable-line react-hooks/exhaustive-deps
-  /* eslint-enable react-hooks/set-state-in-effect */
-
   const save = async () => {
-    const filled = rows.filter(r => r.topic.trim());
-    if (filled.length === 0) return toast.error("Isi minimal 1 baris materi");
+    const trimmed = url.trim();
+    if (!trimmed) return toast.error("Masukkan link spreadsheet terlebih dahulu");
     setSaving(true);
-    const upsertRows = filled.map(r => ({
-      class_id: classId, coach_id: coachId, month, week: r.week,
-      topic: r.topic.trim(), description: r.description.trim(),
-    }));
-    const { error } = await supabase.from("class_programs")
-      .upsert(upsertRows, { onConflict: "class_id,month,week" });
-    if (!error) {
-      // Mark spreadsheet as filled
-      await supabase.from("classes").update({ spreadsheet_filled: true }).eq("id", classId);
-    }
+    const { error } = await supabase.from("classes")
+      .update({ spreadsheet_url: trimmed, spreadsheet_filled: true })
+      .eq("id", classId);
     setSaving(false);
     if (error) return toast.error("Gagal menyimpan", error.message);
-    toast.success("Program tersimpan");
+    toast.success("Link spreadsheet tersimpan");
+    onSaved?.();
     onClose();
   };
 
-  const updateRow = (week: number, field: "topic" | "description", val: string) => {
-    setRows(prev => prev.map(r => r.week === week ? { ...r, [field]: val } : r));
-  };
-
   return (
-    <Modal open onClose={onClose} title={`Spreadsheet Program — ${className}`} size="lg"
-      footer={<><Btn variant="ghost" onClick={onClose}>Batal</Btn><Btn variant="primary" onClick={save} disabled={saving}>{saving ? "Menyimpan…" : "Simpan program"}</Btn></>}>
+    <Modal open onClose={onClose} title={`Spreadsheet Program — ${className}`} size="md"
+      footer={<><Btn variant="ghost" onClick={onClose}>Batal</Btn><Btn variant="primary" onClick={save} disabled={saving}>{saving ? "Menyimpan…" : "Simpan"}</Btn></>}>
       <div className="space-y-4">
-        <div className="flex items-center gap-3">
-          <Field label="Bulan" className="!mb-0">
-            <Input type="month" value={month} onChange={e => setMonth(e.target.value)} className="!w-40 font-mono" />
-          </Field>
+        <div className="p-3 rounded-xl bg-ocean-50 border border-ocean-100 text-sm text-ocean-800 leading-relaxed">
+          Buat spreadsheet program kelas di Google Sheets, lalu paste link-nya di sini. Pastikan link bisa diakses oleh siapa pun yang memiliki link.
         </div>
-        {loading ? <div className="text-ink-mute text-sm py-4 text-center">Memuat…</div> : (
-          <div className="space-y-3">
-            {rows.map(r => (
-              <div key={r.week} className="p-4 rounded-xl border border-line bg-paper-tint space-y-2">
-                <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Minggu {r.week}</div>
-                <Field label="Topik / materi" className="!mb-0">
-                  <Input value={r.topic} onChange={e => updateRow(r.week, "topic", e.target.value)} placeholder="Mis. Gaya bebas — fase tarikan lengan" />
-                </Field>
-                <Field label="Deskripsi (opsional)" className="!mb-0">
-                  <Input value={r.description} onChange={e => updateRow(r.week, "description", e.target.value)} placeholder="Penjelasan singkat latihan minggu ini" />
-                </Field>
-              </div>
-            ))}
-          </div>
+        <Field label="Link Google Sheets / Spreadsheet">
+          <Input
+            value={url}
+            onChange={e => setUrl(e.target.value)}
+            placeholder="https://docs.google.com/spreadsheets/d/..."
+            type="url"
+          />
+        </Field>
+        {currentUrl && (
+          <a href={currentUrl} target="_blank" rel="noreferrer"
+            className="inline-flex items-center gap-1.5 text-xs text-ocean-600 hover:text-ocean-800 font-semibold">
+            <Icon name="link" className="w-3.5 h-3.5" />
+            Buka spreadsheet saat ini
+          </a>
         )}
       </div>
     </Modal>
@@ -1129,9 +1216,57 @@ function SpreadsheetModal({ classId, coachId, className, onClose }: {
 
 // ── Kelas ──────────────────────────────────────────────────────────────────────
 
-function CoachKelas({ classes, coachId }: { classes: ClassRow[]; coachId: string }) {
+type MemberDetail = NonNullable<NonNullable<ClassRow["member_classes"]>[number]["member"]>;
+
+function MemberDetailModal({ member, onClose }: { member: MemberDetail; onClose: () => void }) {
+  const name = member.profile?.full_name ?? "—";
+  const age = member.profile?.birth_date
+    ? Math.floor((Date.now() - new Date(member.profile.birth_date).getTime()) / (365.25 * 24 * 3600 * 1000))
+    : null;
+
+  const rows: [string, string | null | undefined][] = [
+    ["Usia", age != null ? `${age} tahun` : null],
+    ["Jenis kelamin", member.profile?.gender === "male" ? "Laki-laki" : member.profile?.gender === "female" ? "Perempuan" : null],
+    ["No. HP", member.profile?.phone],
+    ["Alamat", member.profile?.address],
+    ["Riwayat kesehatan / alergi", member.profile?.health_notes],
+  ];
+
+  return (
+    <Modal open onClose={onClose} title={name} size="sm"
+      footer={
+        <div className="flex items-center gap-2 w-full">
+          {member.profile?.phone && (
+            <a href={waLink(`Halo ${name}, saya Coach dari Next Swimming School.`)} target="_blank" rel="noreferrer" className="flex-1">
+              <Btn variant="wa" className="w-full" icon="whatsapp">Chat Member</Btn>
+            </a>
+          )}
+          <Btn variant="ghost" onClick={onClose}>Tutup</Btn>
+        </div>
+      }>
+      <div className="space-y-1">
+        <div className="flex items-center gap-3 mb-4">
+          <Avatar name={name} size={48} />
+          <div>
+            <div className="font-display font-bold text-ink text-base">{name}</div>
+            {age != null && <div className="text-xs text-ink-mute">{age} tahun</div>}
+          </div>
+        </div>
+        {rows.filter(([, v]) => v).map(([label, value]) => (
+          <div key={label} className="flex gap-2 py-2 border-b border-line last:border-0">
+            <div className="text-xs text-ink-mute w-36 shrink-0 pt-0.5">{label}</div>
+            <div className="text-sm text-ink font-medium flex-1">{value}</div>
+          </div>
+        ))}
+      </div>
+    </Modal>
+  );
+}
+
+function CoachKelas({ classes, onRefreshClasses }: { classes: ClassRow[]; coachId?: string; onRefreshClasses?: () => void }) {
   const [det, setDet] = useState<ClassRow | null>(null);
   const [openSpreadsheet, setOpenSpreadsheet] = useState<ClassRow | null>(null);
+  const [memberDet, setMemberDet] = useState<MemberDetail | null>(null);
 
   return (
     <div className="space-y-5">
@@ -1147,6 +1282,10 @@ function CoachKelas({ classes, coachId }: { classes: ClassRow[]; coachId: string
                 <div className="text-xs text-ocean-700 font-semibold mt-1.5 font-mono">{c.time_start?.slice(0,5)}{c.time_end ? `–${c.time_end.slice(0,5)}` : ""}</div>
                 <div className="mt-2 flex items-center gap-3 text-xs text-ink-mute">
                   <span className="inline-flex items-center gap-1"><Icon name="users" className="w-3.5 h-3.5" />{c.enrolled}/{c.capacity}</span>
+                  {c.spreadsheet_filled && c.spreadsheet_url
+                    ? <a href={c.spreadsheet_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="inline-flex items-center gap-1 text-ok-600 font-semibold hover:underline"><Icon name="link" className="w-3 h-3" />Program</a>
+                    : <span className="text-warn-500 font-semibold">Program belum diisi</span>
+                  }
                 </div>
               </div>
               <Btn variant="soft" size="sm" icon="book" onClick={e => { e.stopPropagation(); setOpenSpreadsheet(c); }}>Program</Btn>
@@ -1155,24 +1294,50 @@ function CoachKelas({ classes, coachId }: { classes: ClassRow[]; coachId: string
         ))}
         {classes.length === 0 && <Card><p className="text-ink-mute text-sm">Belum ada kelas yang diassign.</p></Card>}
       </div>
+
+      {/* Detail kelas modal */}
       <Modal open={!!det} onClose={() => setDet(null)} title={det?.name ?? ""} size="lg"
-        footer={<><Btn variant="ghost" onClick={() => setDet(null)}>Tutup</Btn><Btn variant="soft" size="sm" icon="book" onClick={() => { setOpenSpreadsheet(det); setDet(null); }}>Isi Program</Btn></>}>
+        footer={
+          <div className="flex items-center gap-2 w-full">
+            {det?.spreadsheet_filled && det.spreadsheet_url && (
+              <a href={det.spreadsheet_url} target="_blank" rel="noreferrer">
+                <Btn variant="soft" size="sm" icon="link">Buka Spreadsheet</Btn>
+              </a>
+            )}
+            <div className="flex-1" />
+            <Btn variant="soft" size="sm" icon="book" onClick={() => { setOpenSpreadsheet(det); setDet(null); }}>
+              {det?.spreadsheet_filled ? "Edit Program" : "Isi Program"}
+            </Btn>
+            <Btn variant="ghost" onClick={() => setDet(null)}>Tutup</Btn>
+          </div>
+        }>
         {det && (
           <div className="space-y-4">
             {det.goals && <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Tujuan</div><p className="text-sm text-ink-soft mt-1">{det.goals}</p></div>}
+            {det.description && <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Deskripsi</div><p className="text-sm text-ink-soft mt-1">{det.description}</p></div>}
+            {!det.spreadsheet_filled && (
+              <div className="flex items-center gap-2 p-3 rounded-xl bg-warn-50 border border-warn-200 text-sm text-warn-800">
+                <Icon name="alert" className="w-4 h-4 shrink-0 text-warn-500" />
+                Spreadsheet program kelas ini belum diisi.
+              </div>
+            )}
             <div>
-              <SectionTitle sub={`${det.enrolled} member terdaftar`}>Daftar Member</SectionTitle>
-              <div className="grid sm:grid-cols-2 gap-2">
+              <SectionTitle sub={`${det.enrolled} member terdaftar · klik untuk detail`}>Daftar Member</SectionTitle>
+              <div className="space-y-2">
                 {(det.member_classes ?? []).map((mc, i) => mc.member && (
-                  <div key={i} className="flex items-center gap-3 p-2.5 rounded-xl border border-line">
-                    <Avatar name={mc.member.profile?.full_name ?? "?"} size={34} />
-                    <div className="flex-1 min-w-0"><div className="font-semibold text-sm text-ink truncate">{mc.member.profile?.full_name ?? "—"}</div></div>
-                    {mc.member.profile?.phone && (
-                      <a href={waLink(`Halo ${mc.member.profile.full_name}, saya Coach dari Next Swimming School.`)} target="_blank" rel="noreferrer">
-                        <Icon name="whatsapp" className="w-4 h-4 text-[#25D366]" />
-                      </a>
-                    )}
-                  </div>
+                  <button key={i} onClick={() => setMemberDet(mc.member!)}
+                    className="w-full flex items-center gap-3 p-2.5 rounded-xl border border-line hover:bg-ocean-50 hover:border-ocean-200 transition text-left">
+                    <Avatar name={mc.member.profile?.full_name ?? "?"} size={36} />
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-sm text-ink truncate">{mc.member.profile?.full_name ?? "—"}</div>
+                      {mc.member.profile?.birth_date && (
+                        <div className="text-xs text-ink-mute">
+                          {Math.floor((Date.now() - new Date(mc.member.profile.birth_date).getTime()) / (365.25 * 24 * 3600 * 1000))} tahun
+                        </div>
+                      )}
+                    </div>
+                    <Icon name="chevron-right" className="w-4 h-4 text-ink-faint shrink-0" />
+                  </button>
                 ))}
                 {(det.member_classes?.length ?? 0) === 0 && <div className="text-sm text-ink-mute">Belum ada member terdaftar.</div>}
               </div>
@@ -1180,12 +1345,18 @@ function CoachKelas({ classes, coachId }: { classes: ClassRow[]; coachId: string
           </div>
         )}
       </Modal>
+
+      {/* Member detail modal */}
+      {memberDet && <MemberDetailModal member={memberDet} onClose={() => setMemberDet(null)} />}
+
+      {/* Spreadsheet modal */}
       {openSpreadsheet && (
         <SpreadsheetModal
           classId={openSpreadsheet.id}
-          coachId={coachId}
           className={openSpreadsheet.name}
+          currentUrl={openSpreadsheet.spreadsheet_url}
           onClose={() => setOpenSpreadsheet(null)}
+          onSaved={onRefreshClasses}
         />
       )}
     </div>
@@ -1220,22 +1391,47 @@ function CoachInvoice({ coachId, branchId, profile }: { coachId: string; branchI
       .is("invoice_id", null);
 
     if (att) {
-      // Get rates for each class
       const classIds = [...new Set(att.map((a: Record<string, unknown>) => a.class_id as string).filter(Boolean))];
-      const { data: rates } = await supabase.from("coach_rates").select("class_id, rate_per_session").is("coach_id", null).in("class_id", classIds as string[]);
-      const rateMap: Record<string, number> = {};
-      (rates ?? []).forEach((r: { class_id: string; rate_per_session: number | null }) => { if (r.rate_per_session != null) rateMap[r.class_id] = r.rate_per_session; });
+      // Fetch both: tarif khusus for this coach AND tarif umum (coach_id null)
+      const { data: rates } = classIds.length > 0
+        ? await supabase.from("coach_rates").select("class_id, coach_id, rate_per_session")
+            .in("class_id", classIds as string[])
+            .or(`coach_id.eq.${coachId},coach_id.is.null`)
+        : { data: [] };
+
+      // Build rateMap: tarif khusus overrides tarif umum
+      const generalMap: Record<string, number> = {};
+      const coachMap: Record<string, number> = {};
+      (rates ?? []).forEach((r: { class_id: string; coach_id: string | null; rate_per_session: number | null }) => {
+        if (r.rate_per_session == null) return;
+        if (!r.coach_id) generalMap[r.class_id] = r.rate_per_session;
+        else coachMap[r.class_id] = r.rate_per_session;
+      });
+      // Tarif khusus takes priority, fallback to tarif umum, then null (no rate set)
+      const rateMap: Record<string, number | null> = {};
+      classIds.forEach(id => { rateMap[id] = coachMap[id] ?? generalMap[id] ?? null; });
 
       const sessionsWithRate = att.map((a: Record<string, unknown>) => {
         const cls = a.class as { id?: string; name?: string } | null;
-        return { id: a.id as string, session_date: a.session_date as string, class_id: a.class_id as string, rate_per_session: rateMap[a.class_id as string] ?? 150000, class: cls ? { name: cls.name ?? "" } : null };
+        const classId = a.class_id as string;
+        return {
+          id: a.id as string,
+          session_date: a.session_date as string,
+          class_id: classId,
+          rate_per_session: rateMap[classId] ?? 0,
+          rate_set: rateMap[classId] != null,
+          class: cls ? { name: cls.name ?? "" } : null,
+        };
       });
-      setSessions(sessionsWithRate);
-      setSelected(new Set(sessionsWithRate.map((s: InvoiceSession) => s.id)));
+      setSessions(sessionsWithRate as InvoiceSession[]);
+      // Only auto-select sessions that have a rate set
+      setSelected(new Set(sessionsWithRate.filter(s => s.rate_set).map(s => s.id)));
     }
 
-    const { data: inv } = await supabase.from("coach_invoices").select("id, invoice_number, period_label, total_amount, status").eq("coach_id", coachId).order("created_at", { ascending: false });
-    if (inv) setPastInvoices(inv as PastInvoice[]);
+    const { data: inv } = await supabase.from("coach_invoices")
+      .select("id, invoice_number, period_label, total_amount, status, bank_info, coach_invoice_items(class_id, session_count, rate, class:classes(name))")
+      .eq("coach_id", coachId).order("created_at", { ascending: false });
+    if (inv) setPastInvoices(inv as unknown as PastInvoice[]);
     setLoading(false);
   }, [coachId, monthFilter, supabase]);
 
@@ -1248,6 +1444,8 @@ function CoachInvoice({ coachId, branchId, profile }: { coachId: string; branchI
 
   const generate = async () => {
     if (selected.size === 0) return toast.error("Pilih minimal 1 sesi");
+    const noRate = sessions.filter(s => selected.has(s.id) && !s.rate_set);
+    if (noRate.length > 0) return toast.error("Tarif belum diset", `Kelas belum ada tarif: ${noRate.map(s => s.class?.name ?? s.class_id).join(", ")}`);
     setGenerating(true);
     const [y, m] = monthFilter.split("-");
     const periodLabel = new Date(parseInt(y), parseInt(m) - 1, 1).toLocaleDateString("id-ID", { month: "long", year: "numeric" });
@@ -1256,7 +1454,8 @@ function CoachInvoice({ coachId, branchId, profile }: { coachId: string; branchI
     const { data: inv, error: invError } = await supabase.from("coach_invoices").insert({
       coach_id: coachId, branch_id: branchId, invoice_number: num,
       period_label: periodLabel, total_amount: total,
-      bank_info: profile?.bank_name ? `${profile.bank_name} - ${profile.bank_account} a/n ${profile.bank_holder}` : null, status: "pending",
+      bank_info: profile?.bank_name ? `${profile.bank_name} - ${profile.bank_account} a/n ${profile.bank_holder}` : null,
+      status: "pending",
     }).select("id").single();
 
     if (invError || !inv) { toast.error("Gagal membuat invoice", invError?.message); setGenerating(false); return; }
@@ -1268,6 +1467,19 @@ function CoachInvoice({ coachId, branchId, profile }: { coachId: string; branchI
     })));
     // Mark attendances as invoiced
     await supabase.from("coach_attendances").update({ invoice_id: inv.id }).in("id", [...selected]);
+
+    // Notify owner — fetch all owner profiles for this branch
+    const { data: ownerProfiles } = await supabase.from("profiles")
+      .select("id").eq("branch_id", branchId).eq("role", "owner");
+    if (ownerProfiles && ownerProfiles.length > 0) {
+      await supabase.from("notifications").insert(ownerProfiles.map((op: { id: string }) => ({
+        user_id: op.id,
+        title: "Invoice baru dari coach",
+        body: `${profile?.full_name ?? "Coach"} mengirimkan invoice ${num} — ${periodLabel} (${fmtIDR(total)})`,
+        icon: "invoice",
+        kind: "info",
+      })));
+    }
 
     setGenerating(false);
     toast.success("Invoice dibuat", "Invoice masuk ke owner panel");
@@ -1294,10 +1506,16 @@ function CoachInvoice({ coachId, branchId, profile }: { coachId: string; branchI
             {sessions.length === 0 ? <div className="p-6 text-center text-ink-mute">Tidak ada sesi yang belum diinvoice bulan ini.</div> : (
               <div className="divide-y divide-line">
                 {sessions.map((s) => (
-                  <label key={s.id} className={`flex items-center gap-3 px-5 py-3 hover:bg-paper-tint cursor-pointer ${selected.has(s.id) ? "bg-ocean-50/40" : ""}`}>
+                  <label key={s.id} className={`flex items-center gap-3 px-5 py-3 hover:bg-paper-tint cursor-pointer ${selected.has(s.id) ? "bg-ocean-50/40" : ""} ${!s.rate_set ? "opacity-60" : ""}`}>
                     <input type="checkbox" checked={selected.has(s.id)} onChange={() => toggle(s.id)} className="w-4 h-4 rounded border-line-strong text-ocean-600" />
-                    <div className="flex-1 min-w-0"><div className="font-semibold text-ink text-sm">{s.class?.name}</div><div className="text-xs text-ink-mute">{fmtDate(s.session_date)}</div></div>
-                    <div className="font-mono font-bold text-sm">{fmtIDR(s.rate_per_session)}</div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-ink text-sm">{s.class?.name}</div>
+                      <div className="text-xs text-ink-mute">{fmtDate(s.session_date)}</div>
+                    </div>
+                    {s.rate_set
+                      ? <div className="font-mono font-bold text-sm">{fmtIDR(s.rate_per_session)}</div>
+                      : <div className="text-xs font-semibold text-warn-600 flex items-center gap-1"><Icon name="warning" className="w-3.5 h-3.5" />Tarif belum diset</div>
+                    }
                   </label>
                 ))}
               </div>
@@ -1327,24 +1545,39 @@ function CoachInvoice({ coachId, branchId, profile }: { coachId: string; branchI
                 <button title="Cetak / Unduh PDF" onClick={() => {
                   const w = window.open("", "_blank", "width=700,height=900");
                   if (!w) return;
+                  // Group items by class name, sum session counts
+                  const itemMap: Record<string, { name: string; sessions: number; rate: number }> = {};
+                  (iv.coach_invoice_items ?? []).forEach(item => {
+                    const key = item.class_id;
+                    if (!itemMap[key]) itemMap[key] = { name: item.class?.name ?? item.class_id, sessions: 0, rate: item.rate };
+                    itemMap[key].sessions += item.session_count;
+                  });
+                  const itemRows = Object.values(itemMap).map(item =>
+                    `<div class="row"><span>${item.name}</span><span>${item.sessions} sesi × Rp ${item.rate.toLocaleString("id-ID")} = <b>Rp ${(item.sessions * item.rate).toLocaleString("id-ID")}</b></span></div>`
+                  ).join("");
                   w.document.write(`<!DOCTYPE html><html><head><title>${iv.invoice_number}</title>
-                    <style>body{font-family:sans-serif;padding:32px;color:#0f172a;max-width:600px;margin:auto}
-                    h1{font-size:22px;font-weight:700}
-                    .meta{color:#64748b;font-size:13px;margin-bottom:24px}
-                    .row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #e2e8f0;font-size:14px}
-                    .total{display:flex;justify-content:space-between;padding:12px 0;font-weight:700;font-size:16px;border-top:2px solid #0f172a;margin-top:8px}
-                    .status{display:inline-block;padding:2px 8px;border-radius:4px;font-size:12px;font-weight:700;background:${iv.status === "paid" ? "#dcfce7" : "#fef9c3"};color:${iv.status === "paid" ? "#166534" : "#854d0e"}}
-                    footer{margin-top:40px;border-top:1px solid #e2e8f0;padding-top:12px;font-size:11px;color:#94a3b8}
+                    <style>body{font-family:sans-serif;padding:32px;color:#0f172a;max-width:640px;margin:auto}
+                    h1{font-size:22px;font-weight:700;margin-bottom:2px}
+                    .sub{font-size:13px;color:#64748b;margin-bottom:20px}
+                    .section{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94a3b8;margin:20px 0 6px}
+                    .meta{background:#f8fafc;border-radius:8px;padding:12px 16px;font-size:13px;line-height:1.8;margin-bottom:16px}
+                    .row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #e2e8f0;font-size:13px}
+                    .total{display:flex;justify-content:space-between;padding:12px 0;font-weight:700;font-size:16px;border-top:2px solid #0f172a;margin-top:4px}
+                    .badge{display:inline-block;padding:2px 10px;border-radius:4px;font-size:11px;font-weight:700;background:${iv.status === "paid" ? "#dcfce7" : "#fef9c3"};color:${iv.status === "paid" ? "#166534" : "#854d0e"}}
+                    footer{margin-top:40px;border-top:1px solid #e2e8f0;padding-top:12px;font-size:11px;color:#94a3b8;text-align:center}
                     </style></head><body>
-                    <h1>${iv.invoice_number}</h1>
+                    <h1>Invoice Coach</h1>
+                    <div class="sub">${iv.invoice_number} &nbsp;·&nbsp; <span class="badge">${iv.status === "paid" ? "Lunas" : "Pending"}</span></div>
+                    <div class="section">Informasi</div>
                     <div class="meta">
-                      Periode: ${iv.period_label}<br/>
-                      Coach: ${profile?.full_name ?? "—"}<br/>
-                      Rekening: ${profile?.bank_name ? `${profile.bank_name} - ${profile.bank_account} a/n ${profile.bank_holder}` : "—"}<br/>
-                      Status: <span class="status">${iv.status === "paid" ? "Lunas" : "Pending"}</span>
+                      <b>Periode:</b> ${iv.period_label}<br/>
+                      <b>Coach:</b> ${profile?.full_name ?? "—"}<br/>
+                      <b>Rekening:</b> ${iv.bank_info ?? (profile?.bank_name ? `${profile.bank_name} - ${profile.bank_account} a/n ${profile.bank_holder}` : "—")}
                     </div>
+                    <div class="section">Rincian Kelas</div>
+                    ${itemRows || '<div class="row"><span style="color:#94a3b8">Tidak ada rincian</span></div>'}
                     <div class="total"><span>Total</span><span>Rp ${iv.total_amount.toLocaleString("id-ID")}</span></div>
-                    <footer>Next Swimming School · ${new Date().toLocaleDateString("id-ID", { dateStyle: "long" })}</footer>
+                    <footer>Next Swimming School &nbsp;·&nbsp; Dicetak ${new Date().toLocaleDateString("id-ID", { dateStyle: "long" })}</footer>
                     </body></html>`);
                   w.document.close();
                   w.focus();
@@ -1447,12 +1680,28 @@ function CoachRapor({ coachId, branchId }: { coachId: string; branchId: string }
 
   const saveRapor = async () => {
     if (!open || !period) return;
+    // Check period still open
+    const today = new Date().toISOString().split("T")[0];
+    if (period.date_to < today) return toast.error("Periode rapor sudah berakhir", "Hubungi admin untuk memperpanjang periode.");
+    const { data: periodCheck } = await supabase.from("rapor_periods").select("is_open").eq("id", period.id).single();
+    if (!periodCheck?.is_open) return toast.error("Periode rapor sudah ditutup", "Hubungi admin untuk membuka kembali periode.");
     setSaving(true);
+    const isNew = !open.locked;
     const { error } = await supabase.from("rapor_entries")
       .update({ scores, notes, filled_at: new Date().toISOString(), locked: true })
       .eq("id", open.id);
     setSaving(false);
     if (error) return toast.error("Gagal menyimpan rapor", error.message);
+    // Notify member when rapor is first filled (not on updates)
+    if (isNew) {
+      await supabase.from("notifications").insert({
+        user_id: open.member_id,
+        title: "Rapor tersedia",
+        body: `Rapor Anda untuk periode "${period.label}" sudah diisi coach. Buka menu Rapor untuk melihat hasilnya.`,
+        icon: "book",
+        kind: "info",
+      });
+    }
     toast.success("Rapor disimpan");
     setOpen(null);
     setEntries(prev => prev.map(e => e.id === open.id ? { ...e, locked: true, scores, notes } : e));
@@ -2069,7 +2318,8 @@ export default function CoachPage() {
   }, [supabase]);
 
   const loadClasses = useCallback(async (profileId: string) => {
-    const { data } = await supabase.from("class_coaches").select("class:classes(id, name, schedule_days, time_start, time_end, capacity, enrolled, goals, class_type, member_classes(member:members(id, profile:profiles(full_name, birth_date, phone))))").eq("coach_id", profileId);
+    const { data, error } = await supabase.from("class_coaches").select("class:classes(id, name, schedule_days, time_start, time_end, capacity, enrolled, goals, description, class_type, spreadsheet_filled, spreadsheet_url, member_classes(member:members(id, profile:profiles(full_name, birth_date, phone, gender, address, health_notes))))").eq("coach_id", profileId);
+    if (error) { console.error("[loadClasses] error:", error); }
     if (!data) return;
     const rows = data.map((d: Record<string, unknown>) => d.class as ClassRow).filter(Boolean);
     setClasses(rows);
@@ -2096,9 +2346,13 @@ export default function CoachPage() {
   const coachId = profile?.id ?? "";
   const branchId = user?.user_metadata?.branch_id as string ?? "";
 
+  const refreshClasses = useCallback(() => {
+    if (coachId) loadClasses(coachId);
+  }, [coachId, loadClasses]);
+
   const logout = async () => {
     await supabase.auth.signOut();
-    router.push("/login");
+    window.location.href = "/login";
   };
 
   const isSuspended = profile?.suspend_until ? new Date(profile.suspend_until) >= new Date() : false;
@@ -2176,9 +2430,9 @@ export default function CoachPage() {
     : overlay === "leave-history"
     ? <LeaveHistory back={() => setOverlay(null)} coachId={coachId} />
     : {
-        home:    <>{SuspendBanner}{IncompleteBanner}<CoachHome setOverlay={setOverlay} coachId={coachId} branchId={branchId} profile={profile} classes={classes} holidayClassIds={holidayClassIds} /></>,
+        home:    <>{SuspendBanner}{IncompleteBanner}<CoachHome setOverlay={setOverlay} setActive={setActive} coachId={coachId} branchId={branchId} profile={profile} classes={classes} holidayClassIds={holidayClassIds} /></>,
         absen:   <>{SuspendBanner}{IncompleteBanner}{locked ? <LockedNotice feature="Absensi" reason={lockReason} /> : <CoachAbsensi setOverlay={setOverlay} coachId={coachId} branchId={branchId} classes={classes} holidayClassIds={holidayClassIds} />}</>,
-        kelas:   <CoachKelas classes={classes} coachId={coachId} />,
+        kelas:   <CoachKelas classes={classes} coachId={coachId} onRefreshClasses={refreshClasses} />,
         invoice: <>{SuspendBanner}{IncompleteBanner}{locked ? <LockedNotice feature="Invoice" reason={lockReason} /> : <CoachInvoice coachId={coachId} branchId={branchId} profile={profile} />}</>,
         rapor:   <>{SuspendBanner}{IncompleteBanner}{locked ? <LockedNotice feature="Rapor" reason={lockReason} /> : <CoachRapor coachId={coachId} branchId={branchId} />}</>,
         profile: <CoachProfile profile={profile} onRefresh={() => user && loadProfile(user.id)} onLogout={logout} />,
