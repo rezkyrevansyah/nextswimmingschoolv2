@@ -117,21 +117,29 @@ export default function RegisterPage() {
       side={
         <div>
           <div className="inline-flex items-center gap-2 bg-white/15 ring-1 ring-white/20 rounded-full px-3 py-1.5 text-[11px] uppercase tracking-widest font-bold mb-6">
-            Pendaftaran online
+            Langkah Awal Petualangan Air
           </div>
           <h2 className="font-display font-extrabold text-4xl xl:text-5xl leading-tight">
-            Selangkah lagi menuju<br />kelas pertama.
+            Mulai latihan renang<br />yang aman & ceria.
           </h2>
-          <p className="text-white/80 mt-5 text-lg">
-            Lengkapi data berikut — admin cabang akan menghubungi Anda via WhatsApp untuk konfirmasi kelas dan pembayaran.
+          <p className="text-white/80 mt-5 text-lg leading-relaxed">
+            Lengkapi data singkat berikut. Coach dan tim kami siap menyambut Anda dan keluarga untuk mendapatkan pengalaman belajar terbaik di kolam renang yang bersih dan nyaman.
           </p>
           <div className="mt-10 bg-white/10 backdrop-blur ring-1 ring-white/20 rounded-2xl p-5">
-            <div className="text-[10px] uppercase tracking-widest font-bold text-wave-200 mb-2">Tahapan setelah Anda daftar</div>
-            <ol className="space-y-2 text-sm text-white/85">
-              <li><span className="font-bold">1.</span> Admin review data Anda</li>
-              <li><span className="font-bold">2.</span> Admin chat WA untuk konfirmasi program</li>
-              <li><span className="font-bold">3.</span> Pembayaran pertama → akun aktif</li>
-              <li><span className="font-bold">4.</span> Anda terima credential login</li>
+            <div className="text-[10px] uppercase tracking-widest font-bold text-wave-200 mb-3.5">Alur Pendaftaran Mudah</div>
+            <ol className="space-y-3 text-sm text-white/90 font-medium">
+              <li className="flex gap-2.5">
+                <span className="text-wave-200 font-bold">1.</span>
+                <span>Isi formulir pendaftaran online di samping</span>
+              </li>
+              <li className="flex gap-2.5">
+                <span className="text-wave-200 font-bold">2.</span>
+                <span>Tim kami akan menghubungi via WhatsApp untuk konfirmasi jadwal & kelas</span>
+              </li>
+              <li className="flex gap-2.5">
+                <span className="text-wave-200 font-bold">3.</span>
+                <span>Konfirmasi pendaftaran & mulai sesi renang pertama Anda!</span>
+              </li>
             </ol>
           </div>
         </div>
@@ -248,11 +256,11 @@ export default function RegisterPage() {
               </Field>
             </div>
 
-            <Card className="mt-6 bg-warn-50 border-warn-500/20">
+            <Card className="mt-6 bg-ocean-50 border-ocean-500/20">
               <div className="text-sm text-ink-soft flex items-start gap-2.5">
-                <Icon name="info" className="w-5 h-5 text-warn-600 shrink-0" />
+                <Icon name="info" className="w-5 h-5 text-ocean-600 shrink-0" />
                 <span>
-                  <b>Catatan:</b> Setelah submit, admin akan menghubungi Anda untuk konfirmasi kelas dan pembayaran. Akun login akan diberikan setelah pembayaran pertama diverifikasi.
+                  <b>Catatan:</b> Setelah pendaftaran dikirim, tim kami akan segera menghubungi Anda melalui WhatsApp untuk mendiskusikan penyesuaian jadwal dan detail kelas. Akun portal Anda akan diaktifkan secara otomatis setelah pendaftaran selesai dikonfirmasi.
                 </span>
               </div>
             </Card>

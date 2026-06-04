@@ -3,11 +3,19 @@ import { fmtIDR, waLink } from "@/lib/utils";
 import { Card } from "@/components/ui/Card";
 import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
-import Placeholder from "@/components/ui/Placeholder";
+
+const PROGRAM_IMAGES: Record<string, string> = {
+  "p-kids": "https://images.unsplash.com/photo-1576013551627-0cc20b96c2a7?w=600&auto=format&fit=crop&q=80",
+  "p-teen": "https://images.unsplash.com/photo-1519315901367-f34ff9154487?w=600&auto=format&fit=crop&q=80",
+  "p-adult": "https://images.unsplash.com/photo-1575425186775-b8de9fa427e6?w=600&auto=format&fit=crop&q=80",
+  "p-private": "https://images.unsplash.com/photo-1560090421-99a3160e64c1?w=600&auto=format&fit=crop&q=80",
+  "p-intense": "https://images.unsplash.com/photo-1530549387789-4c1017266635?w=600&auto=format&fit=crop&q=80",
+  "p-school": "https://images.unsplash.com/photo-1568454537842-d933259bb258?w=600&auto=format&fit=crop&q=80",
+};
 
 export default function Programs() {
   return (
-    <section id="program" className="relative">
+    <section id="program" className="relative bg-white">
       <div className="max-w-7xl mx-auto px-4 lg:px-8 py-20 lg:py-28">
         <div className="flex items-end justify-between gap-4 flex-wrap">
           <div className="max-w-xl">
@@ -21,21 +29,28 @@ export default function Programs() {
           </a>
         </div>
 
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5 mt-10">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 mt-10">
           {PROGRAMS.map((p) => (
-            <Card key={p.id} padded={false} className="overflow-hidden group hover:shadow-lift transition-shadow">
-              <Placeholder label={`${p.name.toLowerCase().replace(/\s/g, "-")}-photo`} ratio="16/10" className="rounded-none border-0 border-b border-line" />
+            <Card key={p.id} padded={false} className="overflow-hidden group hover:shadow-lift transition-all duration-300">
+              <div className="relative overflow-hidden aspect-[16/10] border-b border-line bg-paper-deep">
+                <img
+                  src={PROGRAM_IMAGES[p.id] || "https://images.unsplash.com/photo-1530549387789-4c1017266635?w=600&auto=format&fit=crop&q=80"}
+                  alt={p.name}
+                  className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
+                  loading="lazy"
+                />
+              </div>
               <div className="p-5">
                 <div className="flex items-center justify-between gap-2">
-                  <h3 className="font-display font-bold text-lg text-ink">{p.name}</h3>
+                  <h3 className="font-display font-bold text-lg text-ink group-hover:text-ocean-600 transition-colors">{p.name}</h3>
                   <span className="text-[11px] font-bold px-2 py-1 rounded-full bg-wave-50 text-wave-700 ring-1 ring-wave-500/20">{p.age}</span>
                 </div>
                 <p className="text-sm text-ink-mute mt-2 leading-relaxed line-clamp-2">{p.desc}</p>
-                <ul className="mt-3 space-y-1.5">
+                <ul className="mt-3.5 space-y-2">
                   {p.benefit.map((b) => (
                     <li key={b} className="text-xs text-ink-soft flex items-center gap-2">
-                      <Icon name="check" className="w-3.5 h-3.5 text-ok-500" strokeWidth={2.8} />
-                      {b}
+                      <Icon name="check" className="w-3.5 h-3.5 text-ok-500 shrink-0" strokeWidth={2.8} />
+                      <span>{b}</span>
                     </li>
                   ))}
                 </ul>

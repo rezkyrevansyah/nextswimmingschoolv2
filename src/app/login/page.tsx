@@ -98,24 +98,24 @@ function LoginForm() {
       side={
         <div>
           <div className="inline-flex items-center gap-2 bg-white/15 ring-1 ring-white/20 rounded-full px-3 py-1.5 text-[11px] uppercase tracking-widest font-bold mb-6">
-            Sistem login terpadu
+            Dashboard Anggota & Orang Tua
           </div>
           <h2 className="font-display font-extrabold text-4xl xl:text-5xl leading-tight">
-            Masuk ke ekosistem<br />renang Anda.
+            Pantau tumbuh kembang<br />dan progres renang.
           </h2>
-          <p className="text-white/80 mt-5 text-lg max-w-md">
-            Satu pintu login untuk owner, admin, coach, member, dan school. Sistem otomatis mengarahkan ke halaman sesuai peran.
+          <p className="text-white/80 mt-5 text-lg max-w-md leading-relaxed">
+            Masuk ke portal anggota untuk melihat rapor digital perkembangan renang, riwayat kehadiran kelas, jadwal latihan terbaru, serta info administrasi dengan mudah.
           </p>
-          <ul className="mt-10 space-y-3">
+          <ul className="mt-10 space-y-3.5">
             {[
-              "Zero loading antar menu",
-              "Notifikasi real-time di setiap halaman",
-              "Custom alert — tidak ada browser default",
-              "Mobile-first untuk pengguna HP",
+              "Rapor digital berkala dari coach",
+              "Pencatatan kehadiran (absensi) langsung",
+              "Informasi jadwal & tagihan transparan",
+              "Akses mudah dari smartphone Anda",
             ].map((x) => (
               <li key={x} className="flex items-center gap-2.5 text-white/85">
-                <Icon name="check" className="w-4 h-4 text-wave-200" strokeWidth={2.5} />
-                {x}
+                <Icon name="check" className="w-4.5 h-4.5 text-wave-200" strokeWidth={2.5} />
+                <span className="text-sm font-medium">{x}</span>
               </li>
             ))}
           </ul>
