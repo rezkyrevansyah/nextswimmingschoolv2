@@ -49,6 +49,7 @@ interface ClassRow {
   show_on_landing: boolean;
   goals?: string | null;
   description?: string | null;
+  photo_url?: string | null;
   spreadsheet_url?: string | null;
   spreadsheet_filled?: boolean;
   branch?: { name: string } | null;
@@ -512,13 +513,14 @@ interface Criterion {
   id: string; label: string; kind: string; options: string[] | null; sort_order: number;
 }
 
-const EMPTY_CLASS_FORM = { name: "", class_type: "reguler", schedule_days: [] as string[], schedule_times: [] as ScheduleSlot[], same_time_all: true, time_start: "", time_end: "", capacity: "", price_monthly: "", price_per_session: "", show_on_landing: true, goals: "", description: "" };
+const EMPTY_CLASS_FORM = { name: "", class_type: "reguler", schedule_days: [] as string[], schedule_times: [] as ScheduleSlot[], same_time_all: true, time_start: "", time_end: "", capacity: "", price_monthly: "", price_per_session: "", show_on_landing: true, goals: "", description: "", photo_url: "" };
 const DAY_OPTS = ["Senin","Selasa","Rabu","Kamis","Jumat","Sabtu","Minggu"];
 
 function AdminClass({ branchId }: { branchId: string }) {
   const supabase = createClient();
   const toast = useToast();
   const confirm = useConfirm();
+  const { upload, uploading: uploadingPhoto } = useUpload();
   const [classes, setClasses] = useState<ClassRow[]>([]);
   const [coaches, setCoaches] = useState<CoachProfile[]>([]);
   const [saving, setSaving] = useState(false);
@@ -528,6 +530,8 @@ function AdminClass({ branchId }: { branchId: string }) {
   const [openForm, setOpenForm] = useState(false);
   const [editTarget, setEditTarget] = useState<ClassRow | null>(null);
   const [form, setForm] = useState(EMPTY_CLASS_FORM);
+  const [classPhotoFile, setClassPhotoFile] = useState<File | null>(null);
+  const [classPhotoPreview, setClassPhotoPreview] = useState<string | null>(null);
 
   // Criteria (aspek penilaian) modal
   const [criteriaClass, setCriteriaClass] = useState<ClassRow | null>(null);
@@ -538,7 +542,7 @@ function AdminClass({ branchId }: { branchId: string }) {
 
   const load = useCallback(async () => {
     const { data } = await supabase.from("classes")
-      .select("id, name, branch_id, status, capacity, enrolled, price_monthly, price_per_session, class_type, schedule_days, time_start, time_end, schedule_times, show_on_landing, goals, description, spreadsheet_url, spreadsheet_filled, class_coaches(profile:profiles(full_name, id))")
+      .select("id, name, branch_id, status, capacity, enrolled, price_monthly, price_per_session, class_type, schedule_days, time_start, time_end, schedule_times, show_on_landing, goals, description, photo_url, spreadsheet_url, spreadsheet_filled, class_coaches(profile:profiles(full_name, id))")
       .eq("branch_id", branchId).order("name");
     if (data) setClasses(data as unknown as ClassRow[]);
   }, [branchId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -551,7 +555,7 @@ function AdminClass({ branchId }: { branchId: string }) {
   }, [load]); // eslint-disable-line react-hooks/exhaustive-deps
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  const openCreate = () => { setEditTarget(null); setForm(EMPTY_CLASS_FORM); setOpenForm(true); };
+  const openCreate = () => { setEditTarget(null); setForm(EMPTY_CLASS_FORM); setClassPhotoFile(null); setClassPhotoPreview(null); setOpenForm(true); };
   const openEdit = (c: ClassRow) => {
     setEditTarget(c);
     const slots = c.schedule_times ?? [];
@@ -569,7 +573,10 @@ function AdminClass({ branchId }: { branchId: string }) {
       price_monthly: c.price_monthly ? String(c.price_monthly) : "",
       price_per_session: c.price_per_session ? String(c.price_per_session) : "",
       show_on_landing: c.show_on_landing ?? false, goals: c.goals ?? "", description: c.description ?? "",
+      photo_url: c.photo_url ?? "",
     });
+    setClassPhotoFile(null);
+    setClassPhotoPreview(null);
     setOpenForm(true);
   };
 
@@ -587,8 +594,12 @@ function AdminClass({ branchId }: { branchId: string }) {
     const firstSlot = scheduleTimes[0];
 
     if (editTarget) {
+      let photoUrl = form.photo_url || null;
+      if (classPhotoFile) {
+        try { photoUrl = await upload.classPhoto(classPhotoFile, editTarget.id); } catch { /* non-fatal */ }
+      }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const updatePayload = { name: form.name, class_type: form.class_type, schedule_days: days, schedule_times: scheduleTimes.length > 0 ? scheduleTimes : null, time_start: firstSlot?.time_start || form.time_start || null, time_end: firstSlot?.time_end || form.time_end || null, capacity: isPrivate ? 1 : (Number(form.capacity) || 0), price_monthly: isPrivate ? 0 : (Number(form.price_monthly) || 0), price_per_session: isPrivate ? (Number(form.price_per_session) || null) : null, show_landing: form.show_on_landing, goals: form.goals.trim() || null, description: form.description.trim() || null } as any;
+      const updatePayload = { name: form.name, class_type: form.class_type, schedule_days: days, schedule_times: scheduleTimes.length > 0 ? scheduleTimes : null, time_start: firstSlot?.time_start || form.time_start || null, time_end: firstSlot?.time_end || form.time_end || null, capacity: isPrivate ? 1 : (Number(form.capacity) || 0), price_monthly: isPrivate ? 0 : (Number(form.price_monthly) || 0), price_per_session: isPrivate ? (Number(form.price_per_session) || null) : null, show_landing: form.show_on_landing, goals: form.goals.trim() || null, description: form.description.trim() || null, photo_url: photoUrl } as any;
       const { error } = await supabase.from("classes").update(updatePayload).eq("id", editTarget.id);
       setSaving(false);
       if (error) return toast.error("Gagal update kelas", error.message);
@@ -596,12 +607,20 @@ function AdminClass({ branchId }: { branchId: string }) {
     } else {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const insertPayload = { name: form.name, class_type: form.class_type, schedule_days: days, schedule_times: scheduleTimes.length > 0 ? scheduleTimes : null, time_start: firstSlot?.time_start || form.time_start || null, time_end: firstSlot?.time_end || form.time_end || null, capacity: isPrivate ? 1 : (Number(form.capacity) || 0), price_monthly: isPrivate ? 0 : (Number(form.price_monthly) || 0), price_per_session: isPrivate ? (Number(form.price_per_session) || null) : null, show_landing: form.show_on_landing, goals: form.goals.trim() || null, description: form.description.trim() || null, branch_id: branchId, status: "active", enrolled: 0 } as any;
-      const { error } = await supabase.from("classes").insert(insertPayload);
+      const { data: insertData, error } = await supabase.from("classes").insert(insertPayload).select("id").single();
+      if (error) { setSaving(false); return toast.error("Gagal membuat kelas", error.message); }
+      if (classPhotoFile && insertData?.id) {
+        try {
+          const photoUrl = await upload.classPhoto(classPhotoFile, insertData.id);
+          await supabase.from("classes").update({ photo_url: photoUrl }).eq("id", insertData.id);
+        } catch { /* non-fatal */ }
+      }
       setSaving(false);
-      if (error) return toast.error("Gagal membuat kelas", error.message);
       toast.success("Kelas dibuat");
     }
     setOpenForm(false);
+    setClassPhotoFile(null);
+    setClassPhotoPreview(null);
     load();
   };
 
@@ -701,7 +720,10 @@ function AdminClass({ branchId }: { branchId: string }) {
           return (
             <Card key={c.id} padded={false} className={`overflow-hidden${archived ? " opacity-70" : ""}`}>
               <div className="relative">
-                <Placeholder label={c.id} ratio="16/9" className="rounded-none border-0" />
+                {c.photo_url
+                  ? <div className="aspect-video w-full overflow-hidden bg-paper-deep"><Image src={c.photo_url} alt={c.name} width={480} height={270} className="w-full h-full object-cover" /></div>
+                  : <Placeholder label={c.id} ratio="16/9" className="rounded-none border-0" />
+                }
                 <div className="absolute top-3 left-3 right-3 flex justify-between gap-2">
                   {archived
                     ? <Status kind="archived">Diarsipkan</Status>
@@ -899,6 +921,24 @@ function AdminClass({ branchId }: { branchId: string }) {
           </Field>
           <Field label="Tujuan kelas" hint="Tampil di coach page dan member page"><Textarea rows={2} value={form.goals} onChange={e => setForm(f => ({ ...f, goals: e.target.value }))} placeholder="Mis. Pengenalan air, membangun rasa percaya diri di air." /></Field>
           <Field label="Deskripsi kelas" hint="Opsional — tampil di coach page dan member page"><Textarea rows={3} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Mis. Kelas ini dirancang untuk anak usia 4–6 tahun yang baru pertama kali belajar renang..." /></Field>
+          <Field label="Foto kelas" hint="Opsional — tampil di kartu kelas">
+            <div className="flex items-start gap-4">
+              {(classPhotoPreview || form.photo_url) && (
+                <div className="shrink-0 relative">
+                  <Image src={classPhotoPreview ?? form.photo_url!} alt="Foto kelas" width={80} height={60} className="rounded-lg object-cover border border-line w-20 h-[60px]" />
+                </div>
+              )}
+              <label className="flex-1 cursor-pointer flex flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-line hover:border-ocean-400 bg-paper-tint hover:bg-ocean-50/30 transition-colors py-4 px-3">
+                <Icon name="camera" className="w-5 h-5 text-ink-mute" />
+                <span className="text-xs text-ink-mute font-medium">{uploadingPhoto ? "Mengunggah…" : "Pilih foto"}</span>
+                <input type="file" accept="image/*" className="sr-only" onChange={e => {
+                  const f = e.target.files?.[0] ?? null;
+                  setClassPhotoFile(f);
+                  setClassPhotoPreview(f ? URL.createObjectURL(f) : null);
+                }} />
+              </label>
+            </div>
+          </Field>
           {!isPrivate && (
             <div className="flex items-center justify-between p-3 rounded-xl bg-ocean-50/50 border border-ocean-100">
               <div><div className="font-semibold text-ink text-sm">Tampilkan di landing page</div><div className="text-xs text-ink-mute">Kelas akan muncul di section Swimming Programs.</div></div>
@@ -1195,6 +1235,40 @@ function AdminMember({ branchId }: { branchId: string }) {
   const [showNewPwd, setShowNewPwd] = useState(false);
   const [photoView, setPhotoView] = useState<string | null>(null);
 
+  const [detailTab, setDetailTab] = useState<"info" | "absensi" | "pembayaran">("info");
+  const [attendances, setAttendances] = useState<{ id: string; date: string; status: string; note: string | null; class: { name: string } | null }[]>([]);
+  const [loadingAtt, setLoadingAtt] = useState(false);
+  const [attLoaded, setAttLoaded] = useState(false);
+  const [attClassFilter, setAttClassFilter] = useState("");
+  const [bills, setBills] = useState<{ id: string; period_label: string; amount: number; discount: number; discount_reason: string | null; total: number; status: string; paid_at: string | null; payment_method: string | null }[]>([]);
+  const [loadingBills, setLoadingBills] = useState(false);
+  const [billsLoaded, setBillsLoaded] = useState(false);
+
+  const loadAttendances = async (memberId: string) => {
+    setLoadingAtt(true);
+    const { data } = await supabase
+      .from("member_attendances")
+      .select("id, date, status, note, class:classes(name)")
+      .eq("member_id", memberId)
+      .order("date", { ascending: false })
+      .limit(100);
+    setAttendances((data ?? []) as unknown as typeof attendances);
+    setAttLoaded(true);
+    setLoadingAtt(false);
+  };
+
+  const loadBills = async (memberId: string) => {
+    setLoadingBills(true);
+    const { data } = await supabase
+      .from("bills")
+      .select("id, period_label, amount, discount, discount_reason, total, status, paid_at, payment_method")
+      .eq("member_id", memberId)
+      .order("created_at", { ascending: false });
+    setBills((data ?? []) as unknown as typeof bills);
+    setBillsLoaded(true);
+    setLoadingBills(false);
+  };
+
   const doSuspendMember = async () => {
     if (!suspendMemberTarget || !suspendMemberForm.reason || !suspendMemberForm.until) return toast.error("Alasan dan tanggal berakhir wajib diisi");
     setSuspendingMember(true);
@@ -1307,7 +1381,7 @@ function AdminMember({ branchId }: { branchId: string }) {
                 const fullName = m.profile?.full_name ?? "—";
                 const age = m.profile?.birth_date ? calcAge(m.profile.birth_date) : null;
                 return (
-                  <tr key={m.id} className="hover:bg-paper-tint cursor-pointer" onClick={() => setDetail(m)}>
+                  <tr key={m.id} className="hover:bg-paper-tint cursor-pointer" onClick={() => { setDetail(m); setDetailTab("info"); setAttLoaded(false); setBillsLoaded(false); setAttendances([]); setBills([]); setAttClassFilter(""); }}>
                     <td className="py-3.5 px-5">
                       <div className="flex items-center gap-3">
                         <Avatar name={fullName} src={m.profile?.avatar_url ?? undefined} size={38} />
@@ -1327,10 +1401,10 @@ function AdminMember({ branchId }: { branchId: string }) {
         )}
       </Card>
 
-      <Modal open={!!detail} onClose={() => setDetail(null)} title={detail?.profile?.full_name ?? ""} size="xl"
+      <Modal open={!!detail} onClose={() => { setDetail(null); setDetailTab("info"); setAttLoaded(false); setBillsLoaded(false); }} title={detail?.profile?.full_name ?? ""} size="xl"
         footer={
           <>
-            <Btn variant="ghost" onClick={() => setDetail(null)}>Tutup</Btn>
+            <Btn variant="ghost" onClick={() => { setDetail(null); setDetailTab("info"); setAttLoaded(false); setBillsLoaded(false); }}>Tutup</Btn>
             <Btn variant="outline" icon="edit" onClick={() => detail && openEdit(detail)}>Edit Data</Btn>
             <Btn variant="outline" icon="refresh" onClick={() => { setOpenResetPwd(true); setNewPwd(""); }}>Reset Password</Btn>
             {detail?.type === "private" && (
@@ -1345,6 +1419,8 @@ function AdminMember({ branchId }: { branchId: string }) {
         {detail && (() => {
           const p = detail.profile;
           const age = p?.birth_date ? calcAge(p.birth_date) : null;
+          const memberClassNames = detail.member_classes?.map(mc => mc.class?.name).filter(Boolean) as string[] ?? [];
+          const filteredAtt = attClassFilter ? attendances.filter(a => a.class?.name === attClassFilter) : attendances;
           return (
             <div className="grid md:grid-cols-3 gap-5">
               {/* Left: avatar + QR */}
@@ -1367,48 +1443,162 @@ function AdminMember({ branchId }: { branchId: string }) {
                 )}
               </div>
 
-              {/* Right: detail info */}
+              {/* Right: tabbed detail */}
               <div className="md:col-span-2 space-y-4 text-sm">
-                {/* Row 1: Tipe / Sejak / Sisa Sesi / Jenis Kelamin */}
-                <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-                  <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Tipe</div><div className="font-semibold text-ink capitalize">{detail.type === "reguler" ? "Reguler" : detail.type === "private" ? "Private" : "Afiliasi Sekolah"}</div></div>
-                  <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Sejak</div><div className="font-semibold text-ink">{fmtDate(detail.date_start)}</div></div>
-                  <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Sisa sesi</div><div className="font-semibold text-ink">{detail.remaining_sessions != null ? `${detail.remaining_sessions} / ${detail.total_sessions ?? "—"}` : "—"}</div></div>
-                  <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Jenis kelamin</div><div className="font-semibold text-ink">{p?.gender === "male" ? "Laki-laki" : p?.gender === "female" ? "Perempuan" : "—"}</div></div>
-                  <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Tanggal lahir</div><div className="font-semibold text-ink">{p?.birth_date ? fmtDate(p.birth_date) : "—"}</div></div>
-                  <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Email</div><div className="font-semibold text-ink text-xs break-all">{p?.email ?? "—"}</div></div>
+                {/* Tab bar */}
+                <div className="flex gap-1 bg-paper-tint rounded-xl p-1">
+                  {([["info", "Info"], ["absensi", "Absensi"], ["pembayaran", "Pembayaran"]] as const).map(([id, label]) => (
+                    <button key={id} type="button"
+                      onClick={() => {
+                        setDetailTab(id);
+                        if (id === "absensi" && !attLoaded) loadAttendances(detail.id);
+                        if (id === "pembayaran" && !billsLoaded) loadBills(detail.id);
+                      }}
+                      className={`flex-1 px-3 py-1.5 text-xs font-bold rounded-lg transition-colors ${detailTab === id ? "bg-white text-ocean-700 shadow-sm" : "text-ink-mute hover:text-ink-soft"}`}>
+                      {label}
+                    </button>
+                  ))}
                 </div>
 
-                {/* Contact */}
-                <div className="pt-3 border-t border-line grid grid-cols-2 gap-x-4 gap-y-3">
-                  <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">No HP</div><div className="font-semibold text-ink font-mono text-xs">{p?.phone ?? "—"}</div></div>
-                </div>
+                {/* Tab: Info */}
+                {detailTab === "info" && (
+                  <>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                      <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Tipe</div><div className="font-semibold text-ink capitalize">{detail.type === "reguler" ? "Reguler" : detail.type === "private" ? "Private" : "Afiliasi Sekolah"}</div></div>
+                      <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Sejak</div><div className="font-semibold text-ink">{fmtDate(detail.date_start)}</div></div>
+                      <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Sisa sesi</div><div className="font-semibold text-ink">{detail.remaining_sessions != null ? `${detail.remaining_sessions} / ${detail.total_sessions ?? "—"}` : "—"}</div></div>
+                      <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Jenis kelamin</div><div className="font-semibold text-ink">{p?.gender === "male" ? "Laki-laki" : p?.gender === "female" ? "Perempuan" : "—"}</div></div>
+                      <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Tanggal lahir</div><div className="font-semibold text-ink">{p?.birth_date ? fmtDate(p.birth_date) : "—"}</div></div>
+                      <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Email</div><div className="font-semibold text-ink text-xs break-all">{p?.email ?? "—"}</div></div>
+                    </div>
+                    <div className="pt-3 border-t border-line grid grid-cols-2 gap-x-4 gap-y-3">
+                      <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">No HP</div><div className="font-semibold text-ink font-mono text-xs">{p?.phone ?? "—"}</div></div>
+                    </div>
+                    {(p?.address || p?.health_notes) && (
+                      <div className="pt-3 border-t border-line space-y-2">
+                        {p?.address && <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-0.5">Alamat</div><div className="text-ink-soft leading-snug">{p.address}</div></div>}
+                        {p?.health_notes && <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-0.5">Catatan kesehatan</div><div className="text-ink-soft leading-snug">{p.health_notes}</div></div>}
+                      </div>
+                    )}
+                    {detail.status === "suspended" && (
+                      <div className="pt-3 border-t border-line bg-warn-50 rounded-xl px-3 py-2">
+                        <div className="text-[10px] uppercase tracking-widest font-bold text-warn-500">Suspend s.d.</div>
+                        <div className="font-semibold text-warn-700">{fmtDate(detail.suspend_until ?? "")}</div>
+                        {detail.suspend_reason && <div className="text-xs text-warn-600 mt-0.5">{detail.suspend_reason}</div>}
+                      </div>
+                    )}
+                    <div className="pt-3 border-t border-line">
+                      <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-2">Kelas yang diikuti</div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {detail.member_classes?.map((mc, i) => mc.class && <span key={i} className="px-2 py-1 rounded-lg bg-ocean-50 text-ocean-700 text-xs font-semibold">{mc.class.name}</span>)}
+                        {(detail.member_classes?.length ?? 0) === 0 && <span className="text-xs text-warn-600 font-semibold">Belum assign ke kelas</span>}
+                      </div>
+                    </div>
+                  </>
+                )}
 
-                {/* Address & health */}
-                {(p?.address || p?.health_notes) && (
-                  <div className="pt-3 border-t border-line space-y-2">
-                    {p?.address && <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-0.5">Alamat</div><div className="text-ink-soft leading-snug">{p.address}</div></div>}
-                    {p?.health_notes && <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-0.5">Catatan kesehatan</div><div className="text-ink-soft leading-snug">{p.health_notes}</div></div>}
+                {/* Tab: Absensi */}
+                {detailTab === "absensi" && (
+                  <div className="space-y-3">
+                    {memberClassNames.length > 1 && (
+                      <Select value={attClassFilter} onChange={e => setAttClassFilter(e.target.value)} className="text-xs">
+                        <option value="">Semua kelas</option>
+                        {memberClassNames.map(n => <option key={n} value={n}>{n}</option>)}
+                      </Select>
+                    )}
+                    {loadingAtt ? (
+                      <div className="py-8 text-center text-ink-mute text-sm">Memuat…</div>
+                    ) : filteredAtt.length === 0 ? (
+                      <div className="py-8 text-center text-ink-mute text-sm">Belum ada riwayat absensi.</div>
+                    ) : (
+                      <div className="overflow-x-auto rounded-xl border border-line">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="text-[10px] uppercase tracking-widest text-ink-faint font-bold border-b border-line bg-paper-tint">
+                              <th className="text-left py-2 px-3 font-bold">Tanggal</th>
+                              <th className="text-left py-2 font-bold">Kelas</th>
+                              <th className="text-left py-2 font-bold">Status</th>
+                              <th className="text-left py-2 px-3 font-bold">Catatan</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-line">
+                            {filteredAtt.map(a => (
+                              <tr key={a.id} className="hover:bg-paper-tint">
+                                <td className="py-2 px-3 font-mono whitespace-nowrap">{fmtDate(a.date)}</td>
+                                <td className="py-2 text-ink-soft">{a.class?.name ?? "—"}</td>
+                                <td className="py-2">
+                                  {a.status === "hadir"
+                                    ? <Status kind="approved" dot={false}>Hadir</Status>
+                                    : a.status === "izin"
+                                    ? <Status kind="pending" dot={false}>Izin</Status>
+                                    : a.status === "sakit"
+                                    ? <Status kind="pending" dot={false}>Sakit</Status>
+                                    : <Status kind="rejected" dot={false}>Tidak Hadir</Status>
+                                  }
+                                </td>
+                                <td className="py-2 px-3 text-ink-mute">{a.note ?? "—"}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
                   </div>
                 )}
 
-                {/* Suspend info */}
-                {detail.status === "suspended" && (
-                  <div className="pt-3 border-t border-line bg-warn-50 rounded-xl px-3 py-2">
-                    <div className="text-[10px] uppercase tracking-widest font-bold text-warn-500">Suspend s.d.</div>
-                    <div className="font-semibold text-warn-700">{fmtDate(detail.suspend_until ?? "")}</div>
-                    {detail.suspend_reason && <div className="text-xs text-warn-600 mt-0.5">{detail.suspend_reason}</div>}
+                {/* Tab: Pembayaran */}
+                {detailTab === "pembayaran" && (
+                  <div className="space-y-3">
+                    {loadingBills ? (
+                      <div className="py-8 text-center text-ink-mute text-sm">Memuat…</div>
+                    ) : bills.length === 0 ? (
+                      <div className="py-8 text-center text-ink-mute text-sm">Belum ada riwayat pembayaran.</div>
+                    ) : (
+                      <div className="overflow-x-auto rounded-xl border border-line">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="text-[10px] uppercase tracking-widest text-ink-faint font-bold border-b border-line bg-paper-tint">
+                              <th className="text-left py-2 px-3 font-bold">Periode</th>
+                              <th className="text-right py-2 font-bold">Nominal</th>
+                              <th className="text-right py-2 font-bold">Diskon</th>
+                              <th className="text-right py-2 font-bold">Total</th>
+                              <th className="text-left py-2 font-bold">Status</th>
+                              <th className="text-left py-2 px-3 font-bold">Tgl Bayar</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-line">
+                            {bills.map(b => (
+                              <tr key={b.id} className="hover:bg-paper-tint">
+                                <td className="py-2 px-3 font-semibold text-ink">{b.period_label}</td>
+                                <td className="py-2 text-right font-mono text-ink-soft">{fmtIDR(b.amount)}</td>
+                                <td className="py-2 text-right">
+                                  {b.discount > 0
+                                    ? <span className="text-ok-600 font-mono" title={b.discount_reason ?? undefined}>-{fmtIDR(b.discount)}</span>
+                                    : <span className="text-ink-faint">—</span>
+                                  }
+                                </td>
+                                <td className="py-2 text-right font-mono font-bold text-ink">{fmtIDR(b.total)}</td>
+                                <td className="py-2">
+                                  {b.status === "paid"
+                                    ? <Status kind="approved" dot={false}>Lunas</Status>
+                                    : b.status === "unpaid"
+                                    ? <Status kind="rejected" dot={false}>Belum Bayar</Status>
+                                    : b.status === "partial"
+                                    ? <Status kind="pending" dot={false}>Sebagian</Status>
+                                    : b.status === "free"
+                                    ? <Status kind="archived" dot={false}>Gratis</Status>
+                                    : <Status kind="school_covered" dot={false}>Sekolah</Status>
+                                  }
+                                </td>
+                                <td className="py-2 px-3 text-ink-mute whitespace-nowrap">{b.paid_at ? fmtDate(b.paid_at) : "—"}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
                   </div>
                 )}
-
-                {/* Classes */}
-                <div className="pt-3 border-t border-line">
-                  <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-2">Kelas yang diikuti</div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {detail.member_classes?.map((mc, i) => mc.class && <span key={i} className="px-2 py-1 rounded-lg bg-ocean-50 text-ocean-700 text-xs font-semibold">{mc.class.name}</span>)}
-                    {(detail.member_classes?.length ?? 0) === 0 && <span className="text-xs text-warn-600 font-semibold">Belum assign ke kelas</span>}
-                  </div>
-                </div>
               </div>
             </div>
           );

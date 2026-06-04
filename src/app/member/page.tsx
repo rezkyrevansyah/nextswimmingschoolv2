@@ -18,6 +18,7 @@ import { printSingleRapor, type PrintCriterion } from "@/lib/printRapor";
 import { createClient } from "@/utils/supabase/client";
 import { useUpload } from "@/hooks/useUpload";
 import PhotoLightbox from "@/components/ui/PhotoLightbox";
+import { useToast } from "@/components/providers/ToastProvider";
 
 type TabId = "home" | "schedule" | "absen" | "bills" | "leave" | "rapor" | "profile";
 
@@ -164,7 +165,7 @@ function MemberHome({
       .then(({ data }) => {
         if (data) {
           setMemberInfo({ type: data.type, remaining_sessions: data.remaining_sessions, total_sessions: data.total_sessions });
-          if (data.type === "private" && data.remaining_sessions != null && data.remaining_sessions <= 3) {
+          if (data.type === "private" && data.remaining_sessions != null && data.remaining_sessions <= 1) {
             setPrivateReminder({ remaining: data.remaining_sessions, total: data.total_sessions ?? 0 });
           }
         }
@@ -549,38 +550,71 @@ function MemberSchedule({ memberId }: { memberId: string }) {
 
 function MemberAbsensi({ memberId }: { memberId: string }) {
   const supabase = createClient();
-  const [rows, setRows] = useState<{ id: string; session_date: string; status: string; notes: string | null; class_name: string; time: string }[]>([]);
-  const [stats, setStats] = useState({ present: 0, excused: 0, sick: 0, absent: 0 });
+  const now = new Date();
+  const [filterMonth, setFilterMonth] = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`);
+  const [filterClass, setFilterClass] = useState("all");
+  const [myClasses, setMyClasses] = useState<{ id: string; name: string }[]>([]);
+  const [allRows, setAllRows] = useState<{ id: string; session_date: string; status: string; notes: string | null; class_name: string; class_id: string; time: string }[]>([]);
 
-   
   useEffect(() => {
     if (!memberId) return;
+    // Load member's classes for filter dropdown
+    supabase.from("member_classes").select("classes(id, name)").eq("member_id", memberId)
+      .then(({ data }) => {
+        if (data) setMyClasses(data.map((mc) => {
+          const c = mc.classes as unknown as { id: string; name: string } | null;
+          return { id: c?.id ?? "", name: c?.name ?? "" };
+        }).filter((c) => c.id));
+      });
+    // Load all attendance (no limit so month filter works client-side)
     supabase.from("member_attendances")
-      .select("id, session_date, status, classes(name, time_start)")
+      .select("id, session_date, status, class_id, classes(name, time_start)")
       .eq("member_id", memberId)
       .order("session_date", { ascending: false })
-      .limit(30)
+      .limit(200)
       .then(({ data }) => {
         if (!data) return;
-        const mapped = data.map((r) => {
+        setAllRows(data.map((r) => {
           const cls = r.classes as unknown as { name: string; time_start: string } | null;
-          return { id: r.id, session_date: r.session_date, status: r.status, notes: null as string | null, class_name: cls?.name ?? "—", time: cls?.time_start ?? "—" };
-        });
-        setRows(mapped);
-        setStats({
-          present: mapped.filter((r) => r.status === "hadir").length,
-          excused: mapped.filter((r) => r.status === "izin").length,
-          sick: mapped.filter((r) => r.status === "sakit").length,
-          absent: mapped.filter((r) => r.status === "tidak_hadir" || r.status === "absent").length,
-        });
+          return { id: r.id, session_date: r.session_date, status: r.status, notes: null as string | null, class_name: cls?.name ?? "—", class_id: (r as unknown as { class_id: string }).class_id ?? "", time: cls?.time_start ?? "—" };
+        }));
       });
   }, [memberId]); // eslint-disable-line react-hooks/exhaustive-deps
-   
+
+  const rows = allRows.filter((r) => {
+    const matchMonth = !filterMonth || r.session_date.startsWith(filterMonth);
+    const matchClass = filterClass === "all" || r.class_id === filterClass;
+    return matchMonth && matchClass;
+  });
+
+  const stats = {
+    present: rows.filter((r) => r.status === "hadir").length,
+    excused: rows.filter((r) => r.status === "izin").length,
+    sick: rows.filter((r) => r.status === "sakit").length,
+    absent: rows.filter((r) => r.status === "tidak_hadir" || r.status === "absent").length,
+  };
 
   const monthNames = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agt", "Sep", "Okt", "Nov", "Des"];
 
   return (
     <div className="space-y-5">
+      {/* Filters */}
+      <div className="flex gap-2">
+        <input
+          type="month"
+          value={filterMonth}
+          onChange={(e) => setFilterMonth(e.target.value)}
+          className="flex-1 px-3 py-2 rounded-xl border border-line bg-white text-sm text-ink focus:outline-none focus:ring-2 focus:ring-ocean-300"
+        />
+        <select
+          value={filterClass}
+          onChange={(e) => setFilterClass(e.target.value)}
+          className="flex-1 px-3 py-2 rounded-xl border border-line bg-white text-sm text-ink focus:outline-none focus:ring-2 focus:ring-ocean-300"
+        >
+          <option value="all">Semua Kelas</option>
+          {myClasses.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+      </div>
       <div className="grid grid-cols-4 gap-2">
         {[["Hadir", stats.present, "ok"], ["Izin", stats.excused, "warn"], ["Sakit", stats.sick, "warn"], ["Absen", stats.absent, "danger"]].map(([l, v, t]) => (
           <Card key={l as string} className="!p-3 text-center">
@@ -763,6 +797,7 @@ function MemberBills({ memberId, memberName, branchId }: { memberId: string; mem
 
 function MemberLeave({ memberId }: { memberId: string }) {
   const supabase = createClient();
+  const toast = useToast();
   const [openForm, setOpenForm] = useState(false);
   const [leaves, setLeaves] = useState<{ id: string; date_from: string; date_to: string; type: string; reason: string | null; status: string; reject_reason: string | null; class_ids: string[] }[]>([]);
   const [myClasses, setMyClasses] = useState<{ id: string; name: string }[]>([]);
@@ -815,7 +850,12 @@ function MemberLeave({ memberId }: { memberId: string }) {
       await supabase.from("member_leave_classes").insert(form.class_ids.map((class_id) => ({ leave_id: newLeave.id, class_id })));
     }
     setSubmitting(false);
-    if (!error) { setOpenForm(false); setForm({ class_ids: [], start_date: "", end_date: "", type: "izin", notes: "" }); load(); }
+    if (!error) {
+      setOpenForm(false);
+      setForm({ class_ids: [], start_date: "", end_date: "", type: "izin", notes: "" });
+      toast.success("Pengajuan izin berhasil dikirim", "Menunggu persetujuan admin.");
+      load();
+    }
   };
 
   const monthNames = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agt", "Sep", "Okt", "Nov", "Des"];
@@ -893,7 +933,7 @@ function MemberLeave({ memberId }: { memberId: string }) {
 // ── Rapor ──────────────────────────────────────────────────────────────────────
 
 interface RaporEntryFull {
-  id: string; period: string; period_id: string; class_name: string; coach_id: string; coach_name: string;
+  id: string; period: string; period_id: string; period_is_open: boolean; class_name: string; coach_id: string; coach_name: string;
   class_id: string;
   scores: Record<string, number | string>; notes: string | null;
   review_stars: number | null; review_message: string | null; review_id: string | null;
@@ -902,6 +942,7 @@ interface RaporEntryFull {
 
 function MemberRapor({ memberId, memberName }: { memberId: string; memberName: string }) {
   const supabase = createClient();
+  const toast = useToast();
   const [open, setOpen] = useState(false);
   const [selectedEntry, setSelectedEntry] = useState<RaporEntryFull | null>(null);
   const [entries, setEntries] = useState<RaporEntryFull[]>([]);
@@ -912,7 +953,7 @@ function MemberRapor({ memberId, memberName }: { memberId: string; memberName: s
   const load = useCallback(async () => {
     if (!memberId) return;
     const { data } = await supabase.from("rapor_entries")
-      .select("id, scores, notes, coach_id, period_id, class_id, rapor_periods(label), classes(name), coach:profiles!rapor_entries_coach_id_fkey(full_name)")
+      .select("id, scores, notes, coach_id, period_id, class_id, rapor_periods(label, is_open), classes(name), coach:profiles!rapor_entries_coach_id_fkey(full_name)")
       .eq("member_id", memberId)
       .order("created_at", { ascending: false });
     if (!data) return;
@@ -937,7 +978,7 @@ function MemberRapor({ memberId, memberName }: { memberId: string; memberName: s
     }
 
     setEntries(data.map((e) => {
-      const p = e.rapor_periods as unknown as { label: string } | null;
+      const p = e.rapor_periods as unknown as { label: string; is_open: boolean } | null;
       const cls = e.classes as unknown as { name: string } | null;
       const prof = (e as unknown as { coach: { full_name: string } | null }).coach;
       const review = reviewMap.get(e.id);
@@ -945,6 +986,7 @@ function MemberRapor({ memberId, memberName }: { memberId: string; memberName: s
         id: e.id,
         period: p?.label ?? "—",
         period_id: e.period_id,
+        period_is_open: p?.is_open ?? false,
         class_name: cls?.name ?? "—",
         class_id: e.class_id,
         coach_id: e.coach_id,
@@ -986,44 +1028,59 @@ function MemberRapor({ memberId, memberName }: { memberId: string; memberName: s
     setOpen(false);
   };
 
-  const latest = entries[0];
+  // Separate open-period entries from closed-period (history)
+  const openEntries = entries.filter((e) => e.period_is_open);
+  const historyEntries = entries.filter((e) => !e.period_is_open);
 
   return (
     <div className="space-y-5">
-      {latest && (
-        <div className="bg-ocean-700 text-white rounded-2xl border border-ocean-700 shadow-card p-5 relative overflow-hidden">
-          <div className="caustics absolute inset-0 opacity-30" />
-          <div className="relative flex items-center gap-3">
-            <span className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center"><Icon name="book" className="w-7 h-7" /></span>
-            <div>
-              <div className="text-wave-200 text-[10px] uppercase tracking-widest font-bold">Rapor terbaru</div>
-              <div className="font-display font-bold text-xl mt-0.5">{latest.period}</div>
-              <div className="text-white/80 text-xs mt-0.5">{latest.coach_name} · {latest.class_name}</div>
-            </div>
-            <Btn variant="accent" size="sm" className="ml-auto" onClick={() => openRapor(latest)}>Buka</Btn>
-          </div>
-        </div>
-      )}
-
-      {entries.length > 1 && (
+      {/* Active / open period rapor */}
+      {openEntries.length > 0 && (
         <>
-          <SectionTitle sub="Rapor sebelumnya">History Rapor</SectionTitle>
-          <div className="space-y-2.5">
-            {entries.slice(1).map((r) => (
-                <Card key={r.id} className="!p-3">
-                  <div className="flex items-center gap-3">
-                    <span className="w-10 h-10 rounded-xl bg-paper-tint text-ink-soft flex items-center justify-center"><Icon name="book" className="w-4 h-4" /></span>
-                    <div className="flex-1 min-w-0"><div className="font-semibold text-ink text-sm">{r.period}</div><div className="text-xs text-ink-mute">{r.coach_name} · {r.class_name}</div></div>
-                    <Btn variant="ghost" size="sm" onClick={() => openRapor(r)}>Buka</Btn>
-                  </div>
-                </Card>
-            ))}
-          </div>
+          {openEntries.map((entry) => (
+            <div key={entry.id} className="bg-ocean-700 text-white rounded-2xl border border-ocean-700 shadow-card p-5 relative overflow-hidden">
+              <div className="caustics absolute inset-0 opacity-30" />
+              <div className="relative flex items-center gap-3">
+                <span className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center"><Icon name="book" className="w-7 h-7" /></span>
+                <div>
+                  <div className="text-wave-200 text-[10px] uppercase tracking-widest font-bold">Rapor aktif · {entry.period}</div>
+                  <div className="font-display font-bold text-xl mt-0.5">{entry.class_name}</div>
+                  <div className="text-white/80 text-xs mt-0.5">{entry.coach_name}</div>
+                </div>
+                <Btn variant="accent" size="sm" className="ml-auto" onClick={() => openRapor(entry)}>Buka</Btn>
+              </div>
+            </div>
+          ))}
         </>
       )}
 
-      {entries.length === 0 && (
+      {openEntries.length === 0 && entries.length === 0 && (
         <div className="text-center py-12 text-ink-mute text-sm">Belum ada rapor yang tersedia.</div>
+      )}
+
+      {openEntries.length === 0 && entries.length > 0 && (
+        <div className="rounded-xl border border-line bg-paper-tint p-4 text-sm text-ink-mute text-center">Tidak ada periode rapor yang sedang aktif.</div>
+      )}
+
+      {/* History rapor (closed periods) */}
+      {historyEntries.length > 0 && (
+        <>
+          <SectionTitle sub="Periode sudah berakhir">History Rapor</SectionTitle>
+          <div className="space-y-2.5">
+            {historyEntries.map((r) => (
+              <Card key={r.id} className="!p-3">
+                <div className="flex items-center gap-3">
+                  <span className="w-10 h-10 rounded-xl bg-paper-tint text-ink-soft flex items-center justify-center"><Icon name="book" className="w-4 h-4" /></span>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-ink text-sm">{r.period}</div>
+                    <div className="text-xs text-ink-mute">{r.coach_name} · {r.class_name}</div>
+                  </div>
+                  <Btn variant="ghost" size="sm" onClick={() => openRapor(r)}>Buka</Btn>
+                </div>
+              </Card>
+            ))}
+          </div>
+        </>
       )}
 
       <Modal open={open} onClose={() => setOpen(false)} title={`Rapor — ${selectedEntry?.period ?? ""}`} size="lg"
@@ -1084,20 +1141,39 @@ function MemberRapor({ memberId, memberName }: { memberId: string; memberName: s
                 </div>
               )}
             </div>
-            <div className="bg-wave-50 border border-wave-100 rounded-2xl p-5">
-              <div className="font-display font-bold text-ink mb-1">Review untuk {selectedEntry.coach_name}</div>
-              <p className="text-xs text-ink-mute mb-3">Berikan penilaian jujur untuk membantu perkembangan pelatih.</p>
-              <div className="flex items-center gap-0.5 mb-3">
-                {Array.from({ length: 5 }).map((_, k) => (
-                  <button key={k} onClick={() => setReviewRating(k + 1)} className="p-1 rounded-lg hover:bg-wave-100 transition-colors">
-                    <Icon name="star" className={`w-8 h-8 transition-colors ${k < reviewRating ? "text-amber-400" : "text-line"}`} strokeWidth={1.5} fill={k < reviewRating ? "currentColor" : "none"} />
-                  </button>
-                ))}
-                <span className="ml-2 text-sm font-semibold text-ink-soft">{["", "Kurang", "Cukup", "Baik", "Sangat Baik", "Luar Biasa"][reviewRating]}</span>
+            {selectedEntry.period_is_open ? (
+              <div className="bg-wave-50 border border-wave-100 rounded-2xl p-5">
+                <div className="font-display font-bold text-ink mb-1">Review untuk {selectedEntry.coach_name}</div>
+                <p className="text-xs text-ink-mute mb-3">Berikan penilaian jujur untuk membantu perkembangan pelatih.</p>
+                <div className="flex items-center gap-0.5 mb-3">
+                  {Array.from({ length: 5 }).map((_, k) => (
+                    <button key={k} onClick={() => setReviewRating(k + 1)} className="p-1 rounded-lg hover:bg-wave-100 transition-colors">
+                      <Icon name="star" className={`w-8 h-8 transition-colors ${k < reviewRating ? "text-amber-400" : "text-line"}`} strokeWidth={1.5} fill={k < reviewRating ? "currentColor" : "none"} />
+                    </button>
+                  ))}
+                  <span className="ml-2 text-sm font-semibold text-ink-soft">{["", "Kurang", "Cukup", "Baik", "Sangat Baik", "Luar Biasa"][reviewRating]}</span>
+                </div>
+                <Textarea rows={2} placeholder="Tulis ulasan Anda (opsional)" value={reviewText} onChange={(e) => setReviewText(e.target.value)} />
+                <Btn variant="primary" size="sm" className="mt-3" disabled={saving} onClick={saveReview}>{saving ? "Menyimpan…" : selectedEntry.review_id ? "Perbarui review" : "Simpan review"}</Btn>
               </div>
-              <Textarea rows={2} placeholder="Tulis ulasan Anda (opsional)" value={reviewText} onChange={(e) => setReviewText(e.target.value)} />
-              <Btn variant="primary" size="sm" className="mt-3" disabled={saving} onClick={saveReview}>{saving ? "Menyimpan…" : selectedEntry.review_id ? "Perbarui review" : "Simpan review"}</Btn>
-            </div>
+            ) : (
+              <div className="bg-paper-tint border border-line rounded-2xl p-5">
+                <div className="font-display font-bold text-ink mb-1">Review</div>
+                {selectedEntry.review_stars ? (
+                  <>
+                    <div className="flex items-center gap-0.5 mb-2">
+                      {Array.from({ length: 5 }).map((_, k) => (
+                        <Icon key={k} name="star" className={`w-6 h-6 ${k < (selectedEntry.review_stars ?? 0) ? "text-amber-400" : "text-line"}`} strokeWidth={1.5} fill={k < (selectedEntry.review_stars ?? 0) ? "currentColor" : "none"} />
+                      ))}
+                      <span className="ml-2 text-sm font-semibold text-ink-soft">{["", "Kurang", "Cukup", "Baik", "Sangat Baik", "Luar Biasa"][selectedEntry.review_stars]}</span>
+                    </div>
+                    {selectedEntry.review_message && <p className="text-sm text-ink-soft">{selectedEntry.review_message}</p>}
+                  </>
+                ) : (
+                  <p className="text-sm text-ink-mute">Periode sudah berakhir — review tidak diberikan.</p>
+                )}
+              </div>
+            )}
           </div>
         )}
       </Modal>

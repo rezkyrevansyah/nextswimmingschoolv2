@@ -44,6 +44,7 @@ interface ClassRow {
   class_type?: string;
   spreadsheet_filled?: boolean;
   spreadsheet_url?: string | null;
+  branch?: { name: string; city: string; address: string | null } | null;
   member_classes?: { member: { id: string; profile: { full_name: string; birth_date: string | null; phone: string | null; gender: string | null; address: string | null; health_notes: string | null } | null } | null }[];
 }
 
@@ -1264,9 +1265,23 @@ function MemberDetailModal({ member, onClose }: { member: MemberDetail; onClose:
 }
 
 function CoachKelas({ classes, onRefreshClasses }: { classes: ClassRow[]; coachId?: string; onRefreshClasses?: () => void }) {
+  const supabase = createClient();
   const [det, setDet] = useState<ClassRow | null>(null);
   const [openSpreadsheet, setOpenSpreadsheet] = useState<ClassRow | null>(null);
   const [memberDet, setMemberDet] = useState<MemberDetail | null>(null);
+  const [memberAttHistory, setMemberAttHistory] = useState<{ memberId: string; memberName: string; classId: string; className: string; rows: { id: string; session_date: string; status: string }[] } | null>(null);
+  const [loadingAtt, setLoadingAtt] = useState(false);
+
+  const openMemberAtt = async (memberId: string, memberName: string, classId: string, className: string) => {
+    setLoadingAtt(true);
+    setMemberAttHistory({ memberId, memberName, classId, className, rows: [] });
+    const { data } = await supabase.from("member_attendances")
+      .select("id, session_date, status")
+      .eq("member_id", memberId).eq("class_id", classId)
+      .order("session_date", { ascending: false }).limit(50);
+    setMemberAttHistory({ memberId, memberName, classId, className, rows: (data ?? []).map(r => ({ id: r.id, session_date: r.session_date, status: r.status })) });
+    setLoadingAtt(false);
+  };
 
   return (
     <div className="space-y-5">
@@ -1313,6 +1328,15 @@ function CoachKelas({ classes, onRefreshClasses }: { classes: ClassRow[]; coachI
         }>
         {det && (
           <div className="space-y-4">
+            {/* Branch info */}
+            <div className="flex items-center gap-2 p-3 rounded-xl bg-paper-tint border border-line text-sm">
+              <Icon name="map-pin" className="w-4 h-4 text-ocean-500 shrink-0" />
+              <div>
+                <span className="font-semibold text-ink">{det.branch?.name ?? "—"}</span>
+                {det.branch?.city && <span className="text-ink-mute"> · {det.branch.city}</span>}
+                {det.branch?.address && <div className="text-xs text-ink-mute mt-0.5">{det.branch.address}</div>}
+              </div>
+            </div>
             {det.goals && <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Tujuan</div><p className="text-sm text-ink-soft mt-1">{det.goals}</p></div>}
             {det.description && <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Deskripsi</div><p className="text-sm text-ink-soft mt-1">{det.description}</p></div>}
             {!det.spreadsheet_filled && (
@@ -1325,19 +1349,24 @@ function CoachKelas({ classes, onRefreshClasses }: { classes: ClassRow[]; coachI
               <SectionTitle sub={`${det.enrolled} member terdaftar · klik untuk detail`}>Daftar Member</SectionTitle>
               <div className="space-y-2">
                 {(det.member_classes ?? []).map((mc, i) => mc.member && (
-                  <button key={i} onClick={() => setMemberDet(mc.member!)}
-                    className="w-full flex items-center gap-3 p-2.5 rounded-xl border border-line hover:bg-ocean-50 hover:border-ocean-200 transition text-left">
-                    <Avatar name={mc.member.profile?.full_name ?? "?"} size={36} />
-                    <div className="flex-1 min-w-0">
-                      <div className="font-semibold text-sm text-ink truncate">{mc.member.profile?.full_name ?? "—"}</div>
-                      {mc.member.profile?.birth_date && (
-                        <div className="text-xs text-ink-mute">
-                          {Math.floor((Date.now() - new Date(mc.member.profile.birth_date).getTime()) / (365.25 * 24 * 3600 * 1000))} tahun
-                        </div>
-                      )}
-                    </div>
-                    <Icon name="chevron-right" className="w-4 h-4 text-ink-faint shrink-0" />
-                  </button>
+                  <div key={i} className="flex items-center gap-2 p-2.5 rounded-xl border border-line hover:bg-paper-tint transition">
+                    <button onClick={() => setMemberDet(mc.member!)} className="flex items-center gap-3 flex-1 min-w-0 text-left">
+                      <Avatar name={mc.member.profile?.full_name ?? "?"} size={36} />
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-sm text-ink truncate">{mc.member.profile?.full_name ?? "—"}</div>
+                        {mc.member.profile?.birth_date && (
+                          <div className="text-xs text-ink-mute">
+                            {Math.floor((Date.now() - new Date(mc.member.profile.birth_date).getTime()) / (365.25 * 24 * 3600 * 1000))} tahun
+                          </div>
+                        )}
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => openMemberAtt(mc.member!.id, mc.member!.profile?.full_name ?? "—", det.id, det.name)}
+                      className="shrink-0 px-2.5 py-1.5 rounded-lg border border-line text-xs font-semibold text-ink-soft hover:bg-ocean-50 hover:border-ocean-200 hover:text-ocean-700 transition flex items-center gap-1">
+                      <Icon name="check" className="w-3 h-3" />Absensi
+                    </button>
+                  </div>
                 ))}
                 {(det.member_classes?.length ?? 0) === 0 && <div className="text-sm text-ink-mute">Belum ada member terdaftar.</div>}
               </div>
@@ -1348,6 +1377,39 @@ function CoachKelas({ classes, onRefreshClasses }: { classes: ClassRow[]; coachI
 
       {/* Member detail modal */}
       {memberDet && <MemberDetailModal member={memberDet} onClose={() => setMemberDet(null)} />}
+
+      {/* Member attendance history modal */}
+      {memberAttHistory && (
+        <Modal open={!!memberAttHistory} onClose={() => setMemberAttHistory(null)}
+          title={`Absensi — ${memberAttHistory.memberName}`}
+          footer={<Btn variant="ghost" onClick={() => setMemberAttHistory(null)}>Tutup</Btn>}>
+          <div className="text-xs text-ink-mute mb-3 font-semibold uppercase tracking-widest">{memberAttHistory.className}</div>
+          {loadingAtt ? (
+            <div className="text-center py-6 text-ink-mute text-sm">Memuat…</div>
+          ) : memberAttHistory.rows.length === 0 ? (
+            <div className="text-center py-6 text-ink-mute text-sm">Belum ada data absensi di kelas ini.</div>
+          ) : (
+            <div className="divide-y divide-line -mx-5">
+              {memberAttHistory.rows.map((r) => {
+                const d = new Date(r.session_date + "T00:00:00");
+                const monthNames = ["Jan","Feb","Mar","Apr","Mei","Jun","Jul","Agt","Sep","Okt","Nov","Des"];
+                const dateStr = `${d.getDate()} ${monthNames[d.getMonth()]} ${d.getFullYear()}`;
+                const statusLabel = r.status === "hadir" ? "Hadir" : r.status === "izin" ? "Izin" : r.status === "sakit" ? "Sakit" : "Absen";
+                const statusKind = r.status === "hadir" ? "present" : r.status === "izin" ? "excused" : r.status === "sakit" ? "sick" : "absent";
+                return (
+                  <div key={r.id} className="px-5 py-3 flex items-center gap-3">
+                    <span className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${r.status === "hadir" ? "bg-ok-50 text-ok-600" : r.status === "tidak_hadir" || r.status === "absent" ? "bg-danger-50 text-danger-500" : "bg-warn-50 text-warn-600"}`}>
+                      <Icon name={r.status === "hadir" ? "check" : r.status === "tidak_hadir" || r.status === "absent" ? "x" : "info"} className="w-3.5 h-3.5" strokeWidth={2.5} />
+                    </span>
+                    <div className="flex-1 text-sm font-mono text-ink-soft">{dateStr}</div>
+                    <Status kind={statusKind as "present" | "absent" | "excused" | "sick"}>{statusLabel}</Status>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Modal>
+      )}
 
       {/* Spreadsheet modal */}
       {openSpreadsheet && (
@@ -2016,12 +2078,13 @@ function CoachProfile({ profile, onRefresh, onLogout }: { profile: ProfileData |
   const saveCertEdit = async () => {
     if (!editCertTarget || !certForm.title || !certForm.issued_at) return toast.error("Judul dan tanggal wajib diisi");
     setSavingCert(true);
-    const wasRejected = editCertTarget.status === "rejected";
+    // Any edit on an approved or rejected cert resets it to pending for re-approval
+    const needsReapproval = editCertTarget.status === "approved" || editCertTarget.status === "rejected";
     const { error } = await supabase.from("certifications").update({
       name: certForm.title, issuer: certForm.issuer || null,
       valid_from: certForm.issued_at || null,
       valid_until: certForm.no_expiry ? null : (certForm.expires_at || null),
-      ...(wasRejected ? { status: "pending", reject_reason: null } : {}),
+      ...(needsReapproval ? { status: "pending", reject_reason: null } : {}),
     }).eq("id", editCertTarget.id);
     if (!error && certFile) {
       try { await upload.cert(certFile, editCertTarget.id); } catch { /* non-fatal */ }
@@ -2219,6 +2282,12 @@ function CoachProfile({ profile, onRefresh, onLogout }: { profile: ProfileData |
       <Modal open={openAddCert} onClose={() => { setOpenAddCert(false); setEditCertTarget(null); }} title={editCertTarget ? "Edit Sertifikasi" : "Tambah Sertifikasi"} size="sm"
         footer={<><Btn variant="ghost" onClick={() => { setOpenAddCert(false); setEditCertTarget(null); }}>Batal</Btn><Btn variant="primary" onClick={editCertTarget ? saveCertEdit : saveCert} disabled={savingCert}>{savingCert ? "Menyimpan…" : "Submit"}</Btn></>}>
         <div className="space-y-4">
+          {editCertTarget?.status === "approved" && (
+            <div className="flex items-start gap-2 p-3 rounded-xl bg-warn-50 border border-warn-200 text-xs text-warn-800">
+              <Icon name="info" className="w-4 h-4 shrink-0 mt-0.5 text-warn-600" />
+              Mengedit sertifikasi yang sudah disetujui akan mengembalikan statusnya ke <strong>Menunggu Persetujuan</strong> untuk direview ulang oleh admin.
+            </div>
+          )}
           <Field label="Nama sertifikasi" required><Input value={certForm.title} onChange={e => setCertForm(f => ({ ...f, title: e.target.value }))} placeholder="Mis. Lifeguard ARC" /></Field>
           <Field label="Penerbit"><Input value={certForm.issuer} onChange={e => setCertForm(f => ({ ...f, issuer: e.target.value }))} placeholder="Mis. PMI / FINA" /></Field>
           <Field label="Berlaku dari" required><Input type="date" value={certForm.issued_at} onChange={e => setCertForm(f => ({ ...f, issued_at: e.target.value }))} /></Field>
@@ -2318,7 +2387,7 @@ export default function CoachPage() {
   }, [supabase]);
 
   const loadClasses = useCallback(async (profileId: string) => {
-    const { data, error } = await supabase.from("class_coaches").select("class:classes(id, name, schedule_days, time_start, time_end, capacity, enrolled, goals, description, class_type, spreadsheet_filled, spreadsheet_url, member_classes(member:members(id, profile:profiles(full_name, birth_date, phone, gender, address, health_notes))))").eq("coach_id", profileId);
+    const { data, error } = await supabase.from("class_coaches").select("class:classes(id, name, schedule_days, time_start, time_end, capacity, enrolled, goals, description, class_type, spreadsheet_filled, spreadsheet_url, branch:branches(name, city, address), member_classes(member:members(id, profile:profiles(full_name, birth_date, phone, gender, address, health_notes))))").eq("coach_id", profileId);
     if (error) { console.error("[loadClasses] error:", error); }
     if (!data) return;
     const rows = data.map((d: Record<string, unknown>) => d.class as ClassRow).filter(Boolean);

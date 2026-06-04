@@ -233,6 +233,18 @@ function Branches({ branches, onRefresh }: { branches: Branch[]; onRefresh: () =
     onRefresh();
   };
 
+  const deleteBranch = async (b: Branch) => {
+    const yes = await confirm(
+      `Hapus permanen cabang "${b.name}"?`,
+      `⚠️ PERINGATAN: Semua data cabang ini akan terhapus secara permanen — termasuk kelas, member, coach, absensi, tagihan, rapor, invoice, dan semua data terkait lainnya. Tindakan ini tidak bisa dibatalkan.`
+    );
+    if (!yes) return;
+    const { error } = await supabase.from("branches").delete().eq("id", b.id);
+    if (error) return toast.error("Gagal menghapus cabang", error.message);
+    toast.success(`Cabang "${b.name}" berhasil dihapus permanen`);
+    onRefresh();
+  };
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -270,6 +282,7 @@ function Branches({ branches, onRefresh }: { branches: Branch[]; onRefresh: () =
                 {b.status !== "archived" && (
                   <Btn variant="ghost" size="sm" icon="archive" onClick={() => archive(b)}>Arsip</Btn>
                 )}
+                <Btn variant="danger" size="sm" icon="trash" onClick={() => deleteBranch(b)}>Hapus</Btn>
               </div>
             </div>
           </Card>
@@ -480,6 +493,15 @@ interface Criterion {
 }
 const kindLabel: Record<string, string> = { score_10: "Nilai 1–10", score_100: "Nilai 1–100", choice: "Pilihan ganda", text: "Teks bebas" };
 
+interface ClassCoachRow { id: string; full_name: string; phone: string | null; status: string; }
+interface ClassMemberRow { id: string; full_name: string; phone: string | null; status: string; }
+interface CoachAttRow { id: string; date: string; status: string; note: string | null; profile: { full_name: string } | null; }
+interface MemberAttRow { id: string; date: string; status: string; note: string | null; profile: { full_name: string } | null; }
+
+const ATT_STATUS_LABEL: Record<string, string> = {
+  present: "Hadir", absent: "Absen", leave: "Izin", holiday: "Libur", substitute: "Substitusi",
+};
+
 function Classes({ branches }: { branches: Branch[] }) {
   const supabase = createClient();
   const toast = useToast();
@@ -496,6 +518,15 @@ function Classes({ branches }: { branches: Branch[] }) {
   const [loadingCriteria, setLoadingCriteria] = useState(false);
   const [criterionForm, setCriterionForm] = useState({ label: "", kind: "score_10", options: "" });
   const [savingCriterion, setSavingCriterion] = useState(false);
+
+  // Detail modal
+  const [detailClass, setDetailClass] = useState<ClassRow | null>(null);
+  const [detailTab, setDetailTab] = useState<"info" | "coach" | "member" | "att_coach" | "att_member">("info");
+  const [detailCoaches, setDetailCoaches] = useState<ClassCoachRow[]>([]);
+  const [detailMembers, setDetailMembers] = useState<ClassMemberRow[]>([]);
+  const [detailCoachAtt, setDetailCoachAtt] = useState<CoachAttRow[]>([]);
+  const [detailMemberAtt, setDetailMemberAtt] = useState<MemberAttRow[]>([]);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -561,6 +592,61 @@ function Classes({ branches }: { branches: Branch[] }) {
     toast.success("Aspek penilaian dihapus");
   };
 
+  const openDetail = async (c: ClassRow) => {
+    setDetailClass(c);
+    setDetailTab("info");
+    setDetailCoaches([]); setDetailMembers([]); setDetailCoachAtt([]); setDetailMemberAtt([]);
+  };
+
+  const loadDetailTab = useCallback(async (tab: typeof detailTab, classId: string) => {
+    setDetailLoading(true);
+    if (tab === "coach") {
+      const { data } = await supabase
+        .from("class_coaches")
+        .select("profile:profiles(id, full_name, phone, status)")
+        .eq("class_id", classId);
+      setDetailCoaches(
+        ((data ?? []) as unknown as { profile: { id: string; full_name: string; phone: string | null; status: string } | null }[])
+          .map(r => r.profile).filter((p): p is ClassCoachRow => !!p)
+      );
+    } else if (tab === "member") {
+      const { data } = await supabase
+        .from("member_classes")
+        .select("member:members(id, profile:profiles(full_name, phone, status))")
+        .eq("class_id", classId);
+      setDetailMembers(
+        ((data ?? []) as unknown as { member: { id: string; profile: { full_name: string; phone: string | null; status: string } | null } | null }[])
+          .map(r => r.member)
+          .filter((m): m is { id: string; profile: { full_name: string; phone: string | null; status: string } | null } => !!m)
+          .map(m => ({ id: m.id, full_name: m.profile?.full_name ?? "—", phone: m.profile?.phone ?? null, status: m.profile?.status ?? "active" }))
+      );
+    } else if (tab === "att_coach") {
+      const { data } = await supabase
+        .from("coach_attendances")
+        .select("id, date, status, note, profile:profiles(full_name)")
+        .eq("class_id", classId)
+        .order("date", { ascending: false })
+        .limit(100);
+      setDetailCoachAtt((data ?? []) as unknown as CoachAttRow[]);
+    } else if (tab === "att_member") {
+      const { data } = await supabase
+        .from("member_attendances")
+        .select("id, date, status, note, profile:profiles(full_name)")
+        .eq("class_id", classId)
+        .order("date", { ascending: false })
+        .limit(100);
+      setDetailMemberAtt((data ?? []) as unknown as MemberAttRow[]);
+    }
+    setDetailLoading(false);
+  }, [supabase]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const switchDetailTab = async (tab: typeof detailTab) => {
+    setDetailTab(tab);
+    if (!detailClass) return;
+    if (tab === "info") return;
+    loadDetailTab(tab, detailClass.id);
+  };
+
   // Group by branch
   const grouped = branches.map(b => ({
     branch: b,
@@ -600,6 +686,7 @@ function Classes({ branches }: { branches: Branch[] }) {
                         </div>
                       </div>
                       <div className="flex items-center gap-1">
+                        <Btn variant="ghost" size="sm" icon="eye" onClick={() => openDetail(c)}>Detail</Btn>
                         <Btn variant="ghost" size="sm" icon="book" onClick={() => openCriteria(c)}>Aspek</Btn>
                         <Btn variant="ghost" size="sm" icon="edit" onClick={() => openEdit(c)}>Edit</Btn>
                       </div>
@@ -649,6 +736,188 @@ function Classes({ branches }: { branches: Branch[] }) {
           </div>
         ))
       )}
+
+      {/* Detail modal — Info | Coach | Member | Absensi Coach | Absensi Member */}
+      <Modal open={!!detailClass} onClose={() => setDetailClass(null)}
+        title={`Detail Kelas — ${detailClass?.name ?? ""}`} size="xl"
+        footer={<Btn variant="ghost" onClick={() => setDetailClass(null)}>Tutup</Btn>}>
+        {detailClass && (
+          <div className="space-y-4">
+            {/* Tab bar */}
+            <div className="flex gap-1 flex-wrap border-b border-line pb-2">
+              {(["info", "coach", "member", "att_coach", "att_member"] as const).map(tab => {
+                const labels: Record<string, string> = { info: "Info", coach: "Coach", member: "Member", att_coach: "Absensi Coach", att_member: "Absensi Member" };
+                return (
+                  <button key={tab} onClick={() => switchDetailTab(tab)}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${detailTab === tab ? "bg-ocean-600 text-white" : "text-ink-mute hover:bg-paper-tint"}`}>
+                    {labels[tab]}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Tab: Info */}
+            {detailTab === "info" && (
+              <div className="space-y-4">
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Cabang</div>
+                    <div className="font-semibold text-ink">{(detailClass.branch as { name: string } | null | undefined)?.name ?? "—"}</div>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Status</div>
+                    <Status kind={detailClass.status === "active" ? "active" : "inactive"}>{detailClass.status === "active" ? "Aktif" : "Nonaktif"}</Status>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Jadwal</div>
+                    <div className="text-sm text-ink">{(detailClass.schedule_days ?? []).join(", ")} {detailClass.time_start && <span className="font-mono">{detailClass.time_start.slice(0,5)}{detailClass.time_end ? `–${detailClass.time_end.slice(0,5)}` : ""}</span>}</div>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Kapasitas</div>
+                    <div className="text-sm font-mono text-ink">{detailClass.enrolled}/{detailClass.capacity} peserta</div>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Harga Bulanan</div>
+                    <div className="text-sm font-mono text-ink">{detailClass.price_monthly != null ? `Rp ${Number(detailClass.price_monthly).toLocaleString("id-ID")}` : "—"}</div>
+                  </div>
+                  {detailClass.spreadsheet_url && (
+                    <div className="space-y-2">
+                      <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Spreadsheet</div>
+                      <a href={detailClass.spreadsheet_url} target="_blank" rel="noreferrer" className="text-sm text-ocean-600 hover:underline inline-flex items-center gap-1"><Icon name="link" className="w-3 h-3" />Buka Spreadsheet</a>
+                    </div>
+                  )}
+                </div>
+                {detailClass.goals && (
+                  <div>
+                    <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-1">Tujuan</div>
+                    <p className="text-sm text-ink-soft">{detailClass.goals}</p>
+                  </div>
+                )}
+                {detailClass.description && (
+                  <div>
+                    <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-1">Deskripsi</div>
+                    <p className="text-sm text-ink-soft">{detailClass.description}</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Tab: Coach */}
+            {detailTab === "coach" && (
+              detailLoading ? <div className="text-center py-10 text-ink-mute text-sm">Memuat…</div> : (
+                detailCoaches.length === 0
+                  ? <div className="text-center py-10 text-ink-mute text-sm">Belum ada coach di kelas ini.</div>
+                  : <div className="divide-y divide-line">
+                    {detailCoaches.map(c => (
+                      <div key={c.id} className="flex items-center gap-3 py-3">
+                        <Avatar name={c.full_name} size={36} />
+                        <div className="flex-1 min-w-0">
+                          <div className="font-semibold text-ink text-sm">{c.full_name}</div>
+                          <div className="text-xs text-ink-mute">{c.phone ?? "—"}</div>
+                        </div>
+                        <Status kind={c.status === "active" ? "active" : "inactive"}>{c.status === "active" ? "Aktif" : "Nonaktif"}</Status>
+                      </div>
+                    ))}
+                  </div>
+              )
+            )}
+
+            {/* Tab: Member */}
+            {detailTab === "member" && (
+              detailLoading ? <div className="text-center py-10 text-ink-mute text-sm">Memuat…</div> : (
+                detailMembers.length === 0
+                  ? <div className="text-center py-10 text-ink-mute text-sm">Belum ada member aktif di kelas ini.</div>
+                  : <div className="divide-y divide-line">
+                    {detailMembers.map(m => (
+                      <div key={m.id} className="flex items-center gap-3 py-3">
+                        <Avatar name={m.full_name} size={36} />
+                        <div className="flex-1 min-w-0">
+                          <div className="font-semibold text-ink text-sm">{m.full_name}</div>
+                          <div className="text-xs text-ink-mute">{m.phone ?? "—"}</div>
+                        </div>
+                        <Status kind={m.status === "active" ? "active" : "suspend"}>{m.status === "active" ? "Aktif" : m.status}</Status>
+                      </div>
+                    ))}
+                  </div>
+              )
+            )}
+
+            {/* Tab: Absensi Coach */}
+            {detailTab === "att_coach" && (
+              detailLoading ? <div className="text-center py-10 text-ink-mute text-sm">Memuat…</div> : (
+                detailCoachAtt.length === 0
+                  ? <div className="text-center py-10 text-ink-mute text-sm">Belum ada data absensi coach.</div>
+                  : <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-line text-xs uppercase tracking-widest text-ink-faint">
+                          <th className="text-left py-2 pr-4 font-semibold">Tanggal</th>
+                          <th className="text-left py-2 pr-4 font-semibold">Coach</th>
+                          <th className="text-left py-2 pr-4 font-semibold">Status</th>
+                          <th className="text-left py-2 font-semibold">Catatan</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-line">
+                        {detailCoachAtt.map(a => (
+                          <tr key={a.id} className="hover:bg-paper-tint">
+                            <td className="py-2.5 pr-4 font-mono text-xs">{a.date}</td>
+                            <td className="py-2.5 pr-4">{a.profile?.full_name ?? "—"}</td>
+                            <td className="py-2.5 pr-4">
+                              <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                                a.status === "present" ? "bg-ok-50 text-ok-700" :
+                                a.status === "absent" ? "bg-danger-50 text-danger-700" :
+                                a.status === "leave" ? "bg-warn-50 text-warn-700" :
+                                "bg-paper-tint text-ink-mute"
+                              }`}>{ATT_STATUS_LABEL[a.status] ?? a.status}</span>
+                            </td>
+                            <td className="py-2.5 text-ink-mute text-xs">{a.note ?? "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+              )
+            )}
+
+            {/* Tab: Absensi Member */}
+            {detailTab === "att_member" && (
+              detailLoading ? <div className="text-center py-10 text-ink-mute text-sm">Memuat…</div> : (
+                detailMemberAtt.length === 0
+                  ? <div className="text-center py-10 text-ink-mute text-sm">Belum ada data absensi member.</div>
+                  : <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-line text-xs uppercase tracking-widest text-ink-faint">
+                          <th className="text-left py-2 pr-4 font-semibold">Tanggal</th>
+                          <th className="text-left py-2 pr-4 font-semibold">Member</th>
+                          <th className="text-left py-2 pr-4 font-semibold">Status</th>
+                          <th className="text-left py-2 font-semibold">Catatan</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-line">
+                        {detailMemberAtt.map(a => (
+                          <tr key={a.id} className="hover:bg-paper-tint">
+                            <td className="py-2.5 pr-4 font-mono text-xs">{a.date}</td>
+                            <td className="py-2.5 pr-4">{a.profile?.full_name ?? "—"}</td>
+                            <td className="py-2.5 pr-4">
+                              <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                                a.status === "present" ? "bg-ok-50 text-ok-700" :
+                                a.status === "absent" ? "bg-danger-50 text-danger-700" :
+                                a.status === "leave" ? "bg-warn-50 text-warn-700" :
+                                "bg-paper-tint text-ink-mute"
+                              }`}>{ATT_STATUS_LABEL[a.status] ?? a.status}</span>
+                            </td>
+                            <td className="py-2.5 text-ink-mute text-xs">{a.note ?? "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+              )
+            )}
+          </div>
+        )}
+      </Modal>
 
       {/* Edit modal — goals & description only */}
       <Modal open={!!editTarget} onClose={() => setEditTarget(null)}
