@@ -1,5 +1,7 @@
 import { Card } from "@/components/ui/Card";
 import Icon from "@/components/ui/Icon";
+import Btn from "@/components/ui/Btn";
+import { waLink } from "@/lib/utils";
 
 const ITEMS = [
   { icon: "chart",    t: "Progress Monitoring",     d: "Rapor digital per semester dengan aspek penilaian yang disesuaikan per kelas." },
@@ -54,6 +56,13 @@ export default function WhyUs() {
               <p className="text-sm mt-2 leading-relaxed text-ink-mute">{it.d}</p>
             </Card>
           ))}
+        </div>
+
+        <div className="mt-12 text-center">
+          <p className="text-ink-mute text-sm font-medium mb-3">Ingin berkonsultasi mengenai fasilitas kolam, jadwal, atau coach kami?</p>
+          <a href={waLink("Halo, saya ingin tanya kelebihan & detail program di Next Swimming School.")} target="_blank" rel="noreferrer">
+            <Btn variant="primary" icon="whatsapp">Hubungi Admin via WhatsApp</Btn>
+          </a>
         </div>
       </div>
     </section>

@@ -1,4 +1,6 @@
 import Icon from "@/components/ui/Icon";
+import Btn from "@/components/ui/Btn";
+import { waLink } from "@/lib/utils";
 
 const BLOCKS = [
   {
@@ -81,6 +83,13 @@ export default function Ecosystem() {
               </ul>
             </div>
           ))}
+        </div>
+
+        <div className="mt-12 text-center">
+          <p className="text-white/85 text-sm font-medium mb-3">Nikmati kemudahan pendaftaran dan monitoring progres belajar secara digital.</p>
+          <a href={waLink("Halo, saya ingin tanya seputar pendaftaran & sistem digital di Next Swimming School.")} target="_blank" rel="noreferrer">
+            <Btn variant="accent" icon="whatsapp">Daftar & Hubungi Admin</Btn>
+          </a>
         </div>
       </div>
     </section>

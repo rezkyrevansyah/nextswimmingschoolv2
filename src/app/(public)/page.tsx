@@ -9,6 +9,7 @@ import Testimonials from "./_components/Testimonials";
 import FAQ from "./_components/FAQ";
 import FinalCTA from "./_components/FinalCTA";
 import LandingFooter from "./_components/LandingFooter";
+import WAFloatingButton from "./_components/WAFloatingButton";
 
 export const metadata: Metadata = {
   title: "Sekolah Renang Anak & Dewasa Terbaik | Next Swimming School",
@@ -40,6 +41,7 @@ export default function LandingPage() {
         <FinalCTA />
       </main>
       <LandingFooter />
+      <WAFloatingButton />
     </div>
   );
 }

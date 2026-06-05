@@ -70,6 +70,16 @@ export default function Programs() {
             </Card>
           ))}
         </div>
+
+        <div className="mt-12 text-center bg-paper-tint rounded-2xl p-6 border border-line flex flex-col sm:flex-row items-center justify-between gap-4 max-w-4xl mx-auto">
+          <div className="text-left">
+            <h4 className="font-display font-bold text-ink text-base">Bingung memilih program yang tepat?</h4>
+            <p className="text-xs text-ink-mute mt-1">Konsultasikan kebutuhan renang Anda atau anak Anda secara gratis dengan tim kami.</p>
+          </div>
+          <a href={waLink("Halo, saya ingin konsultasi memilih program renang yang tepat.")} target="_blank" rel="noreferrer" className="w-full sm:w-auto shrink-0">
+            <Btn variant="primary" icon="whatsapp" className="w-full sm:w-auto cursor-pointer">Konsultasi Program Gratis</Btn>
+          </a>
+        </div>
       </div>
     </section>
   );

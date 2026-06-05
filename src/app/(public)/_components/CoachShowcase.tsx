@@ -1,5 +1,7 @@
 import { COACHES } from "@/lib/data";
 import { Card } from "@/components/ui/Card";
+import Btn from "@/components/ui/Btn";
+import { waLink } from "@/lib/utils";
 
 const COACH_IMAGES: Record<string, string> = {
   "c-001": "https://images.unsplash.com/photo-1568602471122-7832951cc4c5?w=400&auto=format&fit=crop&q=80", // Coach Bagas
@@ -52,6 +54,13 @@ export default function CoachShowcase() {
               </div>
             </Card>
           ))}
+        </div>
+
+        <div className="mt-12 text-center">
+          <p className="text-ink-mute text-sm font-medium mb-3">Ingin dibimbing langsung oleh coach pilihan Anda? Hubungi admin untuk jadwalkan kelas privat.</p>
+          <a href={waLink("Halo, saya ingin tanya ketersediaan jadwal privat dengan coach di Next Swimming School.")} target="_blank" rel="noreferrer">
+            <Btn variant="primary" icon="whatsapp">Hubungi Admin via WhatsApp</Btn>
+          </a>
         </div>
       </div>
     </section>
