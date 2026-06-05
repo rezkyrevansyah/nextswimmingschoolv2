@@ -22,6 +22,6 @@ export function getSupabaseAdmin() {
 /** @deprecated Use getSupabaseAdmin() instead to avoid module-level init errors */
 export const supabaseAdmin = new Proxy({} as ReturnType<typeof createClient<Database>>, {
   get(_target, prop) {
-    return (getSupabaseAdmin() as Record<string | symbol, unknown>)[prop];
+    return (getSupabaseAdmin() as unknown as Record<string | symbol, unknown>)[prop];
   },
 });

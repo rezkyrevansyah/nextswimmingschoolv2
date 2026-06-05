@@ -8,7 +8,7 @@ export default function FinalCTA() {
       <div className="absolute inset-0 water-bg" />
       <div className="caustics absolute inset-0" />
       <div className="relative max-w-5xl mx-auto px-4 lg:px-8 py-20 lg:py-28 text-center text-white">
-        <h2 className="font-display font-extrabold text-4xl lg:text-6xl leading-tight">
+        <h2 className="font-display font-extrabold text-3xl sm:text-4xl lg:text-6xl leading-tight">
           Mulai perjalanan renangmu<br />bersama Next Swimming School.
         </h2>
         <p className="text-white/85 mt-5 max-w-2xl mx-auto text-lg">

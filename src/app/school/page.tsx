@@ -13,7 +13,7 @@ import { waLink } from "@/lib/utils";
 import { printSingleRapor, printSchoolRekap, type PrintCriterion } from "@/lib/printRapor";
 import { createClient } from "@/utils/supabase/client";
 
-interface Criterion extends PrintCriterion {}
+type Criterion = PrintCriterion;
 
 interface Student {
   id: string;
@@ -30,7 +30,6 @@ interface Student {
 
 export default function SchoolPage() {
   const supabase = createClient();
-  const [schoolId, setSchoolId] = useState("");
   const [schoolName, setSchoolName] = useState("School Panel");
   const [userId, setUserId] = useState("");
   const [adminWaPhone, setAdminWaPhone] = useState("");
@@ -103,7 +102,6 @@ export default function SchoolPage() {
         .single();
 
       if (!school) { setLoading(false); return; }
-      setSchoolId(school.id);
       setSchoolName(school.name);
 
       const { data: branch } = await supabase.from("branches").select("wa_numbers").eq("id", school.branch_id).single();

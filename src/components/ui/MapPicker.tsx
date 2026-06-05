@@ -145,7 +145,6 @@ export default function MapPicker({ lat, lng, onChange, readOnly }: Props) {
       <link
         rel="stylesheet"
         href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-        // @ts-expect-error crossOrigin is valid
         crossOrigin=""
       />
       <div ref={containerRef} style={{ height: 260, width: "100%" }} />

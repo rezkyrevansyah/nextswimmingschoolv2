@@ -9,6 +9,16 @@ const nextConfig: NextConfig = {
     // Type errors are from stub DB types — will resolve after running `npx supabase gen types`
     ignoreBuildErrors: true,
   },
+  async headers() {
+    return [
+      {
+        source: "/manifest.json",
+        headers: [
+          { key: "Content-Type", value: "application/manifest+json" },
+        ],
+      },
+    ];
+  },
   images: {
     remotePatterns: [
       // Cloudflare R2 public bucket (r2.dev subdomain)

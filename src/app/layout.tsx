@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Plus_Jakarta_Sans, Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { ToastProvider } from "@/components/providers/ToastProvider";
@@ -26,7 +26,27 @@ export const metadata: Metadata = {
   title: "Next Swimming School — Sistem Manajemen",
   description:
     "Sistem manajemen terintegrasi untuk Next Swimming School — member, coach, admin, dan owner.",
-  icons: { icon: "/logo.png" },
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Next Swim",
+  },
+  formatDetection: {
+    telephone: false,
+  },
+  icons: {
+    icon: "/logo.png",
+    apple: "/logo_next_circle.png",
+  },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  themeColor: "#1A6BB0",
 };
 
 export default function RootLayout({

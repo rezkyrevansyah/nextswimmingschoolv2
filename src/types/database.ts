@@ -251,6 +251,7 @@ export type Database = {
           name: string
           no_expiry: boolean
           photo_url: string | null
+          reject_reason: string | null
           reviewed_at: string | null
           reviewed_by: string | null
           status: Database["public"]["Enums"]["cert_status"]
@@ -266,6 +267,7 @@ export type Database = {
           name: string
           no_expiry?: boolean
           photo_url?: string | null
+          reject_reason?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
           status?: Database["public"]["Enums"]["cert_status"]
@@ -281,6 +283,7 @@ export type Database = {
           name?: string
           no_expiry?: boolean
           photo_url?: string | null
+          reject_reason?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
           status?: Database["public"]["Enums"]["cert_status"]
@@ -379,12 +382,116 @@ export type Database = {
           },
         ]
       }
+      class_holidays: {
+        Row: {
+          branch_id: string
+          class_id: string
+          created_at: string
+          created_by: string | null
+          holiday_date: string
+          id: string
+          reason: string | null
+        }
+        Insert: {
+          branch_id: string
+          class_id: string
+          created_at?: string
+          created_by?: string | null
+          holiday_date: string
+          id?: string
+          reason?: string | null
+        }
+        Update: {
+          branch_id?: string
+          class_id?: string
+          created_at?: string
+          created_by?: string | null
+          holiday_date?: string
+          id?: string
+          reason?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "class_holidays_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "class_holidays_class_id_fkey"
+            columns: ["class_id"]
+            isOneToOne: false
+            referencedRelation: "classes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "class_holidays_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      class_programs: {
+        Row: {
+          class_id: string
+          coach_id: string
+          created_at: string
+          description: string | null
+          id: string
+          month: string
+          topic: string
+          updated_at: string
+          week: number
+        }
+        Insert: {
+          class_id: string
+          coach_id: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          month: string
+          topic: string
+          updated_at?: string
+          week: number
+        }
+        Update: {
+          class_id?: string
+          coach_id?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          month?: string
+          topic?: string
+          updated_at?: string
+          week?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "class_programs_class_id_fkey"
+            columns: ["class_id"]
+            isOneToOne: false
+            referencedRelation: "classes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "class_programs_coach_id_fkey"
+            columns: ["coach_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       classes: {
         Row: {
           age_max: number | null
           age_min: number | null
           branch_id: string
           capacity: number
+          class_type: string
           created_at: string
           description: string | null
           enrolled: number
@@ -395,13 +502,16 @@ export type Database = {
           name: string
           photo_url: string | null
           price_monthly: number
+          price_per_session: number | null
           schedule_days: string[]
           schedule_time: string | null
+          schedule_times: Json | null
           sessions_per_month: number
           sessions_per_week: number
           show_landing: boolean
           show_on_landing: boolean | null
           spreadsheet_filled: boolean
+          spreadsheet_url: string | null
           status: string
           time_end: string
           time_start: string
@@ -411,6 +521,7 @@ export type Database = {
           age_min?: number | null
           branch_id: string
           capacity?: number
+          class_type?: string
           created_at?: string
           description?: string | null
           enrolled?: number
@@ -421,13 +532,16 @@ export type Database = {
           name: string
           photo_url?: string | null
           price_monthly?: number
+          price_per_session?: number | null
           schedule_days?: string[]
           schedule_time?: string | null
+          schedule_times?: Json | null
           sessions_per_month?: number
           sessions_per_week?: number
           show_landing?: boolean
           show_on_landing?: boolean | null
           spreadsheet_filled?: boolean
+          spreadsheet_url?: string | null
           status?: string
           time_end: string
           time_start: string
@@ -437,6 +551,7 @@ export type Database = {
           age_min?: number | null
           branch_id?: string
           capacity?: number
+          class_type?: string
           created_at?: string
           description?: string | null
           enrolled?: number
@@ -447,13 +562,16 @@ export type Database = {
           name?: string
           photo_url?: string | null
           price_monthly?: number
+          price_per_session?: number | null
           schedule_days?: string[]
           schedule_time?: string | null
+          schedule_times?: Json | null
           sessions_per_month?: number
           sessions_per_week?: number
           show_landing?: boolean
           show_on_landing?: boolean | null
           spreadsheet_filled?: boolean
+          spreadsheet_url?: string | null
           status?: string
           time_end?: string
           time_start?: string
@@ -776,7 +894,7 @@ export type Database = {
       coach_rates: {
         Row: {
           class_id: string
-          coach_id: string
+          coach_id: string | null
           created_at: string
           id: string
           rate: number
@@ -785,7 +903,7 @@ export type Database = {
         }
         Insert: {
           class_id: string
-          coach_id: string
+          coach_id?: string | null
           created_at?: string
           id?: string
           rate: number
@@ -794,7 +912,7 @@ export type Database = {
         }
         Update: {
           class_id?: string
-          coach_id?: string
+          coach_id?: string | null
           created_at?: string
           id?: string
           rate?: number
@@ -1218,11 +1336,14 @@ export type Database = {
           gender: string | null
           health_notes: string | null
           id: string
+          is_archived: boolean
           is_profile_complete: boolean
           nick_name: string | null
           phone: string | null
           role: Database["public"]["Enums"]["user_role"]
           specialization: string | null
+          suspend_reason: string | null
+          suspend_until: string | null
           updated_at: string
         }
         Insert: {
@@ -1242,11 +1363,14 @@ export type Database = {
           gender?: string | null
           health_notes?: string | null
           id: string
+          is_archived?: boolean
           is_profile_complete?: boolean
           nick_name?: string | null
           phone?: string | null
           role?: Database["public"]["Enums"]["user_role"]
           specialization?: string | null
+          suspend_reason?: string | null
+          suspend_until?: string | null
           updated_at?: string
         }
         Update: {
@@ -1266,11 +1390,14 @@ export type Database = {
           gender?: string | null
           health_notes?: string | null
           id?: string
+          is_archived?: boolean
           is_profile_complete?: boolean
           nick_name?: string | null
           phone?: string | null
           role?: Database["public"]["Enums"]["user_role"]
           specialization?: string | null
+          suspend_reason?: string | null
+          suspend_until?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -1422,6 +1549,7 @@ export type Database = {
           phone: string | null
           phone_owner: string | null
           proof_url: string | null
+          reject_reason: string | null
           reviewed_at: string | null
           reviewed_by: string | null
           status: string
@@ -1441,6 +1569,7 @@ export type Database = {
           phone?: string | null
           phone_owner?: string | null
           proof_url?: string | null
+          reject_reason?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
           status?: string
@@ -1460,6 +1589,7 @@ export type Database = {
           phone?: string | null
           phone_owner?: string | null
           proof_url?: string | null
+          reject_reason?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
           status?: string
@@ -1502,6 +1632,8 @@ export type Database = {
           email: string | null
           id: string
           name: string
+          pic_name: string | null
+          pic_phone: string | null
           profile_id: string | null
         }
         Insert: {
@@ -1510,6 +1642,8 @@ export type Database = {
           email?: string | null
           id?: string
           name: string
+          pic_name?: string | null
+          pic_phone?: string | null
           profile_id?: string | null
         }
         Update: {
@@ -1518,6 +1652,8 @@ export type Database = {
           email?: string | null
           id?: string
           name?: string
+          pic_name?: string | null
+          pic_phone?: string | null
           profile_id?: string | null
         }
         Relationships: [
@@ -1602,7 +1738,7 @@ export type Database = {
     Enums: {
       attendance_method: "selfie" | "qr" | "manual"
       attendance_status: "hadir" | "izin" | "sakit" | "tidak_hadir"
-      bill_type: "monthly" | "package" | "custom"
+      bill_type: "monthly" | "package" | "custom" | "session_pack"
       cert_status: "pending" | "approved" | "rejected"
       coach_status: "active" | "suspended" | "archived"
       invoice_status: "pending" | "paid"
@@ -1741,7 +1877,7 @@ export const Constants = {
     Enums: {
       attendance_method: ["selfie", "qr", "manual"],
       attendance_status: ["hadir", "izin", "sakit", "tidak_hadir"],
-      bill_type: ["monthly", "package", "custom"],
+      bill_type: ["monthly", "package", "custom", "session_pack"],
       cert_status: ["pending", "approved", "rejected"],
       coach_status: ["active", "suspended", "archived"],
       invoice_status: ["pending", "paid"],

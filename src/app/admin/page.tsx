@@ -24,6 +24,7 @@ import { useConfirm } from "@/components/providers/ConfirmProvider";
 import { useUpload } from "@/hooks/useUpload";
 import PhotoLightbox from "@/components/ui/PhotoLightbox";
 import type { User } from "@supabase/supabase-js";
+import type { Database, Json } from "@/types/database";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -190,8 +191,7 @@ function AdminDashboard({ branchId }: { branchId: string }) {
     // Counts — coach aktif = not archived AND not suspended
     Promise.all([
       supabase.from("members").select("id", { count: "exact" }).eq("branch_id", branchId).eq("status", "active"),
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (supabase.from("profiles") as any).select("id, suspend_until").eq("branch_id", branchId).eq("role", "coach").eq("is_archived", false),
+      supabase.from("profiles").select("id, suspend_until").eq("branch_id", branchId).eq("role", "coach").eq("is_archived", false),
       supabase.from("classes").select("id", { count: "exact" }).eq("branch_id", branchId).eq("status", "active"),
       supabase.from("registrations").select("id", { count: "exact" }).eq("branch_id", branchId).eq("status", "pending"),
       supabase.from("coach_leaves").select("id, profile:profiles!coach_leaves_coach_id_fkey(branch_id)").eq("status", "pending"),
@@ -598,15 +598,13 @@ function AdminClass({ branchId }: { branchId: string }) {
       if (classPhotoFile) {
         try { photoUrl = await upload.classPhoto(classPhotoFile, editTarget.id); } catch { /* non-fatal */ }
       }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const updatePayload = { name: form.name, class_type: form.class_type, schedule_days: days, schedule_times: scheduleTimes.length > 0 ? scheduleTimes : null, time_start: firstSlot?.time_start || form.time_start || null, time_end: firstSlot?.time_end || form.time_end || null, capacity: isPrivate ? 1 : (Number(form.capacity) || 0), price_monthly: isPrivate ? 0 : (Number(form.price_monthly) || 0), price_per_session: isPrivate ? (Number(form.price_per_session) || null) : null, show_landing: form.show_on_landing, goals: form.goals.trim() || null, description: form.description.trim() || null, photo_url: photoUrl } as any;
+      const updatePayload: Database["public"]["Tables"]["classes"]["Update"] = { name: form.name, class_type: form.class_type, schedule_days: days, schedule_times: (scheduleTimes.length > 0 ? scheduleTimes : null) as Json | null, time_start: firstSlot?.time_start || form.time_start || undefined, time_end: firstSlot?.time_end || form.time_end || undefined, capacity: isPrivate ? 1 : (Number(form.capacity) || 0), price_monthly: isPrivate ? 0 : (Number(form.price_monthly) || 0), price_per_session: isPrivate ? (Number(form.price_per_session) || null) : null, show_landing: form.show_on_landing, goals: form.goals.trim() || null, description: form.description.trim() || null, photo_url: photoUrl };
       const { error } = await supabase.from("classes").update(updatePayload).eq("id", editTarget.id);
       setSaving(false);
       if (error) return toast.error("Gagal update kelas", error.message);
       toast.success("Kelas diperbarui");
     } else {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const insertPayload = { name: form.name, class_type: form.class_type, schedule_days: days, schedule_times: scheduleTimes.length > 0 ? scheduleTimes : null, time_start: firstSlot?.time_start || form.time_start || null, time_end: firstSlot?.time_end || form.time_end || null, capacity: isPrivate ? 1 : (Number(form.capacity) || 0), price_monthly: isPrivate ? 0 : (Number(form.price_monthly) || 0), price_per_session: isPrivate ? (Number(form.price_per_session) || null) : null, show_landing: form.show_on_landing, goals: form.goals.trim() || null, description: form.description.trim() || null, branch_id: branchId, status: "active", enrolled: 0 } as any;
+      const insertPayload: Database["public"]["Tables"]["classes"]["Insert"] = { name: form.name, class_type: form.class_type, schedule_days: days, schedule_times: (scheduleTimes.length > 0 ? scheduleTimes : null) as Json | null, time_start: firstSlot?.time_start || form.time_start || "", time_end: firstSlot?.time_end || form.time_end || "", capacity: isPrivate ? 1 : (Number(form.capacity) || 0), price_monthly: isPrivate ? 0 : (Number(form.price_monthly) || 0), price_per_session: isPrivate ? (Number(form.price_per_session) || null) : null, show_landing: form.show_on_landing, goals: form.goals.trim() || null, description: form.description.trim() || null, branch_id: branchId, status: "active", enrolled: 0 };
       const { data: insertData, error } = await supabase.from("classes").insert(insertPayload).select("id").single();
       if (error) { setSaving(false); return toast.error("Gagal membuat kelas", error.message); }
       if (classPhotoFile && insertData?.id) {
@@ -625,7 +623,7 @@ function AdminClass({ branchId }: { branchId: string }) {
   };
 
   const archiveClass = async (c: ClassRow) => {
-    const yes = await confirm(`Arsipkan kelas "${c.name}"?`);
+    const yes = await confirm({ body: `Arsipkan kelas "${c.name}"?` });
     if (!yes) return;
     await supabase.from("classes").update({ status: "archived" }).eq("id", c.id);
     toast.success("Kelas diarsipkan");
@@ -633,7 +631,7 @@ function AdminClass({ branchId }: { branchId: string }) {
   };
 
   const restoreClass = async (c: ClassRow) => {
-    const yes = await confirm(`Aktifkan kembali kelas "${c.name}"?`);
+    const yes = await confirm({ body: `Aktifkan kembali kelas "${c.name}"?` });
     if (!yes) return;
     await supabase.from("classes").update({ status: "active" }).eq("id", c.id);
     toast.success("Kelas diaktifkan kembali");
@@ -681,7 +679,7 @@ function AdminClass({ branchId }: { branchId: string }) {
   };
 
   const deleteCriterion = async (id: string) => {
-    const yes = await confirm("Hapus aspek penilaian ini? Data rapor yang sudah diisi tidak akan terpengaruh.");
+    const yes = await confirm({ body: "Hapus aspek penilaian ini? Data rapor yang sudah diisi tidak akan terpengaruh." });
     if (!yes) return;
     await supabase.from("class_criteria").delete().eq("id", id);
     setCriteria(prev => prev.filter(c => c.id !== id));
@@ -1358,46 +1356,48 @@ function AdminMember({ branchId }: { branchId: string }) {
       </div>
       <Card padded={false}>
         <div className="px-5 py-3 border-b border-line flex items-center gap-3 flex-wrap">
-          <div className="flex gap-1.5 bg-paper-tint rounded-xl p-1">
+          <div className="flex gap-1.5 bg-paper-tint rounded-xl p-1 flex-wrap">
             {[["all", "Semua"], ["reguler", "Reguler"], ["private", "Private"], ["school_affiliate", "Afiliasi"], ["suspended", "Suspend"]].map(([id, l]) => (
               <button key={id} onClick={() => setTab(id)} className={`px-3 py-1.5 text-xs font-bold rounded-lg ${tab === id ? "bg-white text-ocean-700 shadow-sm" : "text-ink-mute hover:text-ink-soft"}`}>{l}</button>
             ))}
           </div>
         </div>
         {loading ? <div className="p-10 text-center text-ink-mute">Memuat data…</div> : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-[11px] uppercase tracking-widest text-ink-faint font-bold border-b border-line">
-                <th className="text-left py-3 px-5 font-bold">Member</th>
-                <th className="text-left py-3 font-bold">Tipe</th>
-                <th className="text-left py-3 font-bold">Kelas</th>
-                <th className="text-left py-3 font-bold">Status</th>
-                <th className="px-5" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-line">
-              {filtered.map((m) => {
-                const cls = m.member_classes?.map(mc => mc.class?.name).filter(Boolean).join(", ") ?? "—";
-                const fullName = m.profile?.full_name ?? "—";
-                const age = m.profile?.birth_date ? calcAge(m.profile.birth_date) : null;
-                return (
-                  <tr key={m.id} className="hover:bg-paper-tint cursor-pointer" onClick={() => { setDetail(m); setDetailTab("info"); setAttLoaded(false); setBillsLoaded(false); setAttendances([]); setBills([]); setAttClassFilter(""); }}>
-                    <td className="py-3.5 px-5">
-                      <div className="flex items-center gap-3">
-                        <Avatar name={fullName} src={m.profile?.avatar_url ?? undefined} size={38} />
-                        <div><div className="font-semibold text-ink">{fullName}</div>{age && <div className="text-xs text-ink-mute">{age} thn</div>}</div>
-                      </div>
-                    </td>
-                    <td><Status kind={m.type === "private" ? "substitute" : m.type === "school_affiliate" ? "school_covered" : "active"} dot={false}>{m.type === "reguler" ? "Reguler" : m.type === "private" ? "Private" : "Afiliasi"}</Status></td>
-                    <td className="text-ink-soft text-xs">{cls}</td>
-                    <td><Status kind={m.status === "suspended" ? "suspended" : "active"}>{m.status === "suspended" ? "Suspend" : "Aktif"}</Status></td>
-                    <td className="px-5"><button className="text-ink-mute hover:text-ocean-600 p-1.5"><Icon name="eye" className="w-4 h-4" /></button></td>
-                  </tr>
-                );
-              })}
-              {filtered.length === 0 && <tr><td colSpan={5} className="py-10 text-center text-ink-mute">Tidak ada member</td></tr>}
-            </tbody>
-          </table>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-[11px] uppercase tracking-widest text-ink-faint font-bold border-b border-line">
+                  <th className="text-left py-3 px-5 font-bold">Member</th>
+                  <th className="text-left py-3 font-bold hidden sm:table-cell">Tipe</th>
+                  <th className="text-left py-3 font-bold hidden md:table-cell">Kelas</th>
+                  <th className="text-left py-3 font-bold">Status</th>
+                  <th className="px-5" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {filtered.map((m) => {
+                  const cls = m.member_classes?.map(mc => mc.class?.name).filter(Boolean).join(", ") ?? "—";
+                  const fullName = m.profile?.full_name ?? "—";
+                  const age = m.profile?.birth_date ? calcAge(m.profile.birth_date) : null;
+                  return (
+                    <tr key={m.id} className="hover:bg-paper-tint cursor-pointer" onClick={() => { setDetail(m); setDetailTab("info"); setAttLoaded(false); setBillsLoaded(false); setAttendances([]); setBills([]); setAttClassFilter(""); }}>
+                      <td className="py-3.5 px-5">
+                        <div className="flex items-center gap-3">
+                          <Avatar name={fullName} src={m.profile?.avatar_url ?? undefined} size={38} />
+                          <div className="min-w-0"><div className="font-semibold text-ink truncate max-w-[120px] sm:max-w-none">{fullName}</div>{age && <div className="text-xs text-ink-mute">{age} thn</div>}</div>
+                        </div>
+                      </td>
+                      <td className="hidden sm:table-cell"><Status kind={m.type === "private" ? "substitute" : m.type === "school_affiliate" ? "school_covered" : "active"} dot={false}>{m.type === "reguler" ? "Reguler" : m.type === "private" ? "Private" : "Afiliasi"}</Status></td>
+                      <td className="text-ink-soft text-xs hidden md:table-cell max-w-[150px] truncate">{cls}</td>
+                      <td><Status kind={m.status === "suspended" ? "suspended" : "active"}>{m.status === "suspended" ? "Suspend" : "Aktif"}</Status></td>
+                      <td className="px-5"><button className="text-ink-mute hover:text-ocean-600 p-1.5"><Icon name="eye" className="w-4 h-4" /></button></td>
+                    </tr>
+                  );
+                })}
+                {filtered.length === 0 && <tr><td colSpan={5} className="py-10 text-center text-ink-mute">Tidak ada member</td></tr>}
+              </tbody>
+            </table>
+          </div>
         )}
       </Card>
 
@@ -1908,7 +1908,7 @@ function AdminCoach({ branchId }: { branchId: string }) {
     const { data, error } = await createClient().from("profiles")
       .select("id, full_name, nick_name, email, phone, gender, birth_date, specialization, bio, address, education_level, education_institution, bank_name, bank_account, bank_holder, avatar_url, suspend_until, suspend_reason, is_archived, certifications!certifications_coach_id_fkey(id, name, title, status, valid_from, valid_until), class_coaches(class_id, class:classes(id, name, time_start, time_end, schedule_days))")
       .eq("branch_id", branchId).eq("role", "coach").order("full_name");
-    if (error) console.error("[AdminCoach] query error:", JSON.stringify(error));
+    if (error) return;
     if (data) setCoaches(data as unknown as CoachFull[]);
     setLoading(false);
   }, [branchId]);
@@ -1940,7 +1940,7 @@ function AdminCoach({ branchId }: { branchId: string }) {
     const db = createClient();
 
     // Save extended profile fields
-    const extraFields: Record<string, string | null> = {};
+    const extraFields: Database["public"]["Tables"]["profiles"]["Update"] = {};
     if (form.nick_name) extraFields.nick_name = form.nick_name;
     if (form.gender) extraFields.gender = form.gender;
     if (form.birth_date) extraFields.birth_date = form.birth_date;
@@ -1957,12 +1957,12 @@ function AdminCoach({ branchId }: { branchId: string }) {
 
     // Insert certifications if any
     if (createCerts.length > 0) {
-      const certRows = createCerts.filter(c => c.title).map(c => ({
+      const certRows: Database["public"]["Tables"]["certifications"]["Insert"][] = createCerts.filter(c => c.title).map(c => ({
         coach_id: uid, name: c.title, title: c.title,
         issuer: c.issuer || null,
         valid_from: c.valid_from || null,
         valid_until: c.no_expiry ? null : (c.valid_until || null),
-        status: "pending",
+        status: "pending" as Database["public"]["Enums"]["cert_status"],
       }));
       if (certRows.length > 0) await db.from("certifications").insert(certRows);
     }
@@ -2046,7 +2046,7 @@ function AdminCoach({ branchId }: { branchId: string }) {
 
   const deleteCert = async (certId: string) => {
     if (!detail) return;
-    const ok = await confirm("Hapus sertifikasi ini?");
+    const ok = await confirm({ body: "Hapus sertifikasi ini?" });
     if (!ok) return;
     const { error } = await createClient().from("certifications").delete().eq("id", certId);
     if (error) return toast.error("Gagal menghapus sertifikasi", error.message);
@@ -2057,8 +2057,7 @@ function AdminCoach({ branchId }: { branchId: string }) {
   const doSuspend = async () => {
     if (!suspendTarget || !suspendForm.reason || !suspendForm.until) return toast.error("Alasan dan tanggal berakhir wajib diisi");
     setSuspending(true);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error } = await createClient().from("profiles").update({ suspend_until: suspendForm.until, suspend_reason: suspendForm.reason } as any).eq("id", suspendTarget.id);
+    const { error } = await createClient().from("profiles").update({ suspend_until: suspendForm.until, suspend_reason: suspendForm.reason } satisfies Database["public"]["Tables"]["profiles"]["Update"]).eq("id", suspendTarget.id);
     setSuspending(false);
     if (error) return toast.error("Gagal suspend coach", error.message);
     toast.success(`${suspendTarget.full_name} di-suspend hingga ${fmtDate(suspendForm.until)}`);
@@ -2068,8 +2067,7 @@ function AdminCoach({ branchId }: { branchId: string }) {
   };
 
   const liftSuspend = async (c: CoachFull) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error } = await createClient().from("profiles").update({ suspend_until: null, suspend_reason: null } as any).eq("id", c.id);
+    const { error } = await createClient().from("profiles").update({ suspend_until: null, suspend_reason: null } satisfies Database["public"]["Tables"]["profiles"]["Update"]).eq("id", c.id);
     if (error) return toast.error("Gagal mengakhiri suspend", error.message);
     toast.success("Suspend diakhiri");
     if (detail?.id === c.id) setDetail(prev => prev ? { ...prev, suspend_until: null, suspend_reason: null } : prev);
@@ -2080,8 +2078,7 @@ function AdminCoach({ branchId }: { branchId: string }) {
     const archiving = !c.is_archived;
     const ok = await confirm({ body: archiving ? `Arsipkan coach ${c.full_name}? Coach tidak akan muncul di daftar aktif.` : `Aktifkan kembali coach ${c.full_name}?` });
     if (!ok) return;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error } = await createClient().from("profiles").update({ is_archived: archiving } as any).eq("id", c.id);
+    const { error } = await createClient().from("profiles").update({ is_archived: archiving } satisfies Database["public"]["Tables"]["profiles"]["Update"]).eq("id", c.id);
     if (error) return toast.error("Gagal mengubah status", error.message);
     toast.success(archiving ? "Coach diarsipkan" : "Coach diaktifkan kembali");
     if (detail?.id === c.id) { setDetail(prev => prev ? { ...prev, is_archived: archiving } : prev); }
@@ -2437,11 +2434,11 @@ function AdminCoach({ branchId }: { branchId: string }) {
           <div className="pt-1 border-t border-line">
             <div className="text-xs font-bold text-ink-mute uppercase tracking-widest mb-3">Data Pribadi</div>
             <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Field label="Nama lengkap" required><Input value={form.full_name} onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))} placeholder="Nama lengkap" /></Field>
                 <Field label="Nama panggilan" hint="Opsional"><Input value={form.nick_name} onChange={e => setForm(f => ({ ...f, nick_name: e.target.value }))} placeholder="Nama panggilan" /></Field>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Field label="Jenis kelamin">
                   <Select value={form.gender} onChange={e => setForm(f => ({ ...f, gender: e.target.value }))}>
                     <option value="">Pilih…</option>
@@ -2459,7 +2456,7 @@ function AdminCoach({ branchId }: { branchId: string }) {
 
           <div className="pt-1 border-t border-line">
             <div className="text-xs font-bold text-ink-mute uppercase tracking-widest mb-3">Pendidikan (Opsional)</div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Field label="Pendidikan terakhir">
                 <Select value={form.education_level} onChange={e => setForm(f => ({ ...f, education_level: e.target.value }))}>
                   <option value="">Pilih…</option>
@@ -2535,11 +2532,11 @@ function AdminCoach({ branchId }: { branchId: string }) {
           <div className="pt-1 border-t border-line">
             <div className="text-xs font-bold text-ink-mute uppercase tracking-widest mb-3">Data Pribadi</div>
             <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Field label="Nama lengkap" required><Input value={editForm.full_name} onChange={e => setEditForm(f => ({ ...f, full_name: e.target.value }))} /></Field>
                 <Field label="Nama panggilan" hint="Opsional"><Input value={editForm.nick_name} onChange={e => setEditForm(f => ({ ...f, nick_name: e.target.value }))} placeholder="Nama panggilan" /></Field>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Field label="Jenis kelamin">
                   <Select value={editForm.gender} onChange={e => setEditForm(f => ({ ...f, gender: e.target.value }))}>
                     <option value="">Pilih…</option>
@@ -2556,7 +2553,7 @@ function AdminCoach({ branchId }: { branchId: string }) {
 
           <div className="pt-1 border-t border-line">
             <div className="text-xs font-bold text-ink-mute uppercase tracking-widest mb-3">Pendidikan (Opsional)</div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Field label="Pendidikan terakhir">
                 <Select value={editForm.education_level} onChange={e => setEditForm(f => ({ ...f, education_level: e.target.value }))}>
                   <option value="">Pilih…</option>
@@ -3176,7 +3173,7 @@ function AdminAbsensiCoach({ branchId }: { branchId: string }) {
   };
 
   const deleteRecord = async (r: AttendanceRow) => {
-    const ok = await confirm({ title: "Hapus absensi?", message: `Hapus absensi ${r.profile?.full_name} tanggal ${fmtDate(r.session_date)}?`, confirmLabel: "Hapus", danger: true });
+    const ok = await confirm({ title: "Hapus absensi?", body: `Hapus absensi ${r.profile?.full_name} tanggal ${fmtDate(r.session_date)}?`, confirmLabel: "Hapus", danger: true });
     if (!ok) return;
     const { error } = await supabase.from("coach_attendances").delete().eq("id", r.id);
     if (error) return toast.error("Gagal menghapus", error.message);
@@ -3192,33 +3189,35 @@ function AdminAbsensiCoach({ branchId }: { branchId: string }) {
       </div>
       <Card padded={false}>
         {loading ? <div className="p-10 text-center text-ink-mute">Memuat data…</div> : (
-          <table className="w-full text-sm">
-            <thead><tr className="text-[11px] uppercase tracking-widest text-ink-faint font-bold border-b border-line">
-              <th className="text-left py-3 px-5 font-bold">Tanggal</th><th className="text-left py-3 font-bold">Coach</th>
-              <th className="text-left py-3 font-bold">Kelas</th><th className="text-left py-3 font-bold">Clock-in</th>
-              <th className="text-left py-3 font-bold">Jarak</th><th className="text-left py-3 font-bold">Metode</th>
-              <th className="text-left py-3 pr-5 font-bold"></th>
-            </tr></thead>
-            <tbody className="divide-y divide-line">
-              {records.map((r) => (
-                <tr key={r.id} className="hover:bg-paper-tint">
-                  <td className="py-3.5 px-5 text-ink-soft">{fmtDate(r.session_date)}</td>
-                  <td className="font-semibold">{r.profile?.full_name}</td>
-                  <td className="text-ink-soft">{r.class?.name}</td>
-                  <td className="font-mono">{r.clock_in_time?.slice(0, 5) ?? "—"}</td>
-                  <td className="font-mono">{r.distance_meters != null ? `${r.distance_meters} m` : "—"}</td>
-                  <td>{r.is_manual ? <Status kind="manual">Manual</Status> : <Status kind="active">Selfie + GPS</Status>}</td>
-                  <td className="pr-5">
-                    <div className="flex items-center gap-1">
-                      <button onClick={() => openEdit(r)} className="p-1.5 rounded hover:bg-paper-tint text-ink-mute hover:text-ink" title="Edit"><Icon name="edit" className="w-4 h-4" /></button>
-                      <button onClick={() => deleteRecord(r)} className="p-1.5 rounded hover:bg-danger-50 text-ink-mute hover:text-danger-600" title="Hapus"><Icon name="trash" className="w-4 h-4" /></button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {records.length === 0 && <tr><td colSpan={7} className="py-10 text-center text-ink-mute">Belum ada absensi</td></tr>}
-            </tbody>
-          </table>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead><tr className="text-[11px] uppercase tracking-widest text-ink-faint font-bold border-b border-line">
+                <th className="text-left py-3 px-5 font-bold">Tanggal</th><th className="text-left py-3 font-bold">Coach</th>
+                <th className="text-left py-3 font-bold">Kelas</th><th className="text-left py-3 font-bold">Clock-in</th>
+                <th className="text-left py-3 font-bold hidden sm:table-cell">Jarak</th><th className="text-left py-3 font-bold hidden sm:table-cell">Metode</th>
+                <th className="text-left py-3 pr-5 font-bold"></th>
+              </tr></thead>
+              <tbody className="divide-y divide-line">
+                {records.map((r) => (
+                  <tr key={r.id} className="hover:bg-paper-tint">
+                    <td className="py-3.5 px-5 text-ink-soft">{fmtDate(r.session_date)}</td>
+                    <td className="font-semibold">{r.profile?.full_name}</td>
+                    <td className="text-ink-soft">{r.class?.name}</td>
+                    <td className="font-mono">{r.clock_in_time?.slice(0, 5) ?? "—"}</td>
+                    <td className="font-mono hidden sm:table-cell">{r.distance_meters != null ? `${r.distance_meters} m` : "—"}</td>
+                    <td className="hidden sm:table-cell">{r.is_manual ? <Status kind="manual">Manual</Status> : <Status kind="active">Selfie + GPS</Status>}</td>
+                    <td className="pr-5">
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => openEdit(r)} className="p-1.5 rounded hover:bg-paper-tint text-ink-mute hover:text-ink" title="Edit"><Icon name="edit" className="w-4 h-4" /></button>
+                        <button onClick={() => deleteRecord(r)} className="p-1.5 rounded hover:bg-danger-50 text-ink-mute hover:text-danger-600" title="Hapus"><Icon name="trash" className="w-4 h-4" /></button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {records.length === 0 && <tr><td colSpan={7} className="py-10 text-center text-ink-mute">Belum ada absensi</td></tr>}
+              </tbody>
+            </table>
+          </div>
         )}
       </Card>
       <Modal open={openManual} onClose={() => { setOpenManual(false); setEditTarget(null); }} title={editTarget ? "Edit Absensi Coach" : "Absensi Manual Coach"}
@@ -3301,7 +3300,7 @@ function AdminPengumuman({ branchId }: { branchId: string }) {
       branch_id: branchId, title: form.title, body: form.body,
       target_all: form.target === "all", active: true,
       valid_from: form.valid_from || new Date().toISOString().slice(0, 10),
-      valid_until: form.valid_until || null, created_by: user?.id,
+      valid_until: form.valid_until || null, created_by: user?.id ?? "",
     }).select("id").single();
     if (error || !ann) { setSaving(false); return toast.error("Gagal membuat pengumuman", error?.message); }
     if (form.target === "class" && form.class_ids.length > 0) {
@@ -3342,7 +3341,7 @@ function AdminPengumuman({ branchId }: { branchId: string }) {
   };
 
   const deleteAnn = async (id: string) => {
-    const ok = await confirm("Hapus pengumuman ini? Tindakan tidak bisa dibatalkan.");
+    const ok = await confirm({ body: "Hapus pengumuman ini? Tindakan tidak bisa dibatalkan." });
     if (!ok) return;
     const { error } = await supabase.from("announcements").delete().eq("id", id);
     if (error) return toast.error("Gagal menghapus", error.message);
@@ -3503,21 +3502,20 @@ function AdminIzin({ branchId }: { branchId: string }) {
     const from = new Date(detail.date_from);
     const to   = new Date(detail.date_to);
     const adminId = (await supabase.auth.getUser()).data.user?.id ?? null;
-    const rows: { member_id: string; class_id: string; session_date: string; status: string; method: string; marked_by: string | null }[] = [];
+    const rows: Database["public"]["Tables"]["member_attendances"]["Insert"][] = [];
     for (const lc of detail.member_leave_classes) {
       const scheduleDays: string[] = lc.class?.schedule_days ?? [];
       const d = new Date(from);
       while (d <= to) {
         const dayName = dayNames[d.getDay()];
         if (scheduleDays.length === 0 || scheduleDays.includes(dayName)) {
-          rows.push({ member_id: detail.member_id, class_id: lc.class_id, session_date: d.toISOString().slice(0, 10), status: leaveStatus, method: "manual", marked_by: adminId });
+          rows.push({ member_id: detail.member_id, class_id: lc.class_id, session_date: d.toISOString().slice(0, 10), status: leaveStatus as Database["public"]["Enums"]["attendance_status"], method: "manual" as Database["public"]["Enums"]["attendance_method"], marked_by: adminId });
         }
         d.setDate(d.getDate() + 1);
       }
     }
     if (rows.length > 0) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase.from("member_attendances") as any).upsert(rows, { onConflict: "class_id,member_id,session_date" });
+      await supabase.from("member_attendances").upsert(rows, { onConflict: "class_id,member_id,session_date" });
     }
   };
 
@@ -3555,7 +3553,7 @@ function AdminIzin({ branchId }: { branchId: string }) {
     if (!rejectTarget) return;
     if (!rejectReason.trim()) return toast.error("Alasan penolakan wajib diisi");
     setRejecting(true);
-    const upd: Record<string, unknown> = { status: "rejected", reviewed_at: new Date().toISOString(), reject_reason: rejectReason.trim() };
+    const upd: Database["public"]["Tables"]["coach_leaves"]["Update"] = { status: "rejected" as Database["public"]["Enums"]["leave_status"], reviewed_at: new Date().toISOString(), reject_reason: rejectReason.trim() };
     const table = tab === "coach" ? "coach_leaves" : "member_leaves";
     const { error } = await supabase.from(table as "coach_leaves").update(upd).eq("id", rejectTarget.id);
     setRejecting(false);
@@ -3588,8 +3586,7 @@ function AdminIzin({ branchId }: { branchId: string }) {
     if (!createForm.target_id || !createForm.date_from || !createForm.date_to) return toast.error("Target, tanggal mulai, dan selesai wajib diisi");
     setCreating(true);
     if (tab === "coach") {
-      const ins: Record<string, unknown> = { coach_id: createForm.target_id, type: createForm.type, date_from: createForm.date_from, date_to: createForm.date_to, reason: createForm.reason || null, status: "approved", created_by_admin: true, reviewed_at: new Date().toISOString() };
-      if (createForm.substitute_id) ins.substitute_id = createForm.substitute_id;
+      const ins: Database["public"]["Tables"]["coach_leaves"]["Insert"] = { coach_id: createForm.target_id, type: createForm.type as Database["public"]["Enums"]["leave_type"], date_from: createForm.date_from, date_to: createForm.date_to, reason: createForm.reason || null, status: "approved" as Database["public"]["Enums"]["leave_status"], created_by_admin: true, reviewed_at: new Date().toISOString(), substitute_id: createForm.substitute_id || null };
       const { data, error } = await supabase.from("coach_leaves").insert(ins).select("id").single();
       if (error || !data) { setCreating(false); return toast.error("Gagal membuat izin", error?.message); }
       if (createForm.class_ids.length > 0) {
@@ -3616,7 +3613,7 @@ function AdminIzin({ branchId }: { branchId: string }) {
         if (rows.length > 0) await supabase.from("coach_attendances").upsert(rows, { onConflict: "coach_id,class_id,session_date" });
       }
     } else {
-      const { data, error } = await supabase.from("member_leaves").insert({ member_id: createForm.target_id, type: createForm.type, date_from: createForm.date_from, date_to: createForm.date_to, reason: createForm.reason || null, status: "approved", created_by_admin: true, reviewed_at: new Date().toISOString() }).select("id").single();
+      const { data, error } = await supabase.from("member_leaves").insert({ member_id: createForm.target_id, type: createForm.type as Database["public"]["Enums"]["leave_type"], date_from: createForm.date_from, date_to: createForm.date_to, reason: createForm.reason || null, status: "approved" as Database["public"]["Enums"]["leave_status"], created_by_admin: true, reviewed_at: new Date().toISOString() }).select("id").single();
       if (error || !data) { setCreating(false); return toast.error("Gagal membuat izin", error?.message); }
       if (createForm.class_ids.length > 0) {
         await supabase.from("member_leave_classes").insert(createForm.class_ids.map(cid => ({ leave_id: data.id, class_id: cid })));
@@ -3641,8 +3638,7 @@ function AdminIzin({ branchId }: { branchId: string }) {
   const confirmApprove = async () => {
     if (!approveTarget) return;
     setApproving(true);
-    const upd: Record<string, unknown> = { status: "approved", reviewed_at: new Date().toISOString() };
-    if (substituteId) upd.substitute_id = substituteId;
+    const upd: Database["public"]["Tables"]["coach_leaves"]["Update"] = { status: "approved" as Database["public"]["Enums"]["leave_status"], reviewed_at: new Date().toISOString(), substitute_id: substituteId || null };
     const { error } = await supabase.from("coach_leaves").update(upd).eq("id", approveTarget.id);
     if (error) { setApproving(false); return toast.error("Gagal menyetujui izin", error.message); }
 
@@ -3726,32 +3722,34 @@ function AdminIzin({ branchId }: { branchId: string }) {
           </div>
         </div>
         {loading ? <div className="p-10 text-center text-ink-mute">Memuat data…</div> : (
-          <table className="w-full text-sm">
-            <thead><tr className="text-[11px] uppercase tracking-widest text-ink-faint font-bold border-b border-line">
-              <th className="text-left py-3 px-5 font-bold">Nama</th>
-              <th className="text-left py-3 font-bold">Jenis</th><th className="text-left py-3 font-bold">Mulai</th>
-              <th className="text-left py-3 font-bold">Selesai</th><th className="text-left py-3 font-bold">Status</th><th className="text-left py-3 font-bold">Pengganti</th><th className="px-5" />
-            </tr></thead>
-            <tbody className="divide-y divide-line">
-              {leaves.map((l) => (
-                <tr key={l.id} className="hover:bg-paper-tint">
-                  <td className="py-3.5 px-5 font-semibold">{l.profile?.full_name ?? "—"}</td>
-                  <td>{l.type}</td>
-                  <td className="text-ink-soft">{fmtDate(l.date_from)}</td>
-                  <td className="text-ink-soft">{fmtDate(l.date_to)}</td>
-                  <td><Status kind={l.status as "pending" | "approved" | "rejected"}>{l.status === "pending" ? "Menunggu" : l.status === "approved" ? "Disetujui" : "Ditolak"}</Status></td>
-                  <td className="text-ink-soft text-xs">{l.substitute_profile?.full_name ?? "—"}</td>
-                  <td className="px-5">{l.status === "pending" && (
-                    <div className="flex gap-1 justify-end">
-                      <Btn variant="ghost" size="sm" className="text-danger-500" onClick={() => decide(l.id, "rejected")}>Tolak</Btn>
-                      <Btn variant="soft" size="sm" icon="check" onClick={() => decide(l.id, "approved")}>Setujui</Btn>
-                    </div>
-                  )}</td>
-                </tr>
-              ))}
-              {leaves.length === 0 && <tr><td colSpan={7} className="py-10 text-center text-ink-mute">Tidak ada pengajuan izin</td></tr>}
-            </tbody>
-          </table>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead><tr className="text-[11px] uppercase tracking-widest text-ink-faint font-bold border-b border-line">
+                <th className="text-left py-3 px-5 font-bold">Nama</th>
+                <th className="text-left py-3 font-bold">Jenis</th><th className="text-left py-3 font-bold hidden sm:table-cell">Mulai</th>
+                <th className="text-left py-3 font-bold hidden sm:table-cell">Selesai</th><th className="text-left py-3 font-bold">Status</th><th className="text-left py-3 font-bold hidden md:table-cell">Pengganti</th><th className="px-5" />
+              </tr></thead>
+              <tbody className="divide-y divide-line">
+                {leaves.map((l) => (
+                  <tr key={l.id} className="hover:bg-paper-tint">
+                    <td className="py-3.5 px-5 font-semibold">{l.profile?.full_name ?? "—"}</td>
+                    <td>{l.type}</td>
+                    <td className="text-ink-soft hidden sm:table-cell">{fmtDate(l.date_from)}</td>
+                    <td className="text-ink-soft hidden sm:table-cell">{fmtDate(l.date_to)}</td>
+                    <td><Status kind={l.status as "pending" | "approved" | "rejected"}>{l.status === "pending" ? "Menunggu" : l.status === "approved" ? "Disetujui" : "Ditolak"}</Status></td>
+                    <td className="text-ink-soft text-xs hidden md:table-cell">{l.substitute_profile?.full_name ?? "—"}</td>
+                    <td className="px-5">{l.status === "pending" && (
+                      <div className="flex gap-1 justify-end">
+                        <Btn variant="ghost" size="sm" className="text-danger-500" onClick={() => decide(l.id, "rejected")}>Tolak</Btn>
+                        <Btn variant="soft" size="sm" icon="check" onClick={() => decide(l.id, "approved")}>Setujui</Btn>
+                      </div>
+                    )}</td>
+                  </tr>
+                ))}
+                {leaves.length === 0 && <tr><td colSpan={7} className="py-10 text-center text-ink-mute">Tidak ada pengajuan izin</td></tr>}
+              </tbody>
+            </table>
+          </div>
         )}
       </Card>
 
@@ -3809,7 +3807,7 @@ function AdminIzin({ branchId }: { branchId: string }) {
               <option value="cuti">Cuti</option>
             </Select>
           </Field>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Tanggal mulai" required><Input type="date" value={createForm.date_from} onChange={e => setCreateForm(f => ({ ...f, date_from: e.target.value }))} /></Field>
             <Field label="Tanggal selesai" required><Input type="date" value={createForm.date_to} onChange={e => setCreateForm(f => ({ ...f, date_to: e.target.value }))} min={createForm.date_from} /></Field>
           </div>
@@ -3907,8 +3905,7 @@ function AdminPembayaran({ branchId }: { branchId: string }) {
     setVerifying(true);
     let proof_url: string | null = verifyTarget.proof_url ?? null;
     if (verifyForm.proof_file) {
-      const res = await upload["payment-proof"](verifyForm.proof_file);
-      if (res.url) proof_url = res.url;
+      proof_url = await upload.upload.paymentProof(verifyForm.proof_file, verifyTarget.id);
     }
     const user = (await supabase.auth.getUser()).data.user;
     const { error } = await supabase.from("bills").update({
@@ -3940,24 +3937,21 @@ function AdminPembayaran({ branchId }: { branchId: string }) {
     const discount = Number(addForm.discount) || 0;
     const total = amount - discount;
     const isSessionPack = addForm.type === "session_pack";
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const row: any = {
+    const row: Database["public"]["Tables"]["bills"]["Insert"] = {
       member_id: addForm.member_id,
       branch_id: branchId,
       class_id: addForm.class_id || null,
-      type: addForm.type,
+      type: addForm.type as Database["public"]["Enums"]["bill_type"],
       period_label: addForm.period_label,
       amount,
       discount,
       discount_reason: addForm.discount_reason || null,
       total,
-      status: "unpaid",
+      status: "unpaid" as Database["public"]["Enums"]["payment_status"],
       admin_notes: addForm.admin_notes || null,
+      sessions_total: (isSessionPack && addForm.sessions_total) ? Number(addForm.sessions_total) : null,
+      sessions_used: (isSessionPack && addForm.sessions_total) ? 0 : undefined,
     };
-    if (isSessionPack && addForm.sessions_total) {
-      row.sessions_total = Number(addForm.sessions_total);
-      row.sessions_used = 0;
-    }
     const { error } = await supabase.from("bills").insert(row);
     setSaving(false);
     if (error) return toast.error("Gagal membuat tagihan", error.message);
@@ -3986,16 +3980,15 @@ function AdminPembayaran({ branchId }: { branchId: string }) {
       if (mErr || !members) { toast.error("Gagal memuat member", mErr?.message); setGenerating(false); return; }
       const { data: existing } = await supabase.from("bills").select("member_id").eq("branch_id", branchId).eq("period_label", label);
       const existingIds = new Set((existing ?? []).map(b => b.member_id));
-      const rows: Record<string, unknown>[] = [];
+      const rows: Database["public"]["Tables"]["bills"]["Insert"][] = [];
       for (const m of members as unknown as { id: string; member_classes: { class: { id: string; price_monthly: number } | null }[] }[]) {
         if (existingIds.has(m.id)) continue;
         const cls = m.member_classes?.[0]?.class;
         const amount = cls?.price_monthly ?? 0;
-        rows.push({ member_id: m.id, branch_id: branchId, class_id: cls?.id ?? null, type: "monthly", period_label: label, amount, discount: 0, total: amount, status: "unpaid" });
+        rows.push({ member_id: m.id, branch_id: branchId, class_id: cls?.id ?? null, type: "monthly" as Database["public"]["Enums"]["bill_type"], period_label: label, amount, discount: 0, total: amount, status: "unpaid" as Database["public"]["Enums"]["payment_status"] });
       }
       if (rows.length === 0) { toast.success("Semua member reguler sudah memiliki tagihan untuk periode ini"); setGenerating(false); return; }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await supabase.from("bills").insert(rows as any);
+      const { error } = await supabase.from("bills").insert(rows);
       if (error) { toast.error("Gagal generate tagihan", error.message); setGenerating(false); return; }
       // Notify all members
       for (const row of rows) {
@@ -4038,36 +4031,38 @@ function AdminPembayaran({ branchId }: { branchId: string }) {
 
       <Card padded={false}>
         {loading ? <div className="p-10 text-center text-ink-mute">Memuat data…</div> : (
-          <table className="w-full text-sm">
-            <thead><tr className="text-[11px] uppercase tracking-widest text-ink-faint font-bold border-b border-line">
-              <th className="text-left py-3 px-5 font-bold">Member</th>
-              <th className="text-left py-3 font-bold">Periode</th>
-              <th className="text-left py-3 font-bold">Kelas</th>
-              <th className="text-right py-3 font-bold">Total</th>
-              <th className="text-left py-3 font-bold">Status</th>
-              <th className="px-5" />
-            </tr></thead>
-            <tbody className="divide-y divide-line">
-              {displayBills.map((b) => (
-                <tr key={b.id} className="hover:bg-paper-tint">
-                  <td className="py-3.5 px-5 font-semibold">{b.member?.profile?.full_name ?? "—"}</td>
-                  <td className="text-ink-soft">{b.period_label}</td>
-                  <td className="text-ink-mute text-xs">{b.class?.name ?? "—"}{b.type === "session_pack" && b.sessions_total ? ` · ${b.sessions_used}/${b.sessions_total} sesi` : ""}</td>
-                  <td className="text-right font-mono font-bold">
-                    {fmtIDR(b.total ?? b.amount)}
-                    {b.discount > 0 && <div className="text-xs text-ok-600 font-normal">-{fmtIDR(b.discount)}</div>}
-                  </td>
-                  <td><Status kind={statusKind(b.status)}>{statusLabel(b.status)}</Status></td>
-                  <td className="px-5 flex items-center gap-1.5 py-3.5">
-                    {(b.status === "unpaid" || b.status === "partial") && <Btn variant="soft" size="sm" icon="check" onClick={() => openVerify(b)}>Verifikasi</Btn>}
-                    {b.proof_url && <a href={b.proof_url} target="_blank" rel="noreferrer"><Btn variant="ghost" size="sm" icon="eye">Bukti</Btn></a>}
-                    {b.status === "paid" && b.paid_at && <span className="text-xs text-ink-mute">{new Date(b.paid_at).toLocaleDateString("id-ID")}{b.paid_method ? ` · ${b.paid_method}` : ""}</span>}
-                  </td>
-                </tr>
-              ))}
-              {displayBills.length === 0 && <tr><td colSpan={6} className="py-10 text-center text-ink-mute">Tidak ada tagihan</td></tr>}
-            </tbody>
-          </table>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead><tr className="text-[11px] uppercase tracking-widest text-ink-faint font-bold border-b border-line">
+                <th className="text-left py-3 px-5 font-bold">Member</th>
+                <th className="text-left py-3 font-bold">Periode</th>
+                <th className="text-left py-3 font-bold hidden sm:table-cell">Kelas</th>
+                <th className="text-right py-3 font-bold">Total</th>
+                <th className="text-left py-3 font-bold">Status</th>
+                <th className="px-5" />
+              </tr></thead>
+              <tbody className="divide-y divide-line">
+                {displayBills.map((b) => (
+                  <tr key={b.id} className="hover:bg-paper-tint">
+                    <td className="py-3.5 px-5 font-semibold">{b.member?.profile?.full_name ?? "—"}</td>
+                    <td className="text-ink-soft">{b.period_label}</td>
+                    <td className="text-ink-mute text-xs hidden sm:table-cell">{b.class?.name ?? "—"}{b.type === "session_pack" && b.sessions_total ? ` · ${b.sessions_used}/${b.sessions_total} sesi` : ""}</td>
+                    <td className="text-right font-mono font-bold">
+                      {fmtIDR(b.total ?? b.amount)}
+                      {b.discount > 0 && <div className="text-xs text-ok-600 font-normal">-{fmtIDR(b.discount)}</div>}
+                    </td>
+                    <td><Status kind={statusKind(b.status)}>{statusLabel(b.status)}</Status></td>
+                    <td className="px-5 flex items-center gap-1.5 py-3.5">
+                      {(b.status === "unpaid" || b.status === "partial") && <Btn variant="soft" size="sm" icon="check" onClick={() => openVerify(b)}>Verifikasi</Btn>}
+                      {b.proof_url && <a href={b.proof_url} target="_blank" rel="noreferrer"><Btn variant="ghost" size="sm" icon="eye">Bukti</Btn></a>}
+                      {b.status === "paid" && b.paid_at && <span className="text-xs text-ink-mute">{new Date(b.paid_at).toLocaleDateString("id-ID")}{b.paid_method ? ` · ${b.paid_method}` : ""}</span>}
+                    </td>
+                  </tr>
+                ))}
+                {displayBills.length === 0 && <tr><td colSpan={6} className="py-10 text-center text-ink-mute">Tidak ada tagihan</td></tr>}
+              </tbody>
+            </table>
+          </div>
         )}
       </Card>
 
@@ -4294,8 +4289,7 @@ function AdminApprovement({ branchId }: { branchId: string }) {
     // Upload bukti transfer jika ada
     let proofUrl: string | null = null;
     if (proofFile) {
-      const res = await upload["payment-proof"](proofFile);
-      if (res.url) proofUrl = res.url;
+      proofUrl = await upload.upload.paymentProof(proofFile, r.id);
     }
 
     // Buat email sementara dari nama (tanpa spasi, lowercase) + timestamp
@@ -4334,9 +4328,7 @@ function AdminApprovement({ branchId }: { branchId: string }) {
 
     // Update status registrasi + simpan bukti transfer
     const user = (await supabase.auth.getUser()).data.user;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const upd: any = { status: "approved", reviewed_by: user?.id, reviewed_at: new Date().toISOString() };
-    if (proofUrl) upd.proof_url = proofUrl;
+    const upd: Database["public"]["Tables"]["registrations"]["Update"] = { status: "approved", reviewed_by: user?.id ?? null, reviewed_at: new Date().toISOString(), proof_url: proofUrl ?? undefined };
     await supabase.from("registrations").update(upd).eq("id", r.id);
 
     toast.success("Pendaftaran diapprove", "Member masuk ke menu Member — lengkapi data & kirim credential.");
@@ -4644,7 +4636,7 @@ function AdminCoachReviews({ branchId }: { branchId: string }) {
     <div className="space-y-4">
       {/* Coach summary */}
       {coachAvg.length > 0 && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {coachAvg.map(c => (
             <button key={c.id} onClick={() => setFilterCoach(filterCoach === c.id ? "all" : c.id)}
               className={`text-left rounded-2xl border p-4 transition-all ${filterCoach === c.id ? "bg-ocean-700 text-white border-ocean-700" : "bg-white border-line hover:border-ocean-300"}`}>
@@ -4714,7 +4706,7 @@ function AdminRapor({ branchId }: { branchId: string }) {
     if (!form.label || !form.date_from || !form.date_to) return toast.error("Semua field wajib diisi");
     setSaving(true);
     const user = (await supabase.auth.getUser()).data.user;
-    const { error } = await supabase.from("rapor_periods").insert({ branch_id: branchId, label: form.label, date_from: form.date_from, date_to: form.date_to, is_open: true, created_by: user?.id ?? null });
+    const { error } = await supabase.from("rapor_periods").insert({ branch_id: branchId, label: form.label, date_from: form.date_from, date_to: form.date_to, is_open: true, created_by: user?.id ?? "" });
     setSaving(false);
     if (error) return toast.error("Gagal membuat periode", error.message);
     toast.success("Periode rapor dibuka");
@@ -4723,7 +4715,7 @@ function AdminRapor({ branchId }: { branchId: string }) {
   };
 
   const closePeriod = async (id: string) => {
-    const ok = await confirm({ title: "Tutup periode?", message: "Coach tidak bisa lagi mengisi rapor setelah periode ditutup.", confirmLabel: "Tutup", danger: true });
+    const ok = await confirm({ title: "Tutup periode?", body: "Coach tidak bisa lagi mengisi rapor setelah periode ditutup.", confirmLabel: "Tutup", danger: true });
     if (!ok) return;
     await supabase.from("rapor_periods").update({ is_open: false }).eq("id", id);
     toast.success("Periode ditutup");
@@ -4894,7 +4886,7 @@ function AdminSchoolPanel({ branchId }: { branchId: string }) {
   };
 
   const deleteSchool = async (s: School) => {
-    const ok = await confirm({ title: "Hapus sekolah?", message: `Hapus "${s.name}"? Data member afiliasi tidak ikut terhapus.`, confirmLabel: "Hapus", danger: true });
+    const ok = await confirm({ title: "Hapus sekolah?", body: `Hapus "${s.name}"? Data member afiliasi tidak ikut terhapus.`, confirmLabel: "Hapus", danger: true });
     if (!ok) return;
     const { error } = await supabase.from("schools").delete().eq("id", s.id);
     if (error) return toast.error("Gagal menghapus", error.message);

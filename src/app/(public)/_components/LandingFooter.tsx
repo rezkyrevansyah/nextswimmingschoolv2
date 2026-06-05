@@ -5,7 +5,7 @@ import Icon from "@/components/ui/Icon";
 export default function LandingFooter() {
   return (
     <footer className="bg-ocean-900 text-white/80">
-      <div className="max-w-7xl mx-auto px-4 lg:px-8 py-14 grid md:grid-cols-4 gap-8">
+      <div className="max-w-7xl mx-auto px-4 lg:px-8 py-14 grid sm:grid-cols-2 md:grid-cols-4 gap-8">
         <div className="md:col-span-2">
           <Logo size={44} withWord dark />
           <p className="text-sm text-white/60 mt-4 max-w-xs">

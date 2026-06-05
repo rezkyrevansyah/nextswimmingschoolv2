@@ -40,7 +40,7 @@ export const Input = React.forwardRef<
     ref={ref}
     {...props}
     className={cn(
-      "w-full px-3.5 py-2.5 rounded-xl border border-line bg-white text-sm placeholder:text-ink-faint",
+      "w-full px-3.5 py-2.5 min-h-[44px] rounded-xl border border-line bg-white text-sm placeholder:text-ink-faint",
       "focus:border-wave-400 focus:ring-2 focus:ring-wave-100 outline-none transition",
       className
     )}
@@ -57,7 +57,7 @@ export const Select = React.forwardRef<
     ref={ref}
     {...props}
     className={cn(
-      "w-full px-3.5 py-2.5 rounded-xl border border-line bg-white text-sm",
+      "w-full px-3.5 py-2.5 min-h-[44px] rounded-xl border border-line bg-white text-sm",
       "focus:border-wave-400 focus:ring-2 focus:ring-wave-100 outline-none transition",
       "appearance-none bg-no-repeat bg-right pr-10",
       className
@@ -84,7 +84,7 @@ export const Textarea = React.forwardRef<
     {...props}
     className={cn(
       "w-full px-3.5 py-2.5 rounded-xl border border-line bg-white text-sm placeholder:text-ink-faint",
-      "focus:border-wave-400 focus:ring-2 focus:ring-wave-100 outline-none transition",
+      "focus:border-wave-400 focus:ring-2 focus:ring-wave-100 outline-none transition resize-none",
       className
     )}
   />

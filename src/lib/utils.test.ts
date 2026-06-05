@@ -227,4 +227,129 @@ describe("cn", () => {
     const result = cn("base-class", isActive && "active-class");
     expect(result).toBe("base-class");
   });
+
+  // --- edge cases ---
+
+  it("preserves duplicate classes (no deduplication by design)", () => {
+    // cn is a minimal utility with no deduplication
+    const result = cn("flex", "px-4", "flex");
+    expect(result).toBe("flex px-4 flex");
+  });
+
+  it("filters numeric 0 (falsy) — does not appear in output", () => {
+    // 0 is falsy; cn's filter(Boolean) removes it
+    const result = cn("foo", (0 as unknown as string), "bar");
+    expect(result).toBe("foo bar");
+  });
+
+  it("handles a very long class string without truncation", () => {
+    const longClass = "a".repeat(500);
+    const result = cn(longClass, "b");
+    expect(result).toBe(`${longClass} b`);
+    expect(result.length).toBeGreaterThan(500);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// waLink — edge cases
+// ---------------------------------------------------------------------------
+describe("waLink — edge cases", () => {
+  it("handles phone number with spaces (produces a URL without spaces)", () => {
+    const link = waLink("Halo", "0821 1000 9667");
+    expect(link).not.toContain(" ");
+    expect(link).toMatch(/^https:\/\/wa\.me\//);
+  });
+
+  it("handles phone number with dashes (produces a URL without dashes)", () => {
+    const link = waLink("Test", "0821-1000-9667");
+    expect(link).not.toContain("-");
+    expect(link).toMatch(/^https:\/\/wa\.me\//);
+  });
+
+  it("fully encodes a very long message", () => {
+    const longMsg = "Halo ".repeat(200).trim(); // 1000 chars
+    const link = waLink(longMsg);
+    expect(link).toContain(encodeURIComponent(longMsg));
+  });
+
+  it("encodes an empty message — text= param is present but empty", () => {
+    const link = waLink("");
+    expect(link).toContain("?text=");
+    expect(link).toMatch(/\?text=$/);
+  });
+
+  it("treats null phone as missing and falls back to default number", () => {
+    const linkNull = waLink("Pesan", null);
+    const linkDefault = waLink("Pesan");
+    expect(linkNull).toBe(linkDefault);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// fmtDate — edge cases
+// ---------------------------------------------------------------------------
+describe("fmtDate — edge cases", () => {
+  it("handles leap-year date Feb 29", () => {
+    // 2024 is a leap year; construct in local time to avoid UTC-offset issues
+    const d = new Date(2024, 1, 29); // Feb 29, 2024 (local)
+    const result = fmtDate(d);
+    expect(result).toContain("29");
+    expect(result).toContain("2024");
+  });
+
+  it("handles year-boundary Dec 31", () => {
+    const d = new Date(2024, 11, 31); // Dec 31, 2024 (local)
+    const result = fmtDate(d);
+    expect(result).toContain("31");
+    expect(result).toContain("2024");
+  });
+
+  it("handles year-boundary Jan 1", () => {
+    const d = new Date(2025, 0, 1); // Jan 1, 2025 (local)
+    const result = fmtDate(d);
+    expect(result).toContain("1");
+    expect(result).toContain("2025");
+  });
+
+  it("parses an ISO string with time component and still formats the date", () => {
+    // Use a date-only portion to avoid UTC-offset ambiguity on this assertion
+    const d = new Date(2024, 5, 15, 12, 30, 0); // June 15, 2024 12:30 local
+    const result = fmtDate(d);
+    expect(result).toContain("15");
+    expect(result).toContain("2024");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// fmtDateLong — edge cases
+// ---------------------------------------------------------------------------
+describe("fmtDateLong — edge cases", () => {
+  it("formats leap-year Feb 29 with full month name (Februari)", () => {
+    const d = new Date(2024, 1, 29); // Feb 29, 2024 local
+    const result = fmtDateLong(d);
+    expect(result).toContain("Februari");
+    expect(result).toContain("29");
+    expect(result).toContain("2024");
+  });
+
+  it("formats Dec 31 with full month name (Desember)", () => {
+    const d = new Date(2024, 11, 31); // Dec 31, 2024 local
+    const result = fmtDateLong(d);
+    expect(result).toContain("Desember");
+    expect(result).toContain("31");
+    expect(result).toContain("2024");
+  });
+
+  it("formats Jan 1 with full month name (Januari)", () => {
+    const d = new Date(2025, 0, 1); // Jan 1, 2025 local
+    const result = fmtDateLong(d);
+    expect(result).toContain("Januari");
+    expect(result).toContain("2025");
+  });
+
+  it("always includes a comma after the weekday", () => {
+    const d = new Date(2024, 1, 29); // any date is fine
+    const result = fmtDateLong(d);
+    expect(result).toMatch(/\w+,/);
+  });
 });

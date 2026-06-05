@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { supabaseAdmin } from "@/utils/supabase/admin";
+import type { Database } from "@/types/database";
 
 async function checkCaller() {
   const supabase = await createClient();
@@ -34,7 +35,7 @@ export async function PATCH(
   if (body.profile) {
     const { error: profileError } = await supabaseAdmin
       .from("profiles")
-      .update(body.profile)
+      .update(body.profile as unknown as Database["public"]["Tables"]["profiles"]["Update"])
       .eq("id", userId);
     if (profileError) return NextResponse.json({ error: profileError.message }, { status: 400 });
   }

@@ -85,7 +85,7 @@ function LoginForm() {
         </div>
 
         {/* Form card */}
-        <div className="bg-white rounded-3xl shadow-float ring-1 ring-ocean-100/80 px-8 py-10">
+        <div className="bg-white rounded-3xl shadow-float ring-1 ring-ocean-100/80 px-5 sm:px-8 py-8 sm:py-10">
           <div className="mb-7">
             <h1 className="font-display font-extrabold text-2xl text-ink">Selamat datang kembali</h1>
             <p className="text-ink-mute text-sm mt-1.5">Masuk untuk melanjutkan ke dashboard Anda.</p>
@@ -121,11 +121,11 @@ function LoginForm() {
               </div>
             </Field>
 
-            <div className="flex items-center justify-between text-sm pt-0.5">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-sm pt-0.5">
               <label className="inline-flex items-center gap-2 text-ink-soft cursor-pointer">
                 <input type="checkbox" className="rounded border-line-strong" /> Ingat saya
               </label>
-              <button type="button" onClick={() => setForgot(true)} className="font-semibold text-ocean-600 hover:text-ocean-700">
+              <button type="button" onClick={() => setForgot(true)} className="font-semibold text-ocean-600 hover:text-ocean-700 shrink-0">
                 Lupa password?
               </button>
             </div>
@@ -149,7 +149,7 @@ function LoginForm() {
         </div>
 
         {/* Footer */}
-        <p className="text-center text-[11px] text-ink-faint mt-6">
+        <p className="text-center text-[11px] text-ink-faint mt-6 break-words px-2">
           © 2026 Next Swimming School · Fast · Clean · Trusted · Effortless
         </p>
       </div>

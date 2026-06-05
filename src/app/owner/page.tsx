@@ -225,7 +225,7 @@ function Branches({ branches, onRefresh }: { branches: Branch[]; onRefresh: () =
   };
 
   const archive = async (b: Branch) => {
-    const yes = await confirm(`Arsipkan cabang "${b.name}"?`, "Data tidak akan dihapus, hanya disembunyikan dari panel aktif.");
+    const yes = await confirm({ title: `Arsipkan cabang "${b.name}"?`, body: "Data tidak akan dihapus, hanya disembunyikan dari panel aktif." });
     if (!yes) return;
     const { error } = await supabase.from("branches").update({ status: "archived" }).eq("id", b.id);
     if (error) return toast.error("Gagal mengarsipkan", error.message);
@@ -234,10 +234,11 @@ function Branches({ branches, onRefresh }: { branches: Branch[]; onRefresh: () =
   };
 
   const deleteBranch = async (b: Branch) => {
-    const yes = await confirm(
-      `Hapus permanen cabang "${b.name}"?`,
-      `⚠️ PERINGATAN: Semua data cabang ini akan terhapus secara permanen — termasuk kelas, member, coach, absensi, tagihan, rapor, invoice, dan semua data terkait lainnya. Tindakan ini tidak bisa dibatalkan.`
-    );
+    const yes = await confirm({
+      title: `Hapus permanen cabang "${b.name}"?`,
+      body: `⚠️ PERINGATAN: Semua data cabang ini akan terhapus secara permanen — termasuk kelas, member, coach, absensi, tagihan, rapor, invoice, dan semua data terkait lainnya. Tindakan ini tidak bisa dibatalkan.`,
+      danger: true,
+    });
     if (!yes) return;
     const { error } = await supabase.from("branches").delete().eq("id", b.id);
     if (error) return toast.error("Gagal menghapus cabang", error.message);
@@ -400,7 +401,7 @@ function Admins({ branches }: { branches: Branch[] }) {
   };
 
   const removeAdmin = async (a: AdminProfile) => {
-    const yes = await confirm(`Hapus akun admin ${a.full_name}?`, "Akun login dan data profil akan dihapus permanen.");
+    const yes = await confirm({ title: `Hapus akun admin ${a.full_name}?`, body: "Akun login dan data profil akan dihapus permanen.", danger: true });
     if (!yes) return;
     const res = await fetch(`/api/admin/users/${a.id}`, { method: "DELETE" });
     if (!res.ok) { const j = await res.json() as { error?: string }; return toast.error("Gagal hapus", j.error); }
@@ -421,43 +422,45 @@ function Admins({ branches }: { branches: Branch[] }) {
         {loading ? (
           <div className="p-10 text-center text-ink-mute">Memuat data…</div>
         ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-[11px] uppercase tracking-widest text-ink-faint font-bold border-b border-line">
-                <th className="text-left py-3 px-5 font-bold">Admin</th>
-                <th className="text-left py-3 font-bold">Email</th>
-                <th className="text-left py-3 font-bold">WhatsApp</th>
-                <th className="text-left py-3 font-bold">Cabang</th>
-                <th className="text-left py-3 font-bold">Status</th>
-                <th className="text-right py-3 px-5" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-line">
-              {admins.map((a) => (
-                <tr key={a.id} className="hover:bg-paper-tint">
-                  <td className="py-3.5 px-5">
-                    <div className="flex items-center gap-3">
-                      <Avatar name={a.full_name} size={36} />
-                      <div className="font-semibold">{a.full_name}</div>
-                    </div>
-                  </td>
-                  <td className="text-ink-mute">{a.email}</td>
-                  <td className="text-ink-mute">{a.phone ?? "—"}</td>
-                  <td className="text-ink-soft">{a.branch?.name ?? "—"}</td>
-                  <td><Status kind="active">Aktif</Status></td>
-                  <td className="text-right px-5">
-                    <div className="flex items-center justify-end gap-1">
-                      <button onClick={() => openEdit(a)} className="text-ink-mute hover:text-ocean-600 p-1.5"><Icon name="edit" className="w-4 h-4" /></button>
-                      <button onClick={() => removeAdmin(a)} className="text-ink-mute hover:text-danger-500 p-1.5"><Icon name="trash" className="w-4 h-4" /></button>
-                    </div>
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-[11px] uppercase tracking-widest text-ink-faint font-bold border-b border-line">
+                  <th className="text-left py-3 px-5 font-bold">Admin</th>
+                  <th className="text-left py-3 font-bold hidden sm:table-cell">Email</th>
+                  <th className="text-left py-3 font-bold hidden md:table-cell">WhatsApp</th>
+                  <th className="text-left py-3 font-bold">Cabang</th>
+                  <th className="text-left py-3 font-bold">Status</th>
+                  <th className="text-right py-3 px-5" />
                 </tr>
-              ))}
-              {admins.length === 0 && (
-                <tr><td colSpan={6} className="text-center py-10 text-ink-mute">Belum ada akun admin</td></tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {admins.map((a) => (
+                  <tr key={a.id} className="hover:bg-paper-tint">
+                    <td className="py-3.5 px-5">
+                      <div className="flex items-center gap-3">
+                        <Avatar name={a.full_name} size={36} />
+                        <div className="font-semibold truncate max-w-[120px] sm:max-w-none">{a.full_name}</div>
+                      </div>
+                    </td>
+                    <td className="text-ink-mute hidden sm:table-cell">{a.email}</td>
+                    <td className="text-ink-mute hidden md:table-cell">{a.phone ?? "—"}</td>
+                    <td className="text-ink-soft">{a.branch?.name ?? "—"}</td>
+                    <td><Status kind="active">Aktif</Status></td>
+                    <td className="text-right px-5">
+                      <div className="flex items-center justify-end gap-1">
+                        <button onClick={() => openEdit(a)} className="text-ink-mute hover:text-ocean-600 p-1.5"><Icon name="edit" className="w-4 h-4" /></button>
+                        <button onClick={() => removeAdmin(a)} className="text-ink-mute hover:text-danger-500 p-1.5"><Icon name="trash" className="w-4 h-4" /></button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {admins.length === 0 && (
+                  <tr><td colSpan={6} className="text-center py-10 text-ink-mute">Belum ada akun admin</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         )}
       </Card>
 
@@ -538,9 +541,11 @@ function Classes({ branches }: { branches: Branch[] }) {
       .order("name");
     if (data) setClasses(data as unknown as ClassRow[]);
     setLoading(false);
-  }, [supabase]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [supabase]);
 
-  useEffect(() => { load(); }, [load]); // eslint-disable-line react-hooks/exhaustive-deps
+  /* eslint-disable react-hooks/set-state-in-effect -- async data loader */
+  useEffect(() => { load(); }, [load]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const openEdit = (c: ClassRow) => {
     setEditTarget(c);
@@ -585,7 +590,7 @@ function Classes({ branches }: { branches: Branch[] }) {
   };
 
   const deleteCriterion = async (id: string) => {
-    const yes = await confirm("Hapus aspek penilaian ini? Data rapor yang sudah diisi tidak akan terpengaruh.");
+    const yes = await confirm({ body: "Hapus aspek penilaian ini? Data rapor yang sudah diisi tidak akan terpengaruh." });
     if (!yes) return;
     await supabase.from("class_criteria").delete().eq("id", id);
     setCriteria(prev => prev.filter(c => c.id !== id));
@@ -638,7 +643,7 @@ function Classes({ branches }: { branches: Branch[] }) {
       setDetailMemberAtt((data ?? []) as unknown as MemberAttRow[]);
     }
     setDetailLoading(false);
-  }, [supabase]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [supabase]);
 
   const switchDetailTab = async (tab: typeof detailTab) => {
     setDetailTab(tab);
@@ -1046,9 +1051,11 @@ function SettingsTarif({ branches }: { branches: Branch[] }) {
       setCoachRates({});
     }
     setLoading(false);
-  }, [supabase]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [supabase]);
 
+  /* eslint-disable react-hooks/set-state-in-effect -- async data loader */
   useEffect(() => { if (branchId) loadData(branchId); }, [branchId, loadData]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const saveGeneral = async (classId: string) => {
     const val = Number(generalRates[classId]);
@@ -1058,7 +1065,7 @@ function SettingsTarif({ branches }: { branches: Branch[] }) {
     const { data: existing } = await supabase.from("coach_rates").select("id").eq("class_id", classId).is("coach_id", null).maybeSingle();
     const op = existing
       ? supabase.from("coach_rates").update({ rate_per_session: val }).eq("id", existing.id)
-      : supabase.from("coach_rates").insert({ class_id: classId, coach_id: null, rate_per_session: val });
+      : supabase.from("coach_rates").insert({ class_id: classId, coach_id: null, rate: val });
     const { error } = await op;
     setSaving(null);
     if (error) return toast.error("Gagal menyimpan", error.message);
@@ -1083,7 +1090,7 @@ function SettingsTarif({ branches }: { branches: Branch[] }) {
     const { data: existing } = await supabase.from("coach_rates").select("id").eq("class_id", classId).eq("coach_id", coachId).maybeSingle();
     const op = existing
       ? supabase.from("coach_rates").update({ rate_per_session: val }).eq("id", existing.id)
-      : supabase.from("coach_rates").insert({ class_id: classId, coach_id: coachId, rate_per_session: val });
+      : supabase.from("coach_rates").insert({ class_id: classId, coach_id: coachId, rate: val });
     const { error } = await op;
     setSaving(null);
     if (error) return toast.error("Gagal menyimpan", error.message);
@@ -1409,7 +1416,6 @@ const TITLES: Record<string, [string, string]> = {
 // ── Main page ──────────────────────────────────────────────────────────────────
 
 export default function OwnerPage() {
-  const router = useRouter();
   const supabase = createClient();
   const [active, setActive] = useState("dashboard");
   const [mobileNav, setMobileNav] = useState(false);

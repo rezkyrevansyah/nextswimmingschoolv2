@@ -8,8 +8,8 @@ type BtnSize    = "sm" | "md" | "lg";
 
 const SIZE_CLASSES: Record<BtnSize, string> = {
   sm: "text-xs px-3 py-1.5 rounded-lg gap-1.5",
-  md: "text-sm px-4 py-2.5 rounded-xl gap-2",
-  lg: "text-base px-5 py-3 rounded-xl gap-2",
+  md: "text-sm px-4 py-2.5 min-h-[44px] rounded-xl gap-2",
+  lg: "text-base px-5 py-3 min-h-[44px] rounded-xl gap-2",
 };
 
 const VARIANT_CLASSES: Record<BtnVariant, string> = {

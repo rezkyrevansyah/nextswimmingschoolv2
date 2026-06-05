@@ -5,12 +5,11 @@ import Logo from "@/components/ui/Logo";
 import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
 import { Field, Input, Select, Textarea } from "@/components/ui/FormFields";
-import { Card } from "@/components/ui/Card";
 import { waLink } from "@/lib/utils";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
 
-interface Branch { id: string; name: string; city: string }
+interface Branch { id: string; name: string; city: string | null }
 
 const STEPS = ["Persiapan", "Formulir", "Selesai"];
 
@@ -120,7 +119,7 @@ export default function RegisterPage() {
         )}
 
         {/* Card */}
-        <div className="bg-white rounded-3xl shadow-float ring-1 ring-ocean-100/80 px-8 py-10">
+        <div className="bg-white rounded-3xl shadow-float ring-1 ring-ocean-100/80 px-5 sm:px-8 py-8 sm:py-10">
 
           {/* Step 0 — Persiapan */}
           {step === 0 && (
@@ -188,7 +187,7 @@ export default function RegisterPage() {
                   <Select required value={branchId} onChange={e => setBranchId(e.target.value)}>
                     <option value="" disabled>Pilih cabang…</option>
                     {branches.map((b) => (
-                      <option key={b.id} value={b.id}>{b.name} — {b.city}</option>
+                      <option key={b.id} value={b.id}>{b.name}{b.city ? ` — ${b.city}` : ""}</option>
                     ))}
                   </Select>
                 </Field>
@@ -241,7 +240,7 @@ export default function RegisterPage() {
               </div>
 
               <div className="mt-5 grid sm:grid-cols-2 gap-3">
-                <button type="button" onClick={() => setStep(0)} className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl border border-line text-sm font-semibold text-ink-soft hover:bg-paper-tint transition-colors">
+                <button type="button" onClick={() => setStep(0)} className="flex items-center justify-center gap-1.5 px-4 py-3 min-h-[44px] rounded-xl border border-line text-sm font-semibold text-ink-soft hover:bg-paper-tint transition-colors">
                   <Icon name="arrowL" className="w-3.5 h-3.5" /> Kembali
                 </button>
                 <Btn variant="primary" size="lg" className="w-full" disabled={loading}>
@@ -283,7 +282,7 @@ export default function RegisterPage() {
           )}
         </div>
 
-        <p className="text-center text-[11px] text-ink-faint mt-6">
+        <p className="text-center text-[11px] text-ink-faint mt-6 break-words px-2">
           © 2026 Next Swimming School · Fast · Clean · Trusted · Effortless
         </p>
       </div>

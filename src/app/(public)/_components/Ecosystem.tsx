@@ -51,11 +51,11 @@ export default function Ecosystem() {
             Kami memadukan pengajaran renang terbaik dengan teknologi modern guna memberikan transparansi penuh kepada orang tua selama masa belajar anak.
           </p>
         </div>
-        <div className="grid lg:grid-cols-3 gap-6 mt-12">
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mt-12">
           {BLOCKS.map((b, i) => (
             <div
               key={b.role}
-              className={`relative rounded-2xl p-6.5 transition-all duration-350 hover:translate-y-[-4px] hover:shadow-lift ${
+              className={`relative rounded-2xl p-6 transition-all duration-350 hover:translate-y-[-4px] hover:shadow-lift ${
                 i === 0
                   ? "bg-white/[0.06] ring-1 ring-white/10"
                   : i === 1

@@ -1,6 +1,5 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
 import Logo from "@/components/ui/Logo";
 import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
@@ -83,7 +82,7 @@ function Shell({ children, active, setActive, name, branchName, userId, avatarUr
             {ALL_ITEMS.map((it) => (
               <button key={it.id} onClick={() => setActive(it.id as TabId)}
                 className={`px-3 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 ${active === it.id ? "bg-ocean-50 text-ocean-700" : "text-ink-soft hover:bg-paper-tint"}`}>
-                <Icon name={it.icon} className="w-4 h-4" /> {it.label}
+                <Icon name={it.icon ?? ""} className="w-4 h-4" /> {it.label}
               </button>
             ))}
           </div>
@@ -525,12 +524,12 @@ function MemberSchedule({ memberId }: { memberId: string }) {
               const cls = classes.find((c) => c.id === s.class_id);
               const onLeave = isOnLeave(s.date, s.class_id);
               return (
-                <div key={i} className={`px-5 py-3 flex items-center gap-3 ${onLeave ? "opacity-50" : ""}`}>
-                  <div className="font-mono font-semibold text-sm text-ink w-28">{dateStr}</div>
-                  <div className="text-xs text-ink-mute">{s.day} · {s.time}</div>
-                  <div className="ml-auto flex items-center gap-2">
+                <div key={i} className={`px-4 py-3 flex items-center gap-2 min-w-0 ${onLeave ? "opacity-50" : ""}`}>
+                  <div className="font-mono font-semibold text-xs text-ink shrink-0">{dateStr}</div>
+                  <div className="text-xs text-ink-mute truncate min-w-0">{s.day} · {s.time}</div>
+                  <div className="ml-auto flex items-center gap-1.5 shrink-0">
                     {onLeave && <span className="text-[10px] font-bold uppercase tracking-wide text-warn-600 bg-warn-50 px-1.5 py-0.5 rounded">Izin</span>}
-                    <span className="text-xs text-ink-soft truncate max-w-24">{cls?.name ?? ""}</span>
+                    <span className="text-xs text-ink-soft truncate max-w-20">{cls?.name ?? ""}</span>
                   </div>
                 </div>
               );
@@ -615,7 +614,7 @@ function MemberAbsensi({ memberId }: { memberId: string }) {
           {myClasses.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
       </div>
-      <div className="grid grid-cols-4 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         {[["Hadir", stats.present, "ok"], ["Izin", stats.excused, "warn"], ["Sakit", stats.sick, "warn"], ["Absen", stats.absent, "danger"]].map(([l, v, t]) => (
           <Card key={l as string} className="!p-3 text-center">
             <div className={`font-display font-extrabold text-2xl text-${t}-500`}>{v}</div>
@@ -753,10 +752,10 @@ function MemberBills({ memberId, memberName, branchId }: { memberId: string; mem
                 </div>
               )}
               {adminWa && (
-                <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded-xl bg-white border border-warn-500/20">
+                <div className="mt-3 flex flex-wrap items-center gap-2 px-3 py-2 rounded-xl bg-white border border-warn-500/20">
                   <Icon name="whatsapp" className="w-4 h-4 text-ok-600 shrink-0" />
                   <div className="text-xs text-ink-soft">Konfirmasi pembayaran ke admin:</div>
-                  <div className="font-mono font-bold text-sm text-ink ml-auto">{adminWa}</div>
+                  <div className="font-mono font-bold text-sm text-ink ml-auto truncate">{adminWa}</div>
                 </div>
               )}
               <a href={`https://wa.me/${adminWa?.replace(/\D/g, "") ?? ""}?text=${encodeURIComponent(`Halo Admin, saya ingin konfirmasi pembayaran tagihan ${b.period_label} untuk ${memberName}. Bukti transfer terlampir.`)}`} target="_blank" rel="noreferrer" className="mt-3 inline-flex w-full">
@@ -909,12 +908,12 @@ function MemberLeave({ memberId }: { memberId: string }) {
               {myClasses.length === 0 && <span className="text-sm text-ink-mute">Tidak ada kelas terdaftar</span>}
             </div>
           </Field>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Tanggal mulai" required><Input type="date" value={form.start_date} onChange={(e) => setForm((f) => ({ ...f, start_date: e.target.value }))} /></Field>
             <Field label="Tanggal selesai"><Input type="date" value={form.end_date} onChange={(e) => setForm((f) => ({ ...f, end_date: e.target.value }))} /></Field>
           </div>
           <Field label="Jenis izin" required>
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {[["izin", "Izin"], ["sakit", "Sakit"], ["ujian", "Ujian"], ["lainnya", "Lainnya"]].map(([val, label]) => (
                 <label key={val} className={`px-2 py-2 rounded-xl border text-xs font-semibold text-center cursor-pointer ${form.type === val ? "border-ocean-500 bg-ocean-50 text-ocean-700" : "border-line text-ink-soft hover:bg-paper-tint"}`}>
                   <input type="radio" name="lt" className="sr-only" checked={form.type === val} onChange={() => setForm((f) => ({ ...f, type: val }))} />{label}
@@ -1467,7 +1466,6 @@ function ProfileGate({ memberName, onComplete, onLogout }: { memberName: string;
 
 export default function MemberPage() {
   const supabase = createClient();
-  const router = useRouter();
   const [active, setActive] = useState<TabId>("home");
   const [memberId, setMemberId] = useState("");
   const [memberName, setMemberName] = useState("");
@@ -1484,6 +1482,7 @@ export default function MemberPage() {
   const isSuspended = suspendUntil ? new Date(suspendUntil) >= new Date() : false;
 
   // Countdown ticker for suspend
+  /* eslint-disable react-hooks/set-state-in-effect -- interval-based countdown */
   useEffect(() => {
     if (!isSuspended || !suspendUntil) { setSuspendCountdown(""); return; }
     const tick = () => {
@@ -1499,6 +1498,7 @@ export default function MemberPage() {
     const t = setInterval(tick, 1000);
     return () => clearInterval(t);
   }, [isSuspended, suspendUntil]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const SuspendBanner = isSuspended ? (
     <div className="bg-danger-50 border border-danger-300 rounded-2xl p-4 mb-4">

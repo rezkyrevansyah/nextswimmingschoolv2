@@ -1,0 +1,26 @@
+{
+  "name": "Next Swimming School",
+  "short_name": "Next Swim",
+  "description": "Sistem manajemen terintegrasi untuk Next Swimming School",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F6FAFD",
+  "theme_color": "#1A6BB0",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/logo_next_circle.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/logo.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "categories": ["education", "productivity"],
+  "lang": "id"
+}
