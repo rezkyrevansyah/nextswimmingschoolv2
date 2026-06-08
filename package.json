@@ -8,7 +8,12 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest",
-    "test:coverage": "vitest --coverage"
+    "test:coverage": "vitest --coverage",
+    "test:e2e": "dotenv -e .env.test -- playwright test",
+    "test:e2e:public": "dotenv -e .env.test -- playwright test --project=public --project=public-mobile",
+    "test:e2e:ui": "dotenv -e .env.test -- playwright test --ui",
+    "test:e2e:report": "playwright show-report",
+    "test:e2e:headed": "dotenv -e .env.test -- playwright test --headed"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1053.0",
@@ -38,11 +43,13 @@
     "zustand": "^5.0.13"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitest/coverage-v8": "^2.1.8",
+    "dotenv-cli": "^11.0.0",
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
     "sharp": "^0.34.5",
