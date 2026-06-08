@@ -1954,7 +1954,7 @@ function CoachMyReviews({ coachId }: { coachId: string }) {
 
 // ── Profile ────────────────────────────────────────────────────────────────────
 
-function CoachProfile({ profile, onRefresh, onLogout }: { profile: ProfileData | null; onRefresh: () => void; onLogout: () => void }) {
+function CoachProfile({ profile, onRefresh, onLogout, onAvatarChange }: { profile: ProfileData | null; onRefresh: () => void; onLogout: () => void; onAvatarChange?: (url: string) => void }) {
   const supabase = createClient();
   const toast = useToast();
   const confirm = useConfirm();
@@ -2014,22 +2014,22 @@ function CoachProfile({ profile, onRefresh, onLogout }: { profile: ProfileData |
     setNewPwd(""); setConfirmPwd("");
   };
 
-  const handleAvatarPick = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAvatarPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setPendingAvatarFile(file);
     setAvatarPreview(URL.createObjectURL(file));
     setPhotoView(false);
-  };
-
-  const uploadAvatar = async () => {
-    if (!pendingAvatarFile) return;
-    const url = await upload.avatar(pendingAvatarFile);
-    if (url) {
-      toast.success("Foto profil diperbarui");
-      setPendingAvatarFile(null);
+    try {
+      const url = await upload.avatar(file);
+      // Propagate new URL to parent so Shell header avatar also updates
+      onAvatarChange?.(url);
       setAvatarPreview(null);
-      onRefresh();
+      setPendingAvatarFile(null);
+      toast.success("Foto profil diperbarui");
+    } catch {
+      toast.error("Gagal upload foto, coba lagi");
+      setAvatarPreview(null);
+      setPendingAvatarFile(null);
     }
   };
 
@@ -2163,11 +2163,8 @@ function CoachProfile({ profile, onRefresh, onLogout }: { profile: ProfileData |
             <div className="text-sm text-ocean-700 font-semibold mt-0.5">{profile?.specialization ?? "Coach"}</div>
           </div>
         </div>
-        {pendingAvatarFile && (
-          <div className="mt-3 flex gap-2">
-            <Btn variant="primary" size="sm" disabled={uploading} onClick={uploadAvatar}>{uploading ? "Mengupload…" : "Upload foto"}</Btn>
-            <Btn variant="ghost" size="sm" onClick={() => { setPendingAvatarFile(null); setAvatarPreview(null); }}>Batal</Btn>
-          </div>
+        {uploading && (
+          <div className="mt-2 text-xs text-ink-mute font-semibold animate-pulse">Mengupload foto…</div>
         )}
       </Card>
 
@@ -2515,7 +2512,7 @@ export default function CoachPage() {
         kelas:   <CoachKelas classes={classes} coachId={coachId} onRefreshClasses={refreshClasses} />,
         invoice: <>{SuspendBanner}{IncompleteBanner}{locked ? <LockedNotice feature="Invoice" reason={lockReason} /> : <CoachInvoice coachId={coachId} branchId={branchId} profile={profile} />}</>,
         rapor:   <>{SuspendBanner}{IncompleteBanner}{locked ? <LockedNotice feature="Rapor" reason={lockReason} /> : <CoachRapor coachId={coachId} branchId={branchId} />}</>,
-        profile: <CoachProfile profile={profile} onRefresh={() => user && loadProfile(user.id)} onLogout={logout} />,
+        profile: <CoachProfile profile={profile} onRefresh={() => user && loadProfile(user.id)} onLogout={logout} onAvatarChange={url => setProfile(prev => prev ? { ...prev, avatar_url: url } : prev)} />,
       }[active];
 
   return (

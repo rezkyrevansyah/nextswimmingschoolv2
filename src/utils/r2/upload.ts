@@ -36,7 +36,9 @@ export async function uploadBuffer(
       ContentType: contentType,
     })
   );
-  return `${R2_PUBLIC_URL}/${key}`;
+  // Return direct CDN URL with cache-buster so browsers always fetch the latest
+  // version even when the key (path) is reused for the same resource (e.g. avatar).
+  return `${R2_PUBLIC_URL}/${key}?v=${Date.now()}`;
 }
 
 // ── Delete ────────────────────────────────────────────────────────────────────

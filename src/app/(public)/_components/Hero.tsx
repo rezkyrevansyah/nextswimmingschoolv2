@@ -1,23 +1,19 @@
 "use client";
 import Link from "next/link";
-import { useState, useEffect } from "react";
 import Btn from "@/components/ui/Btn";
 import Icon from "@/components/ui/Icon";
 import Avatar from "@/components/ui/Avatar";
 import Status from "@/components/ui/Status";
 import { waLink } from "@/lib/utils";
 
-interface Stats { branches: number; members: number; coaches: number; classes: number; }
+const STATS = [
+  { value: "5+",    suffix: "",  label: "Cabang aktif",        sub: "Jakarta, Bogor, Bandung",   icon: "map"     },
+  { value: "500",   suffix: "+", label: "Member terdaftar",    sub: "Anak hingga dewasa",         icon: "users"   },
+  { value: "30",    suffix: "+", label: "Coach bersertifikat", sub: "Tersertifikasi resmi",       icon: "shield"  },
+  { value: "20",    suffix: "+", label: "Program & kelas",     sub: "Berbagai level kemampuan",   icon: "book"    },
+] as const;
 
 export default function Hero() {
-  const [stats, setStats] = useState<Stats | null>(null);
-
-  useEffect(() => {
-    fetch("/api/public/stats")
-      .then(r => r.json())
-      .then((d: Stats) => setStats(d))
-      .catch(() => {/* silently keep null — fallback shown */});
-  }, []);
 
   return (
     <section id="home" className="relative overflow-hidden">
@@ -37,7 +33,7 @@ export default function Hero() {
           <div className="text-white">
             <div className="inline-flex items-center gap-2 bg-white/15 backdrop-blur ring-1 ring-white/20 rounded-full px-3 py-1.5 text-[11px] uppercase tracking-widest font-bold mb-6">
               <span className="w-1.5 h-1.5 rounded-full bg-wave-300 animate-pulse" />
-              Sistem digital terintegrasi — {stats?.branches ?? "…"} cabang aktif
+              Sistem digital terintegrasi — 5+ cabang aktif
             </div>
             <h1 className="font-display font-extrabold text-[40px] sm:text-5xl lg:text-[64px] leading-[1.02] tracking-tight">
               Belajar renang<br />lebih{" "}
@@ -137,21 +133,24 @@ export default function Hero() {
       </div>
 
       {/* Trust strip */}
-      <div className="relative bg-white/95 backdrop-blur border-t border-white/10">
-        <div className="max-w-7xl mx-auto px-4 lg:px-8 py-5 grid grid-cols-2 lg:grid-cols-4 gap-5 text-center">
-          {([
-            [stats?.branches,         "Cabang aktif"],
-            [stats?.members,          "Member terdaftar"],
-            [stats?.coaches,          "Coach bersertifikat"],
-            [stats?.classes,          "Program & kelas"],
-          ] as [number | undefined, string][]).map(([n, l]) => (
-            <div key={l}>
-              <div className="font-display font-extrabold text-2xl lg:text-3xl text-ocean-700">
-                {n == null
-                  ? <span className="inline-block w-10 h-7 rounded-lg bg-paper-deep animate-pulse" />
-                  : n}
+      <div className="relative bg-white border-t border-ocean-100">
+        <div className="max-w-7xl mx-auto px-4 lg:px-8 py-8 lg:py-10 grid grid-cols-2 lg:grid-cols-4 gap-px bg-ocean-100/60 rounded-none overflow-hidden">
+          {STATS.map(({ value, suffix, label, sub, icon }, i) => (
+            <div key={label} className={`bg-white flex flex-col items-center text-center px-5 py-6 lg:py-8 gap-3 group hover:bg-ocean-50 transition-colors duration-200 ${i === 0 ? "rounded-l-2xl" : ""} ${i === STATS.length - 1 ? "rounded-r-2xl" : ""}`}>
+              {/* Icon badge */}
+              <div className="w-11 h-11 rounded-2xl bg-ocean-50 text-ocean-500 flex items-center justify-center group-hover:bg-ocean-100 group-hover:text-ocean-600 transition-colors duration-200">
+                <Icon name={icon} className="w-5 h-5" />
               </div>
-              <div className="text-xs lg:text-sm text-ink-mute font-semibold">{l}</div>
+              {/* Number */}
+              <div className="flex items-end gap-0.5 leading-none">
+                <span className="font-display font-extrabold text-4xl lg:text-5xl text-ocean-700 tabular-nums">{value}</span>
+                {suffix && <span className="font-display font-extrabold text-2xl lg:text-3xl text-wave-400 mb-1">{suffix}</span>}
+              </div>
+              {/* Label */}
+              <div className="space-y-0.5">
+                <div className="font-display font-bold text-sm lg:text-base text-ink">{label}</div>
+                <div className="text-[11px] lg:text-xs text-ink-faint">{sub}</div>
+              </div>
             </div>
           ))}
         </div>

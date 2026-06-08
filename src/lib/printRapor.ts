@@ -277,10 +277,10 @@ export function printSingleRapor(student: PrintStudent): void {
         </div>
       </div>
       <div class="sign-box">
-        <div class="sign-label">Orang Tua / Wali</div>
+        <div class="sign-label">Kepala Sekolah</div>
         <div class="sign-line">
-          <div class="sign-name">&nbsp;</div>
-          <div class="sign-role">Tanda Tangan</div>
+          <div class="sign-name">Syahril Sidik</div>
+          <div class="sign-role">Kepala Sekolah</div>
         </div>
       </div>
     </div>
@@ -336,10 +336,10 @@ export function printSchoolRekap(schoolName: string, periodLabel: string, studen
           </div>
         </div>
         <div class="sign-box">
-          <div class="sign-label">Orang Tua / Wali</div>
+          <div class="sign-label">Kepala Sekolah</div>
           <div class="sign-line">
-            <div class="sign-name">&nbsp;</div>
-            <div class="sign-role">Tanda Tangan</div>
+            <div class="sign-name">Syahril Sidik</div>
+            <div class="sign-role">Kepala Sekolah</div>
           </div>
         </div>
       </div>

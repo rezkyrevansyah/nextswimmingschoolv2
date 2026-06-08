@@ -1299,10 +1299,8 @@ function MemberProfile({ memberId, memberName, onLogout, onProfileComplete, onAv
             <div className="font-display font-bold text-xl text-ink">{profile?.full_name ?? memberName}</div>
             <div className="text-sm text-ocean-700 font-semibold">{age != null ? `${age} thn · ` : ""}Member</div>
             {profile?.date_start && <div className="text-xs text-ink-mute mt-1">Member sejak {fmtDate(profile.date_start)}</div>}
-            {avatarFile && (
-              <Btn variant="primary" size="sm" className="mt-2" disabled={avatarSaving} onClick={uploadAvatar}>
-                {avatarSaving ? "Mengupload…" : "Upload foto"}
-              </Btn>
+            {avatarSaving && (
+              <div className="mt-2 text-xs text-ink-mute font-semibold animate-pulse">Mengupload foto…</div>
             )}
           </div>
         </div>
@@ -1390,11 +1388,22 @@ function MemberProfile({ memberId, memberName, onLogout, onProfileComplete, onAv
           src={avatarPreview ?? profile?.avatar_url ?? null}
           name={memberName}
           onClose={() => setPhotoView(null)}
-          onChangePick={e => {
+          onChangePick={async e => {
             const f = e.target.files?.[0] ?? null;
-            setAvatarFile(f);
-            setAvatarPreview(f ? URL.createObjectURL(f) : null);
+            if (!f) return;
+            setAvatarPreview(URL.createObjectURL(f));
+            setAvatarSaving(true);
             setPhotoView(null);
+            try {
+              const url = await upload.avatar(f);
+              setProfile(p => p ? { ...p, avatar_url: url } : p);
+              onAvatarChange?.(url);
+              onProfileComplete?.();
+            } catch {
+              // silent fail
+            }
+            setAvatarPreview(null);
+            setAvatarSaving(false);
           }}
           uploading={avatarSaving}
         />
