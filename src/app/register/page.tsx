@@ -20,6 +20,7 @@ export default function RegisterPage() {
   const [branches, setBranches] = useState<Branch[]>([]);
 
   const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
   const [birthDate, setBirthDate] = useState("");
   const [gender, setGender] = useState("");
   const [branchId, setBranchId] = useState("");
@@ -44,7 +45,7 @@ export default function RegisterPage() {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!fullName || !birthDate || !gender || !branchId || !phone || !address) {
+    if (!fullName || !email || !birthDate || !gender || !branchId || !phone || !address) {
       toast.error("Mohon lengkapi semua field yang wajib diisi");
       return;
     }
@@ -53,6 +54,7 @@ export default function RegisterPage() {
     const supabase = createClient();
     const { error } = await supabase.from("registrations").insert({
       full_name: fullName,
+      email,
       birth_date: birthDate,
       gender: gender as "male" | "female",
       branch_id: branchId,
@@ -172,6 +174,9 @@ export default function RegisterPage() {
               <div className="grid sm:grid-cols-2 gap-4">
                 <Field label="Nama lengkap" required>
                   <Input required placeholder="Mis. Arsenio Daud Putra" value={fullName} onChange={e => setFullName(e.target.value)} />
+                </Field>
+                <Field label="Email" required hint="Akan dipakai sebagai akun login">
+                  <Input required type="email" placeholder="nama@email.com" value={email} onChange={e => setEmail(e.target.value)} />
                 </Field>
                 <Field label="Tanggal lahir" required>
                   <Input type="date" required value={birthDate} onChange={e => setBirthDate(e.target.value)} />

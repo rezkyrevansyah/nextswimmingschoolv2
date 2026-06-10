@@ -236,13 +236,16 @@ function Branches({ branches, onRefresh }: { branches: Branch[]; onRefresh: () =
   const deleteBranch = async (b: Branch) => {
     const yes = await confirm({
       title: `Hapus permanen cabang "${b.name}"?`,
-      body: `⚠️ PERINGATAN: Semua data cabang ini akan terhapus secara permanen — termasuk kelas, member, coach, absensi, tagihan, rapor, invoice, dan semua data terkait lainnya. Tindakan ini tidak bisa dibatalkan.`,
+      body: `⚠️ PERINGATAN: Semua data cabang ini akan terhapus secara permanen — termasuk kelas, member, coach, absensi, tagihan, rapor, invoice, dan semua akun login terkait. Tindakan ini tidak bisa dibatalkan.`,
       danger: true,
     });
     if (!yes) return;
-    const { error } = await supabase.from("branches").delete().eq("id", b.id);
-    if (error) return toast.error("Gagal menghapus cabang", error.message);
-    toast.success(`Cabang "${b.name}" berhasil dihapus permanen`);
+
+    const res = await fetch(`/api/owner/branches/${b.id}`, { method: "DELETE" });
+    const json = await res.json() as { error?: string; deleted_auth_users?: number };
+
+    if (!res.ok) return toast.error("Gagal menghapus cabang", json.error ?? "Unknown error");
+    toast.success(`Cabang "${b.name}" dihapus — ${json.deleted_auth_users ?? 0} akun login ikut dihapus`);
     onRefresh();
   };
 
@@ -391,8 +394,16 @@ function Admins({ branches }: { branches: Branch[] }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...form, role: "admin" }),
       });
-      const json = await res.json() as { error?: string };
-      if (!res.ok) { toast.error("Gagal membuat admin", json.error); setSaving(false); return; }
+      const json = await res.json() as { error?: string; code?: string };
+      if (!res.ok) {
+        const isEmailTaken = json.code === "EMAIL_TAKEN";
+        toast.error(
+          isEmailTaken ? "Email sudah terdaftar" : "Gagal membuat admin",
+          json.error,
+          isEmailTaken ? 7000 : 4000
+        );
+        setSaving(false); return;
+      }
       toast.success("Admin dibuat", "Akun langsung aktif");
       setSaving(false);
       setShowAdd(false);
@@ -1417,11 +1428,13 @@ const TITLES: Record<string, [string, string]> = {
 
 export default function OwnerPage() {
   const supabase = createClient();
+  const router = useRouter();
   const [active, setActive] = useState("dashboard");
   const [mobileNav, setMobileNav] = useState(false);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [profile, setProfile] = useState<{ full_name: string } | null>(null);
   const [userId, setUserId] = useState("");
+  const [initError, setInitError] = useState<string | null>(null);
 
   const loadBranches = useCallback(async () => {
     const [{ data: branchData }, { data: members }, { data: coaches }, { data: classes }] = await Promise.all([
@@ -1458,8 +1471,24 @@ export default function OwnerPage() {
   /* eslint-disable react-hooks/set-state-in-effect -- async data loader */
   useEffect(() => {
     loadBranches();
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user) { setProfile({ full_name: user.user_metadata?.full_name ?? "Owner" }); setUserId(user.id); }
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
+      if (!user) { router.push("/login"); return; }
+      const role = user.user_metadata?.role as string | undefined;
+      // Owner: auto-recreate profile row if missing (e.g. after DB reset)
+      if (role === "owner") {
+        await fetch("/api/owner/init-profile", { method: "POST" });
+        setProfile({ full_name: user.user_metadata?.full_name ?? "Owner" });
+        setUserId(user.id);
+        return;
+      }
+      // Non-owner somehow on owner page
+      const { data: prof } = await supabase.from("profiles").select("id").eq("id", user.id).maybeSingle();
+      if (!prof) {
+        setInitError("Data akun tidak ditemukan di database. Kemungkinan data telah direset. Silakan hubungi owner untuk membuat ulang akun Anda.");
+        return;
+      }
+      setProfile({ full_name: user.user_metadata?.full_name ?? "Owner" });
+      setUserId(user.id);
     });
   }, [loadBranches]); // eslint-disable-line react-hooks/exhaustive-deps
   /* eslint-enable react-hooks/set-state-in-effect */
@@ -1489,6 +1518,23 @@ export default function OwnerPage() {
       </div>
     </div>
   ), [profile?.full_name]);
+
+  if (initError) return (
+    <div className="min-h-screen flex items-center justify-center bg-paper-tint px-4">
+      <div className="bg-white rounded-2xl shadow-float border border-line p-8 max-w-sm w-full text-center space-y-4">
+        <div className="w-14 h-14 rounded-2xl bg-danger-50 text-danger-500 flex items-center justify-center mx-auto">
+          <Icon name="warning" className="w-7 h-7" />
+        </div>
+        <div>
+          <h2 className="font-display font-bold text-xl text-ink">Data Tidak Ditemukan</h2>
+          <p className="text-sm text-ink-mute mt-2 leading-relaxed">{initError}</p>
+        </div>
+        <Btn variant="primary" className="w-full" onClick={async () => { await supabase.auth.signOut(); window.location.href = "/login"; }}>
+          Kembali ke Login
+        </Btn>
+      </div>
+    </div>
+  );
 
   return (
     <div className="flex bg-paper-tint min-h-screen">

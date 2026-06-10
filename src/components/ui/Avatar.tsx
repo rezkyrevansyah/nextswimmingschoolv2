@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from "react";
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 
 const PALETTE = [
@@ -20,13 +20,9 @@ interface AvatarProps {
 }
 
 export default function Avatar({ name = "?", src, size = 36, ring = false, className }: AvatarProps) {
-  const [imgError, setImgError] = useState(false);
-  // Reset error state when src changes so a newly-uploaded URL is always attempted
-  const prevSrcRef = React.useRef(src);
-  if (prevSrcRef.current !== src) {
-    prevSrcRef.current = src;
-    if (imgError) setImgError(false);
-  }
+  // Track which src caused the error — resets automatically when src prop changes
+  const [errorSrc, setErrorSrc] = useState<string | undefined>(undefined);
+  const imgError = errorSrc === src;
 
   const initials = name
     .split(/\s+/)
@@ -53,7 +49,7 @@ export default function Avatar({ name = "?", src, size = 36, ring = false, class
           src={src}
           alt={name}
           className="w-full h-full rounded-full object-cover"
-          onError={() => setImgError(true)}
+          onError={() => setErrorSrc(src)}
         />
       ) : (
         initials

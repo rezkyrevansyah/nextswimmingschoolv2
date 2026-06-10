@@ -58,6 +58,17 @@ export async function POST(req: NextRequest) {
   });
 
   if (authError) {
+    const isEmailTaken =
+      authError.message.toLowerCase().includes("already been registered") ||
+      authError.message.toLowerCase().includes("already registered") ||
+      authError.message.toLowerCase().includes("email address is already") ||
+      authError.message.toLowerCase().includes("duplicate");
+    if (isEmailTaken) {
+      return NextResponse.json(
+        { error: `Email "${email}" sudah terdaftar. Gunakan email lain atau reset password akun yang ada.`, code: "EMAIL_TAKEN" },
+        { status: 409 }
+      );
+    }
     return NextResponse.json({ error: authError.message }, { status: 400 });
   }
 
@@ -102,6 +113,7 @@ export async function POST(req: NextRequest) {
 
   // For members: explicitly insert members row (no DB trigger for this),
   // then optionally assign to a class.
+  let memberId: string | null = null;
   if (role === "member") {
     if (!branch_id) {
       await db.auth.admin.deleteUser(userId);
@@ -129,6 +141,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: memberError.message }, { status: 500 });
     }
 
+    memberId = memberRow?.id ?? null;
+
     if (body.class_id && memberRow) {
       await db.from("member_classes").insert({
         member_id: memberRow.id,
@@ -138,12 +152,5 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Verify profile was saved correctly (debug aid)
-  const { data: savedProfile } = await db
-    .from("profiles")
-    .select("id, role, branch_id, full_name")
-    .eq("id", userId)
-    .single();
-
-  return NextResponse.json({ user_id: userId, _debug: savedProfile });
+  return NextResponse.json({ user_id: userId, member_id: memberId });
 }

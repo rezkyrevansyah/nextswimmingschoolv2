@@ -5,7 +5,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
-import { supabaseAdmin } from "@/utils/supabase/admin";
+import { getSupabaseAdmin } from "@/utils/supabase/admin";
 import type { Database } from "@/types/database";
 
 async function checkCaller() {
@@ -26,6 +26,7 @@ export async function PATCH(
 
   const { userId } = await params;
   const body = await req.json() as {
+    email?: string;
     password?: string;
     user_metadata?: Record<string, unknown>;
     profile?: Record<string, unknown>;
@@ -33,15 +34,16 @@ export async function PATCH(
 
   // Update profiles table (bypasses RLS via service key)
   if (body.profile) {
-    const { error: profileError } = await supabaseAdmin
+    const { error: profileError } = await getSupabaseAdmin()
       .from("profiles")
       .update(body.profile as unknown as Database["public"]["Tables"]["profiles"]["Update"])
       .eq("id", userId);
     if (profileError) return NextResponse.json({ error: profileError.message }, { status: 400 });
   }
 
-  // Update auth user (password / metadata)
-  const authUpdates: { password?: string; user_metadata?: Record<string, unknown> } = {};
+  // Update auth user (email / password / metadata)
+  const authUpdates: { email?: string; password?: string; user_metadata?: Record<string, unknown> } = {};
+  if (body.email) authUpdates.email = body.email;
   if (body.password) authUpdates.password = body.password;
   if (body.user_metadata) authUpdates.user_metadata = body.user_metadata;
 
@@ -55,8 +57,53 @@ export async function PATCH(
   }
 
   if (Object.keys(authUpdates).length > 0) {
-    const { error } = await supabaseAdmin.auth.admin.updateUserById(userId, authUpdates);
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    // Verify user exists first
+    const { data: existingUser, error: lookupError } = await getSupabaseAdmin().auth.admin.getUserById(userId);
+    if (lookupError || !existingUser?.user) {
+      console.error("[patch-user] user not found:", userId, lookupError);
+      return NextResponse.json({ error: `User tidak ditemukan (id: ${userId})` }, { status: 404 });
+    }
+
+    // Pre-check email uniqueness via profiles table (faster than waiting for auth error)
+    if (authUpdates.email) {
+      const { data: emailConflict } = await getSupabaseAdmin()
+        .from("profiles")
+        .select("id")
+        .eq("email", authUpdates.email)
+        .neq("id", userId)
+        .maybeSingle();
+      if (emailConflict) {
+        return NextResponse.json(
+          { error: `Email "${authUpdates.email}" sudah digunakan akun lain. Gunakan email lain.`, code: "EMAIL_TAKEN" },
+          { status: 409 }
+        );
+      }
+    }
+
+    const { error } = await getSupabaseAdmin().auth.admin.updateUserById(userId, authUpdates);
+    if (error) {
+      console.error("[patch-user] auth update error:", JSON.stringify(error));
+      const msg = error.message.toLowerCase();
+      const isEmailTaken =
+        msg.includes("already been registered") ||
+        msg.includes("already registered") ||
+        msg.includes("email address is already") ||
+        msg.includes("duplicate") ||
+        msg.includes("email already") ||
+        msg.includes("already exists");
+      if (isEmailTaken && authUpdates.email) {
+        return NextResponse.json(
+          { error: `Email "${authUpdates.email}" sudah terdaftar. Gunakan email lain.`, code: "EMAIL_TAKEN" },
+          { status: 409 }
+        );
+      }
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+
+    // Sync email ke profiles table juga
+    if (authUpdates.email) {
+      await getSupabaseAdmin().from("profiles").update({ email: authUpdates.email }).eq("id", userId);
+    }
   }
 
   return NextResponse.json({ ok: true });
@@ -76,7 +123,7 @@ export async function DELETE(
     return NextResponse.json({ error: "Cannot delete your own account" }, { status: 400 });
   }
 
-  const { error } = await supabaseAdmin.auth.admin.deleteUser(userId);
+  const { error } = await getSupabaseAdmin().auth.admin.deleteUser(userId);
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
   return NextResponse.json({ ok: true });

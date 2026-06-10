@@ -1539,6 +1539,7 @@ export type Database = {
           birth_date: string | null
           branch_id: string | null
           created_at: string
+          email: string | null
           full_name: string
           gender: string | null
           health_notes: string | null
@@ -1559,6 +1560,7 @@ export type Database = {
           birth_date?: string | null
           branch_id?: string | null
           created_at?: string
+          email?: string | null
           full_name: string
           gender?: string | null
           health_notes?: string | null
@@ -1579,6 +1581,7 @@ export type Database = {
           birth_date?: string | null
           branch_id?: string | null
           created_at?: string
+          email?: string | null
           full_name?: string
           gender?: string | null
           health_notes?: string | null

@@ -11,6 +11,7 @@ import Status from "@/components/ui/Status";
 import Avatar from "@/components/ui/Avatar";
 import QRBox from "@/components/ui/QRBox";
 import Placeholder from "@/components/ui/Placeholder";
+import TimePicker from "@/components/ui/TimePicker";
 import dynamic from "next/dynamic";
 const MapPicker = dynamic(() => import("@/components/ui/MapPicker"), { ssr: false, loading: () => <div className="rounded-xl border border-line bg-paper-tint h-[260px] flex items-center justify-center text-ink-mute text-sm">Memuat peta…</div> });
 import Modal from "@/components/ui/Modal";
@@ -37,6 +38,37 @@ function calcAge(birthDate: string): number {
   return age;
 }
 
+function parseImportDate(raw: unknown): string | undefined {
+  if (!raw) return undefined;
+  const s = String(raw).trim();
+  // DD/MM/YYYY
+  const dmyMatch = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (dmyMatch) {
+    const [, d, mo, y] = dmyMatch;
+    return `${y}-${mo.padStart(2, "0")}-${d.padStart(2, "0")}`;
+  }
+  // YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  return undefined;
+}
+
+function normalizeGender(raw: unknown): "male" | "female" | undefined {
+  if (!raw) return undefined;
+  const s = String(raw).trim().toLowerCase();
+  if (["l", "laki", "laki-laki", "male", "m"].includes(s)) return "male";
+  if (["p", "perempuan", "female", "f", "wanita"].includes(s)) return "female";
+  return undefined;
+}
+
+function normalizeMemberType(raw: unknown): "reguler" | "private" | "school_affiliate" | undefined {
+  if (!raw) return undefined;
+  const s = String(raw).trim().toLowerCase().replace(/\s+/g, "_");
+  if (["reguler", "regular"].includes(s)) return "reguler";
+  if (["private"].includes(s)) return "private";
+  if (["afiliasi_sekolah", "afiliasi", "school_affiliate", "sekolah"].includes(s)) return "school_affiliate";
+  return undefined;
+}
+
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 interface ScheduleSlot { day: string; time_start: string; time_end: string }
@@ -55,6 +87,17 @@ interface ClassRow {
   spreadsheet_filled?: boolean;
   branch?: { name: string } | null;
   class_coaches?: { profile: { full_name: string; id: string } | null }[];
+}
+
+/**
+ * Handle error responses from /api/admin/users endpoints.
+ * Returns [title, subtitle, duration] for toast.error().
+ */
+function parseUserApiError(json: { error?: string; code?: string }): [string, string, number] {
+  if (json.code === "EMAIL_TAKEN") {
+    return ["Email sudah terdaftar", json.error ?? "Gunakan email lain.", 7000];
+  }
+  return ["Gagal", json.error ?? "Terjadi kesalahan.", 4000];
 }
 
 /** Get time for a specific day — falls back to global time_start/time_end */
@@ -77,6 +120,46 @@ interface MemberRow {
     email: string | null; avatar_url: string | null;
   } | null;
   member_classes?: { class: { id: string; name: string } | null }[];
+}
+
+interface ImportRow {
+  nama_lengkap?: unknown;
+  email?: unknown;
+  password?: unknown;
+  tipe_member?: unknown;
+  tanggal_lahir?: unknown;
+  jenis_kelamin?: unknown;
+  no_hp?: unknown;
+  alamat?: unknown;
+  catatan_kesehatan?: unknown;
+  jumlah_sesi?: unknown;
+  nama_kelas?: unknown;
+  nama_sekolah?: unknown;
+}
+
+type ImportRowStatus = "ok" | "warn" | "error";
+
+interface ValidatedRow {
+  _rowNum: number;
+  _status: ImportRowStatus;
+  _errors: string[];
+  _warnings: string[];
+  // Normalised values
+  full_name: string;
+  email: string;
+  password: string;
+  member_type: "reguler" | "private" | "school_affiliate";
+  birth_date?: string;
+  gender?: string;
+  phone?: string;
+  address?: string;
+  health_notes?: string;
+  total_sessions?: number | null;
+  class_id?: string | null;
+  school_id?: string | null;
+  // Display only
+  nama_kelas_raw?: string;
+  nama_sekolah_raw?: string;
 }
 
 interface CoachProfile {
@@ -119,7 +202,7 @@ interface BillRow {
 }
 
 interface RegistrationRow {
-  id: string; full_name: string; birth_date: string | null; gender: string | null;
+  id: string; full_name: string; email: string | null; birth_date: string | null; gender: string | null;
   phone: string | null; phone_owner: string | null; parent_name: string | null;
   parent_phone: string | null; address: string | null; health_notes: string | null;
   status: string; created_at: string; branch_id?: string | null;
@@ -443,39 +526,38 @@ function AdminSettings({ branch, onRefresh, userId }: { branch: Branch | null; o
 
   return (
     <div className="space-y-5">
-      <div className="grid lg:grid-cols-3 gap-5">
-        <Card className="lg:col-span-2 space-y-5">
-          <SectionTitle sub="Wajib diisi pertama kali">Logo & Identitas Cabang</SectionTitle>
-          <div className="flex items-center gap-5">
-            <div className="w-24 h-24 rounded-2xl bg-paper-tint flex items-center justify-center border border-line overflow-hidden">
-              {branch?.logo_url ? <Image src={branch.logo_url} alt="logo" width={96} height={96} className="w-full h-full object-cover" /> : <Logo size={64} />}
+      {/* Row 1: Identitas + Profil Saya */}
+      <div className="grid lg:grid-cols-2 gap-5">
+        {/* Identitas Cabang */}
+        <Card className="space-y-5">
+          <SectionTitle sub="Informasi dasar cabang">Identitas Cabang</SectionTitle>
+          <div className="flex items-center gap-4">
+            <div className="w-20 h-20 rounded-2xl bg-paper-tint flex items-center justify-center border border-line overflow-hidden shrink-0">
+              {branch?.logo_url ? <Image src={branch.logo_url} alt="logo" width={80} height={80} className="w-full h-full object-cover" /> : <Logo size={52} />}
             </div>
             <div>
-              <div className="font-display font-bold text-ink">Logo Cabang</div>
-              <p className="text-xs text-ink-mute mt-1 max-w-xs">Rasio 1:1, max 2MB.</p>
-              <label className="mt-2.5 inline-flex cursor-pointer">
-                <Btn variant="primary" size="sm" icon="upload" disabled={uploading}>Upload baru</Btn>
+              <div className="font-semibold text-ink text-sm">Logo Cabang</div>
+              <p className="text-xs text-ink-mute mt-0.5">Rasio 1:1, max 2MB.</p>
+              <label className="mt-2 inline-flex cursor-pointer">
+                <Btn variant="outline" size="sm" icon="upload" disabled={uploading}>Ganti logo</Btn>
                 <input type="file" accept="image/*" className="sr-only" onChange={handleLogo} />
               </label>
             </div>
           </div>
-          <div className="grid sm:grid-cols-2 gap-4 pt-5 border-t border-line">
+          <div className="grid sm:grid-cols-2 gap-4 pt-4 border-t border-line">
             <Field label="Nama cabang" required><Input value={name} onChange={e => setName(e.target.value)} /></Field>
             <Field label="Alamat lengkap" required><Input value={address} onChange={e => setAddress(e.target.value)} /></Field>
           </div>
-          <div className="pt-5 border-t border-line">
-            <Field label="Nomor WhatsApp Admin" hint="Dipakai otomatis di tombol 'Hubungi Admin'. Format: 081234567890. Bisa lebih dari satu.">
+          <div className="pt-4 border-t border-line">
+            <Field label="Nomor WhatsApp Cabang" hint="Muncul di tombol 'Hubungi Admin' pada landing page, panel member, dan panel coach.">
               <div className="space-y-2">
                 {waNumbers.map((num, i) => (
                   <div key={i} className="flex gap-2">
-                    <Input
-                      type="tel"
-                      value={num}
+                    <Input type="tel" value={num}
                       onChange={e => setWaNumbers(prev => prev.map((n, j) => j === i ? e.target.value : n))}
-                      placeholder="Mis. 081234567890"
-                      className="flex-1 font-mono"
-                    />
-                    <button onClick={() => setWaNumbers(prev => prev.filter((_, j) => j !== i))} className="w-9 h-9 rounded-lg text-ink-mute hover:text-danger-500 hover:bg-danger-50 flex items-center justify-center border border-line shrink-0">
+                      placeholder="Mis. 081234567890" className="flex-1 font-mono" />
+                    <button onClick={() => setWaNumbers(prev => prev.filter((_, j) => j !== i))}
+                      className="w-9 h-9 rounded-lg text-ink-mute hover:text-danger-500 hover:bg-danger-50 flex items-center justify-center border border-line shrink-0">
                       <Icon name="trash" className="w-4 h-4" />
                     </button>
                   </div>
@@ -484,25 +566,35 @@ function AdminSettings({ branch, onRefresh, userId }: { branch: Branch | null; o
               </div>
             </Field>
           </div>
-          <Btn variant="primary" onClick={save} disabled={saving}>{saving ? "Menyimpan…" : "Simpan perubahan"}</Btn>
-        </Card>
-        <div className="space-y-5">
-        <Card>
-          <SectionTitle sub="Untuk validasi absensi coach">Koordinat Lokasi</SectionTitle>
-          <MapPicker lat={lat} lng={lng} onChange={(newLat, newLng) => { setLat(newLat); setLng(newLng); }} />
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            <Field label="Latitude"><Input value={lat} onChange={e => setLat(e.target.value)} className="font-mono" placeholder="-6.2615" /></Field>
-            <Field label="Longitude"><Input value={lng} onChange={e => setLng(e.target.value)} className="font-mono" placeholder="106.8106" /></Field>
+          <div className="pt-2">
+            <Btn variant="primary" onClick={save} disabled={saving}>{saving ? "Menyimpan…" : "Simpan perubahan"}</Btn>
           </div>
         </Card>
+
+        {/* Profil Saya */}
         <Card className="space-y-4">
           <SectionTitle sub="Data akun Anda">Profil Saya</SectionTitle>
           <Field label="Nama lengkap"><Input value={myName} onChange={e => setMyName(e.target.value)} /></Field>
-          <Field label="Nomor WhatsApp" hint="Tampil di profil admin"><Input type="tel" value={myPhone} onChange={e => setMyPhone(e.target.value)} placeholder="081234567890" className="font-mono" /></Field>
-          <Btn variant="primary" onClick={saveProfile} disabled={savingProfile}>{savingProfile ? "Menyimpan…" : "Simpan profil"}</Btn>
+          <Field label="No. HP Pribadi" hint="Nomor pribadi Anda sebagai admin — tidak dipakai untuk tombol kontak cabang">
+            <Input type="tel" value={myPhone} onChange={e => setMyPhone(e.target.value)} placeholder="081234567890" className="font-mono" />
+          </Field>
+          <div className="pt-2">
+            <Btn variant="primary" onClick={saveProfile} disabled={savingProfile}>{savingProfile ? "Menyimpan…" : "Simpan profil"}</Btn>
+          </div>
         </Card>
-        </div>
       </div>
+
+      {/* Row 2: Koordinat Lokasi — full width karena peta butuh ruang */}
+      <Card>
+        <SectionTitle sub="Digunakan untuk validasi radius absensi coach">Koordinat Lokasi Cabang</SectionTitle>
+        <div className="mt-4">
+          <MapPicker lat={lat} lng={lng} onChange={(newLat, newLng) => { setLat(newLat); setLng(newLng); }} />
+          <div className="mt-3 grid sm:grid-cols-2 gap-3 max-w-sm">
+            <Field label="Latitude"><Input value={lat} onChange={e => setLat(e.target.value)} className="font-mono" placeholder="-6.2615" /></Field>
+            <Field label="Longitude"><Input value={lng} onChange={e => setLng(e.target.value)} className="font-mono" placeholder="106.8106" /></Field>
+          </div>
+        </div>
+      </Card>
     </div>
   );
 }
@@ -598,13 +690,13 @@ function AdminClass({ branchId }: { branchId: string }) {
       if (classPhotoFile) {
         try { photoUrl = await upload.classPhoto(classPhotoFile, editTarget.id); } catch { /* non-fatal */ }
       }
-      const updatePayload: Database["public"]["Tables"]["classes"]["Update"] = { name: form.name, class_type: form.class_type, schedule_days: days, schedule_times: (scheduleTimes.length > 0 ? scheduleTimes : null) as Json | null, time_start: firstSlot?.time_start || form.time_start || undefined, time_end: firstSlot?.time_end || form.time_end || undefined, capacity: isPrivate ? 1 : (Number(form.capacity) || 0), price_monthly: isPrivate ? 0 : (Number(form.price_monthly) || 0), price_per_session: isPrivate ? (Number(form.price_per_session) || null) : null, show_landing: form.show_on_landing, goals: form.goals.trim() || null, description: form.description.trim() || null, photo_url: photoUrl };
+      const updatePayload: Database["public"]["Tables"]["classes"]["Update"] = { name: form.name, class_type: form.class_type, schedule_days: days, schedule_times: (scheduleTimes.length > 0 ? scheduleTimes : null) as Json | null, time_start: firstSlot?.time_start || form.time_start || undefined, time_end: firstSlot?.time_end || form.time_end || undefined, capacity: isPrivate ? 1 : (Number(form.capacity) || 0), price_monthly: isPrivate ? 0 : (Number(form.price_monthly) || 0), price_per_session: isPrivate ? (Number(form.price_per_session) || null) : null, show_on_landing: form.show_on_landing, goals: form.goals.trim() || null, description: form.description.trim() || null, photo_url: photoUrl };
       const { error } = await supabase.from("classes").update(updatePayload).eq("id", editTarget.id);
       setSaving(false);
       if (error) return toast.error("Gagal update kelas", error.message);
       toast.success("Kelas diperbarui");
     } else {
-      const insertPayload: Database["public"]["Tables"]["classes"]["Insert"] = { name: form.name, class_type: form.class_type, schedule_days: days, schedule_times: (scheduleTimes.length > 0 ? scheduleTimes : null) as Json | null, time_start: firstSlot?.time_start || form.time_start || "", time_end: firstSlot?.time_end || form.time_end || "", capacity: isPrivate ? 1 : (Number(form.capacity) || 0), price_monthly: isPrivate ? 0 : (Number(form.price_monthly) || 0), price_per_session: isPrivate ? (Number(form.price_per_session) || null) : null, show_landing: form.show_on_landing, goals: form.goals.trim() || null, description: form.description.trim() || null, branch_id: branchId, status: "active", enrolled: 0 };
+      const insertPayload: Database["public"]["Tables"]["classes"]["Insert"] = { name: form.name, class_type: form.class_type, schedule_days: days, schedule_times: (scheduleTimes.length > 0 ? scheduleTimes : null) as Json | null, time_start: firstSlot?.time_start || form.time_start || "", time_end: firstSlot?.time_end || form.time_end || "", capacity: isPrivate ? 1 : (Number(form.capacity) || 0), price_monthly: isPrivate ? 0 : (Number(form.price_monthly) || 0), price_per_session: isPrivate ? (Number(form.price_per_session) || null) : null, show_on_landing: form.show_on_landing, goals: form.goals.trim() || null, description: form.description.trim() || null, branch_id: branchId, status: "active", enrolled: 0 };
       const { data: insertData, error } = await supabase.from("classes").insert(insertPayload).select("id").single();
       if (error) { setSaving(false); return toast.error("Gagal membuat kelas", error.message); }
       if (classPhotoFile && insertData?.id) {
@@ -719,7 +811,7 @@ function AdminClass({ branchId }: { branchId: string }) {
             <Card key={c.id} padded={false} className={`overflow-hidden${archived ? " opacity-70" : ""}`}>
               <div className="relative">
                 {c.photo_url
-                  ? <div className="aspect-video w-full overflow-hidden bg-paper-deep"><Image src={c.photo_url} alt={c.name} width={480} height={270} className="w-full h-full object-cover" /></div>
+                  ? <div className="aspect-video w-full overflow-hidden bg-paper-deep"><img src={c.photo_url} alt={c.name} className="w-full h-full object-cover" loading="lazy" /></div>
                   : <Placeholder label={c.id} ratio="16/9" className="rounded-none border-0" />
                 }
                 <div className="absolute top-3 left-3 right-3 flex justify-between gap-2">
@@ -822,7 +914,8 @@ function AdminClass({ branchId }: { branchId: string }) {
           </div>
 
           {/* Hari & Jam */}
-          <Field label={isPrivate ? "Preferensi hari latihan" : "Hari sesi"} required={!isPrivate} hint={isPrivate ? "Opsional — hanya sebagai info" : "Pilih satu atau lebih hari, lalu atur jam per hari"}>
+          <div className="block">
+            <span className="text-[13px] font-semibold text-ink-soft mb-1.5 block">{isPrivate ? "Preferensi hari latihan" : "Hari sesi"}{!isPrivate && <span className="text-danger-500 ml-0.5">*</span>}</span>
             {/* Day picker */}
             <div className="flex flex-wrap gap-2 mt-1">
               {DAY_OPTS.map(d => (
@@ -877,19 +970,19 @@ function AdminClass({ branchId }: { branchId: string }) {
                   /* Mode: jam sama untuk semua hari */
                   <div className="px-3 py-3 flex gap-3 items-end flex-wrap">
                     <Field label="Jam mulai" className="flex-1 min-w-[120px]">
-                      <Input type="time" value={form.time_start}
-                        onChange={e => setForm(f => ({
+                      <TimePicker value={form.time_start}
+                        onChange={v => setForm(f => ({
                           ...f,
-                          time_start: e.target.value,
-                          schedule_times: f.schedule_times.map(s => ({ ...s, time_start: e.target.value })),
+                          time_start: v,
+                          schedule_times: f.schedule_times.map(s => ({ ...s, time_start: v })),
                         }))} />
                     </Field>
                     <Field label="Jam selesai" className="flex-1 min-w-[120px]">
-                      <Input type="time" value={form.time_end}
-                        onChange={e => setForm(f => ({
+                      <TimePicker value={form.time_end}
+                        onChange={v => setForm(f => ({
                           ...f,
-                          time_end: e.target.value,
-                          schedule_times: f.schedule_times.map(s => ({ ...s, time_end: e.target.value })),
+                          time_end: v,
+                          schedule_times: f.schedule_times.map(s => ({ ...s, time_end: v })),
                         }))} />
                     </Field>
                     <div className="pb-1 text-xs text-ink-mute self-end">Berlaku untuk: {form.schedule_days.join(", ")}</div>
@@ -903,11 +996,11 @@ function AdminClass({ branchId }: { branchId: string }) {
                         <div key={day} className="px-3 py-2.5 flex items-center gap-3">
                           <span className="w-12 text-xs font-bold text-ink-soft shrink-0">{day.slice(0,3)}</span>
                           <div className="flex gap-2 flex-1">
-                            <Input type="time" value={slot.time_start} className="flex-1 text-sm"
-                              onChange={e => updateSlotTime(day, "time_start", e.target.value)} />
+                            <TimePicker value={slot.time_start} className="flex-1"
+                              onChange={v => updateSlotTime(day, "time_start", v)} />
                             <span className="text-ink-faint self-center text-xs">–</span>
-                            <Input type="time" value={slot.time_end} className="flex-1 text-sm"
-                              onChange={e => updateSlotTime(day, "time_end", e.target.value)} />
+                            <TimePicker value={slot.time_end} className="flex-1"
+                              onChange={v => updateSlotTime(day, "time_end", v)} />
                           </div>
                         </div>
                       );
@@ -916,14 +1009,15 @@ function AdminClass({ branchId }: { branchId: string }) {
                 )}
               </div>
             )}
-          </Field>
+            <span className="text-xs text-ink-faint mt-1 block">{isPrivate ? "Opsional — hanya sebagai info" : "Pilih satu atau lebih hari, lalu atur jam per hari"}</span>
+          </div>
           <Field label="Tujuan kelas" hint="Tampil di coach page dan member page"><Textarea rows={2} value={form.goals} onChange={e => setForm(f => ({ ...f, goals: e.target.value }))} placeholder="Mis. Pengenalan air, membangun rasa percaya diri di air." /></Field>
           <Field label="Deskripsi kelas" hint="Opsional — tampil di coach page dan member page"><Textarea rows={3} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Mis. Kelas ini dirancang untuk anak usia 4–6 tahun yang baru pertama kali belajar renang..." /></Field>
           <Field label="Foto kelas" hint="Opsional — tampil di kartu kelas">
             <div className="flex items-start gap-4">
               {(classPhotoPreview || form.photo_url) && (
                 <div className="shrink-0 relative">
-                  <Image src={classPhotoPreview ?? form.photo_url!} alt="Foto kelas" width={80} height={60} className="rounded-lg object-cover border border-line w-20 h-[60px]" />
+                  <img src={classPhotoPreview ?? form.photo_url!} alt="Foto kelas" className="rounded-lg object-cover border border-line w-20 h-[60px]" />
                 </div>
               )}
               <label className="flex-1 cursor-pointer flex flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-line hover:border-ocean-400 bg-paper-tint hover:bg-ocean-50/30 transition-colors py-4 px-3">
@@ -1106,8 +1200,8 @@ function AdminMember({ branchId }: { branchId: string }) {
         total_sessions: form.type === "private" ? (Number(form.jumlah_sesi) || null) : null,
       }),
     });
-    const json = await res.json() as { user_id?: string; error?: string };
-    if (!res.ok) { toast.error("Gagal membuat akun", json.error); setSaving(false); return; }
+    const json = await res.json() as { user_id?: string; error?: string; code?: string };
+    if (!res.ok) { const [t, s, d] = parseUserApiError(json); toast.error(t, s, d); setSaving(false); return; }
 
     // Upload avatar if selected
     if (createAvatarFile && json.user_id) {
@@ -1130,6 +1224,7 @@ function AdminMember({ branchId }: { branchId: string }) {
   const openEdit = (m: MemberRow) => {
     setEditMemberForm({
       full_name: m.profile?.full_name ?? "",
+      email: m.profile?.email ?? "",
       birth_date: m.profile?.birth_date ?? "",
       gender: m.profile?.gender ?? "",
       phone: m.profile?.phone ?? "",
@@ -1151,6 +1246,22 @@ function AdminMember({ branchId }: { branchId: string }) {
     if (!detail) return;
     if (!editMemberForm.full_name) return toast.error("Nama lengkap wajib diisi");
     setSavingEdit(true);
+
+    // Update email di auth jika berubah
+    const currentEmail = (detail.profile?.email ?? "").trim().toLowerCase();
+    const newEmail = editMemberForm.email.trim().toLowerCase();
+    if (newEmail && newEmail !== currentEmail) {
+      const emailRes = await fetch(`/api/admin/users/${detail.profile_id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: newEmail }),
+      });
+      if (!emailRes.ok) {
+        const j = await emailRes.json() as { error?: string; code?: string };
+        const [t, s, d] = parseUserApiError(j);
+        setSavingEdit(false);
+        return toast.error(t, s, d);
+      }
+    }
 
     // Update profiles
     const { error: profileErr } = await createClient().from("profiles").update({
@@ -1190,12 +1301,17 @@ function AdminMember({ branchId }: { branchId: string }) {
     }
 
     // Upload avatar if changed
+    let newAvatarUrl: string | null = null;
     if (editAvatarFile) {
       try {
         const fd = new FormData();
         fd.append("file", editAvatarFile);
         fd.append("profile_id", detail.profile_id);
-        await fetch("/api/upload/avatar", { method: "POST", body: fd });
+        const avatarRes = await fetch("/api/upload/avatar", { method: "POST", body: fd });
+        if (avatarRes.ok) {
+          const { url } = await avatarRes.json() as { url: string };
+          newAvatarUrl = url;
+        }
       } catch { /* non-fatal */ }
     }
 
@@ -1204,6 +1320,22 @@ function AdminMember({ branchId }: { branchId: string }) {
     setOpenEditMember(false);
     setEditAvatarFile(null);
     setEditAvatarPreview(null);
+    // Update detail state immediately so modal reflects changes without waiting for load()
+    setDetail(prev => prev ? {
+      ...prev,
+      type: editMemberForm.type as MemberRow["type"],
+      profile: prev.profile ? {
+        ...prev.profile,
+        full_name: editMemberForm.full_name,
+        birth_date: editMemberForm.birth_date || null,
+        gender: editMemberForm.gender || null,
+        phone: editMemberForm.phone || null,
+        address: editMemberForm.address || null,
+        health_notes: editMemberForm.health_notes || null,
+        email: newEmail && newEmail !== currentEmail ? newEmail : prev.profile.email,
+        avatar_url: newAvatarUrl ?? prev.profile.avatar_url,
+      } : prev.profile,
+    } : prev);
     load();
   };
 
@@ -1223,7 +1355,7 @@ function AdminMember({ branchId }: { branchId: string }) {
   const [suspendingMember, setSuspendingMember] = useState(false);
   const [openEditMember, setOpenEditMember] = useState(false);
   const [editMemberForm, setEditMemberForm] = useState({
-    full_name: "", birth_date: "", gender: "", phone: "", phone_owner: "self",
+    full_name: "", email: "", birth_date: "", gender: "", phone: "", phone_owner: "self",
     parent_name: "", parent_phone: "", address: "", health_notes: "",
     type: "reguler", school_id: "", class_ids: [] as string[],
   });
@@ -1241,6 +1373,33 @@ function AdminMember({ branchId }: { branchId: string }) {
   const [bills, setBills] = useState<{ id: string; period_label: string; amount: number; discount: number; discount_reason: string | null; total: number; status: string; paid_at: string | null; payment_method: string | null }[]>([]);
   const [loadingBills, setLoadingBills] = useState(false);
   const [billsLoaded, setBillsLoaded] = useState(false);
+  const [regProofUrl, setRegProofUrl] = useState<string | null>(null);
+
+  // Import Excel state
+  const [openImport, setOpenImport] = useState(false);
+  const [importStep, setImportStep] = useState<"upload" | "preview" | "result">("upload");
+  const [importRows, setImportRows] = useState<ValidatedRow[]>([]);
+  const [importPage, setImportPage] = useState(0);
+  const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState<{ done: number; total: number } | null>(null);
+  const [importResult, setImportResult] = useState<{ success: number; failed: { row: number; email: string; error: string }[] } | null>(null);
+
+  // Bulk QR download state
+  const [qrSelectMode, setQrSelectMode] = useState(false);
+  const [selectedQR, setSelectedQR] = useState<Set<string>>(new Set());
+  const [generatingQR, setGeneratingQR] = useState(false);
+
+  // Filter, sort & pagination state
+  const [search, setSearch] = useState("");
+  const [filterGender, setFilterGender] = useState("");
+  const [filterClass, setFilterClass] = useState("");
+  const [filterSchool, setFilterSchool] = useState("");
+  const [filterSessions, setFilterSessions] = useState("");
+  const [sortBy, setSortBy] = useState("created_at");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [showFilters, setShowFilters] = useState(false);
+  const [page, setPage] = useState(0);
+  const PAGE_SIZE = 20;
 
   const loadAttendances = async (memberId: string) => {
     setLoadingAtt(true);
@@ -1267,6 +1426,202 @@ function AdminMember({ branchId }: { branchId: string }) {
     setLoadingBills(false);
   };
 
+  const loadRegProof = async (memberId: string) => {
+    const { data } = await supabase
+      .from("registrations")
+      .select("proof_url")
+      .eq("member_id", memberId)
+      .eq("status", "approved")
+      .maybeSingle();
+    setRegProofUrl((data as { proof_url: string | null } | null)?.proof_url ?? null);
+  };
+
+  const validateImportRows = (raw: ImportRow[], classList: ClassRow[], schools: School[]): ValidatedRow[] => {
+    return raw.map((r, i) => {
+      const errors: string[] = [];
+      const warnings: string[] = [];
+
+      const full_name = String(r.nama_lengkap ?? "").trim();
+      const email = String(r.email ?? "").trim();
+      const password = String(r.password ?? "").trim();
+      const memberTypeRaw = r.tipe_member;
+      const member_type = normalizeMemberType(memberTypeRaw) ?? "reguler";
+      const birth_date = parseImportDate(r.tanggal_lahir);
+      const gender = normalizeGender(r.jenis_kelamin);
+      const phone = r.no_hp ? String(r.no_hp).trim() : undefined;
+      const address = r.alamat ? String(r.alamat).trim() : undefined;
+      const health_notes = r.catatan_kesehatan ? String(r.catatan_kesehatan).trim() : undefined;
+      const jumlahSesiRaw = r.jumlah_sesi;
+      const total_sessions = jumlahSesiRaw != null && String(jumlahSesiRaw).trim() !== "" ? Math.round(Number(jumlahSesiRaw)) : null;
+      const nama_kelas_raw = r.nama_kelas ? String(r.nama_kelas).trim() : "";
+      const nama_sekolah_raw = r.nama_sekolah ? String(r.nama_sekolah).trim() : "";
+
+      if (!full_name) errors.push("Nama lengkap wajib diisi");
+      if (!email) errors.push("Email wajib diisi");
+      else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.push("Format email tidak valid");
+      if (!password) errors.push("Password wajib diisi");
+      else if (password.length < 6) errors.push("Password minimal 6 karakter");
+      if (memberTypeRaw && !normalizeMemberType(memberTypeRaw)) errors.push(`Tipe member tidak valid: "${String(memberTypeRaw)}". Gunakan: reguler, private, atau afiliasi_sekolah`);
+      if (r.tanggal_lahir && !birth_date) errors.push(`Format tanggal lahir tidak valid: "${String(r.tanggal_lahir)}". Gunakan DD/MM/YYYY`);
+      if (r.jenis_kelamin && !gender) errors.push(`Jenis kelamin tidak valid: "${String(r.jenis_kelamin)}". Gunakan L atau P`);
+      if (member_type === "private" && (total_sessions === null || isNaN(total_sessions))) errors.push("Jumlah sesi wajib diisi (angka) untuk tipe private");
+
+      let class_id: string | null | undefined = undefined;
+      if (nama_kelas_raw) {
+        const found = classList.find(c => c.name.trim().toLowerCase() === nama_kelas_raw.toLowerCase());
+        if (found) {
+          class_id = found.id;
+        } else {
+          warnings.push(`Kelas "${nama_kelas_raw}" tidak ditemukan. Member akan dibuat tanpa kelas.`);
+          class_id = null;
+        }
+      }
+
+      let school_id: string | null | undefined = undefined;
+      if (member_type === "school_affiliate") {
+        if (!nama_sekolah_raw) {
+          errors.push("Nama sekolah wajib diisi untuk tipe afiliasi sekolah");
+        } else {
+          const found = schools.find(s => s.name.trim().toLowerCase() === nama_sekolah_raw.toLowerCase());
+          if (found) {
+            school_id = found.id;
+          } else {
+            errors.push(`Sekolah "${nama_sekolah_raw}" tidak ditemukan di sistem. Pastikan nama sekolah sama persis.`);
+            school_id = null;
+          }
+        }
+      }
+
+      const status: ImportRowStatus = errors.length > 0 ? "error" : warnings.length > 0 ? "warn" : "ok";
+      return {
+        _rowNum: i + 2, _status: status, _errors: errors, _warnings: warnings,
+        full_name, email, password, member_type, birth_date, gender, phone, address, health_notes,
+        total_sessions: member_type === "private" ? total_sessions : null,
+        class_id, school_id, nama_kelas_raw, nama_sekolah_raw,
+      };
+    });
+  };
+
+  const handleExcelFile = async (file: File) => {
+    try {
+      const XLSX = await import("xlsx");
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: "array", cellDates: false, raw: true });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const raw = XLSX.utils.sheet_to_json<ImportRow>(ws, { defval: "", raw: true });
+      if (raw.length === 0) { toast.error("File kosong", "Tidak ada baris data yang ditemukan."); return; }
+      if (raw.length > 200) { toast.error("Terlalu banyak baris", "Maksimum 200 member per sekali import."); return; }
+      const validated = validateImportRows(raw, classes, schoolsList);
+      setImportRows(validated);
+      setImportPage(0);
+      setImportStep("preview");
+    } catch {
+      toast.error("Gagal membaca file", "Pastikan file berformat .xlsx, .xls, atau .csv.");
+    }
+  };
+
+  const downloadTemplate = async () => {
+    const XLSX = await import("xlsx");
+    const headers = ["nama_lengkap", "email", "password", "tipe_member", "tanggal_lahir", "jenis_kelamin", "no_hp", "alamat", "catatan_kesehatan", "jumlah_sesi", "nama_kelas", "nama_sekolah"];
+    const example = ["Budi Santoso", "budi@gmail.com", "aqua2024", "reguler", "15/06/2010", "L", "08123456789", "Jl. Merdeka No. 1", "", "", "Kelas A Pagi", ""];
+    const notes = ["Nama lengkap", "Email unik", "Min. 6 karakter", "reguler / private / afiliasi_sekolah", "DD/MM/YYYY atau YYYY-MM-DD", "L atau P", "Opsional", "Opsional", "Opsional", "Wajib jika tipe=private", "Harus cocok persis nama kelas", "WAJIB jika tipe=afiliasi_sekolah"];
+    const ws = XLSX.utils.aoa_to_sheet([headers, example, notes]);
+    ws["!cols"] = headers.map((_, i) => ({ wch: [20, 28, 14, 20, 16, 14, 16, 28, 24, 14, 20, 24][i] }));
+    ws["!freeze"] = { xSplit: 0, ySplit: 1 };
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Member Import");
+    XLSX.writeFile(wb, "template-import-member.xlsx");
+  };
+
+  const runImport = async () => {
+    const toImport = importRows.filter(r => r._status !== "error");
+    if (toImport.length === 0) return;
+    const ok = await confirm({ title: "Konfirmasi Import", body: `Akan mengimport ${toImport.length} member. Proses ini tidak dapat dibatalkan. Lanjutkan?` });
+    if (!ok) return;
+
+    const CHUNK = 10;
+    const allFailed: { row: number; email: string; error: string }[] = [];
+    let totalSuccess = 0;
+
+    setImporting(true);
+    setImportProgress({ done: 0, total: toImport.length });
+
+    try {
+      for (let i = 0; i < toImport.length; i += CHUNK) {
+        const chunk = toImport.slice(i, i + CHUNK);
+        const res = await fetch("/api/admin/import-members", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            branch_id: branchId,
+            rows: chunk.map(r => ({
+              email: r.email, password: r.password, full_name: r.full_name,
+              member_type: r.member_type, birth_date: r.birth_date, gender: r.gender,
+              phone: r.phone, address: r.address, health_notes: r.health_notes,
+              total_sessions: r.total_sessions, class_id: r.class_id,
+              school_id: r.school_id ?? null,
+            })),
+          }),
+        });
+        const json = await res.json() as { success: number; failed: { row: number; email: string; error: string }[] };
+        if (!res.ok) {
+          toast.error("Import terhenti", (json as { error?: string }).error ?? "Terjadi kesalahan.");
+          break;
+        }
+        totalSuccess += json.success;
+        allFailed.push(...json.failed);
+        setImportProgress({ done: Math.min(i + CHUNK, toImport.length), total: toImport.length });
+      }
+    } catch {
+      toast.error("Import gagal", "Terjadi kesalahan jaringan.");
+    }
+
+    setImportResult({ success: totalSuccess, failed: allFailed });
+    setImportStep("result");
+    setImporting(false);
+    setImportProgress(null);
+    load();
+  };
+
+  const bulkDownloadQR = async (memberIds: string[]) => {
+    if (memberIds.length === 0) return;
+    setGeneratingQR(true);
+    try {
+      const QRCode = await import("qrcode");
+      const JSZip = (await import("jszip")).default;
+      const zip = new JSZip();
+
+      for (const mid of memberIds) {
+        const m = members.find(r => r.id === mid);
+        if (!m) continue;
+        const qrValue = m.qr_code ?? m.id;
+        const name = (m.profile?.full_name ?? mid).replace(/[^a-zA-Z0-9\s-]/g, "").replace(/\s+/g, "-");
+        const dataUrl: string = await QRCode.toDataURL(qrValue, {
+          width: 400,
+          margin: 2,
+          color: { dark: "#0A2540", light: "#ffffff" },
+        });
+        // dataUrl = "data:image/png;base64,..."
+        const base64 = dataUrl.split(",")[1];
+        zip.file(`QR-${name}.png`, base64, { base64: true });
+      }
+
+      const blob = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `QR-Member-${new Date().toISOString().slice(0, 10)}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setQrSelectMode(false);
+      setSelectedQR(new Set());
+      toast.success("Download selesai", `${memberIds.length} QR code berhasil diunduh`);
+    } catch {
+      toast.error("Gagal generate QR", "Terjadi kesalahan saat membuat file ZIP.");
+    }
+    setGeneratingQR(false);
+  };
+
   const doSuspendMember = async () => {
     if (!suspendMemberTarget || !suspendMemberForm.reason || !suspendMemberForm.until) return toast.error("Alasan dan tanggal berakhir wajib diisi");
     setSuspendingMember(true);
@@ -1277,6 +1632,19 @@ function AdminMember({ branchId }: { branchId: string }) {
     if (error) return toast.error("Gagal suspend member", error.message);
     toast.success(`${suspendMemberTarget.profile?.full_name ?? "Member"} di-suspend`);
     setSuspendMemberTarget(null);
+    setDetail(null);
+    load();
+  };
+
+  const deleteMember = async (m: MemberRow) => {
+    const ok = await confirm({ body: `Hapus permanen akun member ${m.profile?.full_name ?? ""}? Semua data termasuk absensi dan tagihan akan ikut terhapus.`, danger: true, confirmLabel: "Hapus Permanen" });
+    if (!ok) return;
+    const res = await fetch(`/api/admin/users/${m.profile_id}`, { method: "DELETE" });
+    if (!res.ok) {
+      const j = await res.json() as { error?: string };
+      return toast.error("Gagal menghapus member", j.error);
+    }
+    toast.success("Akun member dihapus permanen");
     setDetail(null);
     load();
   };
@@ -1340,13 +1708,93 @@ function AdminMember({ branchId }: { branchId: string }) {
     school:  members.filter(m => m.type === "school_affiliate").length,
   };
 
-  const filtered = tab === "suspended" ? members.filter(m => m.status === "suspended") : (tab === "all" ? members : members.filter(m => m.type === tab));
+  const activeFilterCount = [filterGender, filterClass, filterSchool, filterSessions].filter(Boolean).length;
+
+  const filteredSorted = useMemo(() => {
+    // 1. Tab filter
+    let result = tab === "suspended"
+      ? members.filter(m => m.status === "suspended")
+      : tab === "all" ? members : members.filter(m => m.type === tab);
+
+    // 2. Search
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      result = result.filter(m =>
+        m.profile?.full_name?.toLowerCase().includes(q) ||
+        m.profile?.email?.toLowerCase().includes(q) ||
+        (m.profile?.phone ?? "").includes(q)
+      );
+    }
+
+    // 3. Filters
+    if (filterGender)   result = result.filter(m => m.profile?.gender === filterGender);
+    if (filterClass)    result = result.filter(m => m.member_classes?.some(mc => mc.class?.id === filterClass));
+    if (filterSchool)   result = result.filter(m => m.school_id === filterSchool);
+    if (filterSessions === "has")  result = result.filter(m => (m.remaining_sessions ?? 0) > 0);
+    if (filterSessions === "low")  result = result.filter(m => m.remaining_sessions !== null && m.remaining_sessions <= 3);
+    if (filterSessions === "none") result = result.filter(m => m.remaining_sessions !== null && m.remaining_sessions === 0);
+
+    // 4. Sort
+    if (sortBy !== "created_at") {
+      result = [...result].sort((a, b) => {
+        let va: string | number = "", vb: string | number = "";
+        if (sortBy === "name")                { va = (a.profile?.full_name ?? "").toLowerCase(); vb = (b.profile?.full_name ?? "").toLowerCase(); }
+        else if (sortBy === "date_start")     { va = a.date_start; vb = b.date_start; }
+        else if (sortBy === "sessions")       { va = a.remaining_sessions ?? -1; vb = b.remaining_sessions ?? -1; }
+        if (va < vb) return sortDir === "asc" ? -1 : 1;
+        if (va > vb) return sortDir === "asc" ? 1 : -1;
+        return 0;
+      });
+    } else if (sortDir === "asc") {
+      result = [...result].reverse();
+    }
+
+    return result;
+  }, [members, tab, search, filterGender, filterClass, filterSchool, filterSessions, sortBy, sortDir]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredSorted.length / PAGE_SIZE));
+  // Clamp page to valid range (auto-resets to 0 when filter shrinks result set)
+  const safePage = Math.min(page, Math.max(0, totalPages - 1));
+  const paginated = filteredSorted.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
+
+  const resetFilters = () => { setSearch(""); setFilterGender(""); setFilterClass(""); setFilterSchool(""); setFilterSessions(""); };
+
+  const toggleSort = (col: string) => {
+    if (sortBy === col) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortBy(col); setSortDir("asc"); }
+  };
 
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div><h2 className="font-display font-bold text-2xl">Manajemen Member</h2><p className="text-ink-mute text-sm mt-0.5">CRUD member, suspend, dan reset password.</p></div>
-        <div className="flex gap-2"><Btn variant="primary" icon="plus" onClick={() => { setForm({ full_name: "", birth_date: "", gender: "", type: "reguler", phone: "", phone_owner: "self", parent_name: "", parent_phone: "", address: "", health_notes: "", class_id: "", school_id: "", email: "", password: "", jumlah_sesi: "" }); setOpenCreate(true); }}>Tambah Member</Btn></div>
+        <div className="flex flex-wrap gap-2">
+          {qrSelectMode ? (
+            <>
+              <span className="self-center text-sm text-ink-mute font-medium">
+                {selectedQR.size > 0 ? `${selectedQR.size} dipilih` : "Pilih member"}
+              </span>
+              <Btn variant="ghost" size="sm" onClick={() => { setQrSelectMode(false); setSelectedQR(new Set()); }}>Batal</Btn>
+              <Btn variant="soft" size="sm" onClick={() => { setSelectedQR(new Set(filteredSorted.map(m => m.id))); }}>Pilih Semua ({filteredSorted.length})</Btn>
+              <Btn
+                variant="primary"
+                icon="download"
+                size="sm"
+                disabled={selectedQR.size === 0 || generatingQR}
+                onClick={() => bulkDownloadQR(Array.from(selectedQR))}
+              >
+                {generatingQR ? "Generating…" : `Download QR (${selectedQR.size})`}
+              </Btn>
+            </>
+          ) : (
+            <>
+              <Btn variant="outline" icon="download" size="sm" onClick={downloadTemplate}>Unduh Template</Btn>
+              <Btn variant="soft" icon="upload" onClick={() => { setImportStep("upload"); setImportRows([]); setImportResult(null); setOpenImport(true); }}>Import Excel</Btn>
+              <Btn variant="outline" icon="qr" size="sm" onClick={() => { setQrSelectMode(true); setSelectedQR(new Set()); }}>Download QR</Btn>
+              <Btn variant="primary" icon="plus" onClick={() => { setForm({ full_name: "", birth_date: "", gender: "", type: "reguler", phone: "", phone_owner: "self", parent_name: "", parent_phone: "", address: "", health_notes: "", class_id: "", school_id: "", email: "", password: "", jumlah_sesi: "" }); setOpenCreate(true); }}>Tambah Member</Btn>
+            </>
+          )}
+        </div>
       </div>
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Stat label="Total aktif"       value={stats.all}     icon="users"   tone="ocean" />
@@ -1355,56 +1803,262 @@ function AdminMember({ branchId }: { branchId: string }) {
         <Stat label="Afiliasi sekolah"  value={stats.school}  icon="school"  tone="ocean" />
       </div>
       <Card padded={false}>
-        <div className="px-5 py-3 border-b border-line flex items-center gap-3 flex-wrap">
-          <div className="flex gap-1.5 bg-paper-tint rounded-xl p-1 flex-wrap">
-            {[["all", "Semua"], ["reguler", "Reguler"], ["private", "Private"], ["school_affiliate", "Afiliasi"], ["suspended", "Suspend"]].map(([id, l]) => (
-              <button key={id} onClick={() => setTab(id)} className={`px-3 py-1.5 text-xs font-bold rounded-lg ${tab === id ? "bg-white text-ocean-700 shadow-sm" : "text-ink-mute hover:text-ink-soft"}`}>{l}</button>
-            ))}
+        {/* Search bar */}
+        <div className="px-5 pt-4 pb-3 border-b border-line space-y-3">
+          <div className="flex items-center gap-2 bg-paper-tint border border-line rounded-xl px-3 py-2 focus-within:border-ocean-400 focus-within:ring-2 focus-within:ring-ocean-500/10 transition">
+            <Icon name="search" className="w-4 h-4 text-ink-faint shrink-0" />
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Cari nama, email, atau nomor HP…"
+              className="flex-1 text-sm outline-none bg-transparent"
+            />
+            {search && (
+              <button type="button" onClick={() => setSearch("")} className="text-ink-mute hover:text-ink transition">
+                <Icon name="x" className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
+
+          {/* Sort + Filter toggle + Tab row */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Tabs */}
+            <div className="flex gap-1 bg-paper-deep rounded-xl p-1 flex-wrap">
+              {[["all", "Semua"], ["reguler", "Reguler"], ["private", "Private"], ["school_affiliate", "Afiliasi"], ["suspended", "Suspend"]].map(([id, l]) => (
+                <button key={id} type="button" onClick={() => setTab(id)} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${tab === id ? "bg-white text-ocean-700 shadow-sm" : "text-ink-mute hover:text-ink-soft"}`}>{l}</button>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-2 ml-auto">
+              {/* Sort */}
+              <select
+                value={`${sortBy}:${sortDir}`}
+                onChange={e => { const [col, dir] = e.target.value.split(":"); setSortBy(col); setSortDir(dir as "asc" | "desc"); }}
+                className="text-xs font-semibold border border-line rounded-lg px-2.5 py-1.5 bg-white text-ink-soft outline-none cursor-pointer hover:border-ocean-400 transition"
+              >
+                <option value="created_at:desc">Terbaru</option>
+                <option value="created_at:asc">Terlama</option>
+                <option value="name:asc">Nama A–Z</option>
+                <option value="name:desc">Nama Z–A</option>
+                <option value="date_start:asc">Bergabung lama</option>
+                <option value="date_start:desc">Bergabung baru</option>
+                <option value="sessions:asc">Sesi tersisa ↑</option>
+                <option value="sessions:desc">Sesi tersisa ↓</option>
+              </select>
+
+              {/* Filter toggle */}
+              <button
+                type="button"
+                onClick={() => setShowFilters(v => !v)}
+                className={`relative inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border transition ${showFilters ? "bg-ocean-600 text-white border-ocean-600" : "bg-white border-line text-ink-soft hover:border-ocean-400"}`}
+              >
+                <Icon name="settings" className="w-3.5 h-3.5" />
+                Filter
+                {activeFilterCount > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-danger-500 text-white text-[10px] font-bold flex items-center justify-center">{activeFilterCount}</span>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Filter panel */}
+          {showFilters && (
+            <div className="bg-paper-tint border border-line rounded-xl p-4 grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <div>
+                <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-1.5">Jenis Kelamin</div>
+                <select value={filterGender} onChange={e => setFilterGender(e.target.value)} className="w-full text-sm border border-line rounded-lg px-2.5 py-1.5 bg-white outline-none">
+                  <option value="">Semua</option>
+                  <option value="male">Laki-laki</option>
+                  <option value="female">Perempuan</option>
+                </select>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-1.5">Kelas</div>
+                <select value={filterClass} onChange={e => setFilterClass(e.target.value)} className="w-full text-sm border border-line rounded-lg px-2.5 py-1.5 bg-white outline-none">
+                  <option value="">Semua Kelas</option>
+                  {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+              {(tab === "all" || tab === "school_affiliate") && (
+                <div>
+                  <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-1.5">Sekolah</div>
+                  <select value={filterSchool} onChange={e => setFilterSchool(e.target.value)} className="w-full text-sm border border-line rounded-lg px-2.5 py-1.5 bg-white outline-none">
+                    <option value="">Semua Sekolah</option>
+                    {schoolsList.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                </div>
+              )}
+              {(tab === "all" || tab === "private") && (
+                <div>
+                  <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-1.5">Sesi</div>
+                  <select value={filterSessions} onChange={e => setFilterSessions(e.target.value)} className="w-full text-sm border border-line rounded-lg px-2.5 py-1.5 bg-white outline-none">
+                    <option value="">Semua</option>
+                    <option value="has">Ada sesi tersisa</option>
+                    <option value="low">Sisa ≤ 3 sesi</option>
+                    <option value="none">Sesi habis</option>
+                  </select>
+                </div>
+              )}
+              {activeFilterCount > 0 && (
+                <div className="sm:col-span-2 lg:col-span-4 flex justify-end pt-1">
+                  <button type="button" onClick={resetFilters} className="text-xs font-semibold text-danger-600 hover:underline">Reset semua filter</button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Active filter pills */}
+          {activeFilterCount > 0 && (
+            <div className="flex items-center gap-2 flex-wrap">
+              {filterGender && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-ocean-50 text-ocean-700 text-xs font-semibold ring-1 ring-ocean-200">
+                  {filterGender === "male" ? "Laki-laki" : "Perempuan"}
+                  <button type="button" onClick={() => setFilterGender("")}><Icon name="x" className="w-3 h-3" /></button>
+                </span>
+              )}
+              {filterClass && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-ocean-50 text-ocean-700 text-xs font-semibold ring-1 ring-ocean-200">
+                  {classes.find(c => c.id === filterClass)?.name ?? "Kelas"}
+                  <button type="button" onClick={() => setFilterClass("")}><Icon name="x" className="w-3 h-3" /></button>
+                </span>
+              )}
+              {filterSchool && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-ocean-50 text-ocean-700 text-xs font-semibold ring-1 ring-ocean-200">
+                  {schoolsList.find(s => s.id === filterSchool)?.name ?? "Sekolah"}
+                  <button type="button" onClick={() => setFilterSchool("")}><Icon name="x" className="w-3 h-3" /></button>
+                </span>
+              )}
+              {filterSessions && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-ocean-50 text-ocean-700 text-xs font-semibold ring-1 ring-ocean-200">
+                  {filterSessions === "has" ? "Ada sesi" : filterSessions === "low" ? "Sisa ≤3" : "Sesi habis"}
+                  <button type="button" onClick={() => setFilterSessions("")}><Icon name="x" className="w-3 h-3" /></button>
+                </span>
+              )}
+              <button type="button" onClick={resetFilters} className="text-xs text-ink-mute hover:text-danger-600 transition ml-1">Hapus semua</button>
+            </div>
+          )}
         </div>
+
         {loading ? <div className="p-10 text-center text-ink-mute">Memuat data…</div> : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-[11px] uppercase tracking-widest text-ink-faint font-bold border-b border-line">
-                  <th className="text-left py-3 px-5 font-bold">Member</th>
-                  <th className="text-left py-3 font-bold hidden sm:table-cell">Tipe</th>
-                  <th className="text-left py-3 font-bold hidden md:table-cell">Kelas</th>
-                  <th className="text-left py-3 font-bold">Status</th>
-                  <th className="px-5" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-line">
-                {filtered.map((m) => {
-                  const cls = m.member_classes?.map(mc => mc.class?.name).filter(Boolean).join(", ") ?? "—";
-                  const fullName = m.profile?.full_name ?? "—";
-                  const age = m.profile?.birth_date ? calcAge(m.profile.birth_date) : null;
-                  return (
-                    <tr key={m.id} className="hover:bg-paper-tint cursor-pointer" onClick={() => { setDetail(m); setDetailTab("info"); setAttLoaded(false); setBillsLoaded(false); setAttendances([]); setBills([]); setAttClassFilter(""); }}>
-                      <td className="py-3.5 px-5">
-                        <div className="flex items-center gap-3">
-                          <Avatar name={fullName} src={m.profile?.avatar_url ?? undefined} size={38} />
-                          <div className="min-w-0"><div className="font-semibold text-ink truncate max-w-[120px] sm:max-w-none">{fullName}</div>{age && <div className="text-xs text-ink-mute">{age} thn</div>}</div>
-                        </div>
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-[11px] uppercase tracking-widest text-ink-faint font-bold border-b border-line">
+                    {qrSelectMode && <th className="w-10 py-3 pl-4">
+                      <input
+                        type="checkbox"
+                        className="rounded border-line accent-ocean-600"
+                        checked={filteredSorted.length > 0 && filteredSorted.every(m => selectedQR.has(m.id))}
+                        onChange={e => setSelectedQR(e.target.checked ? new Set(filteredSorted.map(m => m.id)) : new Set())}
+                      />
+                    </th>}
+                    <th
+                      className="text-left py-3 px-5 font-bold cursor-pointer select-none group"
+                      onClick={() => toggleSort("name")}
+                    >
+                      <span className="inline-flex items-center gap-1">
+                        Member
+                        <span className={`transition-opacity ${sortBy === "name" ? "opacity-100 text-ocean-600" : "opacity-0 group-hover:opacity-40"}`}>
+                          {sortBy === "name" ? (sortDir === "asc" ? "↑" : "↓") : "↕"}
+                        </span>
+                      </span>
+                    </th>
+                    <th className="text-left py-3 font-bold hidden sm:table-cell">Tipe</th>
+                    <th className="text-left py-3 font-bold hidden md:table-cell">Kelas</th>
+                    <th className="text-left py-3 font-bold">Status</th>
+                    {!qrSelectMode && <th className="px-5" />}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line">
+                  {paginated.map((m) => {
+                    const cls = m.member_classes?.map(mc => mc.class?.name).filter(Boolean).join(", ") ?? "—";
+                    const fullName = m.profile?.full_name ?? "—";
+                    const age = m.profile?.birth_date ? calcAge(m.profile.birth_date) : null;
+                    const isChecked = selectedQR.has(m.id);
+                    return (
+                      <tr
+                        key={m.id}
+                        className={`hover:bg-paper-tint cursor-pointer ${qrSelectMode && isChecked ? "bg-ocean-50" : ""}`}
+                        onClick={() => {
+                          if (qrSelectMode) {
+                            setSelectedQR(prev => { const next = new Set(prev); if (next.has(m.id)) next.delete(m.id); else next.add(m.id); return next; });
+                          } else {
+                            setDetail(m); setDetailTab("info"); setAttLoaded(false); setBillsLoaded(false); setAttendances([]); setBills([]); setAttClassFilter(""); setRegProofUrl(null); loadRegProof(m.id);
+                          }
+                        }}
+                      >
+                        {qrSelectMode && (
+                          <td className="pl-4" onClick={e => e.stopPropagation()}>
+                            <input type="checkbox" className="rounded border-line accent-ocean-600" checked={isChecked}
+                              onChange={() => setSelectedQR(prev => { const next = new Set(prev); if (next.has(m.id)) next.delete(m.id); else next.add(m.id); return next; })} />
+                          </td>
+                        )}
+                        <td className="py-3.5 px-5">
+                          <div className="flex items-center gap-3">
+                            <Avatar name={fullName} src={m.profile?.avatar_url ?? undefined} size={38} />
+                            <div className="min-w-0">
+                              <div className="font-semibold text-ink truncate max-w-[120px] sm:max-w-none">{fullName}</div>
+                              {age && <div className="text-xs text-ink-mute">{age} thn</div>}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="hidden sm:table-cell"><Status kind={m.type === "private" ? "substitute" : m.type === "school_affiliate" ? "school_covered" : "active"} dot={false}>{m.type === "reguler" ? "Reguler" : m.type === "private" ? "Private" : "Afiliasi"}</Status></td>
+                        <td className="text-ink-soft text-xs hidden md:table-cell max-w-[150px] truncate">{cls}</td>
+                        <td><Status kind={m.status === "suspended" ? "suspended" : "active"}>{m.status === "suspended" ? "Suspend" : "Aktif"}</Status></td>
+                        {!qrSelectMode && <td className="px-5"><button className="text-ink-mute hover:text-ocean-600 p-1.5"><Icon name="eye" className="w-4 h-4" /></button></td>}
+                      </tr>
+                    );
+                  })}
+                  {filteredSorted.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="py-14 text-center">
+                        <Icon name="search" className="w-8 h-8 text-ink-faint mx-auto mb-3" />
+                        <div className="text-sm font-semibold text-ink-mute">Tidak ada member yang cocok</div>
+                        {(search || activeFilterCount > 0) && (
+                          <button type="button" onClick={() => { resetFilters(); setSearch(""); }} className="mt-2 text-xs text-ocean-600 hover:underline font-semibold">Hapus semua filter</button>
+                        )}
                       </td>
-                      <td className="hidden sm:table-cell"><Status kind={m.type === "private" ? "substitute" : m.type === "school_affiliate" ? "school_covered" : "active"} dot={false}>{m.type === "reguler" ? "Reguler" : m.type === "private" ? "Private" : "Afiliasi"}</Status></td>
-                      <td className="text-ink-soft text-xs hidden md:table-cell max-w-[150px] truncate">{cls}</td>
-                      <td><Status kind={m.status === "suspended" ? "suspended" : "active"}>{m.status === "suspended" ? "Suspend" : "Aktif"}</Status></td>
-                      <td className="px-5"><button className="text-ink-mute hover:text-ocean-600 p-1.5"><Icon name="eye" className="w-4 h-4" /></button></td>
                     </tr>
-                  );
-                })}
-                {filtered.length === 0 && <tr><td colSpan={5} className="py-10 text-center text-ink-mute">Tidak ada member</td></tr>}
-              </tbody>
-            </table>
-          </div>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="px-5 py-3.5 border-t border-line flex items-center justify-between flex-wrap gap-3">
+                <span className="text-xs text-ink-mute tabular-nums">
+                  {filteredSorted.length} member · halaman {safePage + 1} dari {totalPages}
+                </span>
+                <div className="flex items-center gap-1">
+                  <button type="button" disabled={safePage === 0} onClick={() => setPage(0)} className="px-2 py-1.5 rounded-lg border border-line text-ink-mute text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-paper-tint transition">«</button>
+                  <button type="button" disabled={safePage === 0} onClick={() => setPage(p => p - 1)} className="px-3 py-1.5 rounded-lg border border-line text-ink-mute text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-paper-tint transition">‹ Sebelumnya</button>
+                  {Array.from({ length: totalPages }, (_, i) => i)
+                    .filter(i => i === 0 || i === totalPages - 1 || Math.abs(i - safePage) <= 1)
+                    .reduce<(number | "…")[]>((acc, i, idx, arr) => {
+                      if (idx > 0 && (i as number) - (arr[idx - 1] as number) > 1) acc.push("…");
+                      acc.push(i);
+                      return acc;
+                    }, [])
+                    .map((item, idx) => item === "…"
+                      ? <span key={`e${idx}`} className="px-2 text-ink-faint text-sm">…</span>
+                      : <button key={item} type="button" onClick={() => setPage(item as number)} className={`w-8 h-8 rounded-lg text-sm font-semibold transition ${safePage === item ? "bg-ocean-600 text-white" : "border border-line text-ink-mute hover:bg-paper-tint"}`}>{(item as number) + 1}</button>
+                    )
+                  }
+                  <button type="button" disabled={safePage === totalPages - 1} onClick={() => setPage(p => p + 1)} className="px-3 py-1.5 rounded-lg border border-line text-ink-mute text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-paper-tint transition">Berikutnya ›</button>
+                  <button type="button" disabled={safePage === totalPages - 1} onClick={() => setPage(totalPages - 1)} className="px-2 py-1.5 rounded-lg border border-line text-ink-mute text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-paper-tint transition">»</button>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </Card>
 
-      <Modal open={!!detail} onClose={() => { setDetail(null); setDetailTab("info"); setAttLoaded(false); setBillsLoaded(false); }} title={detail?.profile?.full_name ?? ""} size="xl"
+      <Modal open={!!detail} onClose={() => { setDetail(null); setDetailTab("info"); setAttLoaded(false); setBillsLoaded(false); setRegProofUrl(null); }} title={detail?.profile?.full_name ?? ""} size="xl"
         footer={
           <>
-            <Btn variant="ghost" onClick={() => { setDetail(null); setDetailTab("info"); setAttLoaded(false); setBillsLoaded(false); }}>Tutup</Btn>
+            <Btn variant="ghost" onClick={() => { setDetail(null); setDetailTab("info"); setAttLoaded(false); setBillsLoaded(false); setRegProofUrl(null); }}>Tutup</Btn>
             <Btn variant="outline" icon="edit" onClick={() => detail && openEdit(detail)}>Edit Data</Btn>
             <Btn variant="outline" icon="refresh" onClick={() => { setOpenResetPwd(true); setNewPwd(""); }}>Reset Password</Btn>
             {detail?.type === "private" && (
@@ -1414,6 +2068,7 @@ function AdminMember({ branchId }: { branchId: string }) {
               ? <Btn variant="ghost" className="text-warn-600" onClick={() => { setSuspendMemberTarget(detail); setSuspendMemberForm({ reason: "", until: "" }); }}>Suspend</Btn>
               : <Btn variant="soft" size="sm" icon="check" onClick={() => detail && liftSuspendMember(detail)}>Akhiri Suspend</Btn>
             }
+            <Btn variant="ghost" className="text-danger-500" icon="trash" onClick={() => detail && deleteMember(detail)}>Hapus Permanen</Btn>
           </>
         }>
         {detail && (() => {
@@ -1493,6 +2148,16 @@ function AdminMember({ branchId }: { branchId: string }) {
                         {detail.member_classes?.map((mc, i) => mc.class && <span key={i} className="px-2 py-1 rounded-lg bg-ocean-50 text-ocean-700 text-xs font-semibold">{mc.class.name}</span>)}
                         {(detail.member_classes?.length ?? 0) === 0 && <span className="text-xs text-warn-600 font-semibold">Belum assign ke kelas</span>}
                       </div>
+                    </div>
+                    <div className="pt-3 border-t border-line">
+                      <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-2">Bukti pembayaran awal</div>
+                      {regProofUrl ? (
+                        <a href={regProofUrl} target="_blank" rel="noreferrer">
+                          <Btn variant="outline" size="sm" icon="eye">Lihat Bukti Transfer</Btn>
+                        </a>
+                      ) : (
+                        <span className="text-xs text-ink-faint">Tidak ada bukti</span>
+                      )}
                     </div>
                   </>
                 )}
@@ -1631,6 +2296,7 @@ function AdminMember({ branchId }: { branchId: string }) {
           </div>
           {/* Identitas */}
           <Field label="Nama lengkap" required><Input value={editMemberForm.full_name} onChange={e => setEditMemberForm(f => ({ ...f, full_name: e.target.value }))} /></Field>
+          <Field label="Email" hint="Ubah email login akun member"><Input type="email" placeholder="nama@email.com" value={editMemberForm.email} onChange={e => setEditMemberForm(f => ({ ...f, email: e.target.value }))} /></Field>
           <Field label="Tanggal lahir"><Input type="date" value={editMemberForm.birth_date} onChange={e => setEditMemberForm(f => ({ ...f, birth_date: e.target.value }))} /></Field>
           <Field label="Jenis kelamin">
             <Select value={editMemberForm.gender} onChange={e => setEditMemberForm(f => ({ ...f, gender: e.target.value }))}>
@@ -1838,6 +2504,201 @@ function AdminMember({ branchId }: { branchId: string }) {
       {photoView && (
         <PhotoLightbox src={photoView} name={detail?.profile?.full_name ?? ""} onClose={() => setPhotoView(null)} />
       )}
+
+      {/* ── Import Excel Modal ─────────────────────────────────────────────── */}
+      <Modal
+        open={openImport}
+        onClose={() => setOpenImport(false)}
+        title={importStep === "upload" ? "Import Member dari Excel" : importStep === "preview" ? `Preview Import (${importRows.length} baris)` : "Hasil Import"}
+        size="xl"
+        footer={
+          importStep === "upload" ? (
+            <Btn variant="ghost" onClick={() => setOpenImport(false)}>Tutup</Btn>
+          ) : importStep === "preview" ? (
+            importing && importProgress ? (
+              <div className="flex-1 flex items-center gap-3 min-w-0">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-semibold text-ink-soft">Mengimport member…</span>
+                    <span className="text-xs font-bold text-ocean-600 tabular-nums">
+                      {importProgress.done}/{importProgress.total} ({Math.round((importProgress.done / importProgress.total) * 100)}%)
+                    </span>
+                  </div>
+                  <div className="h-2 rounded-full bg-line overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-ocean-500 transition-all duration-300"
+                      style={{ width: `${(importProgress.done / importProgress.total) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <>
+                <Btn variant="ghost" onClick={() => setImportStep("upload")}>Kembali</Btn>
+                <Btn
+                  variant="primary"
+                  icon="upload"
+                  disabled={importRows.filter(r => r._status !== "error").length === 0}
+                  onClick={runImport}
+                >
+                  {`Import ${importRows.filter(r => r._status !== "error").length} Member`}
+                </Btn>
+              </>
+            )
+          ) : (
+            <>
+              {importResult && importResult.failed.length > 0 && (
+                <Btn variant="ghost" onClick={() => setImportStep("preview")}>Lihat Detail Preview</Btn>
+              )}
+              <Btn variant="primary" onClick={() => setOpenImport(false)}>Tutup</Btn>
+            </>
+          )
+        }
+      >
+        {/* Step: upload */}
+        {importStep === "upload" && (
+          <div className="space-y-5">
+            <div className="bg-ocean-50 border border-ocean-100 rounded-xl p-4 text-sm text-ocean-800 space-y-2">
+              <div className="font-bold text-ocean-700 mb-1">Kolom yang dibutuhkan dalam file Excel:</div>
+              <div className="grid sm:grid-cols-2 gap-x-6 gap-y-1 text-xs">
+                <div><span className="font-mono font-bold">nama_lengkap</span> <span className="text-ocean-600">— WAJIB</span></div>
+                <div><span className="font-mono font-bold">email</span> <span className="text-ocean-600">— WAJIB</span></div>
+                <div><span className="font-mono font-bold">password</span> <span className="text-ocean-600">— WAJIB (min. 6 karakter)</span></div>
+                <div><span className="font-mono font-bold">tipe_member</span> <span className="text-ink-mute">— reguler / private / afiliasi_sekolah</span></div>
+                <div><span className="font-mono font-bold">tanggal_lahir</span> <span className="text-ink-mute">— DD/MM/YYYY</span></div>
+                <div><span className="font-mono font-bold">jenis_kelamin</span> <span className="text-ink-mute">— L atau P</span></div>
+                <div><span className="font-mono font-bold">no_hp</span> <span className="text-ink-mute">— Opsional</span></div>
+                <div><span className="font-mono font-bold">jumlah_sesi</span> <span className="text-ink-mute">— Wajib jika tipe=private</span></div>
+                <div><span className="font-mono font-bold">nama_kelas</span> <span className="text-ink-mute">— Harus cocok nama kelas di sistem</span></div>
+                <div><span className="font-mono font-bold">nama_sekolah</span> <span className="text-ocean-600">— WAJIB jika tipe=afiliasi_sekolah</span></div>
+              </div>
+            </div>
+            <label className="flex flex-col items-center justify-center gap-3 border-2 border-dashed border-line rounded-2xl p-10 cursor-pointer hover:border-ocean-400 hover:bg-ocean-50/30 transition-colors">
+              <Icon name="upload" className="w-10 h-10 text-ink-faint" />
+              <div className="text-center">
+                <div className="font-semibold text-ink">Klik untuk pilih file</div>
+                <div className="text-sm text-ink-mute">.xlsx, .xls, atau .csv</div>
+              </div>
+              <input
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                className="hidden"
+                onChange={e => { const f = e.target.files?.[0]; if (f) { handleExcelFile(f); e.target.value = ""; } }}
+              />
+            </label>
+            <div className="text-center">
+              <button type="button" onClick={downloadTemplate} className="text-sm text-ocean-600 hover:underline font-semibold">
+                Unduh template Excel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Step: preview */}
+        {importStep === "preview" && (() => {
+          const okCount = importRows.filter(r => r._status === "ok").length;
+          const warnCount = importRows.filter(r => r._status === "warn").length;
+          const errCount = importRows.filter(r => r._status === "error").length;
+          const pageSize = 50;
+          const totalPages = Math.ceil(importRows.length / pageSize);
+          const pageRows = importRows.slice(importPage * pageSize, (importPage + 1) * pageSize);
+          return (
+            <div className="space-y-4">
+              <div className="flex flex-wrap gap-2">
+                <span className="px-3 py-1 rounded-full text-xs font-bold bg-ok-50 text-ok-700 ring-1 ring-ok-200">{okCount} OK</span>
+                {warnCount > 0 && <span className="px-3 py-1 rounded-full text-xs font-bold bg-warn-50 text-warn-700 ring-1 ring-warn-200">{warnCount} Peringatan</span>}
+                {errCount > 0 && <span className="px-3 py-1 rounded-full text-xs font-bold bg-danger-50 text-danger-700 ring-1 ring-danger-200">{errCount} Error — akan dilewati</span>}
+              </div>
+              <div className="overflow-x-auto rounded-xl border border-line">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-paper-tint border-b border-line text-left">
+                      <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs w-10">#</th>
+                      <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs">Nama</th>
+                      <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs">Email</th>
+                      <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs">Tipe</th>
+                      <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs">Kelas</th>
+                      <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs">Sekolah</th>
+                      <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs">Status</th>
+                      <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs">Keterangan</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pageRows.map(r => (
+                      <tr
+                        key={r._rowNum}
+                        className={r._status === "error" ? "bg-danger-50/40 border-b border-danger-100" : r._status === "warn" ? "bg-warn-50/40 border-b border-warn-100" : "border-b border-line"}
+                      >
+                        <td className="px-3 py-2 text-xs text-ink-mute">{r._rowNum}</td>
+                        <td className="px-3 py-2 font-medium text-ink truncate max-w-[140px]">{r.full_name || <span className="text-ink-faint italic">—</span>}</td>
+                        <td className="px-3 py-2 text-ink-soft truncate max-w-[160px]">{r.email || <span className="text-ink-faint italic">—</span>}</td>
+                        <td className="px-3 py-2 text-xs capitalize">{r.member_type}</td>
+                        <td className="px-3 py-2 text-xs text-ink-soft">{r.nama_kelas_raw || "—"}</td>
+                        <td className="px-3 py-2 text-xs text-ink-soft">{r.nama_sekolah_raw || "—"}</td>
+                        <td className="px-3 py-2">
+                          {r._status === "ok" && <span className="text-xs font-bold text-ok-600">OK</span>}
+                          {r._status === "warn" && <span className="text-xs font-bold text-warn-600">Peringatan</span>}
+                          {r._status === "error" && <span className="text-xs font-bold text-danger-600">Error</span>}
+                        </td>
+                        <td className="px-3 py-2 text-xs text-ink-mute max-w-[200px]">
+                          {[...r._errors, ...r._warnings].join("; ") || "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between text-sm">
+                  <button type="button" onClick={() => setImportPage(p => Math.max(0, p - 1))} disabled={importPage === 0} className="px-3 py-1.5 rounded-lg border border-line text-ink-mute disabled:opacity-40">← Sebelumnya</button>
+                  <span className="text-ink-mute text-xs">Halaman {importPage + 1} / {totalPages}</span>
+                  <button type="button" onClick={() => setImportPage(p => Math.min(totalPages - 1, p + 1))} disabled={importPage === totalPages - 1} className="px-3 py-1.5 rounded-lg border border-line text-ink-mute disabled:opacity-40">Berikutnya →</button>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* Step: result */}
+        {importStep === "result" && importResult && (
+          <div className="space-y-5">
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div className="rounded-2xl bg-ok-50 border border-ok-200 p-6 text-center">
+                <div className="text-4xl font-display font-extrabold text-ok-600">{importResult.success}</div>
+                <div className="text-sm font-semibold text-ok-700 mt-1">Member berhasil dibuat</div>
+              </div>
+              {importResult.failed.length > 0 && (
+                <div className="rounded-2xl bg-danger-50 border border-danger-200 p-6 text-center">
+                  <div className="text-4xl font-display font-extrabold text-danger-600">{importResult.failed.length}</div>
+                  <div className="text-sm font-semibold text-danger-700 mt-1">Gagal diimport</div>
+                </div>
+              )}
+            </div>
+            {importResult.failed.length > 0 && (
+              <div className="overflow-x-auto rounded-xl border border-line">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-paper-tint border-b border-line text-left">
+                      <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs w-14">Baris</th>
+                      <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs">Email</th>
+                      <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs">Alasan</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {importResult.failed.map(f => (
+                      <tr key={f.row} className="border-b border-line">
+                        <td className="px-3 py-2 text-xs text-ink-mute">{f.row}</td>
+                        <td className="px-3 py-2 text-ink-soft">{f.email}</td>
+                        <td className="px-3 py-2 text-xs text-danger-700">{f.error}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }
@@ -1856,6 +2717,7 @@ const EMPTY_COACH_FORM = { full_name: "", nick_name: "", email: "", phone: "", p
 function AdminCoach({ branchId }: { branchId: string }) {
   const toast = useToast();
   const confirm = useConfirm();
+  const { upload } = useUpload();
   const [coaches, setCoaches] = useState<CoachFull[]>([]);
   const [loading, setLoading] = useState(true);
   const [showArchived, setShowArchived] = useState(false);
@@ -1882,7 +2744,8 @@ function AdminCoach({ branchId }: { branchId: string }) {
   const [createCerts, setCreateCerts] = useState<{ title: string; issuer: string; valid_from: string; valid_until: string; no_expiry: boolean }[]>([]);
   // add cert from detail panel
   const [openAddCert, setOpenAddCert] = useState(false);
-  const [certForm, setCertForm] = useState({ title: "", issuer: "", issued_at: "" });
+  const [certForm, setCertForm] = useState({ title: "", issuer: "", issued_at: "", expires_at: "", no_expiry: false });
+  const [certPhotoFile, setCertPhotoFile] = useState<File | null>(null);
   const [savingCert, setSavingCert] = useState(false);
 
   // suspend
@@ -1933,8 +2796,8 @@ function AdminCoach({ branchId }: { branchId: string }) {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...form, role: "coach", branch_id: branchId }),
     });
-    const json = await res.json() as { user_id?: string; error?: string };
-    if (!res.ok) { toast.error("Gagal membuat coach", json.error); setSaving(false); return; }
+    const json = await res.json() as { user_id?: string; error?: string; code?: string };
+    if (!res.ok) { const [t, s, d] = parseUserApiError(json); toast.error(t, s, d); setSaving(false); return; }
 
     const uid = json.user_id!;
     const db = createClient();
@@ -2034,13 +2897,20 @@ function AdminCoach({ branchId }: { branchId: string }) {
     setSavingCert(true);
     const { data, error } = await createClient().from("certifications").insert({
       coach_id: detail.id, name: certForm.title, title: certForm.title,
-      issuer: certForm.issuer || null, valid_from: certForm.issued_at || null, status: "pending",
+      issuer: certForm.issuer || null,
+      valid_from: certForm.issued_at || null,
+      valid_until: certForm.no_expiry ? null : (certForm.expires_at || null),
+      status: "pending",
     }).select("id, name, title, status, valid_from, valid_until").single();
+    if (error || !data) { setSavingCert(false); return toast.error("Gagal menambah sertifikasi", error?.message ?? "Data tidak tersimpan"); }
+    if (certPhotoFile) {
+      try { await upload.cert(certPhotoFile, data.id); } catch { /* non-fatal */ }
+    }
     setSavingCert(false);
-    if (error) return toast.error("Gagal menambah sertifikasi", error.message);
     toast.success("Sertifikasi ditambahkan");
     setOpenAddCert(false);
-    setCertForm({ title: "", issuer: "", issued_at: "" });
+    setCertForm({ title: "", issuer: "", issued_at: "", expires_at: "", no_expiry: false });
+    setCertPhotoFile(null);
     setDetail(prev => prev ? { ...prev, certifications: [...(prev.certifications ?? []), data as { id: string; name: string; title: string | null; status: string; valid_from: string | null; valid_until: string | null }] } : prev);
   };
 
@@ -2137,6 +3007,14 @@ function AdminCoach({ branchId }: { branchId: string }) {
     setAssignSaving(false);
     toast.success("Kelas berhasil diperbarui");
     setOpenAssign(false);
+    // Update detail state immediately so panel reflects new assignment
+    setDetail(prev => prev ? {
+      ...prev,
+      class_coaches: assignedClassIds.map(class_id => ({
+        class_id,
+        class: allClasses.find(c => c.id === class_id) ?? null,
+      })),
+    } : prev);
     load();
   };
 
@@ -2356,7 +3234,7 @@ function AdminCoach({ branchId }: { branchId: string }) {
                   <div className="flex items-center justify-between">
                     <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Sertifikasi</div>
                     {!archived && (
-                      <button onClick={() => { setCertForm({ title: "", issuer: "", issued_at: "" }); setOpenAddCert(true); }} className="text-xs text-ocean-600 font-semibold hover:underline">+ Tambah</button>
+                      <button onClick={() => { setCertForm({ title: "", issuer: "", issued_at: "", expires_at: "", no_expiry: false }); setCertPhotoFile(null); setOpenAddCert(true); }} className="text-xs text-ocean-600 font-semibold hover:underline">+ Tambah</button>
                     )}
                   </div>
                   {(detail.certifications?.length ?? 0) === 0 ? (
@@ -2673,12 +3551,31 @@ function AdminCoach({ branchId }: { branchId: string }) {
       </Modal>
 
       {/* ── Add certification modal ── */}
-      <Modal open={openAddCert} onClose={() => setOpenAddCert(false)} title={`Tambah Sertifikasi — ${detail?.full_name ?? ""}`} size="sm"
-        footer={<><Btn variant="ghost" onClick={() => setOpenAddCert(false)}>Batal</Btn><Btn variant="primary" onClick={addCert} disabled={savingCert}>{savingCert ? "Menyimpan…" : "Simpan"}</Btn></>}>
+      <Modal open={openAddCert} onClose={() => { setOpenAddCert(false); setCertPhotoFile(null); }} title={`Tambah Sertifikasi — ${detail?.full_name ?? ""}`} size="sm"
+        footer={<><Btn variant="ghost" onClick={() => { setOpenAddCert(false); setCertPhotoFile(null); }}>Batal</Btn><Btn variant="primary" onClick={addCert} disabled={savingCert}>{savingCert ? "Menyimpan…" : "Simpan"}</Btn></>}>
         <div className="space-y-4">
           <Field label="Nama sertifikasi" required><Input value={certForm.title} onChange={e => setCertForm(f => ({ ...f, title: e.target.value }))} placeholder="Mis. Renang Gaya Bebas Tingkat Lanjut" /></Field>
           <Field label="Lembaga penerbit"><Input value={certForm.issuer} onChange={e => setCertForm(f => ({ ...f, issuer: e.target.value }))} placeholder="Mis. PRSI, FINA" /></Field>
-          <Field label="Tanggal terbit"><Input type="date" value={certForm.issued_at} onChange={e => setCertForm(f => ({ ...f, issued_at: e.target.value }))} /></Field>
+          <Field label="Berlaku dari"><Input type="date" value={certForm.issued_at} onChange={e => setCertForm(f => ({ ...f, issued_at: e.target.value }))} /></Field>
+          <Field label="Berlaku sampai"><Input type="date" value={certForm.expires_at} disabled={certForm.no_expiry} onChange={e => setCertForm(f => ({ ...f, expires_at: e.target.value }))} /></Field>
+          <label className="flex items-center gap-2 text-sm text-ink-soft cursor-pointer">
+            <input type="checkbox" checked={certForm.no_expiry} onChange={e => setCertForm(f => ({ ...f, no_expiry: e.target.checked, expires_at: "" }))} className="rounded" />
+            Tidak ada kedaluwarsa
+          </label>
+          <div>
+            <div className="text-sm font-semibold text-ink mb-1.5">Foto sertifikat <span className="text-ink-faint font-normal text-xs">(opsional, bantu proses verifikasi)</span></div>
+            {certPhotoFile && (
+              <img src={URL.createObjectURL(certPhotoFile)} alt="Preview" className="w-full max-h-36 object-cover rounded-xl border border-line mb-2" />
+            )}
+            <label className="flex items-center gap-3 cursor-pointer group">
+              <span className="flex items-center gap-2 px-3 py-2 rounded-lg border border-line bg-paper-tint hover:bg-white hover:border-ocean-400 transition-colors text-sm font-semibold text-ink-soft group-hover:text-ink">
+                <Icon name="camera" className="w-4 h-4" />
+                {certPhotoFile ? "Ganti foto" : "Pilih foto"}
+              </span>
+              {certPhotoFile && <span className="text-sm text-ink-mute truncate max-w-[160px]">{certPhotoFile.name}</span>}
+              <input type="file" accept="image/*" className="sr-only" onChange={e => setCertPhotoFile(e.target.files?.[0] ?? null)} />
+            </label>
+          </div>
         </div>
       </Modal>
 
@@ -3245,7 +4142,7 @@ function AdminAbsensiCoach({ branchId }: { branchId: string }) {
                 {sessionDates.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
               </Select>
             </Field>
-            <Field label="Jam clock-in"><Input type="time" value={form.clock_in_time} onChange={e => setForm(f => ({ ...f, clock_in_time: e.target.value }))} /></Field>
+            <Field label="Jam clock-in"><TimePicker value={form.clock_in_time} onChange={v => setForm(f => ({ ...f, clock_in_time: v }))} /></Field>
           </div>
           <Field label="Catatan / alasan"><Textarea rows={3} value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} placeholder="Mis. Coach lupa clock-in, sudah konfirmasi via WA." /></Field>
         </div>
@@ -4203,7 +5100,7 @@ function AdminApprovement({ branchId }: { branchId: string }) {
   const load = useCallback(async () => {
     setLoading(true);
     await Promise.all([
-      supabase.from("registrations").select("id, full_name, birth_date, gender, phone, phone_owner, parent_name, parent_phone, address, health_notes, status, created_at").eq("branch_id", branchId).eq("status", "pending").order("created_at")
+      supabase.from("registrations").select("id, full_name, email, birth_date, gender, phone, phone_owner, parent_name, parent_phone, address, health_notes, status, created_at").eq("branch_id", branchId).eq("status", "pending").order("created_at")
         .then(({ data }) => { if (data) setRegistrations(data as RegistrationRow[]); }),
       supabase.from("certifications").select("id, name, title, issuer, valid_from, valid_until, photo_url, status, profile:profiles!certifications_coach_id_fkey(full_name, branch_id)").eq("status", "pending")
         .then(({ data }) => {
@@ -4223,7 +5120,7 @@ function AdminApprovement({ branchId }: { branchId: string }) {
 
   const openEditReg = (r: RegistrationRow) => {
     setEditReg(r);
-    setEditRegForm({ full_name: r.full_name, birth_date: r.birth_date, gender: r.gender, phone: r.phone, phone_owner: r.phone_owner, parent_name: r.parent_name, parent_phone: r.parent_phone, address: r.address, health_notes: r.health_notes });
+    setEditRegForm({ full_name: r.full_name, email: r.email, birth_date: r.birth_date, gender: r.gender, phone: r.phone, phone_owner: r.phone_owner, parent_name: r.parent_name, parent_phone: r.parent_phone, address: r.address, health_notes: r.health_notes });
   };
 
   const saveEditReg = async () => {
@@ -4231,6 +5128,7 @@ function AdminApprovement({ branchId }: { branchId: string }) {
     setSavingEdit(true);
     const { error } = await supabase.from("registrations").update({
       full_name: editRegForm.full_name ?? editReg.full_name,
+      email: editRegForm.email ?? null,
       birth_date: editRegForm.birth_date ?? null,
       gender: editRegForm.gender ?? null,
       phone: editRegForm.phone ?? null,
@@ -4292,16 +5190,20 @@ function AdminApprovement({ branchId }: { branchId: string }) {
       proofUrl = await upload.upload.paymentProof(proofFile, r.id);
     }
 
-    // Buat email sementara dari nama (tanpa spasi, lowercase) + timestamp
-    const tempSlug = r.full_name.toLowerCase().replace(/\s+/g, ".").replace(/[^a-z0-9.]/g, "");
-    const tempEmail = `${tempSlug}.${Date.now()}@temp.nextswimmingschool.id`;
+    // Gunakan email dari form registrasi
+    const memberEmail = r.email?.trim();
+    if (!memberEmail) {
+      toast.error("Email belum diisi di data registrasi", "Edit registrasi terlebih dahulu untuk mengisi email.");
+      setApprovingId(null);
+      return;
+    }
     const tempPassword = Math.random().toString(36).slice(2, 10).toUpperCase();
 
     const res = await fetch("/api/admin/users", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        email: tempEmail,
+        email: memberEmail,
         password: tempPassword,
         full_name: r.full_name,
         role: "member",
@@ -4319,16 +5221,17 @@ function AdminApprovement({ branchId }: { branchId: string }) {
       }),
     });
 
-    const json = await res.json() as { user_id?: string; error?: string };
+    const json = await res.json() as { user_id?: string; member_id?: string; error?: string; code?: string };
     if (!res.ok) {
-      toast.error("Gagal membuat akun member", json.error);
+      const [t, s, d] = parseUserApiError(json);
+      toast.error(t, s, d);
       setApprovingId(null);
       return;
     }
 
-    // Update status registrasi + simpan bukti transfer
+    // Update status registrasi + simpan bukti transfer + link member_id
     const user = (await supabase.auth.getUser()).data.user;
-    const upd: Database["public"]["Tables"]["registrations"]["Update"] = { status: "approved", reviewed_by: user?.id ?? null, reviewed_at: new Date().toISOString(), proof_url: proofUrl ?? undefined };
+    const upd: Database["public"]["Tables"]["registrations"]["Update"] = { status: "approved", reviewed_by: user?.id ?? null, reviewed_at: new Date().toISOString(), proof_url: proofUrl ?? undefined, member_id: json.member_id ?? undefined };
     await supabase.from("registrations").update(upd).eq("id", r.id);
 
     toast.success("Pendaftaran diapprove", "Member masuk ke menu Member — lengkapi data & kirim credential.");
@@ -4437,6 +5340,7 @@ function AdminApprovement({ branchId }: { branchId: string }) {
           const age = detailReg.birth_date ? calcAge(detailReg.birth_date) : null;
           const rows: [string, string | null | undefined][] = [
             ["Nama lengkap", detailReg.full_name],
+            ["Email", detailReg.email ?? "—"],
             ["Tanggal lahir", detailReg.birth_date ? `${fmtDate(detailReg.birth_date)}${age ? ` (${age} thn)` : ""}` : "—"],
             ["Jenis kelamin", detailReg.gender === "male" ? "Laki-laki" : detailReg.gender === "female" ? "Perempuan" : "—"],
             ["No. HP", detailReg.phone ?? "—"],
@@ -4508,6 +5412,7 @@ function AdminApprovement({ branchId }: { branchId: string }) {
         footer={<><Btn variant="ghost" onClick={() => setEditReg(null)}>Batal</Btn><Btn variant="primary" onClick={saveEditReg} disabled={savingEdit}>{savingEdit ? "Menyimpan…" : "Simpan"}</Btn></>}>
         <div className="space-y-4">
           <Field label="Nama lengkap" required><Input value={editRegForm.full_name ?? ""} onChange={e => setEditRegForm(f => ({ ...f, full_name: e.target.value }))} /></Field>
+          <Field label="Email" required hint="Akan dipakai sebagai akun login"><Input type="email" placeholder="nama@email.com" value={editRegForm.email ?? ""} onChange={e => setEditRegForm(f => ({ ...f, email: e.target.value }))} /></Field>
           <div className="grid sm:grid-cols-2 gap-4">
             <Field label="Tanggal lahir"><Input type="date" value={editRegForm.birth_date ?? ""} onChange={e => setEditRegForm(f => ({ ...f, birth_date: e.target.value }))} /></Field>
             <Field label="Jenis kelamin">
@@ -4543,9 +5448,35 @@ function AdminApprovement({ branchId }: { branchId: string }) {
               <div className="font-semibold text-ink text-sm">{approveTarget.full_name}</div>
               <div className="text-xs text-ink-mute mt-0.5">{approveTarget.phone ?? "—"}</div>
             </Card>
-            <Field label="Bukti transfer" hint="Upload bukti transfer sebelum approve. Opsional jika belum ada.">
-              <Input type="file" accept="image/*,application/pdf" onChange={e => setProofFile(e.target.files?.[0] ?? null)} />
-            </Field>
+            <div>
+              <span className="text-[13px] font-semibold text-ink-soft mb-1.5 block">Bukti transfer</span>
+              <label className={`flex items-center gap-3 w-full px-3.5 py-3 rounded-xl border-2 border-dashed cursor-pointer transition-colors ${proofFile ? "border-ocean-400 bg-ocean-50" : "border-line hover:border-wave-300 hover:bg-paper-tint"}`}>
+                <input type="file" accept="image/*,application/pdf" className="sr-only" onChange={e => setProofFile(e.target.files?.[0] ?? null)} />
+                <span className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${proofFile ? "bg-ocean-100 text-ocean-600" : "bg-paper-deep text-ink-faint"}`}>
+                  <Icon name={proofFile ? "check" : "upload"} className="w-4 h-4" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  {proofFile ? (
+                    <>
+                      <div className="text-sm font-semibold text-ink truncate">{proofFile.name}</div>
+                      <div className="text-xs text-ink-mute">{(proofFile.size / 1024).toFixed(0)} KB</div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="text-sm font-semibold text-ink-soft">Klik untuk upload</div>
+                      <div className="text-xs text-ink-faint">JPG, PNG, atau PDF · Opsional</div>
+                    </>
+                  )}
+                </div>
+                {proofFile && (
+                  <button type="button" onClick={e => { e.preventDefault(); setProofFile(null); }}
+                    className="shrink-0 w-6 h-6 rounded-full bg-danger-50 text-danger-400 hover:bg-danger-100 flex items-center justify-center transition-colors">
+                    <Icon name="x" className="w-3 h-3" strokeWidth={2.5} />
+                  </button>
+                )}
+              </label>
+              <span className="text-xs text-ink-faint mt-1 block">Upload bukti transfer sebelum approve. Opsional jika belum ada.</span>
+            </div>
             <div className="bg-ocean-50 border border-ocean-100 rounded-xl p-3 text-xs text-ocean-800">
               Akun member akan dibuat otomatis dengan password sementara. Lengkapi data & kirim credential via WhatsApp dari menu Member.
             </div>
@@ -4845,8 +5776,8 @@ function AdminSchoolPanel({ branchId }: { branchId: string }) {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email: form.email, password: form.password, full_name: form.name, role: "school", branch_id: branchId }),
     });
-    const json = await res.json() as { user_id?: string; error?: string };
-    if (!res.ok) { toast.error("Gagal membuat akun sekolah", json.error); setSaving(false); return; }
+    const json = await res.json() as { user_id?: string; error?: string; code?: string };
+    if (!res.ok) { const [t, s, d] = parseUserApiError(json); toast.error(t, s, d); setSaving(false); return; }
 
     const { error } = await supabase.from("schools").insert({
       branch_id: branchId, name: form.name, email: form.email,
@@ -4888,8 +5819,13 @@ function AdminSchoolPanel({ branchId }: { branchId: string }) {
   const deleteSchool = async (s: School) => {
     const ok = await confirm({ title: "Hapus sekolah?", body: `Hapus "${s.name}"? Data member afiliasi tidak ikut terhapus.`, confirmLabel: "Hapus", danger: true });
     if (!ok) return;
-    const { error } = await supabase.from("schools").delete().eq("id", s.id);
-    if (error) return toast.error("Gagal menghapus", error.message);
+    // Hapus auth.users jika ada profile terkait
+    if (s.profile_id) {
+      await fetch(`/api/admin/users/${s.profile_id}`, { method: "DELETE" });
+    } else {
+      const { error } = await supabase.from("schools").delete().eq("id", s.id);
+      if (error) return toast.error("Gagal menghapus", error.message);
+    }
     toast.success("Sekolah dihapus");
     if (detailTarget?.id === s.id) setDetailTarget(null);
     load();
@@ -5069,6 +6005,7 @@ export default function AdminPage() {
   const [branch, setBranch] = useState<Branch | null>(null);
   const [resolvedBranchId, setResolvedBranchId] = useState("");
   const [ownerPreview, setOwnerPreview] = useState<{ id: string; name: string } | null>(null);
+  const [initError, setInitError] = useState<string | null>(null);
 
   const loadBranch = useCallback(async (branchId: string) => {
     const { data } = await supabase.from("branches").select("id, name, city, address, lat, lng, wa_numbers, logo_url").eq("id", branchId).single();
@@ -5095,12 +6032,19 @@ export default function AdminPage() {
       // If owner preview is active, skip normal branch resolution
       if (sessionStorage.getItem("ownerPreviewBranch")) return;
 
-      // Try branch_id from user_metadata first, fallback to profiles table
-      let branchId = user.user_metadata?.branch_id as string | undefined;
-      if (!branchId) {
-        const { data: profile } = await supabase.from("profiles").select("branch_id").eq("id", user.id).single();
-        branchId = profile?.branch_id ?? undefined;
+      // Verify profile row exists — if not, data was wiped, force re-login
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("branch_id, role")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (!profile) {
+        setInitError("Data akun tidak ditemukan di database. Kemungkinan data telah direset. Silakan hubungi owner untuk membuat ulang akun Anda.");
+        return;
       }
+
+      const branchId = (profile.branch_id ?? user.user_metadata?.branch_id) as string | undefined;
       if (branchId) {
         setResolvedBranchId(branchId);
         loadBranch(branchId);
@@ -5155,6 +6099,23 @@ export default function AdminPage() {
       </div>
     </div>
   ), [branch]);
+
+  if (initError) return (
+    <div className="min-h-screen flex items-center justify-center bg-paper-tint px-4">
+      <div className="bg-white rounded-2xl shadow-float border border-line p-8 max-w-sm w-full text-center space-y-4">
+        <div className="w-14 h-14 rounded-2xl bg-danger-50 text-danger-500 flex items-center justify-center mx-auto">
+          <Icon name="warning" className="w-7 h-7" />
+        </div>
+        <div>
+          <h2 className="font-display font-bold text-xl text-ink">Data Tidak Ditemukan</h2>
+          <p className="text-sm text-ink-mute mt-2 leading-relaxed">{initError}</p>
+        </div>
+        <Btn variant="primary" className="w-full" onClick={async () => { await supabase.auth.signOut(); window.location.href = "/login"; }}>
+          Kembali ke Login
+        </Btn>
+      </div>
+    </div>
+  );
 
   return (
     <div className="flex flex-col bg-paper-tint min-h-screen">

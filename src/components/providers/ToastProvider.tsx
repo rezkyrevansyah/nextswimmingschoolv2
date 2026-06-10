@@ -13,7 +13,7 @@ interface ToastItem {
 interface ToastApi {
   success: (msg: string, sub?: string) => void;
   info:    (msg: string, sub?: string) => void;
-  error:   (msg: string, sub?: string) => void;
+  error:   (msg: string, sub?: string, duration?: number) => void;
 }
 
 const ToastCtx = createContext<ToastApi | null>(null);
@@ -40,7 +40,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     () => ({
       success: (msg, sub) => push({ kind: "ok",  msg, sub }),
       info:    (msg, sub) => push({ kind: "info", msg, sub }),
-      error:   (msg, sub) => push({ kind: "err",  msg, sub }),
+      error:   (msg, sub, duration) => push({ kind: "err",  msg, sub, duration }),
     }),
     [push]
   );

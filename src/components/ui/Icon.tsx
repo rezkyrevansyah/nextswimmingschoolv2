@@ -49,7 +49,6 @@ const PATHS: Record<string, React.ReactNode> = {
   eye:       <><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></>,
   "eye-off": <><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></>,
   star:      <path d="M12 3l2.7 5.6 6.3.9-4.5 4.4 1 6.2L12 17l-5.5 3 1-6.2L3 9.5l6.3-.9z"/>,
-  whatsapp:  <><path d="M20 12a8 8 0 11-3.3-6.5L20 4l-1.4 3.4A8 8 0 0120 12z"/><path d="M9 9c0 4 3 7 7 7l1.5-1.5-2-1.5-1 .8A4.7 4.7 0 0110 12l.8-1-1.5-2z" fill="currentColor"/></>,
   chat:      <><path d="M21 12a8 8 0 11-15.6 2.5L4 20l5.5-1.4A8 8 0 0121 12z"/></>,
   school:    <><path d="M3 10l9-5 9 5-9 5-9-5z"/><path d="M7 12v5c2 1.5 3 2 5 2s3-.5 5-2v-5"/></>,
   book:      <><path d="M4 4h7v16H4z"/><path d="M13 4h7v16h-7z"/></>,
@@ -77,6 +76,16 @@ const PATHS: Record<string, React.ReactNode> = {
 };
 
 export default function Icon({ name, className = "w-5 h-5", strokeWidth = 1.75, fill = "none" }: IconProps) {
+  if (name === "whatsapp") {
+    return (
+      <img
+        src="/icons/whatsapp_logo.png"
+        alt="WhatsApp"
+        className={className}
+        aria-hidden="true"
+      />
+    );
+  }
   return (
     <svg
       viewBox="0 0 24 24"

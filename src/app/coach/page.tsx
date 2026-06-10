@@ -1966,7 +1966,7 @@ function CoachProfile({ profile, onRefresh, onLogout, onAvatarChange }: { profil
   // Avatar
   const [photoView, setPhotoView] = useState(false);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
-  const [pendingAvatarFile, setPendingAvatarFile] = useState<File | null>(null);
+  const [, setPendingAvatarFile] = useState<File | null>(null);
   // Inline profile form
   const [profileForm, setProfileForm] = useState({
     nick_name: "", gender: "", birth_date: "", phone: "",
@@ -2376,6 +2376,7 @@ export default function CoachPage() {
   const [overlay, setOverlay] = useState<string | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<ProfileData | null>(null);
+  const [initError, setInitError] = useState<string | null>(null);
   const [classes, setClasses] = useState<ClassRow[]>([]);
   const [holidayClassIds, setHolidayClassIds] = useState<Set<string>>(new Set());
 
@@ -2415,7 +2416,11 @@ export default function CoachPage() {
       if (!u) { router.push("/login"); return; }
       setUser(u);
       const p = await loadProfile(u.id);
-      if (p) loadClasses(p.id);
+      if (!p) {
+        setInitError("Data akun tidak ditemukan di database. Kemungkinan data telah direset. Silakan hubungi admin untuk membuat ulang akun Anda.");
+        return;
+      }
+      loadClasses(p.id);
     });
   }, [loadProfile, loadClasses]); // eslint-disable-line react-hooks/exhaustive-deps
    
@@ -2514,6 +2519,23 @@ export default function CoachPage() {
         rapor:   <>{SuspendBanner}{IncompleteBanner}{locked ? <LockedNotice feature="Rapor" reason={lockReason} /> : <CoachRapor coachId={coachId} branchId={branchId} />}</>,
         profile: <CoachProfile profile={profile} onRefresh={() => user && loadProfile(user.id)} onLogout={logout} onAvatarChange={url => setProfile(prev => prev ? { ...prev, avatar_url: url } : prev)} />,
       }[active];
+
+  if (initError) return (
+    <div className="min-h-screen flex items-center justify-center bg-paper-tint px-4">
+      <div className="bg-white rounded-2xl shadow-float border border-line p-8 max-w-sm w-full text-center space-y-4">
+        <div className="w-14 h-14 rounded-2xl bg-danger-50 text-danger-500 flex items-center justify-center mx-auto">
+          <Icon name="warning" className="w-7 h-7" />
+        </div>
+        <div>
+          <h2 className="font-display font-bold text-xl text-ink">Data Tidak Ditemukan</h2>
+          <p className="text-sm text-ink-mute mt-2 leading-relaxed">{initError}</p>
+        </div>
+        <Btn variant="primary" className="w-full" onClick={async () => { await supabase.auth.signOut(); window.location.href = "/login"; }}>
+          Kembali ke Login
+        </Btn>
+      </div>
+    </div>
+  );
 
   return (
     <>

@@ -1202,7 +1202,6 @@ function MemberProfile({ memberId, memberName, onLogout, onProfileComplete, onAv
   const [pwdError, setPwdError] = useState("");
   const [showNewPwd, setShowNewPwd] = useState(false);
   const [showConfirmPwd, setShowConfirmPwd] = useState(false);
-  const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [avatarSaving, setAvatarSaving] = useState(false);
   const [photoView, setPhotoView] = useState<string | null>(null);
@@ -1251,21 +1250,7 @@ function MemberProfile({ memberId, memberName, onLogout, onProfileComplete, onAv
     setSaving(false);
   };
 
-  const uploadAvatar = async () => {
-    if (!avatarFile) return;
-    setAvatarSaving(true);
-    try {
-      const url = await upload.avatar(avatarFile);
-      setProfile(p => p ? { ...p, avatar_url: url } : p);
-      onAvatarChange?.(url);
-      setAvatarFile(null);
-      setAvatarPreview(null);
-      onProfileComplete?.();
-    } catch {
-      // silent fail
-    }
-    setAvatarSaving(false);
-  };
+
 
   const changePwd = async () => {
     setPwdError("");
@@ -1483,6 +1468,7 @@ export default function MemberPage() {
   const [userId, setUserId] = useState("");
   const [locked, setLocked] = useState(false);
   const [lockChecked, setLockChecked] = useState(false);
+  const [initError, setInitError] = useState<string | null>(null);
   const [memberAvatarUrl, setMemberAvatarUrl] = useState<string | null>(null);
   const [suspendUntil, setSuspendUntil] = useState<string | null>(null);
   const [suspendReason, setSuspendReason] = useState<string | null>(null);
@@ -1529,9 +1515,9 @@ export default function MemberPage() {
   ) : null;
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
+    supabase.auth.getUser().then(async ({ data }) => {
       const u = data.user;
-      if (!u) return;
+      if (!u) { window.location.href = "/login"; return; }
       setUserId(u.id);
       const meta = u.user_metadata ?? {};
       const bid = meta.branch_id as string | undefined;
@@ -1542,7 +1528,11 @@ export default function MemberPage() {
         .select("id, suspend_until, suspend_reason, profile:profiles(full_name, is_profile_complete, avatar_url)")
         .eq("profile_id", u.id)
         .single()
-        .then(({ data: m }) => {
+        .then(async ({ data: m }) => {
+          if (!m) {
+            setInitError("Data akun tidak ditemukan di database. Kemungkinan data telah direset. Silakan hubungi admin untuk membuat ulang akun Anda.");
+            return;
+          }
           if (m) {
             setMemberId(m.id);
             const rec = m as unknown as { id: string; suspend_until: string | null; suspend_reason: string | null; profile: { full_name: string; is_profile_complete: boolean | null; avatar_url: string | null } | null };
@@ -1590,6 +1580,23 @@ export default function MemberPage() {
   if (lockChecked && locked) {
     return <ProfileGate memberName={memberName} onComplete={onProfileComplete} onLogout={logout} />;
   }
+
+  if (initError) return (
+    <div className="min-h-screen flex items-center justify-center bg-paper-tint px-4">
+      <div className="bg-white rounded-2xl shadow-float border border-line p-8 max-w-sm w-full text-center space-y-4">
+        <div className="w-14 h-14 rounded-2xl bg-danger-50 text-danger-500 flex items-center justify-center mx-auto">
+          <Icon name="warning" className="w-7 h-7" />
+        </div>
+        <div>
+          <h2 className="font-display font-bold text-xl text-ink">Data Tidak Ditemukan</h2>
+          <p className="text-sm text-ink-mute mt-2 leading-relaxed">{initError}</p>
+        </div>
+        <Btn variant="primary" className="w-full" onClick={async () => { await supabase.auth.signOut(); window.location.href = "/login"; }}>
+          Kembali ke Login
+        </Btn>
+      </div>
+    </div>
+  );
 
   return (
     <>

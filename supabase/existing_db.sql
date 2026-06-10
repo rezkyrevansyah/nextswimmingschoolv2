@@ -411,6 +411,7 @@ CREATE TABLE public.registrations (
   member_id uuid,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   reject_reason text,
+  email text,
   CONSTRAINT registrations_pkey PRIMARY KEY (id),
   CONSTRAINT registrations_reviewed_by_fkey FOREIGN KEY (reviewed_by) REFERENCES public.profiles(id),
   CONSTRAINT registrations_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branches(id),

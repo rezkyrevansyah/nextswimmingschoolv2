@@ -264,7 +264,7 @@ test.describe("Halaman Login — UI dan Validasi", () => {
     const tokenCalled = await page.evaluate(() => {
       return window.performance
         .getEntriesByType("resource")
-        .some((r: PerformanceResourceTiming) => r.name.includes("auth/v1/token"));
+        .some((r) => (r as PerformanceResourceTiming).name.includes("auth/v1/token"));
     });
     expect(tokenCalled).toBe(false);
   });

@@ -96,6 +96,40 @@ export default defineConfig({
         storageState: STORAGE_STATE_SCHOOL,
       },
     },
+
+    // ── Flow tests — CRUD & integration (pakai storageState yang sama) ────────
+    {
+      name: "flow-owner",
+      testMatch: /09-flow-owner-crud\.spec\.ts/,
+      use: {
+        ...devices["Desktop Chrome"],
+        storageState: STORAGE_STATE_OWNER,
+      },
+    },
+    {
+      name: "flow-admin",
+      testMatch: /10-flow-admin-crud\.spec\.ts/,
+      use: {
+        ...devices["Desktop Chrome"],
+        storageState: STORAGE_STATE_ADMIN,
+      },
+    },
+    {
+      name: "flow-coach",
+      testMatch: /11-flow-coach-panel\.spec\.ts/,
+      use: {
+        ...devices["Desktop Chrome"],
+        storageState: STORAGE_STATE_COACH,
+      },
+    },
+    {
+      name: "flow-member",
+      testMatch: /12-flow-member-panel\.spec\.ts/,
+      use: {
+        ...devices["Desktop Chrome"],
+        storageState: STORAGE_STATE_MEMBER,
+      },
+    },
   ],
 
   webServer: {
