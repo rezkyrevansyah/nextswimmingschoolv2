@@ -1,18 +1,22 @@
-import { TESTIMONIALS } from "@/lib/data";
 import { Card } from "@/components/ui/Card";
 import Icon from "@/components/ui/Icon";
 import Avatar from "@/components/ui/Avatar";
 import Btn from "@/components/ui/Btn";
 import { waLink } from "@/lib/utils";
+import { createClient } from "@/utils/supabase/server";
+import { getAdminWaPhone } from "@/lib/landing-config";
 
-const AVATAR_IMAGES = [
-  "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&auto=format&fit=crop&q=80", // Ibu Maya (woman)
-  "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&auto=format&fit=crop&q=80", // Bpk. Andika (man)
-  "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100&auto=format&fit=crop&q=80", // Reza (man)
-];
+export default async function Testimonials() {
+  const supabase = await createClient();
+  const [{ data }, waPhone] = await Promise.all([
+    supabase.from("landing_testimonials").select("id, name, role, body_text, avatar_url").order("sort_order").limit(3),
+    getAdminWaPhone(),
+  ]);
 
-export default function Testimonials() {
-  const [first, featured, last] = [TESTIMONIALS[0], TESTIMONIALS[1], TESTIMONIALS[2]];
+  const testimonials = data ?? [];
+  const [first, featured, last] = testimonials;
+
+  if (testimonials.length === 0) return null;
 
   return (
     <section className="bg-paper-tint">
@@ -32,9 +36,9 @@ export default function Testimonials() {
                   <Icon key={k} name="star" className="w-4 h-4 text-amber-400" fill="currentColor" strokeWidth={0} />
                 ))}
               </div>
-              <p className="mt-3 text-[15px] leading-relaxed text-ink-soft min-h-[72px]">&ldquo;{first.text}&rdquo;</p>
+              <p className="mt-3 text-[15px] leading-relaxed text-ink-soft min-h-[72px]">&ldquo;{first.body_text}&rdquo;</p>
               <div className="mt-4 pt-4 border-t border-line/40 flex items-center gap-3">
-                <Avatar name={first.name} src={AVATAR_IMAGES[0]} size={38} />
+                <Avatar name={first.name} src={first.avatar_url ?? undefined} size={38} />
                 <div>
                   <div className="text-sm font-bold text-ink">{first.name}</div>
                   <div className="text-xs text-ink-mute font-medium">{first.role}</div>
@@ -51,9 +55,9 @@ export default function Testimonials() {
                   <Icon key={k} name="star" className="w-4 h-4 text-wave-200" fill="currentColor" strokeWidth={0} />
                 ))}
               </div>
-              <p className="mt-3 text-[15px] leading-relaxed text-white/90 min-h-[72px]">&ldquo;{featured.text}&rdquo;</p>
+              <p className="mt-3 text-[15px] leading-relaxed text-white/90 min-h-[72px]">&ldquo;{featured.body_text}&rdquo;</p>
               <div className="mt-4 pt-4 border-t border-white/20 flex items-center gap-3">
-                <Avatar name={featured.name} src={AVATAR_IMAGES[1]} size={38} ring />
+                <Avatar name={featured.name} src={featured.avatar_url ?? undefined} size={38} ring />
                 <div>
                   <div className="text-sm font-bold text-white">{featured.name}</div>
                   <div className="text-xs text-white/70 font-medium">{featured.role}</div>
@@ -70,9 +74,9 @@ export default function Testimonials() {
                   <Icon key={k} name="star" className="w-4 h-4 text-amber-400" fill="currentColor" strokeWidth={0} />
                 ))}
               </div>
-              <p className="mt-3 text-[15px] leading-relaxed text-ink-soft min-h-[72px]">&ldquo;{last.text}&rdquo;</p>
+              <p className="mt-3 text-[15px] leading-relaxed text-ink-soft min-h-[72px]">&ldquo;{last.body_text}&rdquo;</p>
               <div className="mt-4 pt-4 border-t border-line/40 flex items-center gap-3">
-                <Avatar name={last.name} src={AVATAR_IMAGES[2]} size={38} />
+                <Avatar name={last.name} src={last.avatar_url ?? undefined} size={38} />
                 <div>
                   <div className="text-sm font-bold text-ink">{last.name}</div>
                   <div className="text-xs text-ink-mute font-medium">{last.role}</div>
@@ -84,7 +88,7 @@ export default function Testimonials() {
 
         <div className="mt-12 text-center">
           <p className="text-ink-soft text-sm font-medium mb-3">Gabung bersama ratusan keluarga yang telah puas belajar bersama kami.</p>
-          <a href={waLink("Halo, saya ingin daftar belajar renang di Next Swimming School.")} target="_blank" rel="noreferrer">
+          <a href={waLink("Halo, saya ingin daftar belajar renang di Next Swimming School.", waPhone)} target="_blank" rel="noreferrer">
             <Btn variant="primary" icon="whatsapp">Hubungi Admin & Daftar</Btn>
           </a>
         </div>

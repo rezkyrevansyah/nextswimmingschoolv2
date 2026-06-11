@@ -1,6 +1,7 @@
 import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
 import { waLink } from "@/lib/utils";
+import { getAdminWaPhone } from "@/lib/landing-config";
 
 const BLOCKS = [
   {
@@ -38,7 +39,8 @@ const BLOCKS = [
   },
 ];
 
-export default function Ecosystem() {
+export default async function Ecosystem() {
+  const waPhone = await getAdminWaPhone();
   return (
     <section className="bg-ocean-900 text-white relative overflow-hidden">
       <div className="absolute inset-0 grid-faint opacity-10" />
@@ -87,7 +89,7 @@ export default function Ecosystem() {
 
         <div className="mt-12 text-center">
           <p className="text-white/85 text-sm font-medium mb-3">Nikmati kemudahan pendaftaran dan monitoring progres belajar secara digital.</p>
-          <a href={waLink("Halo, saya ingin tanya seputar pendaftaran & sistem digital di Next Swimming School.")} target="_blank" rel="noreferrer">
+          <a href={waLink("Halo, saya ingin tanya seputar pendaftaran & sistem digital di Next Swimming School.", waPhone)} target="_blank" rel="noreferrer">
             <Btn variant="accent" icon="whatsapp">Daftar & Hubungi Admin</Btn>
           </a>
         </div>

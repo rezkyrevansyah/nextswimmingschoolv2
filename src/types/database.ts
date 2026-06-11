@@ -508,8 +508,7 @@ export type Database = {
           schedule_times: Json | null
           sessions_per_month: number
           sessions_per_week: number
-          show_landing: boolean
-          show_on_landing: boolean | null
+          show_on_landing: boolean
           spreadsheet_filled: boolean
           spreadsheet_url: string | null
           status: string
@@ -538,8 +537,7 @@ export type Database = {
           schedule_times?: Json | null
           sessions_per_month?: number
           sessions_per_week?: number
-          show_landing?: boolean
-          show_on_landing?: boolean | null
+          show_on_landing?: boolean
           spreadsheet_filled?: boolean
           spreadsheet_url?: string | null
           status?: string
@@ -568,8 +566,7 @@ export type Database = {
           schedule_times?: Json | null
           sessions_per_month?: number
           sessions_per_week?: number
-          show_landing?: boolean
-          show_on_landing?: boolean | null
+          show_on_landing?: boolean
           spreadsheet_filled?: boolean
           spreadsheet_url?: string | null
           status?: string
@@ -942,6 +939,315 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      landing_config: {
+        Row: {
+          floating_wa_message: string
+          footer_tagline: string
+          footer_wa_number: string
+          id: number
+          nav_cta_message: string
+          nav_cta_text: string
+          updated_at: string
+        }
+        Insert: {
+          floating_wa_message?: string
+          footer_tagline?: string
+          footer_wa_number?: string
+          id?: number
+          nav_cta_message?: string
+          nav_cta_text?: string
+          updated_at?: string
+        }
+        Update: {
+          floating_wa_message?: string
+          footer_tagline?: string
+          footer_wa_number?: string
+          id?: number
+          nav_cta_message?: string
+          nav_cta_text?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      landing_faqs: {
+        Row: {
+          answer: string
+          id: string
+          question: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          answer?: string
+          id?: string
+          question?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          answer?: string
+          id?: string
+          question?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      landing_finalcta: {
+        Row: {
+          body_text: string
+          cta_sec_text: string
+          cta_wa_message: string
+          cta_wa_text: string
+          headline: string
+          id: number
+          updated_at: string
+        }
+        Insert: {
+          body_text?: string
+          cta_sec_text?: string
+          cta_wa_message?: string
+          cta_wa_text?: string
+          headline?: string
+          id?: number
+          updated_at?: string
+        }
+        Update: {
+          body_text?: string
+          cta_sec_text?: string
+          cta_wa_message?: string
+          cta_wa_text?: string
+          headline?: string
+          id?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      landing_hero: {
+        Row: {
+          badge_text: string
+          bg_image_url: string
+          body_text: string
+          cta_primary_text: string
+          cta_primary_wa: string
+          cta_secondary_text: string
+          feature_1_icon: string
+          feature_1_text: string
+          feature_2_icon: string
+          feature_2_text: string
+          feature_3_icon: string
+          feature_3_text: string
+          feature_4_icon: string
+          feature_4_text: string
+          headline: string
+          id: number
+          updated_at: string
+        }
+        Insert: {
+          badge_text?: string
+          bg_image_url?: string
+          body_text?: string
+          cta_primary_text?: string
+          cta_primary_wa?: string
+          cta_secondary_text?: string
+          feature_1_icon?: string
+          feature_1_text?: string
+          feature_2_icon?: string
+          feature_2_text?: string
+          feature_3_icon?: string
+          feature_3_text?: string
+          feature_4_icon?: string
+          feature_4_text?: string
+          headline?: string
+          id?: number
+          updated_at?: string
+        }
+        Update: {
+          badge_text?: string
+          bg_image_url?: string
+          body_text?: string
+          cta_primary_text?: string
+          cta_primary_wa?: string
+          cta_secondary_text?: string
+          feature_1_icon?: string
+          feature_1_text?: string
+          feature_2_icon?: string
+          feature_2_text?: string
+          feature_3_icon?: string
+          feature_3_text?: string
+          feature_4_icon?: string
+          feature_4_text?: string
+          headline?: string
+          id?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      landing_hero_stats: {
+        Row: {
+          icon: string
+          id: string
+          label: string
+          sort_order: number
+          sub: string
+          suffix: string
+          updated_at: string
+          value: string
+        }
+        Insert: {
+          icon?: string
+          id?: string
+          label?: string
+          sort_order?: number
+          sub?: string
+          suffix?: string
+          updated_at?: string
+          value?: string
+        }
+        Update: {
+          icon?: string
+          id?: string
+          label?: string
+          sort_order?: number
+          sub?: string
+          suffix?: string
+          updated_at?: string
+          value?: string
+        }
+        Relationships: []
+      }
+      landing_nav_links: {
+        Row: {
+          href: string
+          id: string
+          label: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          href?: string
+          id?: string
+          label?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          href?: string
+          id?: string
+          label?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      landing_testimonials: {
+        Row: {
+          avatar_url: string | null
+          body_text: string
+          id: string
+          name: string
+          role: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          body_text?: string
+          id?: string
+          name?: string
+          role?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          avatar_url?: string | null
+          body_text?: string
+          id?: string
+          name?: string
+          role?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      landing_whyus: {
+        Row: {
+          body_text: string
+          featured_desc: string
+          featured_icon: string
+          featured_stat1_label: string
+          featured_stat1_value: string
+          featured_stat2_label: string
+          featured_stat2_value: string
+          featured_title: string
+          headline: string
+          id: number
+          section_label: string
+          updated_at: string
+          wa_button_text: string
+          wa_message: string
+        }
+        Insert: {
+          body_text?: string
+          featured_desc?: string
+          featured_icon?: string
+          featured_stat1_label?: string
+          featured_stat1_value?: string
+          featured_stat2_label?: string
+          featured_stat2_value?: string
+          featured_title?: string
+          headline?: string
+          id?: number
+          section_label?: string
+          updated_at?: string
+          wa_button_text?: string
+          wa_message?: string
+        }
+        Update: {
+          body_text?: string
+          featured_desc?: string
+          featured_icon?: string
+          featured_stat1_label?: string
+          featured_stat1_value?: string
+          featured_stat2_label?: string
+          featured_stat2_value?: string
+          featured_title?: string
+          headline?: string
+          id?: number
+          section_label?: string
+          updated_at?: string
+          wa_button_text?: string
+          wa_message?: string
+        }
+        Relationships: []
+      }
+      landing_whyus_cards: {
+        Row: {
+          description: string
+          icon: string
+          id: string
+          sort_order: number
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          description?: string
+          icon?: string
+          id?: string
+          sort_order?: number
+          title?: string
+          updated_at?: string
+        }
+        Update: {
+          description?: string
+          icon?: string
+          id?: string
+          sort_order?: number
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       member_attendances: {
         Row: {
@@ -1341,6 +1647,7 @@ export type Database = {
           nick_name: string | null
           phone: string | null
           role: Database["public"]["Enums"]["user_role"]
+          show_on_landing: boolean
           specialization: string | null
           suspend_reason: string | null
           suspend_until: string | null
@@ -1368,6 +1675,7 @@ export type Database = {
           nick_name?: string | null
           phone?: string | null
           role?: Database["public"]["Enums"]["user_role"]
+          show_on_landing?: boolean
           specialization?: string | null
           suspend_reason?: string | null
           suspend_until?: string | null
@@ -1395,6 +1703,7 @@ export type Database = {
           nick_name?: string | null
           phone?: string | null
           role?: Database["public"]["Enums"]["user_role"]
+          show_on_landing?: boolean
           specialization?: string | null
           suspend_reason?: string | null
           suspend_until?: string | null

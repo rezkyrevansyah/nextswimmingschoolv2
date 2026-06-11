@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { createClient } from "@/utils/supabase/server";
 import LandingNav from "./_components/LandingNav";
 import Hero from "./_components/Hero";
 import WhyUs from "./_components/WhyUs";
@@ -26,23 +27,35 @@ export const metadata: Metadata = {
   ],
 };
 
-export default function LandingPage() {
+export default async function LandingPage() {
+  const supabase = await createClient();
+  const [{ data: config }, { data: navLinks }] = await Promise.all([
+    supabase.from("landing_config").select("footer_wa_number, floating_wa_message, nav_cta_text, nav_cta_message").single(),
+    supabase.from("landing_nav_links").select("href, label").order("sort_order"),
+  ]);
+
+  const waPhone = config?.footer_wa_number ?? undefined;
+
   return (
     <div className="bg-white">
-      <LandingNav />
+      <LandingNav
+        links={navLinks ?? undefined}
+        ctaText={config?.nav_cta_text ?? undefined}
+        ctaMessage={config?.nav_cta_message ?? undefined}
+        waPhone={waPhone}
+      />
       <main>
-        <Hero />
-        <WhyUs />
+        <Hero waPhone={waPhone} />
+        <WhyUs waPhone={waPhone} />
         <Programs />
         <Ecosystem />
         <CoachShowcase />
         <Testimonials />
         <FAQ />
-        <FinalCTA />
+        <FinalCTA waPhone={waPhone} />
       </main>
       <LandingFooter />
-      <WAFloatingButton />
+      <WAFloatingButton message={config?.floating_wa_message ?? undefined} waPhone={waPhone} />
     </div>
   );
 }
-

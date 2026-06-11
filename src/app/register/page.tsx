@@ -18,6 +18,7 @@ export default function RegisterPage() {
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [branches, setBranches] = useState<Branch[]>([]);
+  const [waPhone, setWaPhone] = useState<string | undefined>(undefined);
 
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -33,14 +34,10 @@ export default function RegisterPage() {
 
   useEffect(() => {
     const supabase = createClient();
-    supabase
-      .from("branches")
-      .select("id, name, city")
-      .eq("status", "active")
-      .order("name")
-      .then(({ data }) => {
-        if (data) setBranches(data);
-      });
+    supabase.from("branches").select("id, name, city").eq("status", "active").order("name")
+      .then(({ data }) => { if (data) setBranches(data); });
+    supabase.from("landing_config").select("footer_wa_number").single()
+      .then(({ data }) => { if (data?.footer_wa_number) setWaPhone(data.footer_wa_number); });
   }, []);
 
   const submit = async (e: React.FormEvent) => {
@@ -142,7 +139,7 @@ export default function RegisterPage() {
                   <p className="text-xs text-ink-soft mt-1 leading-relaxed">
                     Admin akan bantu rekomendasikan kelas yang pas — gratis, tanpa kewajiban apapun.
                   </p>
-                  <a href={waLink("Halo, saya ingin konsultasi sebelum daftar.")} target="_blank" rel="noreferrer" className="mt-3 inline-flex">
+                  <a href={waLink("Halo, saya ingin konsultasi sebelum daftar.", waPhone)} target="_blank" rel="noreferrer" className="mt-3 inline-flex">
                     <Btn variant="wa" size="sm" icon="whatsapp">Konsultasi via WhatsApp</Btn>
                   </a>
                 </div>
@@ -267,7 +264,7 @@ export default function RegisterPage() {
               </p>
 
               <div className="mt-7 space-y-3">
-                <a href={waLink(waMessage)} target="_blank" rel="noreferrer" className="block">
+                <a href={waLink(waMessage, waPhone)} target="_blank" rel="noreferrer" className="block">
                   <Btn variant="wa" icon="whatsapp" size="lg" className="w-full">Chat admin sekarang</Btn>
                 </a>
                 <Link href="/" className="block">

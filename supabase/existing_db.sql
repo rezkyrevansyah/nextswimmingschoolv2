@@ -41,6 +41,7 @@ CREATE TABLE public.profiles (
   suspend_until date,
   suspend_reason text,
   is_archived boolean NOT NULL DEFAULT false,
+  show_on_landing boolean NOT NULL DEFAULT false,
   CONSTRAINT profiles_pkey PRIMARY KEY (id),
   CONSTRAINT profiles_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id),
   CONSTRAINT profiles_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branches(id)
@@ -85,6 +86,7 @@ CREATE TABLE public.classes (
   price_per_session integer,
   schedule_times jsonb,
   spreadsheet_url text,
+  show_on_landing boolean NOT NULL DEFAULT false,
   CONSTRAINT classes_pkey PRIMARY KEY (id),
   CONSTRAINT classes_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branches(id)
 );
@@ -441,4 +443,107 @@ CREATE TABLE public.class_programs (
   CONSTRAINT class_programs_pkey PRIMARY KEY (id),
   CONSTRAINT class_programs_coach_id_fkey FOREIGN KEY (coach_id) REFERENCES public.profiles(id),
   CONSTRAINT class_programs_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.classes(id)
+);
+CREATE TABLE public.landing_hero (
+  id integer NOT NULL DEFAULT 1 CHECK (id = 1),
+  headline text NOT NULL DEFAULT 'Belajar renang lebih aman, modern, dan profesional.'::text,
+  body_text text NOT NULL DEFAULT 'Next Swimming School membantu anak hingga dewasa belajar renang dengan metode modern, coach bersertifikat, dan sistem digital yang memudahkan orang tua memantau setiap progres.'::text,
+  badge_text text NOT NULL DEFAULT 'Sistem digital terintegrasi — 5+ cabang aktif'::text,
+  bg_image_url text NOT NULL DEFAULT 'https://images.unsplash.com/photo-1530549387789-4c1017266635?w=1800&q=80&auto=format&fit=crop'::text,
+  cta_primary_text text NOT NULL DEFAULT 'Konsultasi Sekarang'::text,
+  cta_primary_wa text NOT NULL DEFAULT 'Halo, saya ingin tanya soal program & jadwal Next Swimming School.'::text,
+  cta_secondary_text text NOT NULL DEFAULT 'Daftar Online'::text,
+  feature_1_icon text NOT NULL DEFAULT 'shield'::text,
+  feature_1_text text NOT NULL DEFAULT 'Coach bersertifikat'::text,
+  feature_2_icon text NOT NULL DEFAULT 'chart'::text,
+  feature_2_text text NOT NULL DEFAULT 'Progress monitoring'::text,
+  feature_3_icon text NOT NULL DEFAULT 'users'::text,
+  feature_3_text text NOT NULL DEFAULT 'Rasio kelas kecil'::text,
+  feature_4_icon text NOT NULL DEFAULT 'qr'::text,
+  feature_4_text text NOT NULL DEFAULT 'Sistem QR absensi'::text,
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT landing_hero_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.landing_hero_stats (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  sort_order integer NOT NULL DEFAULT 0,
+  value text NOT NULL DEFAULT '0'::text,
+  suffix text NOT NULL DEFAULT ''::text,
+  label text NOT NULL DEFAULT ''::text,
+  sub text NOT NULL DEFAULT ''::text,
+  icon text NOT NULL DEFAULT 'star'::text,
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT landing_hero_stats_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.landing_whyus (
+  id integer NOT NULL DEFAULT 1 CHECK (id = 1),
+  section_label text NOT NULL DEFAULT 'Mengapa Kami'::text,
+  headline text NOT NULL DEFAULT 'Lima alasan keluarga mempercayakan kami.'::text,
+  body_text text NOT NULL DEFAULT 'Bukan sekadar belajar renang — kami menghadirkan ekosistem yang mempermudah orang tua, coach, dan administrasi sekolah dalam satu sistem.'::text,
+  wa_button_text text NOT NULL DEFAULT 'Hubungi Admin via WhatsApp'::text,
+  wa_message text NOT NULL DEFAULT 'Halo, saya ingin tanya kelebihan & detail program di Next Swimming School.'::text,
+  featured_icon text NOT NULL DEFAULT 'shield'::text,
+  featured_title text NOT NULL DEFAULT 'Coach Profesional'::text,
+  featured_desc text NOT NULL DEFAULT 'Setiap coach memiliki sertifikasi yang diverifikasi admin sebelum mengajar.'::text,
+  featured_stat1_label text NOT NULL DEFAULT 'Sertifikasi'::text,
+  featured_stat1_value text NOT NULL DEFAULT '100%'::text,
+  featured_stat2_label text NOT NULL DEFAULT 'Lifeguard ARC'::text,
+  featured_stat2_value text NOT NULL DEFAULT 'Aktif'::text,
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT landing_whyus_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.landing_whyus_cards (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  sort_order integer NOT NULL DEFAULT 0,
+  icon text NOT NULL DEFAULT 'chart'::text,
+  title text NOT NULL DEFAULT ''::text,
+  description text NOT NULL DEFAULT ''::text,
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT landing_whyus_cards_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.landing_testimonials (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  sort_order integer NOT NULL DEFAULT 0,
+  name text NOT NULL DEFAULT ''::text,
+  role text NOT NULL DEFAULT ''::text,
+  body_text text NOT NULL DEFAULT ''::text,
+  avatar_url text,
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT landing_testimonials_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.landing_faqs (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  question text NOT NULL DEFAULT ''::text,
+  answer text NOT NULL DEFAULT ''::text,
+  sort_order integer NOT NULL DEFAULT 0,
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT landing_faqs_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.landing_finalcta (
+  id integer NOT NULL DEFAULT 1 CHECK (id = 1),
+  headline text NOT NULL DEFAULT 'Mulai perjalanan renangmu bersama Next Swimming School.'::text,
+  body_text text NOT NULL DEFAULT 'Chat admin kami untuk konsultasi program yang paling sesuai dengan anak Anda atau diri sendiri.'::text,
+  cta_wa_text text NOT NULL DEFAULT 'Chat admin sekarang'::text,
+  cta_wa_message text NOT NULL DEFAULT 'Halo, saya tertarik untuk daftar di Next Swimming School.'::text,
+  cta_sec_text text NOT NULL DEFAULT 'Lihat program'::text,
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT landing_finalcta_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.landing_config (
+  id integer NOT NULL DEFAULT 1 CHECK (id = 1),
+  footer_wa_number text NOT NULL DEFAULT '082110009667'::text,
+  footer_tagline text NOT NULL DEFAULT 'Sekolah renang modern dengan ekosistem digital terintegrasi. Cabang aktif di Jakarta Selatan, Bogor, dan Bandung.'::text,
+  floating_wa_message text NOT NULL DEFAULT 'Halo Admin Next Swimming School, saya ingin bertanya tentang program les renang. Bisa dibantu?'::text,
+  nav_cta_text text NOT NULL DEFAULT 'Konsultasi Sekarang'::text,
+  nav_cta_message text NOT NULL DEFAULT 'Halo Admin Next Swimming School, saya ingin konsultasi program renang.'::text,
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT landing_config_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.landing_nav_links (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  sort_order integer NOT NULL DEFAULT 0,
+  label text NOT NULL DEFAULT ''::text,
+  href text NOT NULL DEFAULT '#'::text,
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT landing_nav_links_pkey PRIMARY KEY (id)
 );

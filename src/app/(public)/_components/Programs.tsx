@@ -3,6 +3,7 @@ import { Card } from "@/components/ui/Card";
 import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
 import { createClient } from "@/utils/supabase/server";
+import { getAdminWaPhone } from "@/lib/landing-config";
 
 interface ClassRow {
   id: string;
@@ -20,12 +21,10 @@ interface ClassRow {
 
 export default async function Programs() {
   const supabase = await createClient();
-  // TODO: filter by landing page visibility — will be managed via a dedicated menu
-  const { data: classes } = await supabase
-    .from("classes")
-    .select("id, name, description, goals, price_monthly, price_per_session, class_type, schedule_days, time_start, time_end, photo_url")
-    .eq("status", "active")
-    .order("created_at", { ascending: true });
+  const [{ data: classes }, waPhone] = await Promise.all([
+    supabase.from("classes").select("id, name, description, goals, price_monthly, price_per_session, class_type, schedule_days, time_start, time_end, photo_url").eq("status", "active").eq("show_on_landing", true).order("created_at", { ascending: true }),
+    getAdminWaPhone(),
+  ]);
 
   const items = (classes ?? []) as ClassRow[];
 
@@ -39,7 +38,7 @@ export default async function Programs() {
               Program yang dirancang<br />untuk setiap level.
             </h2>
           </div>
-          <a href={waLink("Halo, saya ingin tanya program yang sesuai untuk saya / anak saya.")} target="_blank" rel="noreferrer" className="hidden sm:inline-flex">
+          <a href={waLink("Halo, saya ingin tanya program yang sesuai untuk saya / anak saya.", waPhone)} target="_blank" rel="noreferrer" className="hidden sm:inline-flex">
             <Btn variant="outline" icon="whatsapp">Tanya program ke admin</Btn>
           </a>
         </div>
@@ -94,7 +93,7 @@ export default async function Programs() {
                         <span className="text-xs text-ink-mute font-semibold">{c.price_monthly > 0 ? "/bln" : ""}</span>
                       </div>
                     </div>
-                    <a href={waLink(`Halo, saya tertarik dengan program ${c.name}.`)} target="_blank" rel="noreferrer">
+                    <a href={waLink(`Halo, saya tertarik dengan program ${c.name}.`, waPhone)} target="_blank" rel="noreferrer">
                       <Btn variant="soft" size="sm" icon="arrow">Tanya</Btn>
                     </a>
                   </div>
@@ -109,7 +108,7 @@ export default async function Programs() {
             <h4 className="font-display font-bold text-ink text-base">Bingung memilih program yang tepat?</h4>
             <p className="text-xs text-ink-mute mt-1">Konsultasikan kebutuhan renang Anda atau anak Anda secara gratis dengan tim kami.</p>
           </div>
-          <a href={waLink("Halo, saya ingin konsultasi memilih program renang yang tepat.")} target="_blank" rel="noreferrer" className="w-full sm:w-auto shrink-0">
+          <a href={waLink("Halo, saya ingin konsultasi memilih program renang yang tepat.", waPhone)} target="_blank" rel="noreferrer" className="w-full sm:w-auto shrink-0">
             <Btn variant="primary" icon="whatsapp" className="w-full sm:w-auto cursor-pointer">Konsultasi Program Gratis</Btn>
           </a>
         </div>

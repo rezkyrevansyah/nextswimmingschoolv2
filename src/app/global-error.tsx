@@ -36,6 +36,7 @@ export default function GlobalError({
               Error ID: {error.digest}
             </p>
           )}
+          {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
           <a
             href="/"
             style={{

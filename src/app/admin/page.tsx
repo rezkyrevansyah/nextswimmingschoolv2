@@ -611,7 +611,6 @@ function AdminClass({ branchId }: { branchId: string }) {
   const supabase = createClient();
   const toast = useToast();
   const confirm = useConfirm();
-  const { upload, uploading: uploadingPhoto } = useUpload();
   const [classes, setClasses] = useState<ClassRow[]>([]);
   const [coaches, setCoaches] = useState<CoachProfile[]>([]);
   const [saving, setSaving] = useState(false);
@@ -621,8 +620,6 @@ function AdminClass({ branchId }: { branchId: string }) {
   const [openForm, setOpenForm] = useState(false);
   const [editTarget, setEditTarget] = useState<ClassRow | null>(null);
   const [form, setForm] = useState(EMPTY_CLASS_FORM);
-  const [classPhotoFile, setClassPhotoFile] = useState<File | null>(null);
-  const [classPhotoPreview, setClassPhotoPreview] = useState<string | null>(null);
 
   // Criteria (aspek penilaian) modal
   const [criteriaClass, setCriteriaClass] = useState<ClassRow | null>(null);
@@ -646,7 +643,7 @@ function AdminClass({ branchId }: { branchId: string }) {
   }, [load]); // eslint-disable-line react-hooks/exhaustive-deps
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  const openCreate = () => { setEditTarget(null); setForm(EMPTY_CLASS_FORM); setClassPhotoFile(null); setClassPhotoPreview(null); setOpenForm(true); };
+  const openCreate = () => { setEditTarget(null); setForm(EMPTY_CLASS_FORM); setOpenForm(true); };
   const openEdit = (c: ClassRow) => {
     setEditTarget(c);
     const slots = c.schedule_times ?? [];
@@ -666,8 +663,6 @@ function AdminClass({ branchId }: { branchId: string }) {
       goals: c.goals ?? "", description: c.description ?? "",
       photo_url: c.photo_url ?? "",
     });
-    setClassPhotoFile(null);
-    setClassPhotoPreview(null);
     setOpenForm(true);
   };
 
@@ -685,31 +680,19 @@ function AdminClass({ branchId }: { branchId: string }) {
     const firstSlot = scheduleTimes[0];
 
     if (editTarget) {
-      let photoUrl = form.photo_url || null;
-      if (classPhotoFile) {
-        try { photoUrl = await upload.classPhoto(classPhotoFile, editTarget.id); } catch { /* non-fatal */ }
-      }
-      const updatePayload: Database["public"]["Tables"]["classes"]["Update"] = { name: form.name, class_type: form.class_type, schedule_days: days, schedule_times: (scheduleTimes.length > 0 ? scheduleTimes : null) as Json | null, time_start: firstSlot?.time_start || form.time_start || undefined, time_end: firstSlot?.time_end || form.time_end || undefined, capacity: isPrivate ? 1 : (Number(form.capacity) || 0), price_monthly: isPrivate ? 0 : (Number(form.price_monthly) || 0), price_per_session: isPrivate ? (Number(form.price_per_session) || null) : null, goals: form.goals.trim() || null, description: form.description.trim() || null, photo_url: photoUrl };
+      const updatePayload: Database["public"]["Tables"]["classes"]["Update"] = { name: form.name, class_type: form.class_type, schedule_days: days, schedule_times: (scheduleTimes.length > 0 ? scheduleTimes : null) as Json | null, time_start: firstSlot?.time_start || form.time_start || undefined, time_end: firstSlot?.time_end || form.time_end || undefined, capacity: isPrivate ? 1 : (Number(form.capacity) || 0), price_monthly: isPrivate ? 0 : (Number(form.price_monthly) || 0), price_per_session: isPrivate ? (Number(form.price_per_session) || null) : null, goals: form.goals.trim() || null, description: form.description.trim() || null };
       const { error } = await supabase.from("classes").update(updatePayload).eq("id", editTarget.id);
       setSaving(false);
       if (error) return toast.error("Gagal update kelas", error.message);
       toast.success("Kelas diperbarui");
     } else {
       const insertPayload: Database["public"]["Tables"]["classes"]["Insert"] = { name: form.name, class_type: form.class_type, schedule_days: days, schedule_times: (scheduleTimes.length > 0 ? scheduleTimes : null) as Json | null, time_start: firstSlot?.time_start || form.time_start || "", time_end: firstSlot?.time_end || form.time_end || "", capacity: isPrivate ? 1 : (Number(form.capacity) || 0), price_monthly: isPrivate ? 0 : (Number(form.price_monthly) || 0), price_per_session: isPrivate ? (Number(form.price_per_session) || null) : null, goals: form.goals.trim() || null, description: form.description.trim() || null, branch_id: branchId, status: "active", enrolled: 0 };
-      const { data: insertData, error } = await supabase.from("classes").insert(insertPayload).select("id").single();
+      const { error } = await supabase.from("classes").insert(insertPayload).select("id").single();
       if (error) { setSaving(false); return toast.error("Gagal membuat kelas", error.message); }
-      if (classPhotoFile && insertData?.id) {
-        try {
-          const photoUrl = await upload.classPhoto(classPhotoFile, insertData.id);
-          await supabase.from("classes").update({ photo_url: photoUrl }).eq("id", insertData.id);
-        } catch { /* non-fatal */ }
-      }
       setSaving(false);
       toast.success("Kelas dibuat");
     }
     setOpenForm(false);
-    setClassPhotoFile(null);
-    setClassPhotoPreview(null);
     load();
   };
 
@@ -1009,24 +992,6 @@ function AdminClass({ branchId }: { branchId: string }) {
           </div>
           <Field label="Tujuan kelas" hint="Tampil di coach page dan member page"><Textarea rows={2} value={form.goals} onChange={e => setForm(f => ({ ...f, goals: e.target.value }))} placeholder="Mis. Pengenalan air, membangun rasa percaya diri di air." /></Field>
           <Field label="Deskripsi kelas" hint="Opsional — tampil di coach page dan member page"><Textarea rows={3} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Mis. Kelas ini dirancang untuk anak usia 4–6 tahun yang baru pertama kali belajar renang..." /></Field>
-          <Field label="Foto kelas" hint="Opsional — tampil di kartu kelas">
-            <div className="flex items-start gap-4">
-              {(classPhotoPreview || form.photo_url) && (
-                <div className="shrink-0 relative">
-                  <img src={classPhotoPreview ?? form.photo_url!} alt="Foto kelas" className="rounded-lg object-cover border border-line w-20 h-[60px]" />
-                </div>
-              )}
-              <label className="flex-1 cursor-pointer flex flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-line hover:border-ocean-400 bg-paper-tint hover:bg-ocean-50/30 transition-colors py-4 px-3">
-                <Icon name="camera" className="w-5 h-5 text-ink-mute" />
-                <span className="text-xs text-ink-mute font-medium">{uploadingPhoto ? "Mengunggah…" : "Pilih foto"}</span>
-                <input type="file" accept="image/*" className="sr-only" onChange={e => {
-                  const f = e.target.files?.[0] ?? null;
-                  setClassPhotoFile(f);
-                  setClassPhotoPreview(f ? URL.createObjectURL(f) : null);
-                }} />
-              </label>
-            </div>
-          </Field>
           {editTarget && coaches.length > 0 && (
             <div>
               <div className="text-xs font-bold uppercase tracking-widest text-ink-faint mb-2">Coach yang mengajar</div>

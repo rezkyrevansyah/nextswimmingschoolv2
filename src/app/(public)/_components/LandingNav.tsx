@@ -6,15 +6,32 @@ import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
 import { waLink } from "@/lib/utils";
 
-const NAV_LINKS = [
-  { id: "home",    label: "Beranda"      },
-  { id: "why",     label: "Mengapa Kami" },
-  { id: "program", label: "Program"      },
-  { id: "coach",   label: "Coach"        },
-  { id: "faq",     label: "FAQ"          },
+interface NavLink {
+  href: string;
+  label: string;
+}
+
+interface LandingNavProps {
+  links?: NavLink[];
+  ctaText?: string;
+  ctaMessage?: string;
+  waPhone?: string;
+}
+
+const DEFAULT_LINKS: NavLink[] = [
+  { href: "#home",    label: "Beranda"      },
+  { href: "#why",     label: "Mengapa Kami" },
+  { href: "#program", label: "Program"      },
+  { href: "#coach",   label: "Coach"        },
+  { href: "#faq",     label: "FAQ"          },
 ];
 
-export default function LandingNav() {
+export default function LandingNav({
+  links = DEFAULT_LINKS,
+  ctaText = "Konsultasi Sekarang",
+  ctaMessage = "Halo Admin Next Swimming School, saya ingin konsultasi program renang.",
+  waPhone,
+}: LandingNavProps) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -30,10 +47,10 @@ export default function LandingNav() {
         </a>
 
         <nav className="ml-6 hidden lg:flex items-center gap-1">
-          {NAV_LINKS.map((l) => (
+          {links.map((l) => (
             <a
-              key={l.id}
-              href={`#${l.id}`}
+              key={l.href}
+              href={l.href}
               className="px-3.5 py-2 text-sm font-semibold text-ink-soft hover:text-ocean-700 rounded-lg hover:bg-paper-tint"
             >
               {l.label}
@@ -48,12 +65,12 @@ export default function LandingNav() {
         </Link>
 
         <a
-          href={waLink("Halo Admin Next Swimming School, saya ingin konsultasi program renang.")}
+          href={waLink(ctaMessage, waPhone)}
           target="_blank"
           rel="noreferrer"
           className="hidden sm:inline-flex"
         >
-          <Btn variant="primary" icon="whatsapp">Konsultasi Sekarang</Btn>
+          <Btn variant="primary" icon="whatsapp">{ctaText}</Btn>
         </a>
 
         <button
@@ -67,10 +84,10 @@ export default function LandingNav() {
       {open && (
         <div className="lg:hidden border-t border-line bg-white">
           <div className="px-4 py-3 grid gap-1">
-            {NAV_LINKS.map((l) => (
+            {links.map((l) => (
               <a
-                key={l.id}
-                href={`#${l.id}`}
+                key={l.href}
+                href={l.href}
                 onClick={() => setOpen(false)}
                 className="px-3 py-2.5 rounded-lg text-sm font-semibold text-ink-soft hover:bg-paper-tint"
               >
@@ -84,8 +101,8 @@ export default function LandingNav() {
             >
               Login
             </Link>
-            <a href={waLink()} target="_blank" rel="noreferrer" className="mt-2">
-              <Btn variant="primary" icon="whatsapp" className="w-full">Konsultasi via WhatsApp</Btn>
+            <a href={waLink(ctaMessage, waPhone)} target="_blank" rel="noreferrer" className="mt-2">
+              <Btn variant="primary" icon="whatsapp" className="w-full">{ctaText}</Btn>
             </a>
           </div>
         </div>

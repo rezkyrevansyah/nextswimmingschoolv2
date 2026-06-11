@@ -140,11 +140,12 @@ function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number)
   return Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 }
 
-function ClockInFlow({ back, coachId, branchId, classes, preselectedClassId }: {
+function ClockInFlow({ back, coachId, branchId, classes, preselectedClassId, onSuccess }: {
   back: () => void;
   coachId: string; branchId: string;
   classes: ClassRow[];
   preselectedClassId?: string;
+  onSuccess?: (classId: string) => void;
 }) {
   const toast = useToast();
   const { upload, uploading } = useUpload();
@@ -213,6 +214,7 @@ function ClockInFlow({ back, coachId, branchId, classes, preselectedClassId }: {
     setSubmitting(false);
     if (error) { toast.error("Gagal menyimpan absensi", error.message); return; }
     toast.success("Absensi Berhasil!", "Data tersimpan ke history & admin panel");
+    onSuccess?.(classId);
     setStep(3);
   };
 
@@ -609,13 +611,15 @@ function isInClockInWindow(timeStart: string, timeEnd: string): boolean {
   return nowMin >= startMin - 60 && nowMin <= endMin;
 }
 
-function CoachHome({ setOverlay, setActive, coachId, profile, classes, holidayClassIds }: {
+function CoachHome({ setOverlay, setActive, coachId, profile, classes, holidayClassIds, clockedInIds, setClockedInIds }: {
   setOverlay: (v: string) => void;
   setActive: (tab: string) => void;
   coachId: string; branchId?: string;
   profile: ProfileData | null;
   classes: ClassRow[];
   holidayClassIds: Set<string>;
+  clockedInIds: Set<string>;
+  setClockedInIds: React.Dispatch<React.SetStateAction<Set<string>>>;
 }) {
   const supabase = createClient();
   const [monthStats, setMonthStats] = useState({ present: 0, leave: 0, sub: 0 });
@@ -634,9 +638,18 @@ function CoachHome({ setOverlay, setActive, coachId, profile, classes, holidayCl
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
     const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split("T")[0];
 
-    supabase.from("coach_attendances").select("id, status").eq("coach_id", coachId).gte("session_date", monthStart).lte("session_date", monthEnd)
+    supabase.from("coach_attendances").select("id, status, class_id, session_date").eq("coach_id", coachId).gte("session_date", monthStart).lte("session_date", monthEnd)
       .then(({ data }) => {
-        if (data) setMonthStats({ present: data.filter(a => a.status === "present").length, leave: data.filter(a => a.status === "absent").length, sub: 0 });
+        if (data) {
+          setMonthStats({ present: data.filter(a => a.status === "present").length, leave: data.filter(a => a.status === "absent").length, sub: 0 });
+          // Track which classes coach already clocked-in today
+          const todayClockedIn = new Set<string>(
+            (data as { id: string; status: string; class_id: string; session_date: string }[])
+              .filter(a => a.session_date === today && a.status === "present" && a.class_id)
+              .map(a => a.class_id)
+          );
+          setClockedInIds(todayClockedIn);
+        }
       });
 
     // Load substitute assignments for today
@@ -729,21 +742,23 @@ function CoachHome({ setOverlay, setActive, coachId, profile, classes, holidayCl
             {todayClasses.map((c) => {
               const isHoliday = holidayClassIds.has(c.id);
               const isOnLeave = leaveClassIds.has(c.id);
-              const inWindow = !isHoliday && !isOnLeave && isInClockInWindow(c.time_start, c.time_end);
+              const isClockedIn = clockedInIds.has(c.id);
+              const inWindow = !isHoliday && !isOnLeave && !isClockedIn && isInClockInWindow(c.time_start, c.time_end);
               return (
                 <Card key={c.id} className={isHoliday || isOnLeave ? "opacity-60" : ""}>
                   <div className="flex items-start gap-3">
-                    <span className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${isHoliday ? "bg-warn-50 text-warn-500" : isOnLeave ? "bg-danger-50 text-danger-400" : "bg-wave-50 text-wave-600"}`}>
-                      <Icon name={isHoliday ? "flag" : isOnLeave ? "clipboard" : "swim"} className="w-6 h-6" />
+                    <span className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${isHoliday ? "bg-warn-50 text-warn-500" : isOnLeave ? "bg-danger-50 text-danger-400" : isClockedIn ? "bg-ok-50 text-ok-600" : "bg-wave-50 text-wave-600"}`}>
+                      <Icon name={isHoliday ? "flag" : isOnLeave ? "clipboard" : isClockedIn ? "check" : "swim"} className="w-6 h-6" />
                     </span>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <div className="font-display font-bold text-ink">{c.name}</div>
                         {isHoliday && <Status kind="holiday">Libur</Status>}
                         {isOnLeave && <Status kind="inactive">Izin Hari Ini</Status>}
+                        {isClockedIn && <Status kind="approved">Sudah Absen</Status>}
                       </div>
                       <div className="text-xs text-ink-mute mt-0.5 font-mono">{c.time_start?.slice(0,5)}{c.time_end ? `–${c.time_end.slice(0,5)}` : ""} · {c.enrolled}/{c.capacity} member</div>
-                      {!isHoliday && !isOnLeave && (
+                      {!isHoliday && !isOnLeave && !isClockedIn && (
                         <div className="mt-3 flex flex-wrap gap-2">
                           {inWindow ? (
                             <Btn variant="primary" size="sm" icon="camera" onClick={() => setOverlay(`clockin:${c.id}`)}>Clock-In</Btn>
@@ -762,29 +777,33 @@ function CoachHome({ setOverlay, setActive, coachId, profile, classes, holidayCl
             })}
             {subClasses.map((s) => {
               const subClass = classes.find(c => c.id === s.classId);
-              const inWindow = subClass ? isInClockInWindow(subClass.time_start, subClass.time_end) : false;
+              const isClockedIn = clockedInIds.has(s.classId);
+              const inWindow = !isClockedIn && (subClass ? isInClockInWindow(subClass.time_start, subClass.time_end) : false);
               return (
                 <Card key={s.classId} className="border-sub-200 bg-sub-50/30">
                   <div className="flex items-start gap-3">
-                    <span className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 bg-sub-100 text-sub-600">
-                      <Icon name="refresh" className="w-6 h-6" />
+                    <span className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${isClockedIn ? "bg-ok-50 text-ok-600" : "bg-sub-100 text-sub-600"}`}>
+                      <Icon name={isClockedIn ? "check" : "refresh"} className="w-6 h-6" />
                     </span>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <div className="font-display font-bold text-ink">{s.className}</div>
                         <Status kind="substitute">Pengganti</Status>
+                        {isClockedIn && <Status kind="approved">Sudah Absen</Status>}
                       </div>
                       <div className="text-xs text-ink-mute mt-0.5">Menggantikan: {s.originalCoach}</div>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {inWindow ? (
-                          <Btn variant="primary" size="sm" icon="camera" onClick={() => setOverlay(`clockin:${s.classId}`)}>Clock-In</Btn>
-                        ) : (
-                          <div className="text-xs text-ink-mute font-semibold flex items-center gap-1">
-                            <Icon name="clock" className="w-3.5 h-3.5" />
-                            Di luar window — hubungi admin untuk input manual
-                          </div>
-                        )}
-                      </div>
+                      {!isClockedIn && (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {inWindow ? (
+                            <Btn variant="primary" size="sm" icon="camera" onClick={() => setOverlay(`clockin:${s.classId}`)}>Clock-In</Btn>
+                          ) : (
+                            <div className="text-xs text-ink-mute font-semibold flex items-center gap-1">
+                              <Icon name="clock" className="w-3.5 h-3.5" />
+                              Di luar window — hubungi admin untuk input manual
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </Card>
@@ -815,13 +834,18 @@ function CoachHome({ setOverlay, setActive, coachId, profile, classes, holidayCl
 
 // ── Absensi ────────────────────────────────────────────────────────────────────
 
-function CoachAbsensi({ setOverlay, coachId, classes, holidayClassIds }: {
+function CoachAbsensi({ setOverlay, coachId, classes, holidayClassIds, clockedInIds }: {
   setOverlay: (v: string) => void;
-  coachId: string; branchId?: string; classes: ClassRow[]; holidayClassIds: Set<string>;
+  coachId: string; branchId?: string; classes: ClassRow[]; holidayClassIds: Set<string>; clockedInIds: Set<string>;
 }) {
   const supabase = createClient();
   const toast = useToast();
   const [history, setHistory] = useState<AttendanceRow[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [historyPage, setHistoryPage] = useState(0);
+  const [historyHasMore, setHistoryHasMore] = useState(false);
+  const [filterMonth, setFilterMonth] = useState<string>(() => new Date().toISOString().slice(0, 7)); // "YYYY-MM"
+  const [filterClassId, setFilterClassId] = useState<string>("all");
   const [loading, setLoading] = useState(true);
   const [openManual, setOpenManual] = useState(false);
   const [showQR, setShowQR] = useState(false);
@@ -866,16 +890,46 @@ function CoachAbsensi({ setOverlay, coachId, classes, holidayClassIds }: {
     setMemberAttHistory([...grouped.values()].sort((a, b) => b.session_date.localeCompare(a.session_date)).slice(0, 10));
   }, [coachId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const PAGE_SIZE = 15;
+
+  const loadHistory = useCallback(async (page: number, month: string, classId: string, append = false) => {
+    if (!coachId) return;
+    setHistoryLoading(true);
+    const [y, m] = month.split("-");
+    const monthStart = `${y}-${m}-01`;
+    const monthEnd = new Date(Number(y), Number(m), 0).toISOString().split("T")[0]; // last day of month
+    let q = supabase.from("coach_attendances")
+      .select("id, session_date, clock_in_time, distance_meters, is_manual, manual_note, status, class_id, class:classes(name), manual_by_profile:profiles!coach_attendances_manual_by_fkey(full_name)")
+      .eq("coach_id", coachId)
+      .gte("session_date", monthStart)
+      .lte("session_date", monthEnd)
+      .order("session_date", { ascending: false })
+      .order("clock_in_time", { ascending: false })
+      .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE); // +PAGE_SIZE fetches PAGE_SIZE+1 to detect next page
+    if (classId !== "all") q = q.eq("class_id", classId);
+    const { data } = await q;
+    const rows = (data ?? []) as unknown as AttendanceRow[];
+    const hasMore = rows.length > PAGE_SIZE;
+    const display = hasMore ? rows.slice(0, PAGE_SIZE) : rows;
+    setHistory(prev => append ? [...prev, ...display] : display);
+    setHistoryHasMore(hasMore);
+    setHistoryLoading(false);
+  }, [coachId, supabase]); // eslint-disable-line react-hooks/exhaustive-deps
+
   /* eslint-disable react-hooks/set-state-in-effect -- async data loader */
   useEffect(() => {
     if (!coachId) return;
     setLoading(true);
-    supabase.from("coach_attendances")
-      .select("id, session_date, clock_in_time, distance_meters, is_manual, manual_note, status, class:classes(name), manual_by_profile:profiles!coach_attendances_manual_by_fkey(full_name)")
-      .eq("coach_id", coachId).order("session_date", { ascending: false }).order("clock_in_time", { ascending: false }).limit(20)
-      .then(({ data }) => { if (data) setHistory(data as unknown as AttendanceRow[]); setLoading(false); });
+    setHistoryPage(0);
+    loadHistory(0, filterMonth, filterClassId);
     loadMemberAttHistory();
+    setLoading(false);
   }, [coachId, loadMemberAttHistory]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    setHistoryPage(0);
+    loadHistory(0, filterMonth, filterClassId);
+  }, [filterMonth, filterClassId]); // eslint-disable-line react-hooks/exhaustive-deps
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const onManualClassChange = (classId: string) => {
@@ -1007,7 +1061,8 @@ function CoachAbsensi({ setOverlay, coachId, classes, holidayClassIds }: {
         <div className="space-y-3">
           {todayClasses.map((c) => {
             const isHoliday = holidayClassIds.has(c.id);
-            const inWindow = !isHoliday && isInClockInWindow(c.time_start, c.time_end);
+            const isClockedIn = clockedInIds.has(c.id);
+            const inWindow = !isHoliday && !isClockedIn && isInClockInWindow(c.time_start, c.time_end);
             return (
               <Card key={c.id} className={isHoliday ? "opacity-60" : ""}>
                 <div className="flex items-center gap-3">
@@ -1015,11 +1070,16 @@ function CoachAbsensi({ setOverlay, coachId, classes, holidayClassIds }: {
                     <div className="flex items-center gap-2 flex-wrap">
                       <div className="font-display font-bold text-ink">{c.name}</div>
                       {isHoliday && <Status kind="holiday">Libur</Status>}
+                      {isClockedIn && <Status kind="approved">Sudah Absen</Status>}
                     </div>
                     <div className="text-xs text-ink-mute font-mono">{c.time_start?.slice(0,5)}{c.time_end ? `–${c.time_end.slice(0,5)}` : ""}</div>
                   </div>
-                  {!isHoliday && (inWindow ? (
-                    <Btn variant="primary" size="md" icon="camera" onClick={() => setOverlay("clockin")}>Clock-In</Btn>
+                  {!isHoliday && (isClockedIn ? (
+                    <span className="w-10 h-10 rounded-xl bg-ok-50 text-ok-600 flex items-center justify-center shrink-0">
+                      <Icon name="check" className="w-5 h-5" strokeWidth={2.5} />
+                    </span>
+                  ) : inWindow ? (
+                    <Btn variant="primary" size="md" icon="camera" onClick={() => setOverlay(`clockin:${c.id}`)}>Clock-In</Btn>
                   ) : (
                     <div className="text-right">
                       <div className="text-xs font-semibold text-ink-mute">Di luar window</div>
@@ -1057,28 +1117,76 @@ function CoachAbsensi({ setOverlay, coachId, classes, holidayClassIds }: {
       </div>
 
       <Card padded={false}>
-        <div className="p-5 border-b border-line"><SectionTitle sub="20 absensi terakhir">History Absensi</SectionTitle></div>
-        {loading ? <div className="p-6 text-center text-ink-mute">Memuat…</div> : (
-          <div className="divide-y divide-line">
-            {history.map((h) => (
-              <div key={h.id} className="px-5 py-3 flex items-center gap-3 hover:bg-paper-tint">
-                <span className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${h.is_manual ? "bg-manual-50 text-manual-500" : "bg-ok-50 text-ok-600"}`}>
-                  <Icon name={h.is_manual ? "edit" : "check"} className="w-4 h-4" strokeWidth={2.4} />
-                </span>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <div className="font-semibold text-ink text-sm">{h.class?.name}</div>
-                    {h.is_manual && <Status kind="manual">Manual — oleh Admin</Status>}
-                  </div>
-                  <div className="text-xs text-ink-mute font-mono">{fmtDate(h.session_date)} · {h.clock_in_time?.slice(0, 5) ?? "—"}{h.distance_meters != null ? ` · ${h.distance_meters}m` : ""}</div>
-                  {h.is_manual && h.manual_by_profile && (
-                    <div className="text-[10px] text-ink-faint mt-0.5">oleh: {h.manual_by_profile.full_name}{h.manual_note ? ` · "${h.manual_note}"` : ""}</div>
-                  )}
-                </div>
-              </div>
-            ))}
-            {history.length === 0 && <div className="p-6 text-center text-ink-mute">Belum ada absensi.</div>}
+        {/* Header + filter */}
+        <div className="p-5 border-b border-line space-y-3">
+          <SectionTitle>History Absensi</SectionTitle>
+          <div className="flex flex-wrap gap-2">
+            {/* Month filter */}
+            <select
+              value={filterMonth}
+              onChange={e => setFilterMonth(e.target.value)}
+              className="text-sm rounded-lg border border-line bg-white px-3 py-1.5 text-ink focus:outline-none focus:ring-2 focus:ring-ocean-300"
+            >
+              {Array.from({ length: 12 }, (_, i) => {
+                const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - i);
+                const val = d.toISOString().slice(0, 7);
+                const label = d.toLocaleDateString("id-ID", { month: "long", year: "numeric" });
+                return <option key={val} value={val}>{label}</option>;
+              })}
+            </select>
+            {/* Class filter */}
+            <select
+              value={filterClassId}
+              onChange={e => setFilterClassId(e.target.value)}
+              className="text-sm rounded-lg border border-line bg-white px-3 py-1.5 text-ink focus:outline-none focus:ring-2 focus:ring-ocean-300 max-w-[180px] truncate"
+            >
+              <option value="all">Semua kelas</option>
+              {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
           </div>
+        </div>
+        {historyLoading && history.length === 0 ? (
+          <div className="p-6 text-center text-ink-mute text-sm">Memuat…</div>
+        ) : (
+          <>
+            <div className="divide-y divide-line">
+              {history.map((h) => (
+                <div key={h.id} className="px-5 py-3 flex items-center gap-3 hover:bg-paper-tint">
+                  <span className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${h.is_manual ? "bg-manual-50 text-manual-500" : "bg-ok-50 text-ok-600"}`}>
+                    <Icon name={h.is_manual ? "edit" : "check"} className="w-4 h-4" strokeWidth={2.4} />
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <div className="font-semibold text-ink text-sm">{h.class?.name}</div>
+                      {h.is_manual && <Status kind="manual">Manual</Status>}
+                    </div>
+                    <div className="text-xs text-ink-mute font-mono">{fmtDate(h.session_date)} · {h.clock_in_time?.slice(0, 5) ?? "—"}{h.distance_meters != null ? ` · ${h.distance_meters}m` : ""}</div>
+                    {h.is_manual && h.manual_by_profile && (
+                      <div className="text-[10px] text-ink-faint mt-0.5">oleh: {h.manual_by_profile.full_name}{h.manual_note ? ` · "${h.manual_note}"` : ""}</div>
+                    )}
+                  </div>
+                </div>
+              ))}
+              {!historyLoading && history.length === 0 && (
+                <div className="p-6 text-center text-ink-mute text-sm">Tidak ada absensi di periode ini.</div>
+              )}
+            </div>
+            {historyHasMore && (
+              <div className="p-4 border-t border-line">
+                <button
+                  onClick={() => {
+                    const next = historyPage + 1;
+                    setHistoryPage(next);
+                    loadHistory(next, filterMonth, filterClassId, true);
+                  }}
+                  disabled={historyLoading}
+                  className="w-full text-sm font-semibold text-ocean-700 hover:text-ocean-900 py-2 rounded-lg hover:bg-ocean-50 transition-colors disabled:opacity-50"
+                >
+                  {historyLoading ? "Memuat…" : "Tampilkan lebih banyak"}
+                </button>
+              </div>
+            )}
+          </>
         )}
       </Card>
 
@@ -2379,6 +2487,7 @@ export default function CoachPage() {
   const [initError, setInitError] = useState<string | null>(null);
   const [classes, setClasses] = useState<ClassRow[]>([]);
   const [holidayClassIds, setHolidayClassIds] = useState<Set<string>>(new Set());
+  const [clockedInIds, setClockedInIds] = useState<Set<string>>(new Set());
 
   const loadProfile = useCallback(async (userId: string) => {
     const { data, error } = await supabase.from("profiles")
@@ -2506,14 +2615,14 @@ export default function CoachPage() {
 
   const clockinClassId = overlay?.startsWith("clockin:") ? overlay.slice(8) : null;
   const content = (overlay === "clockin" || overlay?.startsWith("clockin:"))
-    ? (locked ? <LockedNotice feature="Clock-In" reason={lockReason} /> : <ClockInFlow back={() => setOverlay(null)} coachId={coachId} branchId={branchId} classes={classes} preselectedClassId={clockinClassId ?? undefined} />)
+    ? (locked ? <LockedNotice feature="Clock-In" reason={lockReason} /> : <ClockInFlow back={() => setOverlay(null)} coachId={coachId} branchId={branchId} classes={classes} preselectedClassId={clockinClassId ?? undefined} onSuccess={(cid) => setClockedInIds(prev => new Set([...prev, cid]))} />)
     : overlay === "leave"
     ? <LeaveForm back={() => setOverlay(null)} coachId={coachId} branchId={branchId} classes={classes} />
     : overlay === "leave-history"
     ? <LeaveHistory back={() => setOverlay(null)} coachId={coachId} />
     : {
-        home:    <>{SuspendBanner}{IncompleteBanner}<CoachHome setOverlay={setOverlay} setActive={(tab) => setActive(tab as TabId)} coachId={coachId} branchId={branchId} profile={profile} classes={classes} holidayClassIds={holidayClassIds} /></>,
-        absen:   <>{SuspendBanner}{IncompleteBanner}{locked ? <LockedNotice feature="Absensi" reason={lockReason} /> : <CoachAbsensi setOverlay={setOverlay} coachId={coachId} branchId={branchId} classes={classes} holidayClassIds={holidayClassIds} />}</>,
+        home:    <>{SuspendBanner}{IncompleteBanner}<CoachHome setOverlay={setOverlay} setActive={(tab) => setActive(tab as TabId)} coachId={coachId} branchId={branchId} profile={profile} classes={classes} holidayClassIds={holidayClassIds} clockedInIds={clockedInIds} setClockedInIds={setClockedInIds} /></>,
+        absen:   <>{SuspendBanner}{IncompleteBanner}{locked ? <LockedNotice feature="Absensi" reason={lockReason} /> : <CoachAbsensi setOverlay={setOverlay} coachId={coachId} branchId={branchId} classes={classes} holidayClassIds={holidayClassIds} clockedInIds={clockedInIds} />}</>,
         kelas:   <CoachKelas classes={classes} coachId={coachId} onRefreshClasses={refreshClasses} />,
         invoice: <>{SuspendBanner}{IncompleteBanner}{locked ? <LockedNotice feature="Invoice" reason={lockReason} /> : <CoachInvoice coachId={coachId} branchId={branchId} profile={profile} />}</>,
         rapor:   <>{SuspendBanner}{IncompleteBanner}{locked ? <LockedNotice feature="Rapor" reason={lockReason} /> : <CoachRapor coachId={coachId} branchId={branchId} />}</>,

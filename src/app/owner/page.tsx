@@ -16,6 +16,7 @@ import { fmtIDR } from "@/lib/utils";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
+import LandingCMS from "./_components/LandingCMS";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -1413,6 +1414,8 @@ const NAV_ITEMS: NavItem[] = [
   { section: "Keuangan" },
   { id: "rates",     label: "Tarif Coach",   icon: "settings"},
   { id: "invoices",  label: "Invoice Coach", icon: "invoice" },
+  { section: "Konten" },
+  { id: "landing",   label: "Landing Page",  icon: "star"    },
 ];
 
 const TITLES: Record<string, [string, string]> = {
@@ -1422,6 +1425,7 @@ const TITLES: Record<string, [string, string]> = {
   classes:   ["Kelas",          "Semua kelas lintas cabang"],
   rates:     ["Settings Tarif", "Tarif coach per kelas"],
   invoices:  ["Invoice Coach",  "Invoice masuk dari semua coach"],
+  landing:   ["Landing Page",   "Kelola konten halaman depan"],
 };
 
 // ── Main page ──────────────────────────────────────────────────────────────────
@@ -1505,6 +1509,7 @@ export default function OwnerPage() {
     classes:   <Classes branches={branches} />,
     rates:     <SettingsTarif branches={branches} />,
     invoices:  <Invoices branches={branches} />,
+    landing:   <LandingCMS />,
   };
 
   const [title, sub] = TITLES[active] ?? ["Owner", ""];
