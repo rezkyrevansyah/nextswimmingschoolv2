@@ -79,7 +79,6 @@ interface ClassRow {
   price_per_session: number | null; class_type: string;
   schedule_days: string[]; time_start: string | null; time_end: string | null;
   schedule_times?: ScheduleSlot[] | null;
-  show_on_landing: boolean;
   goals?: string | null;
   description?: string | null;
   photo_url?: string | null;
@@ -605,7 +604,7 @@ interface Criterion {
   id: string; label: string; kind: string; options: string[] | null; sort_order: number;
 }
 
-const EMPTY_CLASS_FORM = { name: "", class_type: "reguler", schedule_days: [] as string[], schedule_times: [] as ScheduleSlot[], same_time_all: true, time_start: "", time_end: "", capacity: "", price_monthly: "", price_per_session: "", show_on_landing: true, goals: "", description: "", photo_url: "" };
+const EMPTY_CLASS_FORM = { name: "", class_type: "reguler", schedule_days: [] as string[], schedule_times: [] as ScheduleSlot[], same_time_all: true, time_start: "", time_end: "", capacity: "", price_monthly: "", price_per_session: "", goals: "", description: "", photo_url: "" };
 const DAY_OPTS = ["Senin","Selasa","Rabu","Kamis","Jumat","Sabtu","Minggu"];
 
 function AdminClass({ branchId }: { branchId: string }) {
@@ -634,7 +633,7 @@ function AdminClass({ branchId }: { branchId: string }) {
 
   const load = useCallback(async () => {
     const { data } = await supabase.from("classes")
-      .select("id, name, branch_id, status, capacity, enrolled, price_monthly, price_per_session, class_type, schedule_days, time_start, time_end, schedule_times, show_on_landing, goals, description, photo_url, spreadsheet_url, spreadsheet_filled, class_coaches(profile:profiles(full_name, id))")
+      .select("id, name, branch_id, status, capacity, enrolled, price_monthly, price_per_session, class_type, schedule_days, time_start, time_end, schedule_times, goals, description, photo_url, spreadsheet_url, spreadsheet_filled, class_coaches(profile:profiles(full_name, id))")
       .eq("branch_id", branchId).order("name");
     if (data) setClasses(data as unknown as ClassRow[]);
   }, [branchId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -664,7 +663,7 @@ function AdminClass({ branchId }: { branchId: string }) {
       capacity: c.capacity ? String(c.capacity) : "",
       price_monthly: c.price_monthly ? String(c.price_monthly) : "",
       price_per_session: c.price_per_session ? String(c.price_per_session) : "",
-      show_on_landing: c.show_on_landing ?? false, goals: c.goals ?? "", description: c.description ?? "",
+      goals: c.goals ?? "", description: c.description ?? "",
       photo_url: c.photo_url ?? "",
     });
     setClassPhotoFile(null);
@@ -690,13 +689,13 @@ function AdminClass({ branchId }: { branchId: string }) {
       if (classPhotoFile) {
         try { photoUrl = await upload.classPhoto(classPhotoFile, editTarget.id); } catch { /* non-fatal */ }
       }
-      const updatePayload: Database["public"]["Tables"]["classes"]["Update"] = { name: form.name, class_type: form.class_type, schedule_days: days, schedule_times: (scheduleTimes.length > 0 ? scheduleTimes : null) as Json | null, time_start: firstSlot?.time_start || form.time_start || undefined, time_end: firstSlot?.time_end || form.time_end || undefined, capacity: isPrivate ? 1 : (Number(form.capacity) || 0), price_monthly: isPrivate ? 0 : (Number(form.price_monthly) || 0), price_per_session: isPrivate ? (Number(form.price_per_session) || null) : null, show_on_landing: form.show_on_landing, goals: form.goals.trim() || null, description: form.description.trim() || null, photo_url: photoUrl };
+      const updatePayload: Database["public"]["Tables"]["classes"]["Update"] = { name: form.name, class_type: form.class_type, schedule_days: days, schedule_times: (scheduleTimes.length > 0 ? scheduleTimes : null) as Json | null, time_start: firstSlot?.time_start || form.time_start || undefined, time_end: firstSlot?.time_end || form.time_end || undefined, capacity: isPrivate ? 1 : (Number(form.capacity) || 0), price_monthly: isPrivate ? 0 : (Number(form.price_monthly) || 0), price_per_session: isPrivate ? (Number(form.price_per_session) || null) : null, goals: form.goals.trim() || null, description: form.description.trim() || null, photo_url: photoUrl };
       const { error } = await supabase.from("classes").update(updatePayload).eq("id", editTarget.id);
       setSaving(false);
       if (error) return toast.error("Gagal update kelas", error.message);
       toast.success("Kelas diperbarui");
     } else {
-      const insertPayload: Database["public"]["Tables"]["classes"]["Insert"] = { name: form.name, class_type: form.class_type, schedule_days: days, schedule_times: (scheduleTimes.length > 0 ? scheduleTimes : null) as Json | null, time_start: firstSlot?.time_start || form.time_start || "", time_end: firstSlot?.time_end || form.time_end || "", capacity: isPrivate ? 1 : (Number(form.capacity) || 0), price_monthly: isPrivate ? 0 : (Number(form.price_monthly) || 0), price_per_session: isPrivate ? (Number(form.price_per_session) || null) : null, show_on_landing: form.show_on_landing, goals: form.goals.trim() || null, description: form.description.trim() || null, branch_id: branchId, status: "active", enrolled: 0 };
+      const insertPayload: Database["public"]["Tables"]["classes"]["Insert"] = { name: form.name, class_type: form.class_type, schedule_days: days, schedule_times: (scheduleTimes.length > 0 ? scheduleTimes : null) as Json | null, time_start: firstSlot?.time_start || form.time_start || "", time_end: firstSlot?.time_end || form.time_end || "", capacity: isPrivate ? 1 : (Number(form.capacity) || 0), price_monthly: isPrivate ? 0 : (Number(form.price_monthly) || 0), price_per_session: isPrivate ? (Number(form.price_per_session) || null) : null, goals: form.goals.trim() || null, description: form.description.trim() || null, branch_id: branchId, status: "active", enrolled: 0 };
       const { data: insertData, error } = await supabase.from("classes").insert(insertPayload).select("id").single();
       if (error) { setSaving(false); return toast.error("Gagal membuat kelas", error.message); }
       if (classPhotoFile && insertData?.id) {
@@ -815,10 +814,7 @@ function AdminClass({ branchId }: { branchId: string }) {
                   : <Placeholder label={c.id} ratio="16/9" className="rounded-none border-0" />
                 }
                 <div className="absolute top-3 left-3 right-3 flex justify-between gap-2">
-                  {archived
-                    ? <Status kind="archived">Diarsipkan</Status>
-                    : c.show_on_landing && <Status kind="active" className="!bg-white/95">Tampil di landing</Status>
-                  }
+                  {archived && <Status kind="archived">Diarsipkan</Status>}
                 </div>
               </div>
               <div className="p-4">
@@ -1031,12 +1027,6 @@ function AdminClass({ branchId }: { branchId: string }) {
               </label>
             </div>
           </Field>
-          {!isPrivate && (
-            <div className="flex items-center justify-between p-3 rounded-xl bg-ocean-50/50 border border-ocean-100">
-              <div><div className="font-semibold text-ink text-sm">Tampilkan di landing page</div><div className="text-xs text-ink-mute">Kelas akan muncul di section Swimming Programs.</div></div>
-              <Switch checked={form.show_on_landing} onChange={v => setForm(f => ({ ...f, show_on_landing: v }))} />
-            </div>
-          )}
           {editTarget && coaches.length > 0 && (
             <div>
               <div className="text-xs font-bold uppercase tracking-widest text-ink-faint mb-2">Coach yang mengajar</div>
@@ -1168,7 +1158,7 @@ function AdminMember({ branchId }: { branchId: string }) {
   /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {
-    supabase.from("classes").select("id, name, capacity, enrolled, status, branch_id, schedule_days, time_start, time_end, price_monthly, price_per_session, class_type, show_on_landing").eq("branch_id", branchId).eq("status", "active")
+    supabase.from("classes").select("id, name, capacity, enrolled, status, branch_id, schedule_days, time_start, time_end, price_monthly, price_per_session, class_type").eq("branch_id", branchId).eq("status", "active")
       .then(({ data }) => { if (data) setClasses(data as unknown as ClassRow[]); });
     supabase.from("schools").select("id, name").eq("branch_id", branchId).order("name")
       .then(({ data }) => { if (data) setSchoolsList(data as School[]); });
@@ -3954,7 +3944,7 @@ function AdminAbsensiCoach({ branchId }: { branchId: string }) {
   useEffect(() => {
     load();
     supabase.from("profiles").select("id, full_name").eq("branch_id", branchId).eq("role", "coach").then(({ data }) => { if (data) setCoaches(data as unknown as CoachProfile[]); });
-    supabase.from("classes").select("id, name, time_start, time_end, status, branch_id, capacity, enrolled, schedule_days, price_monthly, show_on_landing, class_coaches(coach_id)").eq("branch_id", branchId).eq("status", "active").then(({ data }) => { if (data) setClasses(data as unknown as ClassRow[]); });
+    supabase.from("classes").select("id, name, time_start, time_end, status, branch_id, capacity, enrolled, schedule_days, price_monthly, class_coaches(coach_id)").eq("branch_id", branchId).eq("status", "active").then(({ data }) => { if (data) setClasses(data as unknown as ClassRow[]); });
   }, [load]); // eslint-disable-line react-hooks/exhaustive-deps
   /* eslint-enable react-hooks/set-state-in-effect */
 
@@ -4175,7 +4165,7 @@ function AdminPengumuman({ branchId }: { branchId: string }) {
   /* eslint-disable react-hooks/set-state-in-effect -- async data loader */
   useEffect(() => {
     load();
-    supabase.from("classes").select("id, name, time_start, time_end, status, branch_id, capacity, enrolled, schedule_days, price_monthly, show_on_landing")
+    supabase.from("classes").select("id, name, time_start, time_end, status, branch_id, capacity, enrolled, schedule_days, price_monthly")
       .eq("branch_id", branchId).eq("status", "active").order("name")
       .then(({ data }) => { if (data) setClasses(data as unknown as ClassRow[]); });
   }, [load]); // eslint-disable-line react-hooks/exhaustive-deps

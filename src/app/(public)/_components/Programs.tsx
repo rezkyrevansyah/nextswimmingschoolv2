@@ -20,10 +20,10 @@ interface ClassRow {
 
 export default async function Programs() {
   const supabase = await createClient();
+  // TODO: filter by landing page visibility — will be managed via a dedicated menu
   const { data: classes } = await supabase
     .from("classes")
     .select("id, name, description, goals, price_monthly, price_per_session, class_type, schedule_days, time_start, time_end, photo_url")
-    .eq("show_on_landing", true)
     .eq("status", "active")
     .order("created_at", { ascending: true });
 

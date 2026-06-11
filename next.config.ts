@@ -47,7 +47,4 @@ export default withSentryConfig(nextConfig, {
 
   // Suppress non-CI output
   silent: !process.env.CI,
-
-  // Automatically tree-shake Sentry logger statements in production
-  disableLogger: true,
 });
