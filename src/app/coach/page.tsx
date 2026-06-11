@@ -855,7 +855,12 @@ function CoachAbsensi({ setOverlay, coachId, classes, holidayClassIds, clockedIn
   const [memberAtt, setMemberAtt] = useState<MemberAttRow[]>([]);
   const [saving, setSaving] = useState(false);
   const [attStatus, setAttStatus] = useState<Record<string, string>>({});
-  const [memberAttHistory, setMemberAttHistory] = useState<{ id: string; session_date: string; class_name: string; total: number; hadir: number }[]>([]);
+  const [memberAttHistory, setMemberAttHistory] = useState<{ id: string; class_id: string; session_date: string; class_name: string; total: number; hadir: number }[]>([]);
+
+  // Detail sesi modal
+  const [detailSesi, setDetailSesi] = useState<{ classId: string; className: string; date: string } | null>(null);
+  const [detailRows, setDetailRows] = useState<{ member_id: string; full_name: string; status: string; method: string }[]>([]);
+  const [loadingDetail, setLoadingDetail] = useState(false);
 
   // Private session recording
   const [openPrivate, setOpenPrivate] = useState(false);
@@ -867,28 +872,47 @@ function CoachAbsensi({ setOverlay, coachId, classes, holidayClassIds, clockedIn
 
   const loadMemberAttHistory = useCallback(async () => {
     if (!coachId) return;
-    // Get distinct (class_id, session_date) combos where coach manually entered attendance
+    // Get distinct (class_id, session_date) combos for all methods (manual + QR)
     const { data } = await supabase.from("member_attendances")
       .select("id, session_date, method, status, class_id, class:classes(name)")
-      .eq("method", "manual")
       .in("class_id",
         (await supabase.from("class_coaches").select("class_id").eq("coach_id", coachId).then(r => r.data?.map(x => x.class_id) ?? []))
       )
       .order("session_date", { ascending: false })
-      .limit(100);
+      .limit(200);
     if (!data) return;
     // Group by (class_id, session_date)
-    const grouped = new Map<string, { id: string; session_date: string; class_name: string; total: number; hadir: number }>();
+    const grouped = new Map<string, { id: string; class_id: string; session_date: string; class_name: string; total: number; hadir: number }>();
     for (const row of data) {
       const cls = (row as unknown as { class: { name: string } | null }).class;
       const key = `${row.class_id}__${row.session_date}`;
-      if (!grouped.has(key)) grouped.set(key, { id: key, session_date: row.session_date, class_name: cls?.name ?? "—", total: 0, hadir: 0 });
+      if (!grouped.has(key)) grouped.set(key, { id: key, class_id: row.class_id, session_date: row.session_date, class_name: cls?.name ?? "—", total: 0, hadir: 0 });
       const g = grouped.get(key)!;
       g.total++;
       if (row.status === "hadir") g.hadir++;
     }
-    setMemberAttHistory([...grouped.values()].sort((a, b) => b.session_date.localeCompare(a.session_date)).slice(0, 10));
+    setMemberAttHistory([...grouped.values()].sort((a, b) => b.session_date.localeCompare(a.session_date)).slice(0, 15));
   }, [coachId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const openDetailSesi = async (classId: string, className: string, date: string) => {
+    setDetailSesi({ classId, className, date });
+    setLoadingDetail(true);
+    const { data } = await supabase
+      .from("member_attendances")
+      .select("member_id, status, method, member:members(profile:profiles(full_name))")
+      .eq("class_id", classId)
+      .eq("session_date", date)
+      .order("status");
+    setDetailRows(
+      (data ?? []).map(r => ({
+        member_id: r.member_id,
+        full_name: (r as unknown as { member: { profile: { full_name: string } | null } | null }).member?.profile?.full_name ?? "—",
+        status: r.status,
+        method: r.method ?? "",
+      }))
+    );
+    setLoadingDetail(false);
+  };
 
   const PAGE_SIZE = 15;
 
@@ -997,9 +1021,13 @@ function CoachAbsensi({ setOverlay, coachId, classes, holidayClassIds, clockedIn
     if (error) return toast.error("Gagal menyimpan", error.message);
     const hadirCount = rows.filter(r => r.status === "hadir").length;
     toast.success("Absensi member disimpan", `${hadirCount} hadir dari ${rows.length} member`);
+    const savedClassId = manualClassId;
+    const savedDate = manualDate;
+    const savedClassName = classes.find(c => c.id === manualClassId)?.name ?? "—";
     setOpenManual(false);
     setManualClassId(""); setManualDate(""); setManualSessionDates([]); setMemberAtt([]); setAttStatus({});
-    loadMemberAttHistory();
+    await loadMemberAttHistory();
+    openDetailSesi(savedClassId, savedClassName, savedDate);
   };
 
   const savePrivateSession = async () => {
@@ -1192,10 +1220,14 @@ function CoachAbsensi({ setOverlay, coachId, classes, holidayClassIds, clockedIn
 
       {memberAttHistory.length > 0 && (
         <Card padded={false}>
-          <div className="p-5 border-b border-line"><SectionTitle sub="Absensi member yang Anda input manual">History Absensi Member</SectionTitle></div>
+          <div className="p-5 border-b border-line"><SectionTitle sub="Klik sesi untuk lihat detail member">History Absensi Member</SectionTitle></div>
           <div className="divide-y divide-line">
             {memberAttHistory.map((h) => (
-              <div key={h.id} className="px-5 py-3 flex items-center gap-3 hover:bg-paper-tint">
+              <div
+                key={h.id}
+                className="px-5 py-3 flex items-center gap-3 hover:bg-paper-tint cursor-pointer active:bg-ocean-50 transition-colors"
+                onClick={() => openDetailSesi(h.class_id, h.class_name, h.session_date)}
+              >
                 <span className="w-10 h-10 rounded-xl bg-wave-50 text-wave-600 flex items-center justify-center shrink-0">
                   <Icon name="users" className="w-4 h-4" />
                 </span>
@@ -1203,9 +1235,12 @@ function CoachAbsensi({ setOverlay, coachId, classes, holidayClassIds, clockedIn
                   <div className="font-semibold text-ink text-sm">{h.class_name}</div>
                   <div className="text-xs text-ink-mute font-mono">{fmtDate(h.session_date)}</div>
                 </div>
-                <div className="text-right">
-                  <div className="font-bold text-ok-600 text-sm">{h.hadir}/{h.total}</div>
-                  <div className="text-[10px] text-ink-faint">hadir</div>
+                <div className="flex items-center gap-3">
+                  <div className="text-right">
+                    <div className="font-bold text-ok-600 text-sm">{h.hadir}/{h.total}</div>
+                    <div className="text-[10px] text-ink-faint">hadir</div>
+                  </div>
+                  <Icon name="arrow" className="w-4 h-4 text-ink-faint -rotate-90" />
                 </div>
               </div>
             ))}
@@ -1269,6 +1304,64 @@ function CoachAbsensi({ setOverlay, coachId, classes, holidayClassIds, clockedIn
             <Textarea rows={2} value={privateNote} onChange={e => setPrivateNote(e.target.value)} placeholder="Mis. Latihan gaya dada, progress baik." />
           </Field>
         </div>
+      </Modal>
+
+      {/* Detail Sesi Modal */}
+      <Modal
+        open={detailSesi !== null}
+        onClose={() => setDetailSesi(null)}
+        title={detailSesi ? `${detailSesi.className} — ${fmtDate(detailSesi.date)}` : ""}
+        size="sm"
+        footer={<Btn variant="ghost" onClick={() => setDetailSesi(null)}>Tutup</Btn>}
+      >
+        {loadingDetail ? (
+          <div className="py-6 text-center text-ink-mute text-sm">Memuat…</div>
+        ) : (
+          <div>
+            {/* Summary bar */}
+            <div className="flex gap-4 text-xs font-bold mb-4 pb-3 border-b border-line">
+              <span className="flex items-center gap-1 text-ok-600">
+                <span className="w-4 h-4 rounded-full bg-ok-100 flex items-center justify-center"><Icon name="check" className="w-2.5 h-2.5" strokeWidth={3} /></span>
+                {detailRows.filter(r => r.status === "hadir").length} Hadir
+              </span>
+              <span className="flex items-center gap-1 text-warn-600">
+                <span className="w-4 h-4 rounded-full bg-warn-100 flex items-center justify-center"><Icon name="clipboard" className="w-2.5 h-2.5" /></span>
+                {detailRows.filter(r => r.status === "izin").length} Izin
+              </span>
+              <span className="flex items-center gap-1 text-orange-500">
+                <span className="w-4 h-4 rounded-full bg-orange-100 flex items-center justify-center"><Icon name="alert" className="w-2.5 h-2.5" /></span>
+                {detailRows.filter(r => r.status === "sakit").length} Sakit
+              </span>
+              <span className="flex items-center gap-1 text-danger-500">
+                <span className="w-4 h-4 rounded-full bg-danger-100 flex items-center justify-center"><Icon name="close" className="w-2.5 h-2.5" /></span>
+                {detailRows.filter(r => r.status === "tidak_hadir").length} Absen
+              </span>
+            </div>
+            <div className="space-y-0.5">
+              {detailRows.map(r => (
+                <div key={r.member_id} className="flex items-center gap-3 py-2.5 border-b border-line last:border-0">
+                  <span className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                    r.status === "hadir" ? "bg-ok-50 text-ok-600" :
+                    r.status === "izin" ? "bg-warn-50 text-warn-600" :
+                    r.status === "sakit" ? "bg-orange-50 text-orange-500" :
+                    "bg-danger-50 text-danger-500"
+                  }`}>
+                    <Icon name={r.status === "hadir" ? "check" : r.status === "izin" ? "clipboard" : r.status === "sakit" ? "alert" : "close"} className="w-4 h-4" strokeWidth={r.status === "hadir" ? 2.5 : 2} />
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-semibold text-ink truncate">{r.full_name}</div>
+                  </div>
+                  <Status kind={r.status === "hadir" ? "approved" : r.status === "izin" ? "excused" : r.status === "sakit" ? "sick" : "inactive"}>
+                    {r.status === "hadir" ? "Hadir" : r.status === "izin" ? "Izin" : r.status === "sakit" ? "Sakit" : "Tidak Hadir"}
+                  </Status>
+                </div>
+              ))}
+              {detailRows.length === 0 && (
+                <div className="py-4 text-center text-ink-mute text-sm">Tidak ada data absensi untuk sesi ini.</div>
+              )}
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   );
