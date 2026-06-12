@@ -488,7 +488,7 @@ function Admins({ branches }: { branches: Branch[] }) {
         <div className="space-y-4">
           <Field label="Nama lengkap" required><Input value={form.full_name} onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))} disabled={!!editTarget} /></Field>
           {!editTarget && <Field label="Email" required><Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} /></Field>}
-          <Field label="Nomor WhatsApp"><Input type="tel" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="0812…" /></Field>
+          <Field label="Nomor WhatsApp"><Input type="tel" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="Mis. 081234567890" /></Field>
           <Field label="Cabang" required>
             <Select value={form.branch_id} onChange={e => setForm(f => ({ ...f, branch_id: e.target.value }))}>
               <option value="" disabled>Pilih cabang…</option>
@@ -497,7 +497,7 @@ function Admins({ branches }: { branches: Branch[] }) {
           </Field>
           {!editTarget && <Field label="Password awal" required hint="Admin bisa ganti setelah login">
             <div className="relative">
-              <Input type={showAdminPwd ? "text" : "password"} value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder="Min. 8 karakter" className="pr-10" />
+              <Input type={showAdminPwd ? "text" : "password"} value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder="••••••••" className="pr-10" />
               <button type="button" tabIndex={-1} onClick={() => setShowAdminPwd(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-mute hover:text-ink transition-colors">
                 <Icon name={showAdminPwd ? "eye-off" : "eye"} className="w-4 h-4" />
               </button>

@@ -2042,11 +2042,11 @@ function CoachRapor({ coachId, branchId }: { coachId: string; branchId: string }
               )}
               {c.kind === "text" && (
                 <Textarea rows={2} value={(scores[c.id] as string) ?? ""}
-                  onChange={e => setScores(s => ({ ...s, [c.id]: e.target.value }))} placeholder={`Catatan ${c.label.toLowerCase()}…`} />
+                  onChange={e => setScores(s => ({ ...s, [c.id]: e.target.value }))} placeholder="Mis. Sudah cukup baik, perlu latihan lebih konsisten." />
               )}
             </div>
           ))}
-          <Field label="Catatan umum coach"><Textarea rows={3} value={notes} onChange={e => setNotes(e.target.value)} placeholder="Feedback keseluruhan untuk member…" /></Field>
+          <Field label="Catatan umum coach"><Textarea rows={3} value={notes} onChange={e => setNotes(e.target.value)} placeholder="Mis. Member menunjukkan progres yang baik bulan ini, terutama pada teknik pernapasan." /></Field>
         </div>
       </Modal>
 
@@ -2375,7 +2375,7 @@ function CoachProfile({ profile, onRefresh, onLogout, onAvatarChange }: { profil
         <div className="mt-4 space-y-4">
           <div className="text-xs font-bold text-ink-mute uppercase tracking-widest">Data Pribadi</div>
           <div className="grid sm:grid-cols-2 gap-3">
-            <Field label="Nama panggilan" hint="Opsional"><Input value={profileForm.nick_name} onChange={e => setProfileForm(f => ({ ...f, nick_name: e.target.value }))} placeholder="Nama panggilan" /></Field>
+            <Field label="Nama panggilan" hint="Opsional"><Input value={profileForm.nick_name} onChange={e => setProfileForm(f => ({ ...f, nick_name: e.target.value }))} placeholder="Mis. Kak Reza" /></Field>
             <Field label="Jenis kelamin">
               <Select value={profileForm.gender} onChange={e => setProfileForm(f => ({ ...f, gender: e.target.value }))}>
                 <option value="">Pilih…</option>
@@ -2392,7 +2392,7 @@ function CoachProfile({ profile, onRefresh, onLogout, onAvatarChange }: { profil
             <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-1">Email</div>
             <div className="text-sm font-semibold text-ink">{profile?.email ?? "—"}</div>
           </div>
-          <Field label="Alamat" hint="Opsional"><Textarea rows={2} value={profileForm.address} onChange={e => setProfileForm(f => ({ ...f, address: e.target.value }))} placeholder="Alamat lengkap" /></Field>
+          <Field label="Alamat" hint="Opsional"><Textarea rows={2} value={profileForm.address} onChange={e => setProfileForm(f => ({ ...f, address: e.target.value }))} placeholder="Mis. Jl. Anggrek No. 12, Bekasi" /></Field>
 
           <div className="pt-3 border-t border-line">
             <div className="text-xs font-bold text-ink-mute uppercase tracking-widest mb-3">Pendidikan (Opsional)</div>
@@ -2411,7 +2411,7 @@ function CoachProfile({ profile, onRefresh, onLogout, onAvatarChange }: { profil
             <div className="text-xs font-bold text-ink-mute uppercase tracking-widest mb-3">Profil Pelatih</div>
             <div className="space-y-3">
               <Field label="Spesialisasi" hint="Opsional"><Input value={profileForm.specialization} onChange={e => setProfileForm(f => ({ ...f, specialization: e.target.value }))} placeholder="Mis. Renang gaya bebas, anak-anak" /></Field>
-              <Field label="Bio / Deskripsi" hint="Opsional"><Textarea rows={3} value={profileForm.bio} onChange={e => setProfileForm(f => ({ ...f, bio: e.target.value }))} placeholder="Ceritakan sedikit tentang Anda…" /></Field>
+              <Field label="Bio / Deskripsi" hint="Opsional"><Textarea rows={3} value={profileForm.bio} onChange={e => setProfileForm(f => ({ ...f, bio: e.target.value }))} placeholder="Mis. Berpengalaman 5 tahun melatih renang anak usia dini dengan pendekatan bermain." /></Field>
             </div>
           </div>
 
@@ -2482,8 +2482,8 @@ function CoachProfile({ profile, onRefresh, onLogout, onAvatarChange }: { profil
       <Card>
         <SectionTitle>Ganti Password</SectionTitle>
         <div className="mt-4 space-y-3">
-          <Field label="Password baru"><Input type="password" placeholder="Password baru" value={newPwd} onChange={e => setNewPwd(e.target.value)} /></Field>
-          <Field label="Konfirmasi"><Input type="password" placeholder="Ulangi password" value={confirmPwd} onChange={e => setConfirmPwd(e.target.value)} /></Field>
+          <Field label="Password baru"><Input type="password" placeholder="••••••••" value={newPwd} onChange={e => setNewPwd(e.target.value)} /></Field>
+          <Field label="Konfirmasi"><Input type="password" placeholder="••••••••" value={confirmPwd} onChange={e => setConfirmPwd(e.target.value)} /></Field>
           <Btn variant="primary" size="md" onClick={changePassword} disabled={savingPwd}>{savingPwd ? "Menyimpan…" : "Simpan password baru"}</Btn>
         </div>
       </Card>
@@ -2531,8 +2531,8 @@ function CoachProfile({ profile, onRefresh, onLogout, onAvatarChange }: { profil
         footer={<><Btn variant="ghost" onClick={() => setOpenEditBank(false)}>Batal</Btn><Btn variant="primary" onClick={saveBank} disabled={savingBank}>{savingBank ? "Menyimpan…" : "Simpan"}</Btn></>}>
         <div className="space-y-4">
           <Field label="Nama bank" required><Input value={bankForm.bank_name} onChange={e => setBankForm(f => ({ ...f, bank_name: e.target.value }))} placeholder="Mis. BCA, BRI, Mandiri" /></Field>
-          <Field label="Nomor rekening" required><Input value={bankForm.bank_account} onChange={e => setBankForm(f => ({ ...f, bank_account: e.target.value }))} placeholder="Nomor rekening" /></Field>
-          <Field label="Atas nama" required><Input value={bankForm.bank_holder} onChange={e => setBankForm(f => ({ ...f, bank_holder: e.target.value }))} placeholder="Nama pemilik rekening" /></Field>
+          <Field label="Nomor rekening" required><Input value={bankForm.bank_account} onChange={e => setBankForm(f => ({ ...f, bank_account: e.target.value }))} placeholder="Mis. 1234567890" /></Field>
+          <Field label="Atas nama" required><Input value={bankForm.bank_holder} onChange={e => setBankForm(f => ({ ...f, bank_holder: e.target.value }))} placeholder="Mis. Reza Fahlevi" /></Field>
         </div>
       </Modal>
 

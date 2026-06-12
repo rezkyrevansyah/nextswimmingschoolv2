@@ -583,7 +583,7 @@ function AdminSettings({ branch, onRefresh, userId }: { branch: Branch | null; o
           <SectionTitle sub="Data akun Anda">Profil Saya</SectionTitle>
           <Field label="Nama lengkap"><Input value={myName} onChange={e => setMyName(e.target.value)} /></Field>
           <Field label="No. HP Pribadi" hint="Nomor pribadi Anda sebagai admin — tidak dipakai untuk tombol kontak cabang">
-            <Input type="tel" value={myPhone} onChange={e => setMyPhone(e.target.value)} placeholder="081234567890" className="font-mono" />
+            <Input type="tel" value={myPhone} onChange={e => setMyPhone(e.target.value)} placeholder="Mis. 081234567890" className="font-mono" />
           </Field>
           <div className="pt-2">
             <Btn variant="primary" onClick={saveProfile} disabled={savingProfile}>{savingProfile ? "Menyimpan…" : "Simpan profil"}</Btn>
@@ -2376,7 +2376,7 @@ function AdminMember({ branchId }: { branchId: string }) {
               <Field label="No HP orang tua / wali"><Input type="tel" value={editMemberForm.parent_phone} onChange={e => setEditMemberForm(f => ({ ...f, parent_phone: e.target.value }))} /></Field>
             </>
           )}
-          <Field label="Alamat" className="sm:col-span-2"><Textarea rows={2} value={editMemberForm.address} onChange={e => setEditMemberForm(f => ({ ...f, address: e.target.value }))} placeholder="Jl. ..." /></Field>
+          <Field label="Alamat" className="sm:col-span-2"><Textarea rows={2} value={editMemberForm.address} onChange={e => setEditMemberForm(f => ({ ...f, address: e.target.value }))} placeholder="Mis. Jl. Anggrek No. 12, Bekasi" /></Field>
           <Field label="Catatan kesehatan" className="sm:col-span-2" hint="Alergi, kondisi khusus, dll."><Textarea rows={2} value={editMemberForm.health_notes} onChange={e => setEditMemberForm(f => ({ ...f, health_notes: e.target.value }))} /></Field>
           {/* Kelas — multi-select checkboxes */}
           <div className="sm:col-span-2">
@@ -2492,7 +2492,7 @@ function AdminMember({ branchId }: { branchId: string }) {
               <Field label="No HP orang tua / wali"><Input type="tel" value={form.parent_phone} onChange={e => setForm(f => ({ ...f, parent_phone: e.target.value }))} /></Field>
             </>
           )}
-          <Field label="Alamat" className="sm:col-span-2"><Textarea rows={2} value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} placeholder="Jl. ..." /></Field>
+          <Field label="Alamat" className="sm:col-span-2"><Textarea rows={2} value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} placeholder="Mis. Jl. Anggrek No. 12, Bekasi" /></Field>
           <Field label="Catatan kesehatan" className="sm:col-span-2" hint="Alergi, kondisi khusus, dll."><Textarea rows={2} value={form.health_notes} onChange={e => setForm(f => ({ ...f, health_notes: e.target.value }))} /></Field>
           <Field label="Email login" required><Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} /></Field>
           <Field label="Password" required hint="Min. 6 karakter">
@@ -3363,8 +3363,8 @@ function AdminCoach({ branchId }: { branchId: string }) {
             <div className="text-xs font-bold text-ink-mute uppercase tracking-widest mb-3">Data Pribadi</div>
             <div className="space-y-3">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <Field label="Nama lengkap" required><Input value={form.full_name} onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))} placeholder="Nama lengkap" /></Field>
-                <Field label="Nama panggilan" hint="Opsional"><Input value={form.nick_name} onChange={e => setForm(f => ({ ...f, nick_name: e.target.value }))} placeholder="Nama panggilan" /></Field>
+                <Field label="Nama lengkap" required><Input value={form.full_name} onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))} placeholder="Mis. Reza Fahlevi" /></Field>
+                <Field label="Nama panggilan" hint="Opsional"><Input value={form.nick_name} onChange={e => setForm(f => ({ ...f, nick_name: e.target.value }))} placeholder="Mis. Kak Reza" /></Field>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Field label="Jenis kelamin">
@@ -3378,7 +3378,7 @@ function AdminCoach({ branchId }: { branchId: string }) {
               </div>
               <Field label="Email" required><Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} /></Field>
               <Field label="No HP / WA"><Input type="tel" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="08xxxxxxxxxx" /></Field>
-              <Field label="Alamat" hint="Opsional"><Textarea rows={2} value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} placeholder="Alamat lengkap" /></Field>
+              <Field label="Alamat" hint="Opsional"><Textarea rows={2} value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} placeholder="Mis. Jl. Anggrek No. 12, Bekasi" /></Field>
             </div>
           </div>
 
@@ -3399,7 +3399,7 @@ function AdminCoach({ branchId }: { branchId: string }) {
             <div className="text-xs font-bold text-ink-mute uppercase tracking-widest mb-3">Profil Pelatih</div>
             <div className="space-y-3">
               <Field label="Spesialisasi" hint="Opsional"><Input value={form.specialization} onChange={e => setForm(f => ({ ...f, specialization: e.target.value }))} placeholder="Mis. Teknik renang anak" /></Field>
-              <Field label="Bio / Deskripsi" hint="Opsional"><Textarea rows={2} value={form.bio} onChange={e => setForm(f => ({ ...f, bio: e.target.value }))} placeholder="Ceritakan sedikit tentang coach…" /></Field>
+              <Field label="Bio / Deskripsi" hint="Opsional"><Textarea rows={2} value={form.bio} onChange={e => setForm(f => ({ ...f, bio: e.target.value }))} placeholder="Mis. Berpengalaman 5 tahun melatih renang anak usia dini dengan pendekatan bermain." /></Field>
             </div>
           </div>
 
@@ -3407,8 +3407,8 @@ function AdminCoach({ branchId }: { branchId: string }) {
             <div className="text-xs font-bold text-ink-mute uppercase tracking-widest mb-3">Informasi Rekening (Opsional)</div>
             <div className="space-y-3">
               <Field label="Nama bank"><Input value={form.bank_name} onChange={e => setForm(f => ({ ...f, bank_name: e.target.value }))} placeholder="Mis. BCA, BRI, Mandiri" /></Field>
-              <Field label="Nomor rekening"><Input value={form.bank_account} onChange={e => setForm(f => ({ ...f, bank_account: e.target.value }))} placeholder="Nomor rekening" /></Field>
-              <Field label="Atas nama"><Input value={form.bank_holder} onChange={e => setForm(f => ({ ...f, bank_holder: e.target.value }))} placeholder="Nama pemilik rekening" /></Field>
+              <Field label="Nomor rekening"><Input value={form.bank_account} onChange={e => setForm(f => ({ ...f, bank_account: e.target.value }))} placeholder="Mis. 1234567890" /></Field>
+              <Field label="Atas nama"><Input value={form.bank_holder} onChange={e => setForm(f => ({ ...f, bank_holder: e.target.value }))} placeholder="Mis. Reza Fahlevi" /></Field>
             </div>
           </div>
 
@@ -3420,8 +3420,8 @@ function AdminCoach({ branchId }: { branchId: string }) {
             {createCerts.map((c, i) => (
               <div key={i} className="relative border border-line rounded-xl p-3 mb-3 space-y-2">
                 <button type="button" onClick={() => setCreateCerts(cs => cs.filter((_, j) => j !== i))} className="absolute top-2 right-2 p-1 rounded hover:bg-danger-50 text-danger-500 transition-colors"><Icon name="x" className="w-4 h-4" /></button>
-                <Input placeholder="Nama sertifikasi*" value={c.title} onChange={e => setCreateCerts(cs => cs.map((x, j) => j === i ? { ...x, title: e.target.value } : x))} />
-                <Input placeholder="Lembaga penerbit (opsional)" value={c.issuer} onChange={e => setCreateCerts(cs => cs.map((x, j) => j === i ? { ...x, issuer: e.target.value } : x))} />
+                <Input placeholder="Mis. Lifeguard Level 2" value={c.title} onChange={e => setCreateCerts(cs => cs.map((x, j) => j === i ? { ...x, title: e.target.value } : x))} />
+                <Input placeholder="Mis. PMI / PRSI" value={c.issuer} onChange={e => setCreateCerts(cs => cs.map((x, j) => j === i ? { ...x, issuer: e.target.value } : x))} />
                 <div className="grid grid-cols-2 gap-2">
                   <div><label className="text-xs text-ink-mute mb-1 block">Berlaku dari</label><Input type="date" value={c.valid_from} onChange={e => setCreateCerts(cs => cs.map((x, j) => j === i ? { ...x, valid_from: e.target.value } : x))} /></div>
                   <div><label className="text-xs text-ink-mute mb-1 block">Berlaku sampai</label><Input type="date" value={c.valid_until} disabled={c.no_expiry} onChange={e => setCreateCerts(cs => cs.map((x, j) => j === i ? { ...x, valid_until: e.target.value } : x))} /></div>
@@ -3438,7 +3438,7 @@ function AdminCoach({ branchId }: { branchId: string }) {
             <div className="text-xs font-bold text-ink-mute uppercase tracking-widest mb-3">Akun</div>
             <Field label="Password awal" required>
               <div className="relative">
-                <Input type={showCoachPwd ? "text" : "password"} value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder="Min. 6 karakter" className="pr-10" />
+                <Input type={showCoachPwd ? "text" : "password"} value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder="••••••••" className="pr-10" />
                 <button type="button" tabIndex={-1} onClick={() => setShowCoachPwd(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-mute hover:text-ink transition-colors">
                   <Icon name={showCoachPwd ? "eye-off" : "eye"} className="w-4 h-4" />
                 </button>
@@ -3469,7 +3469,7 @@ function AdminCoach({ branchId }: { branchId: string }) {
             <div className="space-y-3">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Field label="Nama lengkap" required><Input value={editForm.full_name} onChange={e => setEditForm(f => ({ ...f, full_name: e.target.value }))} /></Field>
-                <Field label="Nama panggilan" hint="Opsional"><Input value={editForm.nick_name} onChange={e => setEditForm(f => ({ ...f, nick_name: e.target.value }))} placeholder="Nama panggilan" /></Field>
+                <Field label="Nama panggilan" hint="Opsional"><Input value={editForm.nick_name} onChange={e => setEditForm(f => ({ ...f, nick_name: e.target.value }))} placeholder="Mis. Kak Reza" /></Field>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Field label="Jenis kelamin">
@@ -3482,7 +3482,7 @@ function AdminCoach({ branchId }: { branchId: string }) {
                 <Field label="Tanggal lahir" hint="Opsional"><DatePicker value={editForm.birth_date} onChange={v => setEditForm(f => ({ ...f, birth_date: v }))} /></Field>
               </div>
               <Field label="No HP / WA"><Input type="tel" value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))} placeholder="08xxxxxxxxxx" /></Field>
-              <Field label="Alamat" hint="Opsional"><Textarea rows={2} value={editForm.address} onChange={e => setEditForm(f => ({ ...f, address: e.target.value }))} placeholder="Alamat lengkap" /></Field>
+              <Field label="Alamat" hint="Opsional"><Textarea rows={2} value={editForm.address} onChange={e => setEditForm(f => ({ ...f, address: e.target.value }))} placeholder="Mis. Jl. Anggrek No. 12, Bekasi" /></Field>
             </div>
           </div>
 
@@ -3503,7 +3503,7 @@ function AdminCoach({ branchId }: { branchId: string }) {
             <div className="text-xs font-bold text-ink-mute uppercase tracking-widest mb-3">Profil Pelatih</div>
             <div className="space-y-3">
               <Field label="Spesialisasi" hint="Opsional"><Input value={editForm.specialization} onChange={e => setEditForm(f => ({ ...f, specialization: e.target.value }))} placeholder="Mis. Teknik renang anak" /></Field>
-              <Field label="Bio / Deskripsi" hint="Opsional"><Textarea rows={2} value={editForm.bio} onChange={e => setEditForm(f => ({ ...f, bio: e.target.value }))} placeholder="Ceritakan sedikit tentang coach…" /></Field>
+              <Field label="Bio / Deskripsi" hint="Opsional"><Textarea rows={2} value={editForm.bio} onChange={e => setEditForm(f => ({ ...f, bio: e.target.value }))} placeholder="Mis. Berpengalaman 5 tahun melatih renang anak usia dini dengan pendekatan bermain." /></Field>
             </div>
           </div>
 
@@ -3511,8 +3511,8 @@ function AdminCoach({ branchId }: { branchId: string }) {
             <div className="text-xs font-bold text-ink-mute uppercase tracking-widest mb-3">Informasi Rekening (Opsional)</div>
             <div className="space-y-3">
               <Field label="Nama bank"><Input value={editForm.bank_name} onChange={e => setEditForm(f => ({ ...f, bank_name: e.target.value }))} placeholder="Mis. BCA, BRI, Mandiri" /></Field>
-              <Field label="Nomor rekening"><Input value={editForm.bank_account} onChange={e => setEditForm(f => ({ ...f, bank_account: e.target.value }))} placeholder="Nomor rekening" /></Field>
-              <Field label="Atas nama"><Input value={editForm.bank_holder} onChange={e => setEditForm(f => ({ ...f, bank_holder: e.target.value }))} placeholder="Nama pemilik rekening" /></Field>
+              <Field label="Nomor rekening"><Input value={editForm.bank_account} onChange={e => setEditForm(f => ({ ...f, bank_account: e.target.value }))} placeholder="Mis. 1234567890" /></Field>
+              <Field label="Atas nama"><Input value={editForm.bank_holder} onChange={e => setEditForm(f => ({ ...f, bank_holder: e.target.value }))} placeholder="Mis. Reza Fahlevi" /></Field>
             </div>
           </div>
         </div>
@@ -3543,7 +3543,7 @@ function AdminCoach({ branchId }: { branchId: string }) {
           </Card>
           <Field label="Password baru" required hint="Minimal 6 karakter">
             <div className="relative">
-              <Input type={showNewPassword ? "text" : "password"} value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="Password baru…" className="pr-10" />
+              <Input type={showNewPassword ? "text" : "password"} value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="••••••••" className="pr-10" />
               <button type="button" tabIndex={-1} onClick={() => setShowNewPassword(v => !v)}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-mute hover:text-ink transition-colors">
                 <Icon name={showNewPassword ? "eye-off" : "eye"} className="w-4 h-4" />
@@ -5433,10 +5433,10 @@ function AdminPembayaran({ branchId }: { branchId: string }) {
             <Input value={addForm.period_label} onChange={e => setAddForm(f => ({ ...f, period_label: e.target.value }))} placeholder={addForm.type === "monthly" ? "Mis. Juni 2026" : "Mis. Paket 8 Sesi Juli"} />
           </Field>
           <Field label="Nominal tagihan" required>
-            <Input type="number" min={0} value={addForm.amount} onChange={e => setAddForm(f => ({ ...f, amount: e.target.value }))} placeholder="0" />
+            <Input type="number" min={0} value={addForm.amount} onChange={e => setAddForm(f => ({ ...f, amount: e.target.value }))} placeholder="Mis. 500000" />
           </Field>
           <Field label="Diskon" hint="Opsional.">
-            <Input type="number" min={0} value={addForm.discount} onChange={e => setAddForm(f => ({ ...f, discount: e.target.value }))} placeholder="0" />
+            <Input type="number" min={0} value={addForm.discount} onChange={e => setAddForm(f => ({ ...f, discount: e.target.value }))} placeholder="Mis. 50000" />
           </Field>
           {Number(addForm.discount) > 0 && (
             <Field label="Alasan diskon">
@@ -5450,7 +5450,7 @@ function AdminPembayaran({ branchId }: { branchId: string }) {
             </div>
           )}
           <Field label="Catatan admin" hint="Opsional.">
-            <Textarea rows={2} value={addForm.admin_notes} onChange={e => setAddForm(f => ({ ...f, admin_notes: e.target.value }))} placeholder="Catatan internal…" />
+            <Textarea rows={2} value={addForm.admin_notes} onChange={e => setAddForm(f => ({ ...f, admin_notes: e.target.value }))} placeholder="Mis. Tagihan bulan Mei 2026, sudah konfirmasi via WA." />
           </Field>
         </div>
       </Modal>
@@ -5791,7 +5791,7 @@ function AdminApprovement({ branchId }: { branchId: string }) {
             </div>
           )}
           <Field label="Alasan penolakan" required>
-            <Textarea rows={3} value={certRejectReason} onChange={e => setCertRejectReason(e.target.value)} placeholder="Jelaskan alasan penolakan sertifikasi ini…" />
+            <Textarea rows={3} value={certRejectReason} onChange={e => setCertRejectReason(e.target.value)} placeholder="Mis. Sertifikat sudah kedaluwarsa, harap perbarui dengan dokumen terbaru." />
           </Field>
         </div>
       </Modal>
@@ -5807,7 +5807,7 @@ function AdminApprovement({ branchId }: { branchId: string }) {
             </div>
           )}
           <Field label="Alasan penolakan" required>
-            <Textarea rows={3} value={regRejectReason} onChange={e => setRegRejectReason(e.target.value)} placeholder="Jelaskan alasan penolakan pendaftaran ini…" />
+            <Textarea rows={3} value={regRejectReason} onChange={e => setRegRejectReason(e.target.value)} placeholder="Mis. Data tidak lengkap, nomor WA tidak aktif." />
           </Field>
         </div>
       </Modal>

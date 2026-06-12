@@ -195,7 +195,7 @@ export default function RegisterPage() {
                 </Field>
 
                 <Field label="Nomor HP / WhatsApp" required hint="Pastikan bisa dihubungi via WA">
-                  <Input required type="tel" placeholder="0812 …" value={phone} onChange={e => setPhone(e.target.value)} />
+                  <Input required type="tel" placeholder="Mis. 081234567890" value={phone} onChange={e => setPhone(e.target.value)} />
                 </Field>
                 <Field label="HP milik siapa?" required>
                   <div className="flex gap-2 mt-0.5">
@@ -221,13 +221,13 @@ export default function RegisterPage() {
                       <Input required placeholder="Mis. Bpk. Andika Putra" value={parentName} onChange={e => setParentName(e.target.value)} />
                     </Field>
                     <Field label="Nomor HP orang tua" required>
-                      <Input required type="tel" placeholder="0812 …" value={parentPhone} onChange={e => setParentPhone(e.target.value)} />
+                      <Input required type="tel" placeholder="Mis. 081234567890" value={parentPhone} onChange={e => setParentPhone(e.target.value)} />
                     </Field>
                   </>
                 )}
 
                 <Field label="Alamat" required>
-                  <Textarea required rows={2} placeholder="Alamat tinggal" value={address} onChange={e => setAddress(e.target.value)} />
+                  <Textarea required rows={2} placeholder="Mis. Jl. Anggrek No. 12, Bekasi Selatan" value={address} onChange={e => setAddress(e.target.value)} />
                 </Field>
                 <Field label="Riwayat kesehatan / alergi" hint="Opsional, sangat membantu coach">
                   <Textarea rows={2} placeholder="Contoh: asma ringan, alergi klorin" value={healthNotes} onChange={e => setHealthNotes(e.target.value)} />

@@ -1153,7 +1153,7 @@ function MemberRapor({ memberId, memberName }: { memberId: string; memberName: s
                   ))}
                   <span className="ml-2 text-sm font-semibold text-ink-soft">{["", "Kurang", "Cukup", "Baik", "Sangat Baik", "Luar Biasa"][reviewRating]}</span>
                 </div>
-                <Textarea rows={2} placeholder="Tulis ulasan Anda (opsional)" value={reviewText} onChange={(e) => setReviewText(e.target.value)} />
+                <Textarea rows={2} placeholder="Mis. Coach sangat sabar dan metodenya menyenangkan untuk anak-anak." value={reviewText} onChange={(e) => setReviewText(e.target.value)} />
                 <Btn variant="primary" size="sm" className="mt-3" disabled={saving} onClick={saveReview}>{saving ? "Menyimpan…" : selectedEntry.review_id ? "Perbarui review" : "Simpan review"}</Btn>
               </div>
             ) : (
