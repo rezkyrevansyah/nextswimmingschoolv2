@@ -5907,7 +5907,8 @@ function AdminCoachReviews({ branchId }: { branchId: string }) {
     (async () => {
       const { data } = await supabase
         .from("member_reviews")
-        .select("id, stars, message, created_at, coach_id, coach:profiles!member_reviews_coach_id_fkey(full_name), member:members!member_reviews_member_id_fkey(profile:profiles(full_name)), rapor:rapor_entries!member_reviews_rapor_id_fkey(rapor_periods(label))")
+        .select("id, stars, message, created_at, coach_id, coach:profiles!member_reviews_coach_id_fkey(full_name), member:members!member_reviews_member_id_fkey(branch_id, profile:profiles(full_name)), rapor:rapor_entries!member_reviews_rapor_id_fkey(rapor_periods(label))")
+        .eq("member.branch_id", branchId)
         .order("created_at", { ascending: false });
       if (!data) { setLoading(false); return; }
 
