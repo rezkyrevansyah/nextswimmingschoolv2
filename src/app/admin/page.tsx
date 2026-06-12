@@ -6278,7 +6278,7 @@ function AdminSchoolPanel({ branchId }: { branchId: string }) {
               </div>
             </div>
             {detailTarget.pic_phone && (
-              <a href={waLink(`Halo ${detailTarget.pic_name ?? ""}, berikut akses login School Panel Next Swimming School untuk ${detailTarget.name}.\n\nEmail: ${detailTarget.email ?? ""}\n\nSilakan login di: ${typeof window !== "undefined" ? window.location.origin : ""}/login`)} target="_blank" rel="noreferrer" className="block">
+              <a href={waLink(`Halo ${detailTarget.pic_name ?? ""}, berikut akses login School Panel Next Swimming School untuk ${detailTarget.name}.\n\nEmail: ${detailTarget.email ?? ""}\n\nSilakan login di: ${typeof window !== "undefined" ? window.location.origin : ""}/login`, detailTarget.pic_phone)} target="_blank" rel="noreferrer" className="block">
                 <Btn variant="wa" icon="whatsapp" className="w-full">Hubungi PIC via WA</Btn>
               </a>
             )}
