@@ -12,6 +12,7 @@ import Avatar from "@/components/ui/Avatar";
 import QRBox from "@/components/ui/QRBox";
 import Placeholder from "@/components/ui/Placeholder";
 import TimePicker from "@/components/ui/TimePicker";
+import DatePicker from "@/components/ui/DatePicker";
 import dynamic from "next/dynamic";
 const MapPicker = dynamic(() => import("@/components/ui/MapPicker"), { ssr: false, loading: () => <div className="rounded-xl border border-line bg-paper-tint h-[260px] flex items-center justify-center text-ink-mute text-sm">Memuat peta…</div> });
 import Modal from "@/components/ui/Modal";
@@ -2338,7 +2339,7 @@ function AdminMember({ branchId }: { branchId: string }) {
           {/* Identitas */}
           <Field label="Nama lengkap" required><Input value={editMemberForm.full_name} onChange={e => setEditMemberForm(f => ({ ...f, full_name: e.target.value }))} /></Field>
           <Field label="Email" hint="Ubah email login akun member"><Input type="email" placeholder="nama@email.com" value={editMemberForm.email} onChange={e => setEditMemberForm(f => ({ ...f, email: e.target.value }))} /></Field>
-          <Field label="Tanggal lahir"><Input type="date" value={editMemberForm.birth_date} onChange={e => setEditMemberForm(f => ({ ...f, birth_date: e.target.value }))} /></Field>
+          <Field label="Tanggal lahir"><DatePicker value={editMemberForm.birth_date} onChange={v => setEditMemberForm(f => ({ ...f, birth_date: v }))} /></Field>
           <Field label="Jenis kelamin">
             <Select value={editMemberForm.gender} onChange={e => setEditMemberForm(f => ({ ...f, gender: e.target.value }))}>
               <option value="">— pilih —</option>
@@ -2444,7 +2445,7 @@ function AdminMember({ branchId }: { branchId: string }) {
             <p className="text-xs text-ink-faint">Foto profil (opsional)</p>
           </div>
           <Field label="Nama lengkap" required><Input value={form.full_name} onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))} /></Field>
-          <Field label="Tanggal lahir"><Input type="date" value={form.birth_date} onChange={e => setForm(f => ({ ...f, birth_date: e.target.value }))} /></Field>
+          <Field label="Tanggal lahir"><DatePicker value={form.birth_date} onChange={v => setForm(f => ({ ...f, birth_date: v }))} /></Field>
           <Field label="Jenis kelamin">
             <Select value={form.gender} onChange={e => setForm(f => ({ ...f, gender: e.target.value }))}>
               <option value="">— pilih —</option>
@@ -3373,7 +3374,7 @@ function AdminCoach({ branchId }: { branchId: string }) {
                     <option value="female">Perempuan</option>
                   </Select>
                 </Field>
-                <Field label="Tanggal lahir" hint="Opsional"><Input type="date" value={form.birth_date} onChange={e => setForm(f => ({ ...f, birth_date: e.target.value }))} /></Field>
+                <Field label="Tanggal lahir" hint="Opsional"><DatePicker value={form.birth_date} onChange={v => setForm(f => ({ ...f, birth_date: v }))} /></Field>
               </div>
               <Field label="Email" required><Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} /></Field>
               <Field label="No HP / WA"><Input type="tel" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="08xxxxxxxxxx" /></Field>
@@ -3478,7 +3479,7 @@ function AdminCoach({ branchId }: { branchId: string }) {
                     <option value="female">Perempuan</option>
                   </Select>
                 </Field>
-                <Field label="Tanggal lahir" hint="Opsional"><Input type="date" value={editForm.birth_date} onChange={e => setEditForm(f => ({ ...f, birth_date: e.target.value }))} /></Field>
+                <Field label="Tanggal lahir" hint="Opsional"><DatePicker value={editForm.birth_date} onChange={v => setEditForm(f => ({ ...f, birth_date: v }))} /></Field>
               </div>
               <Field label="No HP / WA"><Input type="tel" value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))} placeholder="08xxxxxxxxxx" /></Field>
               <Field label="Alamat" hint="Opsional"><Textarea rows={2} value={editForm.address} onChange={e => setEditForm(f => ({ ...f, address: e.target.value }))} placeholder="Alamat lengkap" /></Field>
@@ -5818,7 +5819,7 @@ function AdminApprovement({ branchId }: { branchId: string }) {
           <Field label="Nama lengkap" required><Input value={editRegForm.full_name ?? ""} onChange={e => setEditRegForm(f => ({ ...f, full_name: e.target.value }))} /></Field>
           <Field label="Email" required hint="Akan dipakai sebagai akun login"><Input type="email" placeholder="nama@email.com" value={editRegForm.email ?? ""} onChange={e => setEditRegForm(f => ({ ...f, email: e.target.value }))} /></Field>
           <div className="grid sm:grid-cols-2 gap-4">
-            <Field label="Tanggal lahir"><Input type="date" value={editRegForm.birth_date ?? ""} onChange={e => setEditRegForm(f => ({ ...f, birth_date: e.target.value }))} /></Field>
+            <Field label="Tanggal lahir"><DatePicker value={editRegForm.birth_date ?? ""} onChange={v => setEditRegForm(f => ({ ...f, birth_date: v }))} /></Field>
             <Field label="Jenis kelamin">
               <Select value={editRegForm.gender ?? ""} onChange={e => setEditRegForm(f => ({ ...f, gender: e.target.value }))}>
                 <option value="">—</option>
