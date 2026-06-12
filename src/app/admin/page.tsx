@@ -1403,6 +1403,7 @@ function AdminMember({ branchId }: { branchId: string }) {
   const [openResetPwd, setOpenResetPwd] = useState(false);
   const [newPwd, setNewPwd] = useState("");
   const [showNewPwd, setShowNewPwd] = useState(false);
+  const [showCreatePwd, setShowCreatePwd] = useState(false);
   const [photoView, setPhotoView] = useState<string | null>(null);
 
   const [detailTab, setDetailTab] = useState<"info" | "absensi" | "pembayaran">("info");
@@ -2493,7 +2494,14 @@ function AdminMember({ branchId }: { branchId: string }) {
           <Field label="Alamat" className="sm:col-span-2"><Textarea rows={2} value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} placeholder="Jl. ..." /></Field>
           <Field label="Catatan kesehatan" className="sm:col-span-2" hint="Alergi, kondisi khusus, dll."><Textarea rows={2} value={form.health_notes} onChange={e => setForm(f => ({ ...f, health_notes: e.target.value }))} /></Field>
           <Field label="Email login" required><Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} /></Field>
-          <Field label="Password" required hint="Min. 6 karakter"><Input type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} /></Field>
+          <Field label="Password" required hint="Min. 6 karakter">
+            <div className="relative">
+              <Input type={showCreatePwd ? "text" : "password"} value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder="••••••••" className="pr-10" />
+              <button type="button" tabIndex={-1} onClick={() => setShowCreatePwd(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-mute hover:text-ink transition-colors">
+                <Icon name={showCreatePwd ? "eye-off" : "eye"} className="w-4 h-4" />
+              </button>
+            </div>
+          </Field>
         </div>
       </Modal>
 
@@ -2772,6 +2780,7 @@ function AdminCoach({ branchId }: { branchId: string }) {
   const [editAvatarPreview, setEditAvatarPreview] = useState<string | null>(null);
   const [coachCredential, setCoachCredential] = useState<{ full_name: string; email: string; password: string; phone: string } | null>(null);
   const [photoView, setPhotoView] = useState<string | null>(null);
+  const [showCoachPwd, setShowCoachPwd] = useState(false);
 
   // detail panel
   const [detail, setDetail] = useState<CoachFull | null>(null);
@@ -3426,7 +3435,14 @@ function AdminCoach({ branchId }: { branchId: string }) {
 
           <div className="pt-1 border-t border-line">
             <div className="text-xs font-bold text-ink-mute uppercase tracking-widest mb-3">Akun</div>
-            <Field label="Password awal" required><Input type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder="Min. 6 karakter" /></Field>
+            <Field label="Password awal" required>
+              <div className="relative">
+                <Input type={showCoachPwd ? "text" : "password"} value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder="Min. 6 karakter" className="pr-10" />
+                <button type="button" tabIndex={-1} onClick={() => setShowCoachPwd(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-mute hover:text-ink transition-colors">
+                  <Icon name={showCoachPwd ? "eye-off" : "eye"} className="w-4 h-4" />
+                </button>
+              </div>
+            </Field>
           </div>
         </div>
       </Modal>
@@ -6141,6 +6157,7 @@ function AdminSchoolPanel({ branchId }: { branchId: string }) {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(EMPTY_SCHOOL_FORM);
   const [createdCredential, setCreatedCredential] = useState<{ name: string; email: string; password: string; pic_phone: string } | null>(null);
+  const [showSchoolPwd, setShowSchoolPwd] = useState(false);
   // Detail / edit
   const [detailTarget, setDetailTarget] = useState<School | null>(null);
   const [editTarget, setEditTarget] = useState<School | null>(null);
@@ -6312,7 +6329,14 @@ function AdminSchoolPanel({ branchId }: { branchId: string }) {
             <Field label="No. HP PIC" hint="WA credential dikirim ke sini"><Input value={form.pic_phone} onChange={e => setForm(f => ({ ...f, pic_phone: e.target.value }))} placeholder="08xxxxxxxxxx" /></Field>
           </div>
           <Field label="Email login" required hint="Digunakan untuk login ke school page"><Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} /></Field>
-          <Field label="Password" required hint="Min. 6 karakter"><Input type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder="••••••••" /></Field>
+          <Field label="Password" required hint="Min. 6 karakter">
+            <div className="relative">
+              <Input type={showSchoolPwd ? "text" : "password"} value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder="••••••••" className="pr-10" />
+              <button type="button" tabIndex={-1} onClick={() => setShowSchoolPwd(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-mute hover:text-ink transition-colors">
+                <Icon name={showSchoolPwd ? "eye-off" : "eye"} className="w-4 h-4" />
+              </button>
+            </div>
+          </Field>
         </div>
       </Modal>
 

@@ -343,6 +343,7 @@ function Admins({ branches }: { branches: Branch[] }) {
   const [editTarget, setEditTarget] = useState<AdminProfile | null>(null);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ full_name: "", email: "", phone: "", branch_id: "", password: "" });
+  const [showAdminPwd, setShowAdminPwd] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -495,7 +496,12 @@ function Admins({ branches }: { branches: Branch[] }) {
             </Select>
           </Field>
           {!editTarget && <Field label="Password awal" required hint="Admin bisa ganti setelah login">
-            <Input type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder="Min. 8 karakter" />
+            <div className="relative">
+              <Input type={showAdminPwd ? "text" : "password"} value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder="Min. 8 karakter" className="pr-10" />
+              <button type="button" tabIndex={-1} onClick={() => setShowAdminPwd(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-mute hover:text-ink transition-colors">
+                <Icon name={showAdminPwd ? "eye-off" : "eye"} className="w-4 h-4" />
+              </button>
+            </div>
           </Field>}
         </div>
       </Modal>
