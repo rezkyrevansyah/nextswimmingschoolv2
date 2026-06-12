@@ -49,7 +49,7 @@ function calcAge(birthDate: string): number {
 
 // ── Shell ──────────────────────────────────────────────────────────────────────
 
-function Shell({ children, active, setActive, name, branchName, userId, avatarUrl }: {
+function Shell({ children, active, setActive, name, branchName, userId, avatarUrl, isSchoolAffiliate }: {
   children: React.ReactNode;
   active: TabId;
   setActive: (id: TabId) => void;
@@ -57,6 +57,7 @@ function Shell({ children, active, setActive, name, branchName, userId, avatarUr
   branchName: string;
   userId: string;
   avatarUrl?: string | null;
+  isSchoolAffiliate?: boolean;
 }) {
   const title = active === "home" ? `Hai, ${name || "…"}` : {
     schedule: "Jadwal", absen: "Absensi", bills: "Tagihan",
@@ -79,7 +80,7 @@ function Shell({ children, active, setActive, name, branchName, userId, avatarUr
             <p className="text-xs text-ink-mute truncate">{sub}</p>
           </div>
           <div className="hidden lg:flex items-center gap-1">
-            {ALL_ITEMS.map((it) => (
+            {ALL_ITEMS.filter(it => !(isSchoolAffiliate && it.id === "bills")).map((it) => (
               <button key={it.id} onClick={() => setActive(it.id as TabId)}
                 className={`px-3 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 ${active === it.id ? "bg-ocean-50 text-ocean-700" : "text-ink-soft hover:bg-paper-tint"}`}>
                 <Icon name={it.icon ?? ""} className="w-4 h-4" /> {it.label}
@@ -93,7 +94,7 @@ function Shell({ children, active, setActive, name, branchName, userId, avatarUr
         </div>
       </header>
       <main className="max-w-3xl mx-auto p-4 lg:p-7 anim-in">{children}</main>
-      <MobileNav items={NAV_ITEMS} active={active} onSelect={(id) => setActive(id as TabId)} />
+      <MobileNav items={NAV_ITEMS.filter(it => !(isSchoolAffiliate && it.id === "bills"))} active={active} onSelect={(id) => setActive(id as TabId)} />
     </div>
   );
 }
@@ -1463,6 +1464,7 @@ export default function MemberPage() {
   const [active, setActive] = useState<TabId>("home");
   const [memberId, setMemberId] = useState("");
   const [memberName, setMemberName] = useState("");
+  const [memberType, setMemberType] = useState<"reguler" | "private" | "school_affiliate">("reguler");
   const [branchId, setBranchId] = useState("");
   const [branchName, setBranchName] = useState("");
   const [userId, setUserId] = useState("");
@@ -1525,7 +1527,7 @@ export default function MemberPage() {
 
       // Load member record by profile_id (= auth uid)
       supabase.from("members")
-        .select("id, suspend_until, suspend_reason, profile:profiles(full_name, is_profile_complete, avatar_url)")
+        .select("id, type, suspend_until, suspend_reason, profile:profiles(full_name, is_profile_complete, avatar_url)")
         .eq("profile_id", u.id)
         .single()
         .then(async ({ data: m }) => {
@@ -1535,7 +1537,8 @@ export default function MemberPage() {
           }
           if (m) {
             setMemberId(m.id);
-            const rec = m as unknown as { id: string; suspend_until: string | null; suspend_reason: string | null; profile: { full_name: string; is_profile_complete: boolean | null; avatar_url: string | null } | null };
+            const rec = m as unknown as { id: string; type: "reguler" | "private" | "school_affiliate"; suspend_until: string | null; suspend_reason: string | null; profile: { full_name: string; is_profile_complete: boolean | null; avatar_url: string | null } | null };
+            setMemberType(rec.type ?? "reguler");
             setSuspendUntil(rec.suspend_until ?? null);
             setSuspendReason(rec.suspend_reason ?? null);
             const prof = rec.profile;
@@ -1600,7 +1603,7 @@ export default function MemberPage() {
 
   return (
     <>
-      <Shell active={active} setActive={setActive} name={memberName} branchName={branchName} userId={userId} avatarUrl={memberAvatarUrl}>
+      <Shell active={active} setActive={setActive} name={memberName} branchName={branchName} userId={userId} avatarUrl={memberAvatarUrl} isSchoolAffiliate={memberType === "school_affiliate"}>
         {lockChecked ? pages[active] : <div className="p-10 text-center text-ink-mute">Memuat…</div>}
       </Shell>
     </>

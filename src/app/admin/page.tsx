@@ -5092,7 +5092,7 @@ function AdminPembayaran({ branchId }: { branchId: string }) {
   useEffect(() => {
     load();
     // Load members + classes for manual add form
-    supabase.from("members").select("id, type, profile:profiles(full_name)").eq("branch_id", branchId).eq("status", "active")
+    supabase.from("members").select("id, type, profile:profiles(full_name)").eq("branch_id", branchId).eq("status", "active").neq("type", "school_affiliate")
       .then(({ data }) => {
         if (data) setAddMembers((data as unknown as { id: string; type: string; profile: { full_name: string } | null }[])
           .map(m => ({ id: m.id, full_name: m.profile?.full_name ?? "—", type: m.type })));
@@ -5145,6 +5145,8 @@ function AdminPembayaran({ branchId }: { branchId: string }) {
 
   const saveManualBill = async () => {
     if (!addForm.member_id || !addForm.period_label || !addForm.amount) return toast.error("Member, periode, dan nominal wajib diisi");
+    const selectedMember = addMembers.find(m => m.id === addForm.member_id);
+    if (selectedMember?.type === "school_affiliate") return toast.error("Member afiliasi sekolah tidak dapat dibuatkan tagihan");
     setSaving(true);
     const amount = Number(addForm.amount) || 0;
     const discount = Number(addForm.discount) || 0;
