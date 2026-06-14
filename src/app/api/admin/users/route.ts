@@ -111,6 +111,15 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // For coaches: also insert into coach_branches junction table
+  if (role === "coach" && branch_id) {
+    await db.from("coach_branches").upsert({
+      coach_id: userId,
+      branch_id,
+      is_primary: true,
+    }, { onConflict: "coach_id,branch_id" });
+  }
+
   // For members: explicitly insert members row (no DB trigger for this),
   // then optionally assign to a class.
   let memberId: string | null = null;

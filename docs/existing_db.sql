@@ -210,10 +210,12 @@ CREATE TABLE public.coach_leaves (
   reject_reason text,
   created_by_admin boolean NOT NULL DEFAULT false,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
+  branch_id uuid,
   CONSTRAINT coach_leaves_pkey PRIMARY KEY (id),
   CONSTRAINT coach_leaves_coach_id_fkey FOREIGN KEY (coach_id) REFERENCES public.profiles(id),
   CONSTRAINT coach_leaves_substitute_id_fkey FOREIGN KEY (substitute_id) REFERENCES public.profiles(id),
-  CONSTRAINT coach_leaves_reviewed_by_fkey FOREIGN KEY (reviewed_by) REFERENCES public.profiles(id)
+  CONSTRAINT coach_leaves_reviewed_by_fkey FOREIGN KEY (reviewed_by) REFERENCES public.profiles(id),
+  CONSTRAINT coach_leaves_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branches(id)
 );
 CREATE TABLE public.coach_leave_classes (
   leave_id uuid NOT NULL,
@@ -546,4 +548,14 @@ CREATE TABLE public.landing_nav_links (
   href text NOT NULL DEFAULT '#'::text,
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT landing_nav_links_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.coach_branches (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  coach_id uuid NOT NULL,
+  branch_id uuid NOT NULL,
+  joined_at timestamp with time zone NOT NULL DEFAULT now(),
+  is_primary boolean NOT NULL DEFAULT false,
+  CONSTRAINT coach_branches_pkey PRIMARY KEY (id),
+  CONSTRAINT coach_branches_coach_id_fkey FOREIGN KEY (coach_id) REFERENCES public.profiles(id),
+  CONSTRAINT coach_branches_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branches(id)
 );

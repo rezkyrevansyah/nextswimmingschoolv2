@@ -217,7 +217,7 @@ interface RegistrationRow {
 
 interface CertRow {
   id: string; name: string; title: string | null; issuer: string | null; valid_from: string | null;
-  valid_until: string | null; photo_url: string | null; status: string;
+  valid_until: string | null; no_expiry: boolean; photo_url: string | null; status: string;
   profile?: { full_name: string } | null;
 }
 
@@ -2759,6 +2759,7 @@ interface CoachFull extends CoachProfile {
   suspend_reason?: string | null;
   is_archived?: boolean | null;
   class_coaches?: { class_id: string; class?: { id: string; name: string; time_start: string | null; time_end: string | null; schedule_days: string[] | null } | null }[];
+  coach_branches?: { branch_id: string; branches?: { name: string; city: string | null } | null; is_primary: boolean; joined_at: string }[] | null;
 }
 
 const EMPTY_COACH_FORM = { full_name: "", nick_name: "", email: "", phone: "", password: "", gender: "", birth_date: "", specialization: "", bio: "", address: "", education_level: "", education_institution: "", bank_name: "", bank_account: "", bank_holder: "" };
@@ -2809,6 +2810,13 @@ function AdminCoach({ branchId }: { branchId: string }) {
   const [resetSaving, setResetSaving] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
 
+  // link existing coach
+  const [openLink, setOpenLink] = useState(false);
+  const [linkEmail, setLinkEmail] = useState("");
+  const [linkResult, setLinkResult] = useState<{ id: string; full_name: string } | null>(null);
+  const [linkSearching, setLinkSearching] = useState(false);
+  const [linkSaving, setLinkSaving] = useState(false);
+
   // assign class
   const [openAssign, setOpenAssign] = useState(false);
   const [allClasses, setAllClasses] = useState<{ id: string; name: string; time_start: string | null; time_end: string | null; schedule_days: string[] | null }[]>([]);
@@ -2818,9 +2826,13 @@ function AdminCoach({ branchId }: { branchId: string }) {
   const load = useCallback(async () => {
     if (!branchId) return;
     setLoading(true);
+    // Load coach_ids in this branch from junction table, then load profiles for those coaches
+    const { data: cbData } = await createClient().from("coach_branches").select("coach_id").eq("branch_id", branchId);
+    const coachIds = (cbData ?? []).map((r: { coach_id: string }) => r.coach_id);
+    if (coachIds.length === 0) { setCoaches([]); setLoading(false); return; }
     const { data, error } = await createClient().from("profiles")
-      .select("id, full_name, nick_name, email, phone, gender, birth_date, specialization, bio, address, education_level, education_institution, bank_name, bank_account, bank_holder, avatar_url, suspend_until, suspend_reason, is_archived, certifications!certifications_coach_id_fkey(id, name, title, status, valid_from, valid_until), class_coaches(class_id, class:classes(id, name, time_start, time_end, schedule_days))")
-      .eq("branch_id", branchId).eq("role", "coach").order("full_name");
+      .select("id, full_name, nick_name, email, phone, gender, birth_date, specialization, bio, address, education_level, education_institution, bank_name, bank_account, bank_holder, avatar_url, suspend_until, suspend_reason, is_archived, certifications!certifications_coach_id_fkey(id, name, title, status, valid_from, valid_until), class_coaches(class_id, class:classes(id, name, time_start, time_end, schedule_days)), coach_branches!coach_branches_coach_id_fkey(branch_id, branches(name, city), is_primary, joined_at)")
+      .eq("role", "coach").in("id", coachIds).order("full_name");
     if (error) return;
     if (data) setCoaches(data as unknown as CoachFull[]);
     setLoading(false);
@@ -3034,6 +3046,39 @@ function AdminCoach({ branchId }: { branchId: string }) {
     setShowNewPassword(false);
   };
 
+  const searchCoachByEmail = async () => {
+    if (!linkEmail.trim()) return;
+    setLinkSearching(true);
+    setLinkResult(null);
+    const { data } = await createClient().from("profiles").select("id, full_name").eq("email", linkEmail.trim()).eq("role", "coach").maybeSingle();
+    setLinkSearching(false);
+    if (!data) { return toast.error("Coach tidak ditemukan", "Pastikan email terdaftar sebagai coach"); }
+    // Check if already in this branch
+    const { data: existing } = await createClient().from("coach_branches").select("id").eq("coach_id", data.id).eq("branch_id", branchId).maybeSingle();
+    if (existing) { return toast.error("Coach sudah terdaftar di cabang ini"); }
+    setLinkResult(data);
+  };
+
+  const linkCoachToBranch = async () => {
+    if (!linkResult) return;
+    setLinkSaving(true);
+    const res = await fetch(`/api/admin/coaches/${linkResult.id}/branches`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch_id: branchId }),
+    });
+    const j = await res.json() as { error?: string; code?: string };
+    setLinkSaving(false);
+    if (!res.ok) {
+      if (j.code === "ALREADY_LINKED") return toast.error("Coach sudah terdaftar di cabang ini");
+      return toast.error("Gagal menghubungkan coach", j.error);
+    }
+    toast.success(`${linkResult.full_name} berhasil ditambahkan ke cabang ini`);
+    setOpenLink(false);
+    setLinkEmail("");
+    setLinkResult(null);
+    load();
+  };
+
   const openAssignModal = async (c: CoachFull) => {
     const { data } = await createClient().from("classes")
       .select("id, name, time_start, time_end, schedule_days").eq("branch_id", branchId).eq("status", "active").order("name");
@@ -3083,6 +3128,7 @@ function AdminCoach({ branchId }: { branchId: string }) {
               {showArchived ? "Sembunyikan Arsip" : `Tampilkan Arsip (${coaches.filter(c => c.is_archived).length})`}
             </Btn>
           )}
+          <Btn variant="soft" icon="link" onClick={() => { setLinkEmail(""); setLinkResult(null); setOpenLink(true); }}>Link Coach Existing</Btn>
           <Btn variant="primary" icon="plus" onClick={() => { setForm(EMPTY_COACH_FORM); setCreateAvatarFile(null); setCreateAvatarPreview(null); setOpenAdd(true); }}>Tambah Coach</Btn>
         </div>
       </div>
@@ -3224,6 +3270,27 @@ function AdminCoach({ branchId }: { branchId: string }) {
                   </div>
                 )}
 
+                {/* Branches */}
+                {(detail.coach_branches?.length ?? 0) > 0 && (
+                  <div className="space-y-2">
+                    <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Cabang Terdaftar</div>
+                    <div className="bg-paper-tint rounded-xl divide-y divide-line">
+                      {detail.coach_branches!.map(cb => (
+                        <div key={cb.branch_id} className="flex items-center justify-between px-4 py-2.5">
+                          <div>
+                            <span className="text-sm text-ink font-semibold">{cb.branches?.name ?? cb.branch_id}</span>
+                            {cb.branches?.city && <span className="text-xs text-ink-mute ml-1.5">{cb.branches.city}</span>}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {cb.is_primary && <span className="text-[10px] font-bold text-ocean-600 bg-ocean-50 px-1.5 py-0.5 rounded">Utama</span>}
+                            <span className="text-xs text-ink-faint">Sejak {fmtDate(cb.joined_at)}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* QR & ID */}
                 <div className="space-y-2">
                   <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">QR Coach</div>
@@ -3342,6 +3409,33 @@ function AdminCoach({ branchId }: { branchId: string }) {
           </div>
         );
       })()}
+
+      {/* ── Link existing coach modal ── */}
+      <Modal open={openLink} onClose={() => { setOpenLink(false); setLinkEmail(""); setLinkResult(null); }} title="Hubungkan Coach ke Cabang Ini" size="sm"
+        footer={
+          linkResult
+            ? <><Btn variant="ghost" onClick={() => { setOpenLink(false); setLinkEmail(""); setLinkResult(null); }}>Batal</Btn><Btn variant="primary" icon="link" onClick={linkCoachToBranch} disabled={linkSaving}>{linkSaving ? "Menghubungkan…" : "Hubungkan"}</Btn></>
+            : <Btn variant="ghost" onClick={() => { setOpenLink(false); setLinkEmail(""); setLinkResult(null); }}>Tutup</Btn>
+        }>
+        <div className="space-y-4">
+          <p className="text-sm text-ink-soft">Coach yang sudah terdaftar di cabang lain dapat ditambahkan ke cabang ini tanpa membuat akun baru.</p>
+          <Field label="Email coach">
+            <div className="flex gap-2">
+              <Input type="email" value={linkEmail} onChange={e => setLinkEmail(e.target.value)} placeholder="coach@email.com" onKeyDown={e => e.key === "Enter" && searchCoachByEmail()} className="flex-1" />
+              <Btn variant="outline" onClick={searchCoachByEmail} disabled={linkSearching}>{linkSearching ? "…" : "Cari"}</Btn>
+            </div>
+          </Field>
+          {linkResult && (
+            <div className="flex items-center gap-3 p-3 rounded-xl bg-ok-50 border border-ok-200">
+              <Avatar name={linkResult.full_name} size={40} />
+              <div>
+                <div className="font-semibold text-ink text-sm">{linkResult.full_name}</div>
+                <div className="text-xs text-ok-700">Coach ditemukan — siap dihubungkan ke cabang ini</div>
+              </div>
+            </div>
+          )}
+        </div>
+      </Modal>
 
       {/* ── Add coach modal ── */}
       <Modal open={openAdd} onClose={() => setOpenAdd(false)} title="Tambah Coach" size="md"
@@ -5493,6 +5587,8 @@ function AdminApprovement({ branchId }: { branchId: string }) {
   const [approveTarget, setApproveTarget] = useState<RegistrationRow | null>(null);
   const [proofFile, setProofFile] = useState<File | null>(null);
   const [approvingId, setApprovingId] = useState<string | null>(null);
+  // Cert detail popup
+  const [detailCert, setDetailCert] = useState<CertRow | null>(null);
   // Reject with reason — cert
   const [rejectCertTarget, setRejectCertTarget] = useState<CertRow | null>(null);
   const [certRejectReason, setCertRejectReason] = useState("");
@@ -5507,7 +5603,7 @@ function AdminApprovement({ branchId }: { branchId: string }) {
     await Promise.all([
       supabase.from("registrations").select("id, full_name, email, birth_date, gender, phone, phone_owner, parent_name, parent_phone, address, health_notes, status, created_at").eq("branch_id", branchId).eq("status", "pending").order("created_at")
         .then(({ data }) => { if (data) setRegistrations(data as RegistrationRow[]); }),
-      supabase.from("certifications").select("id, name, title, issuer, valid_from, valid_until, photo_url, status, profile:profiles!certifications_coach_id_fkey(full_name, branch_id)").eq("status", "pending")
+      supabase.from("certifications").select("id, name, title, issuer, valid_from, valid_until, no_expiry, photo_url, status, profile:profiles!certifications_coach_id_fkey(full_name, branch_id)").eq("status", "pending")
         .then(({ data }) => {
           if (data) {
             const filtered = (data as unknown as (CertRow & { profile: { full_name: string; branch_id: string | null } | null })[])
@@ -5672,30 +5768,26 @@ function AdminApprovement({ branchId }: { branchId: string }) {
         <Card>
           <SectionTitle sub="Dari halaman /register">Registrasi Baru ({registrations.length})</SectionTitle>
           {registrations.length === 0 ? <p className="text-ink-mute text-sm">Tidak ada pendaftaran baru.</p> : (
-            <div className="space-y-3">
+            <div className="space-y-2">
               {registrations.map((r) => {
                 const age = r.birth_date ? calcAge(r.birth_date) : null;
                 const contactPhone = r.phone_owner === "parent" ? r.parent_phone : r.phone;
                 const isApproving = approvingId === r.id;
                 return (
-                  <div key={r.id} className="p-3 rounded-xl border border-line">
-                    <button className="flex items-center gap-3 w-full text-left" onClick={() => setDetailReg(r)}>
-                      <Avatar name={r.full_name} size={42} />
+                  <div key={r.id} className="flex items-center gap-2 p-3 rounded-xl border border-line hover:border-ocean-200 transition-colors">
+                    <button className="flex items-center gap-3 flex-1 min-w-0 text-left" onClick={() => setDetailReg(r)}>
+                      <Avatar name={r.full_name} size={40} />
                       <div className="flex-1 min-w-0">
-                        <div className="font-semibold text-ink truncate">{r.full_name}</div>
+                        <div className="font-semibold text-ink text-sm truncate">{r.full_name}</div>
                         <div className="text-xs text-ink-mute">{age ? `${age} thn` : ""}{age && r.phone ? " · " : ""}{r.phone ?? ""}</div>
                       </div>
-                      <Icon name="chevron-right" className="w-4 h-4 text-ink-faint shrink-0" />
                     </button>
-                    <div className="mt-3 flex gap-1.5 flex-wrap">
-                      <Btn variant="ghost" size="sm" icon="edit" onClick={() => openEditReg(r)}>Edit</Btn>
-                      <Btn variant="ghost" size="sm" className="text-danger-500" onClick={() => deleteReg(r)} disabled={deletingId === r.id}>Hapus</Btn>
-                      <Btn variant="ghost" size="sm" className="text-danger-500" onClick={() => rejectReg(r)}>Tolak</Btn>
+                    <div className="flex gap-1.5 shrink-0">
                       <a href={waLink(`Halo ${r.full_name}, terima kasih telah mendaftar di Next Swimming School. Kami sedang memproses pendaftaran Anda.`, contactPhone)} target="_blank" rel="noreferrer">
-                        <Btn variant="wa" size="sm" icon="whatsapp">Chat WA</Btn>
+                        <Btn variant="wa" size="sm" icon="whatsapp" />
                       </a>
-                      <Btn variant="primary" size="sm" icon="check" className="ml-auto" disabled={isApproving} onClick={() => openApproveReg(r)}>
-                        {isApproving ? "Memproses…" : "Approve"}
+                      <Btn variant="primary" size="sm" icon="check" disabled={isApproving} onClick={() => openApproveReg(r)}>
+                        {isApproving ? "…" : "Approve"}
                       </Btn>
                     </div>
                   </div>
@@ -5707,16 +5799,17 @@ function AdminApprovement({ branchId }: { branchId: string }) {
         <Card>
           <SectionTitle sub="Wajib verifikasi">Sertifikasi ({certs.length})</SectionTitle>
           {certs.length === 0 ? <p className="text-ink-mute text-sm">Tidak ada sertifikasi pending.</p> : (
-            <div className="space-y-3">
+            <div className="space-y-2">
               {certs.map((c) => (
-                <div key={c.id} className="p-3 rounded-xl border border-line">
-                  <div className="flex items-center gap-3"><Avatar name={c.profile?.full_name ?? "?"} size={42} /><div className="flex-1 min-w-0"><div className="font-semibold text-ink truncate">{c.profile?.full_name}</div><div className="text-xs text-ink-mute">{c.title ?? c.name} — {c.issuer ?? "—"}</div></div></div>
-                  {c.photo_url && <a href={c.photo_url} target="_blank" rel="noreferrer" className="block mt-3"><img src={c.photo_url} alt="cert" className="w-full rounded-lg object-cover max-h-48" /></a>}
-                  <div className="mt-3 flex gap-1.5">
-                    <Btn variant="ghost" size="sm" className="text-danger-500" onClick={() => { setRejectCertTarget(c); setCertRejectReason(""); }}>Tolak</Btn>
-                    <Btn variant="primary" size="sm" icon="check" className="ml-auto" onClick={() => approveCert(c.id)}>Approve</Btn>
+                <button key={c.id} onClick={() => setDetailCert(c)}
+                  className="flex items-center gap-3 w-full text-left p-3 rounded-xl border border-line hover:border-ocean-300 hover:bg-ocean-50/30 transition-colors">
+                  <Avatar name={c.profile?.full_name ?? "?"} size={40} />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-ink text-sm truncate">{c.title ?? c.name}</div>
+                    <div className="text-xs text-ink-mute truncate">{c.profile?.full_name} · {c.issuer ?? "—"}</div>
                   </div>
-                </div>
+                  <Icon name="chevron-right" className="w-4 h-4 text-ink-faint shrink-0" />
+                </button>
               ))}
             </div>
           )}
@@ -5778,6 +5871,46 @@ function AdminApprovement({ branchId }: { branchId: string }) {
             </div>
           );
         })()}
+      </Modal>
+
+      {/* ── Detail Sertifikasi Modal ── */}
+      <Modal open={!!detailCert} onClose={() => setDetailCert(null)} title="Detail Sertifikasi" size="sm"
+        footer={
+          <div className="flex gap-2 w-full">
+            <Btn variant="ghost" className="text-danger-500" onClick={() => { setRejectCertTarget(detailCert!); setDetailCert(null); setCertRejectReason(""); }}>Tolak</Btn>
+            <Btn variant="primary" icon="check" className="ml-auto" onClick={() => { approveCert(detailCert!.id); setDetailCert(null); }}>Approve</Btn>
+          </div>
+        }>
+        {detailCert && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 pb-3 border-b border-line">
+              <Avatar name={detailCert.profile?.full_name ?? "?"} size={48} />
+              <div>
+                <div className="font-display font-bold text-ink">{detailCert.profile?.full_name}</div>
+                <Status kind="pending" className="mt-1">Menunggu verifikasi</Status>
+              </div>
+            </div>
+            <div className="divide-y divide-line">
+              {([
+                ["Nama sertifikat", detailCert.title ?? detailCert.name],
+                ["Penerbit", detailCert.issuer ?? "—"],
+                ["Berlaku dari", detailCert.valid_from ? fmtDate(detailCert.valid_from) : "—"],
+                ["Berlaku sampai", detailCert.no_expiry ? "Tidak kedaluwarsa" : detailCert.valid_until ? fmtDate(detailCert.valid_until) : "—"],
+              ] as [string, string][]).map(([label, value]) => (
+                <div key={label} className="py-2 grid grid-cols-[40%_1fr] gap-2 text-sm">
+                  <span className="text-ink-mute">{label}</span>
+                  <span className="text-ink font-medium break-words">{value}</span>
+                </div>
+              ))}
+            </div>
+            {detailCert.photo_url && (
+              <a href={detailCert.photo_url} target="_blank" rel="noreferrer" className="block">
+                <img src={detailCert.photo_url} alt="Foto sertifikat" className="w-full rounded-xl object-cover max-h-64 border border-line" />
+                <span className="text-xs text-ocean-600 mt-1 block text-center">Klik untuk buka ukuran penuh</span>
+              </a>
+            )}
+          </div>
+        )}
       </Modal>
 
       {/* ── Tolak Sertifikasi Modal ── */}

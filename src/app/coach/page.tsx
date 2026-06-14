@@ -94,10 +94,13 @@ interface ProfileData {
 
 // ── Shell ──────────────────────────────────────────────────────────────────────
 
-function Shell({ children, active, onNav, title, sub, user, avatarUrl }: {
+function Shell({ children, active, onNav, title, sub, user, avatarUrl, branches, activeBranchId, onBranchChange }: {
   children: React.ReactNode;
   active: TabId; onNav: (id: TabId) => void;
   title: string; sub: string; user: User | null; avatarUrl?: string | null;
+  branches?: { branch_id: string; name: string }[];
+  activeBranchId?: string;
+  onBranchChange?: (branchId: string) => void;
 }) {
   return (
     <div className="min-h-screen bg-paper-tint pb-24 lg:pb-0">
@@ -108,6 +111,18 @@ function Shell({ children, active, onNav, title, sub, user, avatarUrl }: {
             <h1 className="font-display font-bold text-base text-ink leading-tight truncate">{title}</h1>
             <p className="text-xs text-ink-mute truncate">{sub}</p>
           </div>
+          {/* Branch selector — only shown when coach has multiple branches */}
+          {branches && branches.length > 1 && onBranchChange && (
+            <select
+              value={activeBranchId}
+              onChange={e => onBranchChange(e.target.value)}
+              className="text-xs font-semibold text-ocean-700 bg-ocean-50 border border-ocean-200 rounded-lg px-2 py-1.5 cursor-pointer focus:outline-none focus:ring-1 focus:ring-ocean-400 max-w-[120px] truncate"
+            >
+              {branches.map(b => (
+                <option key={b.branch_id} value={b.branch_id}>{b.name}</option>
+              ))}
+            </select>
+          )}
           <div className="hidden lg:flex items-center gap-1">
             {NAV_ITEMS.map((it) => (
               <button key={it.id} onClick={() => onNav(it.id as TabId)}
@@ -407,18 +422,18 @@ function LeaveForm({ back, coachId, branchId, classes }: { back: () => void; coa
   useEffect(() => {
     if (!branchId) return;
     const today = new Date().toISOString().split("T")[0];
-    supabase.from("profiles")
-      .select("id, full_name, suspend_until")
+    // Load coaches in the same branch via coach_branches junction
+    supabase.from("coach_branches")
+      .select("coach_id, profile:profiles!coach_branches_coach_id_fkey(id, full_name, suspend_until)")
       .eq("branch_id", branchId)
-      .eq("role", "coach")
-      .neq("id", coachId)
-      .order("full_name")
+      .neq("coach_id", coachId)
       .then(({ data }) => {
         if (!data) return;
-        // Filter out suspended coaches per PRD
-        const active = (data as { id: string; full_name: string; suspend_until: string | null }[])
+        const profiles = (data as { profile: { id: string; full_name: string; suspend_until: string | null } | null }[])
+          .map(r => r.profile)
+          .filter((p): p is { id: string; full_name: string; suspend_until: string | null } => !!p)
           .filter(c => !c.suspend_until || c.suspend_until < today);
-        setCoachList(active);
+        setCoachList(profiles);
       });
   }, [branchId, coachId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -427,6 +442,7 @@ function LeaveForm({ back, coachId, branchId, classes }: { back: () => void; coa
     setSaving(true);
     const { data: leave, error } = await supabase.from("coach_leaves").insert({
       coach_id: coachId,
+      branch_id: branchId || null,
       type: type as "izin" | "sakit" | "lainnya", date_from: startDate, date_to: endDate, reason: reason || null, status: "pending" as const,
       substitute_id: substituteId || null,
     }).select("id").single();
@@ -2581,6 +2597,8 @@ export default function CoachPage() {
   const [classes, setClasses] = useState<ClassRow[]>([]);
   const [holidayClassIds, setHolidayClassIds] = useState<Set<string>>(new Set());
   const [clockedInIds, setClockedInIds] = useState<Set<string>>(new Set());
+  const [coachBranches, setCoachBranches] = useState<{ branch_id: string; name: string; is_primary: boolean }[]>([]);
+  const [activeBranchId, setActiveBranchId] = useState<string>("");
 
   const loadProfile = useCallback(async (userId: string) => {
     const { data, error } = await supabase.from("profiles")
@@ -2623,12 +2641,31 @@ export default function CoachPage() {
         return;
       }
       loadClasses(p.id);
+      // Load branches for this coach
+      const { data: cbData } = await supabase
+        .from("coach_branches")
+        .select("branch_id, branches(name), is_primary")
+        .eq("coach_id", p.id);
+      if (cbData && cbData.length > 0) {
+        const mapped = (cbData as { branch_id: string; branches: { name: string } | null; is_primary: boolean }[]).map(cb => ({
+          branch_id: cb.branch_id,
+          name: cb.branches?.name ?? cb.branch_id,
+          is_primary: cb.is_primary,
+        }));
+        setCoachBranches(mapped);
+        // Default to primary branch, or first, or fallback to auth metadata
+        const primaryId = mapped.find(b => b.is_primary)?.branch_id ?? mapped[0]?.branch_id ?? (u.user_metadata?.branch_id as string ?? "");
+        setActiveBranchId(primaryId);
+      } else {
+        // Fallback to auth metadata (pre-migration coaches)
+        setActiveBranchId(u.user_metadata?.branch_id as string ?? "");
+      }
     });
-  }, [loadProfile, loadClasses]); // eslint-disable-line react-hooks/exhaustive-deps
-   
+  }, [loadProfile, loadClasses, supabase]); // eslint-disable-line react-hooks/exhaustive-deps
+
 
   const coachId = profile?.id ?? "";
-  const branchId = user?.user_metadata?.branch_id as string ?? "";
+  const branchId = activeBranchId || (user?.user_metadata?.branch_id as string ?? "");
 
   const refreshClasses = useCallback(() => {
     if (coachId) loadClasses(coachId);
@@ -2741,7 +2778,10 @@ export default function CoachPage() {
 
   return (
     <>
-      <Shell active={active} onNav={(id) => { setOverlay(null); setActive(id); }} title={overlay ? "" : title} sub={overlay ? "" : sub} user={user} avatarUrl={profile?.avatar_url}>
+      <Shell active={active} onNav={(id) => { setOverlay(null); setActive(id); }} title={overlay ? "" : title} sub={overlay ? "" : sub} user={user} avatarUrl={profile?.avatar_url}
+        branches={coachBranches.length > 1 ? coachBranches : undefined}
+        activeBranchId={activeBranchId}
+        onBranchChange={setActiveBranchId}>
         {content}
       </Shell>
     </>

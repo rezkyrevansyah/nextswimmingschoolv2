@@ -308,6 +308,45 @@ export type Database = {
           },
         ]
       }
+      coach_branches: {
+        Row: {
+          id: string
+          coach_id: string
+          branch_id: string
+          joined_at: string
+          is_primary: boolean
+        }
+        Insert: {
+          id?: string
+          coach_id: string
+          branch_id: string
+          joined_at?: string
+          is_primary?: boolean
+        }
+        Update: {
+          id?: string
+          coach_id?: string
+          branch_id?: string
+          joined_at?: string
+          is_primary?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coach_branches_coach_id_fkey"
+            columns: ["coach_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "coach_branches_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       class_coaches: {
         Row: {
           class_id: string
@@ -820,6 +859,7 @@ export type Database = {
       }
       coach_leaves: {
         Row: {
+          branch_id: string | null
           coach_id: string
           created_at: string
           created_by_admin: boolean
@@ -835,6 +875,7 @@ export type Database = {
           type: Database["public"]["Enums"]["leave_type"]
         }
         Insert: {
+          branch_id?: string | null
           coach_id: string
           created_at?: string
           created_by_admin?: boolean
@@ -850,6 +891,7 @@ export type Database = {
           type: Database["public"]["Enums"]["leave_type"]
         }
         Update: {
+          branch_id?: string | null
           coach_id?: string
           created_at?: string
           created_by_admin?: boolean
