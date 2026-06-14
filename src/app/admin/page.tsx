@@ -81,6 +81,16 @@ interface CoachSpreadsheetEntry {
   coach?: { full_name: string } | null;
 }
 
+interface ClassPackage {
+  id: string;
+  class_id: string;
+  name: string;
+  sessions: number;
+  price: number;
+  sort_order: number;
+  active: boolean;
+}
+
 interface ClassRow {
   id: string; name: string; branch_id: string; status: string;
   capacity: number; enrolled: number; price_monthly: number;
@@ -95,6 +105,7 @@ interface ClassRow {
   branch?: { name: string } | null;
   class_coaches?: { profile: { full_name: string; id: string } | null }[];
   coach_spreadsheets?: CoachSpreadsheetEntry[];
+  packages?: ClassPackage[];
 }
 
 /**
@@ -664,9 +675,15 @@ function AdminClass({ branchId }: { branchId: string }) {
   const [loadingAtt2, setLoadingAtt2] = useState(false);
   const [attExpanded, setAttExpanded] = useState<Set<string>>(new Set());
 
+  // Package management modal
+  const [packageClass, setPackageClass] = useState<ClassRow | null>(null);
+  const [packages, setPackages] = useState<ClassPackage[]>([]);
+  const [pkgForm, setPkgForm] = useState({ name: "", sessions: "", price: "" });
+  const [savingPkg, setSavingPkg] = useState(false);
+
   const load = useCallback(async () => {
     const { data } = await supabase.from("classes")
-      .select("id, name, branch_id, status, capacity, enrolled, price_monthly, price_per_session, class_type, schedule_days, time_start, time_end, schedule_times, goals, description, photo_url, spreadsheet_url, spreadsheet_filled, class_coaches(profile:profiles(full_name, id)), coach_spreadsheets:class_coach_spreadsheets(coach_id, spreadsheet_url, updated_at, coach:profiles(full_name))")
+      .select("id, name, branch_id, status, capacity, enrolled, price_monthly, price_per_session, class_type, schedule_days, time_start, time_end, schedule_times, goals, description, photo_url, spreadsheet_url, spreadsheet_filled, class_coaches(profile:profiles(full_name, id)), coach_spreadsheets:class_coach_spreadsheets(coach_id, spreadsheet_url, updated_at, coach:profiles(full_name)), packages:class_packages(id, name, sessions, price, sort_order, active)")
       .eq("branch_id", branchId).order("name");
     if (data) setClasses(data as unknown as ClassRow[]);
   }, [branchId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -761,6 +778,47 @@ function AdminClass({ branchId }: { branchId: string }) {
 
   const updateSlotTime = (day: string, field: "time_start" | "time_end", value: string) =>
     setForm(f => ({ ...f, schedule_times: f.schedule_times.map(s => s.day === day ? { ...s, [field]: value } : s) }));
+
+  // ── Packages ───────────────────────────────────────────────────────────────
+  const openPackages = (c: ClassRow) => {
+    setPackageClass(c);
+    setPackages((c.packages ?? []).slice().sort((a, b) => a.sort_order - b.sort_order));
+    setPkgForm({ name: "", sessions: "", price: "" });
+  };
+
+  const savePackage = async () => {
+    if (!packageClass || !pkgForm.sessions || !pkgForm.price) return toast.error("Jumlah sesi dan harga wajib diisi");
+    setSavingPkg(true);
+    const name = pkgForm.name.trim() || `Paket ${pkgForm.sessions} Sesi`;
+    const { error } = await supabase.from("class_packages").insert({
+      class_id: packageClass.id,
+      name,
+      sessions: Number(pkgForm.sessions),
+      price: Number(pkgForm.price),
+      sort_order: packages.length,
+    });
+    setSavingPkg(false);
+    if (error) return toast.error("Gagal menyimpan paket", error.message);
+    toast.success("Paket ditambahkan");
+    const { data } = await supabase.from("class_packages").select("id, name, sessions, price, sort_order, active").eq("class_id", packageClass.id).order("sort_order");
+    setPackages((data ?? []) as ClassPackage[]);
+    setPkgForm({ name: "", sessions: "", price: "" });
+    load();
+  };
+
+  const deletePackage = async (pkgId: string) => {
+    const yes = await confirm({ body: "Hapus paket ini?" });
+    if (!yes) return;
+    await supabase.from("class_packages").delete().eq("id", pkgId);
+    setPackages(p => p.filter(x => x.id !== pkgId));
+    toast.success("Paket dihapus");
+    load();
+  };
+
+  const togglePackageActive = async (pkg: ClassPackage) => {
+    await supabase.from("class_packages").update({ active: !pkg.active }).eq("id", pkg.id);
+    setPackages(p => p.map(x => x.id === pkg.id ? { ...x, active: !x.active } : x));
+  };
 
   // ── Criteria ───────────────────────────────────────────────────────────────
   const openCriteria = async (c: ClassRow) => {
@@ -892,12 +950,22 @@ function AdminClass({ branchId }: { branchId: string }) {
                   )}
                 </div>
                 <div className="mt-3 pt-3 border-t border-line flex items-center justify-between">
-                  <div className="font-display font-bold text-ocean-700">{fmtIDR(c.price_monthly)}<span className="text-xs text-ink-mute font-semibold">/bln</span></div>
+                  {c.class_type === "private" ? (
+                    <div>
+                      <div className="text-xs text-ink-mute font-semibold">Private</div>
+                      <div className="text-xs text-ink-mute">{(c.packages ?? []).filter(p => p.active).length} paket aktif</div>
+                    </div>
+                  ) : (
+                    <div className="font-display font-bold text-ocean-700">{fmtIDR(c.price_monthly)}<span className="text-xs text-ink-mute font-semibold">/bln</span></div>
+                  )}
                   <div className="flex gap-1">
                     {archived ? (
                       <button onClick={() => restoreClass(c)} title="Aktifkan kembali" className="w-8 h-8 rounded-lg hover:bg-paper-tint text-ink-mute hover:text-ok-600 flex items-center justify-center"><Icon name="check" className="w-4 h-4" /></button>
                     ) : (
                       <>
+                        {c.class_type === "private" && (
+                          <button onClick={() => openPackages(c)} title="Paket harga" className="w-8 h-8 rounded-lg hover:bg-paper-tint text-ink-mute hover:text-ocean-600 flex items-center justify-center"><Icon name="invoice" className="w-4 h-4" /></button>
+                        )}
                         <button onClick={() => openClassAtt(c)} title="Absensi member" className="w-8 h-8 rounded-lg hover:bg-paper-tint text-ink-mute hover:text-wave-600 flex items-center justify-center"><Icon name="calendar" className="w-4 h-4" /></button>
                         <button onClick={() => openCriteria(c)} title="Aspek penilaian" className="w-8 h-8 rounded-lg hover:bg-paper-tint text-ink-mute hover:text-ocean-600 flex items-center justify-center"><Icon name="book" className="w-4 h-4" /></button>
                         <button onClick={() => openEdit(c)} title="Edit kelas" className="w-8 h-8 rounded-lg hover:bg-paper-tint text-ink-mute hover:text-ocean-600 flex items-center justify-center"><Icon name="edit" className="w-4 h-4" /></button>
@@ -1188,6 +1256,48 @@ function AdminClass({ branchId }: { branchId: string }) {
           </div>
         )}
       </Modal>
+
+      {/* Package management modal */}
+      <Modal open={!!packageClass} onClose={() => setPackageClass(null)} title={`Paket Harga — ${packageClass?.name ?? ""}`} size="sm"
+        footer={<Btn variant="ghost" onClick={() => setPackageClass(null)}>Tutup</Btn>}>
+        <div className="space-y-4">
+          {packages.length === 0 ? (
+            <div className="text-center py-6 text-ink-mute text-sm">Belum ada paket. Tambahkan paket di bawah.</div>
+          ) : (
+            <div className="space-y-2">
+              {packages.map(pkg => (
+                <div key={pkg.id} className={`flex items-center gap-3 p-3 rounded-xl border ${pkg.active ? "border-line bg-white" : "border-line bg-paper-tint opacity-60"}`}>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-sm text-ink truncate">{pkg.name}</div>
+                    <div className="text-xs text-ink-mute">{pkg.sessions} sesi · {fmtIDR(pkg.price)}</div>
+                  </div>
+                  <button onClick={() => togglePackageActive(pkg)} className={`text-xs px-2 py-1 rounded-lg font-bold shrink-0 ${pkg.active ? "bg-ok-50 text-ok-600" : "bg-paper-tint text-ink-mute"}`}>
+                    {pkg.active ? "Aktif" : "Nonaktif"}
+                  </button>
+                  <button onClick={() => deletePackage(pkg.id)} className="w-7 h-7 rounded-lg text-ink-mute hover:text-danger-500 hover:bg-danger-50 flex items-center justify-center shrink-0">
+                    <Icon name="trash" className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="border-t border-line pt-4 space-y-3">
+            <div className="text-xs font-bold text-ink-mute uppercase tracking-widest">Tambah Paket</div>
+            <Field label="Nama paket" hint="Opsional — otomatis dari jumlah sesi jika kosong.">
+              <Input value={pkgForm.name} onChange={e => setPkgForm(f => ({ ...f, name: e.target.value }))} placeholder="Mis. Paket Hemat 10 Sesi" />
+            </Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Jumlah sesi" required>
+                <Input type="number" min={1} value={pkgForm.sessions} onChange={e => setPkgForm(f => ({ ...f, sessions: e.target.value }))} placeholder="10" />
+              </Field>
+              <Field label="Harga paket" required>
+                <Input type="number" min={0} value={pkgForm.price} onChange={e => setPkgForm(f => ({ ...f, price: e.target.value }))} placeholder="1200000" className="font-mono" />
+              </Field>
+            </div>
+            <Btn variant="primary" size="sm" icon="plus" onClick={savePackage} disabled={savingPkg}>{savingPkg ? "Menyimpan…" : "Tambah Paket"}</Btn>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
@@ -1211,8 +1321,9 @@ function AdminMember({ branchId }: { branchId: string }) {
   const [editAvatarFile, setEditAvatarFile] = useState<File | null>(null);
   const [editAvatarPreview, setEditAvatarPreview] = useState<string | null>(null);
   const [openAddSesi, setOpenAddSesi] = useState(false);
-  const [addSesiForm, setAddSesiForm] = useState({ jumlah: "", generate_bill: false });
+  const [addSesiForm, setAddSesiForm] = useState({ jumlah: "", generate_bill: false, selectedPackageId: "" });
   const [savingAddSesi, setSavingAddSesi] = useState(false);
+  const [privateClassPackages, setPrivateClassPackages] = useState<ClassPackage[]>([]);
   const [schoolsList, setSchoolsList] = useState<School[]>([]);
 
   const load = useCallback(async () => {
@@ -1739,26 +1850,44 @@ function AdminMember({ branchId }: { branchId: string }) {
     if (error) { setSavingAddSesi(false); return toast.error("Gagal menambah sesi", error.message); }
 
     if (addSesiForm.generate_bill) {
-      const cls = detail.member_classes?.[0]?.class;
-      const classRow = cls ? classes.find(c => c.id === cls.id) : null;
-      const pricePerSession = classRow?.price_per_session ?? 0;
-      if (pricePerSession > 0) {
+      const selectedPkg = privateClassPackages.find(p => p.id === addSesiForm.selectedPackageId);
+      if (selectedPkg) {
+        // Use package price
         await db.from("bills").insert({
           member_id: detail.id, branch_id: branchId,
-          period_label: `Tambah ${jumlah} sesi`,
+          class_id: detail.member_classes?.[0]?.class?.id ?? null,
+          period_label: selectedPkg.name,
           type: "session_pack" as "monthly",
-          amount: pricePerSession * jumlah,
+          sessions_total: selectedPkg.sessions,
+          sessions_used: 0,
+          amount: selectedPkg.price,
           discount: 0,
-          total: pricePerSession * jumlah,
+          total: selectedPkg.price,
           status: "unpaid",
         });
+      } else {
+        // Fallback: use price_per_session
+        const cls = detail.member_classes?.[0]?.class;
+        const classRow = cls ? classes.find(c => c.id === cls.id) : null;
+        const pricePerSession = classRow?.price_per_session ?? 0;
+        if (pricePerSession > 0) {
+          await db.from("bills").insert({
+            member_id: detail.id, branch_id: branchId,
+            period_label: `Tambah ${jumlah} sesi`,
+            type: "session_pack" as "monthly",
+            amount: pricePerSession * jumlah,
+            discount: 0,
+            total: pricePerSession * jumlah,
+            status: "unpaid",
+          });
+        }
       }
     }
 
     setSavingAddSesi(false);
     toast.success(`${jumlah} sesi ditambahkan`);
     setOpenAddSesi(false);
-    setAddSesiForm({ jumlah: "", generate_bill: false });
+    setAddSesiForm({ jumlah: "", generate_bill: false, selectedPackageId: "" });
     // Refresh detail
     const { data } = await db.from("members")
       .select("id, profile_id, type, status, date_start, qr_code, school_id, remaining_sessions, total_sessions, suspend_until, suspend_reason, profile:profiles(full_name, birth_date, phone, gender, address, health_notes, email, avatar_url), member_classes(class:classes(id, name))")
@@ -2128,7 +2257,19 @@ function AdminMember({ branchId }: { branchId: string }) {
             <Btn variant="outline" icon="edit" onClick={() => detail && openEdit(detail)}>Edit Data</Btn>
             <Btn variant="outline" icon="refresh" onClick={() => { setOpenResetPwd(true); setNewPwd(""); }}>Reset Password</Btn>
             {detail?.type === "private" && (
-              <Btn variant="accent" icon="plus" onClick={() => { setOpenAddSesi(true); setAddSesiForm({ jumlah: "", generate_bill: false }); }}>Tambah Sesi</Btn>
+              <Btn variant="accent" icon="plus" onClick={async () => {
+                setAddSesiForm({ jumlah: "", generate_bill: false, selectedPackageId: "" });
+                // Load packages for this member's private class
+                const classId = detail.member_classes?.[0]?.class?.id;
+                if (classId) {
+                  const db = createClient();
+                  const { data: pkgs } = await db.from("class_packages").select("id, name, sessions, price, sort_order, active").eq("class_id", classId).eq("active", true).order("sort_order");
+                  setPrivateClassPackages((pkgs ?? []) as ClassPackage[]);
+                } else {
+                  setPrivateClassPackages([]);
+                }
+                setOpenAddSesi(true);
+              }}>Tambah Sesi</Btn>
             )}
             {detail?.status !== "suspended"
               ? <Btn variant="ghost" className="text-warn-600" onClick={() => { setSuspendMemberTarget(detail); setSuspendMemberForm({ reason: "", until: "" }); }}>Suspend</Btn>
@@ -2550,15 +2691,42 @@ function AdminMember({ branchId }: { branchId: string }) {
       <Modal open={openAddSesi} onClose={() => setOpenAddSesi(false)} title={`Tambah Sesi — ${detail?.profile?.full_name ?? ""}`} size="sm"
         footer={<><Btn variant="ghost" onClick={() => setOpenAddSesi(false)}>Batal</Btn><Btn variant="primary" onClick={doAddSesi} disabled={savingAddSesi}>{savingAddSesi ? "Menyimpan…" : "Tambah Sesi"}</Btn></>}>
         <div className="space-y-4">
-          <Field label="Jumlah sesi yang ditambahkan" required>
-            <Input type="number" min="1" value={addSesiForm.jumlah} onChange={e => setAddSesiForm(f => ({ ...f, jumlah: e.target.value }))} placeholder="Mis. 8" />
-          </Field>
+          {privateClassPackages.length > 0 ? (
+            <Field label="Pilih paket" required hint="Jumlah sesi otomatis terisi dari paket yang dipilih.">
+              <div className="space-y-2">
+                {privateClassPackages.map(pkg => (
+                  <button key={pkg.id} type="button" onClick={() => setAddSesiForm(f => ({ ...f, jumlah: String(pkg.sessions), selectedPackageId: pkg.id }))}
+                    className={`w-full flex justify-between items-center px-3 py-2.5 rounded-xl border-2 text-sm transition ${addSesiForm.selectedPackageId === pkg.id ? "border-ocean-500 bg-ocean-50" : "border-line bg-white hover:border-ocean-300"}`}>
+                    <span className="font-semibold text-ink">{pkg.name}</span>
+                    <div className="text-right shrink-0 ml-3">
+                      <div className="font-mono font-bold text-ocean-700">{fmtIDR(pkg.price)}</div>
+                      <div className="text-xs text-ink-mute">{pkg.sessions} sesi</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </Field>
+          ) : (
+            <Field label="Jumlah sesi yang ditambahkan" required>
+              <Input type="number" min="1" value={addSesiForm.jumlah} onChange={e => setAddSesiForm(f => ({ ...f, jumlah: e.target.value }))} placeholder="Mis. 8" />
+            </Field>
+          )}
           <div className="flex items-center justify-between p-3 rounded-xl bg-ocean-50/50 border border-ocean-100">
-            <div><div className="font-semibold text-ink text-sm">Generate tagihan</div><div className="text-xs text-ink-mute">Buat tagihan otomatis berdasarkan harga per sesi.</div></div>
+            <div><div className="font-semibold text-ink text-sm">Generate tagihan</div><div className="text-xs text-ink-mute">{privateClassPackages.length > 0 ? "Buat tagihan otomatis dari paket yang dipilih." : "Buat tagihan otomatis berdasarkan harga per sesi."}</div></div>
             <Switch checked={addSesiForm.generate_bill} onChange={v => setAddSesiForm(f => ({ ...f, generate_bill: v }))} />
           </div>
-          {addSesiForm.generate_bill && detail?.member_classes?.[0]?.class && (() => {
-            const classRow = classes.find(c => c.id === detail.member_classes![0].class!.id);
+          {addSesiForm.generate_bill && (() => {
+            const selectedPkg = privateClassPackages.find(p => p.id === addSesiForm.selectedPackageId);
+            if (selectedPkg) {
+              return (
+                <div className="bg-paper-tint rounded-xl p-3 text-sm">
+                  <div className="text-ink-mute">Tagihan yang akan dibuat:</div>
+                  <div className="font-bold text-ink mt-1">{fmtIDR(selectedPkg.price)}</div>
+                  <div className="text-xs text-ink-mute">{selectedPkg.name} · {selectedPkg.sessions} sesi</div>
+                </div>
+              );
+            }
+            const classRow = classes.find(c => c.id === detail?.member_classes?.[0]?.class?.id);
             const pricePerSession = classRow?.price_per_session;
             const jumlah = Number(addSesiForm.jumlah) || 0;
             return pricePerSession ? (
@@ -2568,7 +2736,7 @@ function AdminMember({ branchId }: { branchId: string }) {
                 <div className="text-xs text-ink-mute">{jumlah} sesi × {fmtIDR(pricePerSession)}</div>
               </div>
             ) : (
-              <div className="text-xs text-warn-600">Harga per sesi belum diset di kelas ini.</div>
+              <div className="text-xs text-warn-600">Belum ada paket atau harga per sesi yang diset di kelas ini.</div>
             );
           })()}
         </div>
@@ -5546,7 +5714,8 @@ function AdminPembayaran({ branchId }: { branchId: string }) {
   const [openAdd, setOpenAdd] = useState(false);
   const [addForm, setAddForm] = useState({ member_id: "", class_id: "", type: "monthly", period_label: "", amount: "", discount: "", discount_reason: "", admin_notes: "", sessions_total: "" });
   const [addMembers, setAddMembers] = useState<{ id: string; full_name: string; type: string }[]>([]);
-  const [addClasses, setAddClasses] = useState<{ id: string; name: string; price_monthly: number; price_per_session: number | null }[]>([]);
+  const [addClasses, setAddClasses] = useState<{ id: string; name: string; class_type: string; price_monthly: number; price_per_session: number | null; packages?: ClassPackage[] }[]>([]);
+  const [selectedPackage, setSelectedPackage] = useState<ClassPackage | null>(null);
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
@@ -5567,8 +5736,8 @@ function AdminPembayaran({ branchId }: { branchId: string }) {
         if (data) setAddMembers((data as unknown as { id: string; type: string; profile: { full_name: string } | null }[])
           .map(m => ({ id: m.id, full_name: m.profile?.full_name ?? "—", type: m.type })));
       });
-    supabase.from("classes").select("id, name, price_monthly, price_per_session").eq("branch_id", branchId).eq("status", "active").order("name")
-      .then(({ data }) => { if (data) setAddClasses(data as unknown as { id: string; name: string; price_monthly: number; price_per_session: number | null }[]); });
+    supabase.from("classes").select("id, name, class_type, price_monthly, price_per_session, packages:class_packages(id, name, sessions, price, sort_order, active)").eq("branch_id", branchId).eq("status", "active").order("name")
+      .then(({ data }) => { if (data) setAddClasses(data as unknown as { id: string; name: string; class_type: string; price_monthly: number; price_per_session: number | null; packages?: ClassPackage[] }[]); });
   }, [load]); // eslint-disable-line react-hooks/exhaustive-deps
   /* eslint-enable react-hooks/set-state-in-effect */
 
@@ -5649,6 +5818,7 @@ function AdminPembayaran({ branchId }: { branchId: string }) {
     });
     toast.success("Tagihan berhasil dibuat");
     setOpenAdd(false);
+    setSelectedPackage(null);
     setAddForm({ member_id: "", class_id: "", type: "monthly", period_label: "", amount: "", discount: "", discount_reason: "", admin_notes: "", sessions_total: "" });
     load();
   };
@@ -5848,63 +6018,99 @@ function AdminPembayaran({ branchId }: { branchId: string }) {
       </Modal>
 
       {/* Tambah Tagihan Manual Modal */}
-      <Modal open={openAdd} onClose={() => setOpenAdd(false)} title="Tambah Tagihan" size="sm"
-        footer={<><Btn variant="ghost" onClick={() => setOpenAdd(false)}>Batal</Btn><Btn variant="primary" icon="plus" onClick={saveManualBill} disabled={saving}>{saving ? "Menyimpan…" : "Buat Tagihan"}</Btn></>}>
+      <Modal open={openAdd} onClose={() => { setOpenAdd(false); setSelectedPackage(null); }} title="Tambah Tagihan" size="sm"
+        footer={<><Btn variant="ghost" onClick={() => { setOpenAdd(false); setSelectedPackage(null); }}>Batal</Btn><Btn variant="primary" icon="plus" onClick={saveManualBill} disabled={saving}>{saving ? "Menyimpan…" : "Buat Tagihan"}</Btn></>}>
         <div className="space-y-4">
-          <Field label="Member" required>
-            <Select value={addForm.member_id} onChange={e => {
-              const m = addMembers.find(x => x.id === e.target.value);
-              setAddForm(f => ({ ...f, member_id: e.target.value, type: m?.type === "private" ? "session_pack" : "monthly" }));
-            }}>
-              <option value="">— pilih member —</option>
-              {addMembers.map(m => <option key={m.id} value={m.id}>{m.full_name} ({m.type})</option>)}
-            </Select>
-          </Field>
-          <Field label="Kelas">
-            <Select value={addForm.class_id} onChange={e => {
-              const cls = addClasses.find(c => c.id === e.target.value);
-              const isSession = addForm.type === "session_pack";
-              setAddForm(f => ({ ...f, class_id: e.target.value, amount: String(isSession ? (cls?.price_per_session ?? 0) : (cls?.price_monthly ?? 0)) }));
-            }}>
-              <option value="">— pilih kelas —</option>
-              {addClasses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </Select>
-          </Field>
-          <Field label="Tipe tagihan" required>
-            <Select value={addForm.type} onChange={e => setAddForm(f => ({ ...f, type: e.target.value }))}>
-              <option value="monthly">Bulanan</option>
-              <option value="session_pack">Paket Sesi</option>
-              <option value="custom">Custom</option>
-            </Select>
-          </Field>
-          {addForm.type === "session_pack" && (
-            <Field label="Jumlah sesi dalam paket" required>
-              <Input type="number" min={1} value={addForm.sessions_total} onChange={e => setAddForm(f => ({ ...f, sessions_total: e.target.value }))} placeholder="Mis. 8" />
-            </Field>
-          )}
-          <Field label="Periode / nama paket" required>
-            <Input value={addForm.period_label} onChange={e => setAddForm(f => ({ ...f, period_label: e.target.value }))} placeholder={addForm.type === "monthly" ? "Mis. Juni 2026" : "Mis. Paket 8 Sesi Juli"} />
-          </Field>
-          <Field label="Nominal tagihan" required>
-            <Input type="number" min={0} value={addForm.amount} onChange={e => setAddForm(f => ({ ...f, amount: e.target.value }))} placeholder="Mis. 500000" />
-          </Field>
-          <Field label="Diskon" hint="Opsional.">
-            <Input type="number" min={0} value={addForm.discount} onChange={e => setAddForm(f => ({ ...f, discount: e.target.value }))} placeholder="Mis. 50000" />
-          </Field>
-          {Number(addForm.discount) > 0 && (
-            <Field label="Alasan diskon">
-              <Input value={addForm.discount_reason} onChange={e => setAddForm(f => ({ ...f, discount_reason: e.target.value }))} placeholder="Mis. Beasiswa / keringanan" />
-            </Field>
-          )}
-          {Number(addForm.amount) > 0 && (
-            <div className="flex justify-between text-sm font-semibold px-1">
-              <span className="text-ink-mute">Total yang harus dibayar</span>
-              <span className="text-ink font-mono">{fmtIDR(Number(addForm.amount) - Number(addForm.discount || 0))}</span>
-            </div>
-          )}
-          <Field label="Catatan admin" hint="Opsional.">
-            <Textarea rows={2} value={addForm.admin_notes} onChange={e => setAddForm(f => ({ ...f, admin_notes: e.target.value }))} placeholder="Mis. Tagihan bulan Mei 2026, sudah konfirmasi via WA." />
-          </Field>
+          {(() => {
+            const selectedClass = addClasses.find(c => c.id === addForm.class_id);
+            const activePackages = (selectedClass?.packages ?? []).filter(p => p.active).sort((a, b) => a.sort_order - b.sort_order);
+            return (
+              <>
+                <Field label="Member" required>
+                  <Select value={addForm.member_id} onChange={e => {
+                    const m = addMembers.find(x => x.id === e.target.value);
+                    setSelectedPackage(null);
+                    setAddForm(f => ({ ...f, member_id: e.target.value, class_id: "", amount: "", sessions_total: "", type: m?.type === "private" ? "session_pack" : "monthly" }));
+                  }}>
+                    <option value="">— pilih member —</option>
+                    {addMembers.map(m => <option key={m.id} value={m.id}>{m.full_name} ({m.type})</option>)}
+                  </Select>
+                </Field>
+                <Field label="Kelas">
+                  <Select value={addForm.class_id} onChange={e => {
+                    const cls = addClasses.find(c => c.id === e.target.value);
+                    setSelectedPackage(null);
+                    if (cls?.class_type === "private") {
+                      setAddForm(f => ({ ...f, class_id: e.target.value, amount: "", sessions_total: "" }));
+                    } else {
+                      setAddForm(f => ({ ...f, class_id: e.target.value, amount: String(cls?.price_monthly ?? 0), sessions_total: "" }));
+                    }
+                  }}>
+                    <option value="">— pilih kelas —</option>
+                    {addClasses.map(c => <option key={c.id} value={c.id}>{c.name}{c.class_type === "private" ? " (Private)" : ""}</option>)}
+                  </Select>
+                </Field>
+                <Field label="Tipe tagihan" required>
+                  <Select value={addForm.type} onChange={e => setAddForm(f => ({ ...f, type: e.target.value }))}>
+                    <option value="monthly">Bulanan</option>
+                    <option value="session_pack">Paket Sesi</option>
+                    <option value="custom">Custom</option>
+                  </Select>
+                </Field>
+                {addForm.type === "session_pack" && selectedClass?.class_type === "private" && activePackages.length > 0 && (
+                  <Field label="Pilih paket" required>
+                    <div className="space-y-2">
+                      {activePackages.map(pkg => (
+                        <button key={pkg.id} type="button" onClick={() => {
+                          setSelectedPackage(pkg);
+                          setAddForm(f => ({
+                            ...f,
+                            sessions_total: String(pkg.sessions),
+                            amount: String(pkg.price),
+                            period_label: f.period_label || pkg.name,
+                          }));
+                        }} className={`w-full flex justify-between items-center px-3 py-2.5 rounded-xl border-2 text-sm transition ${selectedPackage?.id === pkg.id ? "border-ocean-500 bg-ocean-50" : "border-line bg-white hover:border-ocean-300"}`}>
+                          <span className="font-semibold text-ink">{pkg.name}</span>
+                          <div className="text-right shrink-0 ml-3">
+                            <div className="font-mono font-bold text-ocean-700">{fmtIDR(pkg.price)}</div>
+                            <div className="text-xs text-ink-mute">{pkg.sessions} sesi</div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </Field>
+                )}
+                {addForm.type === "session_pack" && !(selectedClass?.class_type === "private" && activePackages.length > 0) && (
+                  <Field label="Jumlah sesi dalam paket" required>
+                    <Input type="number" min={1} value={addForm.sessions_total} onChange={e => setAddForm(f => ({ ...f, sessions_total: e.target.value }))} placeholder="Mis. 8" />
+                  </Field>
+                )}
+                <Field label="Periode / nama paket" required>
+                  <Input value={addForm.period_label} onChange={e => setAddForm(f => ({ ...f, period_label: e.target.value }))} placeholder={addForm.type === "monthly" ? "Mis. Juni 2026" : "Mis. Paket 10 Sesi"} />
+                </Field>
+                <Field label="Nominal tagihan" required hint={selectedPackage ? `Dari paket: ${selectedPackage.name}` : undefined}>
+                  <Input type="number" min={0} value={addForm.amount} onChange={e => setAddForm(f => ({ ...f, amount: e.target.value }))} placeholder="Mis. 500000" />
+                </Field>
+                <Field label="Diskon" hint="Opsional.">
+                  <Input type="number" min={0} value={addForm.discount} onChange={e => setAddForm(f => ({ ...f, discount: e.target.value }))} placeholder="Mis. 50000" />
+                </Field>
+                {Number(addForm.discount) > 0 && (
+                  <Field label="Alasan diskon">
+                    <Input value={addForm.discount_reason} onChange={e => setAddForm(f => ({ ...f, discount_reason: e.target.value }))} placeholder="Mis. Beasiswa / keringanan" />
+                  </Field>
+                )}
+                {Number(addForm.amount) > 0 && (
+                  <div className="flex justify-between text-sm font-semibold px-1">
+                    <span className="text-ink-mute">Total yang harus dibayar</span>
+                    <span className="text-ink font-mono">{fmtIDR(Number(addForm.amount) - Number(addForm.discount || 0))}</span>
+                  </div>
+                )}
+                <Field label="Catatan admin" hint="Opsional.">
+                  <Textarea rows={2} value={addForm.admin_notes} onChange={e => setAddForm(f => ({ ...f, admin_notes: e.target.value }))} placeholder="Mis. Tagihan bulan Mei 2026, sudah konfirmasi via WA." />
+                </Field>
+              </>
+            );
+          })()}
         </div>
       </Modal>
 

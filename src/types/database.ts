@@ -524,6 +524,47 @@ export type Database = {
           },
         ]
       }
+      class_packages: {
+        Row: {
+          id: string
+          class_id: string
+          name: string
+          sessions: number
+          price: number
+          sort_order: number
+          active: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          class_id: string
+          name: string
+          sessions: number
+          price: number
+          sort_order?: number
+          active?: boolean
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          class_id?: string
+          name?: string
+          sessions?: number
+          price?: number
+          sort_order?: number
+          active?: boolean
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "class_packages_class_id_fkey"
+            columns: ["class_id"]
+            isOneToOne: false
+            referencedRelation: "classes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       class_programs: {
         Row: {
           class_id: string
