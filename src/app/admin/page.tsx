@@ -4766,6 +4766,9 @@ function AdminIzin({ branchId }: { branchId: string }) {
   const [allMembers, setAllMembers] = useState<{ id: string; full_name: string }[]>([]);
   const [allClasses, setAllClasses] = useState<{ id: string; name: string }[]>([]);
   const [createForm, setCreateForm] = useState({ target_id: "", type: "sakit", date_from: "", date_to: "", reason: "", class_ids: [] as string[], class_substitutes: {} as Record<string, string> });
+  const [detailTarget, setDetailTarget] = useState<LeaveRow | null>(null);
+  const [page, setPage] = useState(0);
+  const PAGE_SIZE = 15;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -4773,10 +4776,9 @@ function AdminIzin({ branchId }: { branchId: string }) {
     if (tab === "coach") {
       const { data: d } = await supabase.from("coach_leaves")
         .select("id, coach_id, type, reason, date_from, date_to, status, substitute_id, substitute_profile:profiles!coach_leaves_substitute_id_fkey(full_name), coach:profiles!coach_leaves_coach_id_fkey(full_name, role, branch_id), coach_leave_classes(class_id, substitute_id, class:classes(name, schedule_days), substitute:profiles!coach_leave_classes_substitute_id_fkey(full_name))")
+        .eq("branch_id", branchId)
         .order("created_at", { ascending: false });
-      data = (d as Record<string, unknown>[] | null)?.filter(
-        l => (l.coach as { branch_id?: string } | null)?.branch_id === branchId
-      ) ?? null;
+      data = (d as Record<string, unknown>[] | null) ?? null;
     } else {
       const { data: d } = await supabase.from("member_leaves")
         .select("id, member_id, type, reason, date_from, date_to, status, member:members(branch_id, profile:profiles(full_name))")
@@ -4812,6 +4814,9 @@ function AdminIzin({ branchId }: { branchId: string }) {
       .then(({ data }) => { if (data) setAllClasses(data as { id: string; name: string }[]); });
   }, [load]); // eslint-disable-line react-hooks/exhaustive-deps
   /* eslint-enable react-hooks/set-state-in-effect */
+
+  // Reset page when tab changes
+  useEffect(() => { setPage(0); }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const autoCreateMemberAttendances = async (leaveId: string) => {
     const { data: leaveDetail } = await supabase
@@ -5082,6 +5087,10 @@ function AdminIzin({ branchId }: { branchId: string }) {
     load();
   };
 
+  const totalPages = Math.max(1, Math.ceil(leaves.length / PAGE_SIZE));
+  const safePage = Math.min(page, Math.max(0, totalPages - 1));
+  const paginatedLeaves = leaves.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -5105,10 +5114,18 @@ function AdminIzin({ branchId }: { branchId: string }) {
                 <th className="text-left py-3 font-bold hidden sm:table-cell">Selesai</th><th className="text-left py-3 font-bold">Status</th><th className="text-left py-3 font-bold hidden md:table-cell">Pengganti</th><th className="px-5" />
               </tr></thead>
               <tbody className="divide-y divide-line">
-                {leaves.map((l) => (
-                  <tr key={l.id} className="hover:bg-paper-tint">
-                    <td className="py-3.5 px-5 font-semibold">{l.profile?.full_name ?? "—"}</td>
-                    <td>{l.type}</td>
+                {paginatedLeaves.map((l) => (
+                  <tr key={l.id} className="hover:bg-paper-tint cursor-pointer" onClick={() => setDetailTarget(l)}>
+                    <td className="py-3.5 px-5">
+                      <div className="flex items-center gap-3">
+                        <Avatar name={l.profile?.full_name ?? "?"} size={34} />
+                        <div className="min-w-0">
+                          <div className="font-semibold text-ink truncate">{l.profile?.full_name ?? "—"}</div>
+                          {l.reason && <div className="text-xs text-ink-faint truncate max-w-[140px] sm:max-w-[220px]">{l.reason}</div>}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="capitalize text-sm">{l.type}</td>
                     <td className="text-ink-soft hidden sm:table-cell">{fmtDate(l.date_from)}</td>
                     <td className="text-ink-soft hidden sm:table-cell">{fmtDate(l.date_to)}</td>
                     <td><Status kind={l.status as "pending" | "approved" | "rejected"}>{l.status === "pending" ? "Menunggu" : l.status === "approved" ? "Disetujui" : "Ditolak"}</Status></td>
@@ -5123,17 +5140,60 @@ function AdminIzin({ branchId }: { branchId: string }) {
                         return l.substitute_profile?.full_name ?? "—";
                       })()}
                     </td>
-                    <td className="px-5">{l.status === "pending" && (
-                      <div className="flex gap-1 justify-end">
-                        <Btn variant="ghost" size="sm" className="text-danger-500" onClick={() => decide(l.id, "rejected")}>Tolak</Btn>
-                        <Btn variant="soft" size="sm" icon="check" onClick={() => decide(l.id, "approved")}>Setujui</Btn>
-                      </div>
-                    )}</td>
+                    <td className="px-5" onClick={e => e.stopPropagation()}>
+                      {l.status === "pending" ? (
+                        <div className="flex gap-1 justify-end">
+                          <Btn variant="ghost" size="sm" className="text-danger-500" onClick={() => decide(l.id, "rejected")}>Tolak</Btn>
+                          <Btn variant="soft" size="sm" icon="check" onClick={() => decide(l.id, "approved")}>Setujui</Btn>
+                        </div>
+                      ) : (
+                        <div className="flex justify-end">
+                          <button className="p-1.5 text-ink-mute hover:text-ocean-600 rounded-lg transition-colors" onClick={() => setDetailTarget(l)}>
+                            <Icon name="eye" className="w-4 h-4" />
+                          </button>
+                        </div>
+                      )}
+                    </td>
                   </tr>
                 ))}
                 {leaves.length === 0 && <tr><td colSpan={7} className="py-10 text-center text-ink-mute">Tidak ada pengajuan izin</td></tr>}
               </tbody>
             </table>
+          </div>
+        )}
+        {!loading && totalPages > 1 && (
+          <div className="px-5 py-3.5 border-t border-line flex items-center justify-between flex-wrap gap-3">
+            <span className="text-xs text-ink-mute tabular-nums">
+              {leaves.length} pengajuan · halaman {safePage + 1} dari {totalPages}
+            </span>
+            <div className="flex items-center gap-1">
+              <button type="button" disabled={safePage === 0} onClick={() => setPage(0)}
+                className="px-2 py-1.5 rounded-lg border border-line text-xs text-ink-mute disabled:opacity-40 disabled:cursor-not-allowed hover:bg-paper-tint transition">«</button>
+              <button type="button" disabled={safePage === 0} onClick={() => setPage(p => p - 1)}
+                className="px-2.5 py-1.5 rounded-lg border border-line text-xs text-ink-mute disabled:opacity-40 disabled:cursor-not-allowed hover:bg-paper-tint transition">‹</button>
+              {Array.from({ length: totalPages }, (_, i) => i)
+                .filter(i => i === 0 || i === totalPages - 1 || Math.abs(i - safePage) <= 1)
+                .reduce<(number | "...")[]>((acc, i, idx, arr) => {
+                  if (idx > 0 && i - (arr[idx - 1] as number) > 1) acc.push("...");
+                  acc.push(i);
+                  return acc;
+                }, [])
+                .map((item, idx) =>
+                  item === "..." ? (
+                    <span key={`e${idx}`} className="px-2 text-xs text-ink-faint">…</span>
+                  ) : (
+                    <button key={item} type="button" onClick={() => setPage(item as number)}
+                      className={`min-w-[32px] py-1.5 rounded-lg border text-xs transition
+                        ${safePage === item ? "bg-ocean-600 border-ocean-600 text-white font-bold" : "border-line text-ink-soft hover:bg-paper-tint"}`}>
+                      {(item as number) + 1}
+                    </button>
+                  )
+                )}
+              <button type="button" disabled={safePage === totalPages - 1} onClick={() => setPage(p => p + 1)}
+                className="px-2.5 py-1.5 rounded-lg border border-line text-xs text-ink-mute disabled:opacity-40 disabled:cursor-not-allowed hover:bg-paper-tint transition">›</button>
+              <button type="button" disabled={safePage === totalPages - 1} onClick={() => setPage(totalPages - 1)}
+                className="px-2 py-1.5 rounded-lg border border-line text-xs text-ink-mute disabled:opacity-40 disabled:cursor-not-allowed hover:bg-paper-tint transition">»</button>
+            </div>
           </div>
         )}
       </Card>
@@ -5202,6 +5262,100 @@ function AdminIzin({ branchId }: { branchId: string }) {
             <Textarea rows={2} value={rejectReason} onChange={e => setRejectReason(e.target.value)} placeholder="Mis. Tanggal bentrok dengan acara cabang." />
           </Field>
         </div>
+      </Modal>
+
+      {/* Detail leave modal */}
+      <Modal open={!!detailTarget} onClose={() => setDetailTarget(null)} title="Detail Izin" size="md"
+        footer={
+          <div className="flex gap-2 w-full">
+            {detailTarget?.status === "pending" && (
+              <>
+                <Btn variant="ghost" className="text-danger-500"
+                  onClick={() => { setRejectTarget(detailTarget); setRejectReason(""); setDetailTarget(null); }}>Tolak</Btn>
+                <Btn variant="soft" icon="check"
+                  onClick={() => { decide(detailTarget.id, "approved"); setDetailTarget(null); }}>Setujui</Btn>
+              </>
+            )}
+            <Btn variant="ghost" className="ml-auto" onClick={() => setDetailTarget(null)}>Tutup</Btn>
+          </div>
+        }>
+        {detailTarget && (
+          <div className="space-y-4">
+            {/* Header */}
+            <div className="flex items-center gap-4 p-4 bg-paper-tint rounded-2xl">
+              <Avatar name={detailTarget.profile?.full_name ?? "?"} size={48} />
+              <div className="min-w-0">
+                <div className="font-display font-bold text-lg text-ink leading-tight truncate">{detailTarget.profile?.full_name ?? "—"}</div>
+                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                  <Status kind={detailTarget.status as "pending" | "approved" | "rejected"}>
+                    {detailTarget.status === "pending" ? "Menunggu" : detailTarget.status === "approved" ? "Disetujui" : "Ditolak"}
+                  </Status>
+                  <span className="text-xs text-ink-mute capitalize">{detailTarget.type}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Info rows */}
+            <div className="bg-paper-tint rounded-xl divide-y divide-line">
+              <div className="flex items-center justify-between px-4 py-3">
+                <span className="text-xs text-ink-mute">Jenis</span>
+                <span className="text-sm text-ink font-medium capitalize">{detailTarget.type}</span>
+              </div>
+              <div className="flex items-center justify-between px-4 py-3">
+                <span className="text-xs text-ink-mute">Tanggal mulai</span>
+                <span className="text-sm text-ink">{fmtDate(detailTarget.date_from)}</span>
+              </div>
+              <div className="flex items-center justify-between px-4 py-3">
+                <span className="text-xs text-ink-mute">Tanggal selesai</span>
+                <span className="text-sm text-ink">{fmtDate(detailTarget.date_to)}</span>
+              </div>
+              {detailTarget.date_from !== detailTarget.date_to && (
+                <div className="flex items-center justify-between px-4 py-3">
+                  <span className="text-xs text-ink-mute">Durasi</span>
+                  <span className="text-sm text-ink tabular-nums">
+                    {Math.round((new Date(detailTarget.date_to).getTime() - new Date(detailTarget.date_from).getTime()) / 86400000) + 1} hari
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Reason — main ask */}
+            <div className="space-y-1.5">
+              <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Alasan / Keterangan</div>
+              {detailTarget.reason
+                ? <p className="text-sm text-ink bg-paper-tint rounded-xl px-4 py-3 leading-relaxed whitespace-pre-wrap">{detailTarget.reason}</p>
+                : <p className="text-sm text-ink-faint italic px-4 py-3 bg-paper-tint rounded-xl">Tidak ada keterangan.</p>
+              }
+            </div>
+
+            {/* Per-class substitutes (coach, new format) */}
+            {tab === "coach" && detailTarget.coach_leave_classes && detailTarget.coach_leave_classes.length > 0 && (
+              <div className="space-y-1.5">
+                <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Kelas & Pengganti</div>
+                <div className="bg-paper-tint rounded-xl divide-y divide-line">
+                  {detailTarget.coach_leave_classes.map(lc => (
+                    <div key={lc.class_id} className="flex items-center justify-between px-4 py-3">
+                      <span className="text-sm text-ink">{lc.class?.name ?? "—"}</span>
+                      {lc.substitute?.full_name
+                        ? <span className="text-xs font-semibold text-ok-600">{lc.substitute.full_name}</span>
+                        : <span className="text-xs text-warn-600">Belum ada pengganti</span>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Fallback: old single substitute (pre-migration) */}
+            {tab === "coach" && !(detailTarget.coach_leave_classes?.length) && detailTarget.substitute_profile && (
+              <div className="bg-paper-tint rounded-xl divide-y divide-line">
+                <div className="flex items-center justify-between px-4 py-3">
+                  <span className="text-xs text-ink-mute">Pengganti</span>
+                  <span className="text-sm font-semibold text-ok-600">{detailTarget.substitute_profile.full_name}</span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </Modal>
 
       {/* Admin create leave modal */}
