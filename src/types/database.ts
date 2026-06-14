@@ -473,6 +473,45 @@ export type Database = {
           },
         ]
       }
+      class_coach_spreadsheets: {
+        Row: {
+          id: string
+          class_id: string
+          coach_id: string
+          spreadsheet_url: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          class_id: string
+          coach_id: string
+          spreadsheet_url: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          class_id?: string
+          coach_id?: string
+          spreadsheet_url?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "class_coach_spreadsheets_class_id_fkey"
+            columns: ["class_id"]
+            isOneToOne: false
+            referencedRelation: "classes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "class_coach_spreadsheets_coach_id_fkey"
+            columns: ["coach_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       class_programs: {
         Row: {
           class_id: string

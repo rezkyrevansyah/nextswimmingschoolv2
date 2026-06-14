@@ -36,6 +36,13 @@ const NAV_ITEMS: MobileNavItem[] = [
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
+interface CoachSpreadsheetRow {
+  coach_id: string;
+  spreadsheet_url: string;
+  updated_at: string;
+  coach?: { full_name: string } | null;
+}
+
 interface ClassRow {
   id: string; name: string; schedule_days: string[];
   time_start: string; time_end: string;
@@ -46,6 +53,7 @@ interface ClassRow {
   spreadsheet_url?: string | null;
   branch?: { name: string; city: string; address: string | null } | null;
   member_classes?: { member: { id: string; profile: { full_name: string; birth_date: string | null; phone: string | null; gender: string | null; address: string | null; health_notes: string | null } | null } | null }[];
+  coach_spreadsheets?: CoachSpreadsheetRow[];
 }
 
 interface AttendanceRow {
@@ -723,7 +731,7 @@ function minutesLate(clockInTime: string, classTimeStart: string): number {
   return toMin(clockInTime) - toMin(classTimeStart);
 }
 
-function CoachHome({ setOverlay, setActive, coachId, profile, classes, holidayClassIds, clockedInIds, setClockedInIds }: {
+function CoachHome({ setOverlay, setActive, coachId, profile, classes, holidayClassIds, clockedInIds, setClockedInIds, ownSpreadsheets }: {
   setOverlay: (v: string) => void;
   setActive: (tab: string) => void;
   coachId: string; branchId?: string;
@@ -732,6 +740,7 @@ function CoachHome({ setOverlay, setActive, coachId, profile, classes, holidayCl
   holidayClassIds: Set<string>;
   clockedInIds: Set<string>;
   setClockedInIds: React.Dispatch<React.SetStateAction<Set<string>>>;
+  ownSpreadsheets: Map<string, string>;
 }) {
   const supabase = createClient();
   const [monthStats, setMonthStats] = useState({ present: 0, leave: 0, sub: 0 });
@@ -739,8 +748,8 @@ function CoachHome({ setOverlay, setActive, coachId, profile, classes, holidayCl
   // Class IDs the coach is on leave for today (clock-in blocked)
   const [leaveClassIds, setLeaveClassIds] = useState<Set<string>>(new Set());
 
-  // Classes with unfilled spreadsheet program
-  const unfilledClasses = classes.filter(c => c.spreadsheet_filled === false);
+  // Classes where THIS coach hasn't filled their own spreadsheet yet
+  const unfilledClasses = classes.filter(c => !ownSpreadsheets.has(c.id));
 
    
   useEffect(() => {
@@ -1486,8 +1495,8 @@ function CoachAbsensi({ setOverlay, coachId, classes, holidayClassIds, clockedIn
 
 // ── Spreadsheet Program ────────────────────────────────────────────────────────
 
-function SpreadsheetModal({ classId, className, currentUrl, onClose, onSaved }: {
-  classId: string; className: string; currentUrl?: string | null; onClose: () => void; onSaved?: () => void;
+function SpreadsheetModal({ classId, className, coachId, currentUrl, onClose, onSaved }: {
+  classId: string; className: string; coachId: string; currentUrl?: string | null; onClose: () => void; onSaved?: () => void;
 }) {
   const supabase = createClient();
   const toast = useToast();
@@ -1498,11 +1507,17 @@ function SpreadsheetModal({ classId, className, currentUrl, onClose, onSaved }: 
     const trimmed = url.trim();
     if (!trimmed) return toast.error("Masukkan link spreadsheet terlebih dahulu");
     setSaving(true);
-    const { error } = await supabase.from("classes")
-      .update({ spreadsheet_url: trimmed, spreadsheet_filled: true })
-      .eq("id", classId);
+    // Upsert per-coach entry
+    const { error } = await supabase
+      .from("class_coach_spreadsheets")
+      .upsert(
+        { class_id: classId, coach_id: coachId, spreadsheet_url: trimmed, updated_at: new Date().toISOString() },
+        { onConflict: "class_id,coach_id" }
+      );
+    if (error) { setSaving(false); return toast.error("Gagal menyimpan", error.message); }
+    // Keep classes.spreadsheet_filled in sync (aggregate: any coach filled = true)
+    await supabase.from("classes").update({ spreadsheet_filled: true }).eq("id", classId);
     setSaving(false);
-    if (error) return toast.error("Gagal menyimpan", error.message);
     toast.success("Link spreadsheet tersimpan");
     onSaved?.();
     onClose();
@@ -1589,7 +1604,13 @@ function MemberDetailModal({ member, onClose }: { member: MemberDetail; onClose:
   );
 }
 
-function CoachKelas({ classes, onRefreshClasses }: { classes: ClassRow[]; coachId?: string; onRefreshClasses?: () => void }) {
+function CoachKelas({ classes, coachId, classSpreadsheets, ownSpreadsheets, onRefreshClasses }: {
+  classes: ClassRow[];
+  coachId: string;
+  classSpreadsheets: Map<string, CoachSpreadsheetRow[]>;
+  ownSpreadsheets: Map<string, string>;
+  onRefreshClasses?: () => void;
+}) {
   const supabase = createClient();
   const [det, setDet] = useState<ClassRow | null>(null);
   const [openSpreadsheet, setOpenSpreadsheet] = useState<ClassRow | null>(null);
@@ -1622,8 +1643,8 @@ function CoachKelas({ classes, onRefreshClasses }: { classes: ClassRow[]; coachI
                 <div className="text-xs text-ocean-700 font-semibold mt-1.5 font-mono">{c.time_start?.slice(0,5)}{c.time_end ? `–${c.time_end.slice(0,5)}` : ""}</div>
                 <div className="mt-2 flex items-center gap-3 text-xs text-ink-mute">
                   <span className="inline-flex items-center gap-1"><Icon name="users" className="w-3.5 h-3.5" />{c.enrolled}/{c.capacity}</span>
-                  {c.spreadsheet_filled && c.spreadsheet_url
-                    ? <a href={c.spreadsheet_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="inline-flex items-center gap-1 text-ok-600 font-semibold hover:underline"><Icon name="link" className="w-3 h-3" />Program</a>
+                  {ownSpreadsheets.has(c.id)
+                    ? <a href={ownSpreadsheets.get(c.id)!} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="inline-flex items-center gap-1 text-ok-600 font-semibold hover:underline"><Icon name="link" className="w-3 h-3" />Program Saya</a>
                     : <span className="text-warn-500 font-semibold">Program belum diisi</span>
                   }
                 </div>
@@ -1639,14 +1660,14 @@ function CoachKelas({ classes, onRefreshClasses }: { classes: ClassRow[]; coachI
       <Modal open={!!det} onClose={() => setDet(null)} title={det?.name ?? ""} size="lg"
         footer={
           <div className="flex items-center gap-2 w-full">
-            {det?.spreadsheet_filled && det.spreadsheet_url && (
-              <a href={det.spreadsheet_url} target="_blank" rel="noreferrer">
-                <Btn variant="soft" size="sm" icon="link">Buka Spreadsheet</Btn>
+            {det && ownSpreadsheets.has(det.id) && (
+              <a href={ownSpreadsheets.get(det.id)!} target="_blank" rel="noreferrer">
+                <Btn variant="soft" size="sm" icon="link">Buka Spreadsheet Saya</Btn>
               </a>
             )}
             <div className="flex-1" />
             <Btn variant="soft" size="sm" icon="book" onClick={() => { setOpenSpreadsheet(det); setDet(null); }}>
-              {det?.spreadsheet_filled ? "Edit Program" : "Isi Program"}
+              {det && ownSpreadsheets.has(det.id) ? "Edit Program" : "Isi Program"}
             </Btn>
             <Btn variant="ghost" onClick={() => setDet(null)}>Tutup</Btn>
           </div>
@@ -1664,10 +1685,33 @@ function CoachKelas({ classes, onRefreshClasses }: { classes: ClassRow[]; coachI
             </div>
             {det.goals && <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Tujuan</div><p className="text-sm text-ink-soft mt-1">{det.goals}</p></div>}
             {det.description && <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Deskripsi</div><p className="text-sm text-ink-soft mt-1">{det.description}</p></div>}
-            {!det.spreadsheet_filled && (
+            {!ownSpreadsheets.has(det.id) && (
               <div className="flex items-center gap-2 p-3 rounded-xl bg-warn-50 border border-warn-200 text-sm text-warn-800">
                 <Icon name="alert" className="w-4 h-4 shrink-0 text-warn-500" />
-                Spreadsheet program kelas ini belum diisi.
+                Spreadsheet program Anda untuk kelas ini belum diisi.
+              </div>
+            )}
+            {(classSpreadsheets.get(det.id) ?? []).length > 0 && (
+              <div>
+                <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-2">Spreadsheet Semua Coach</div>
+                <div className="space-y-2">
+                  {(classSpreadsheets.get(det.id) ?? []).map(s => (
+                    <div key={s.coach_id} className="flex items-center gap-2.5 p-2.5 rounded-xl border border-line bg-paper-tint">
+                      <Avatar name={s.coach?.full_name ?? "?"} size={28} />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-semibold text-ink">
+                          {s.coach?.full_name ?? "—"}
+                          {s.coach_id === coachId && <span className="ml-1.5 text-[10px] text-ocean-600 font-bold uppercase tracking-wide">Anda</span>}
+                        </div>
+                        <div className="text-[10px] text-ink-faint font-mono">{new Date(s.updated_at).toLocaleDateString("id-ID")}</div>
+                      </div>
+                      <a href={s.spreadsheet_url} target="_blank" rel="noreferrer"
+                        className="shrink-0 text-ocean-600 flex items-center gap-1 text-xs font-semibold hover:underline">
+                        <Icon name="link" className="w-3.5 h-3.5" />Buka
+                      </a>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
             <div>
@@ -1744,7 +1788,8 @@ function CoachKelas({ classes, onRefreshClasses }: { classes: ClassRow[]; coachI
         <SpreadsheetModal
           classId={openSpreadsheet.id}
           className={openSpreadsheet.name}
-          currentUrl={openSpreadsheet.spreadsheet_url}
+          coachId={coachId}
+          currentUrl={ownSpreadsheets.get(openSpreadsheet.id) ?? null}
           onClose={() => setOpenSpreadsheet(null)}
           onSaved={onRefreshClasses}
         />
@@ -2700,6 +2745,8 @@ export default function CoachPage() {
   const [clockedInIds, setClockedInIds] = useState<Set<string>>(new Set());
   const [coachBranches, setCoachBranches] = useState<{ branch_id: string; name: string; is_primary: boolean }[]>([]);
   const [activeBranchId, setActiveBranchId] = useState<string>("");
+  const [ownSpreadsheets, setOwnSpreadsheets] = useState<Map<string, string>>(new Map());
+  const [classSpreadsheets, setClassSpreadsheets] = useState<Map<string, CoachSpreadsheetRow[]>>(new Map());
 
   const loadProfile = useCallback(async (userId: string) => {
     const { data, error } = await supabase.from("profiles")
@@ -2717,6 +2764,31 @@ export default function CoachPage() {
     return data ? { ...data, certifications: certs ?? [] } as unknown as ProfileData : null;
   }, [supabase]);
 
+  const loadSpreadsheets = useCallback(async (coachId: string, classIds: string[]) => {
+    if (classIds.length === 0) return;
+    // Own entries (for unfilled alert + modal pre-population)
+    const { data: own } = await supabase
+      .from("class_coach_spreadsheets")
+      .select("class_id, spreadsheet_url")
+      .eq("coach_id", coachId)
+      .in("class_id", classIds);
+    if (own) setOwnSpreadsheets(new Map(
+      (own as { class_id: string; spreadsheet_url: string }[]).map(r => [r.class_id, r.spreadsheet_url])
+    ));
+    // All coaches' entries (for display in detail modal)
+    const { data: all } = await supabase
+      .from("class_coach_spreadsheets")
+      .select("class_id, coach_id, spreadsheet_url, updated_at, coach:profiles(full_name)")
+      .in("class_id", classIds);
+    if (all) {
+      const map = new Map<string, CoachSpreadsheetRow[]>();
+      (all as (CoachSpreadsheetRow & { class_id: string })[]).forEach(r => {
+        map.set(r.class_id, [...(map.get(r.class_id) ?? []), r]);
+      });
+      setClassSpreadsheets(map);
+    }
+  }, [supabase]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const loadClasses = useCallback(async (profileId: string) => {
     const { data, error } = await supabase.from("class_coaches").select("class:classes(id, name, schedule_days, time_start, time_end, capacity, enrolled, goals, description, class_type, spreadsheet_filled, spreadsheet_url, branch:branches(name, city, address), member_classes(member:members(id, profile:profiles(full_name, birth_date, phone, gender, address, health_notes))))").eq("coach_id", profileId);
     if (error || !data) return;
@@ -2729,9 +2801,11 @@ export default function CoachPage() {
       const { data: hols } = await supabase.from("class_holidays").select("class_id").in("class_id", classIds).eq("holiday_date", today);
       if (hols) setHolidayClassIds(new Set((hols as { class_id: string }[]).map((h) => h.class_id)));
     }
-  }, [supabase]);
+    // Load spreadsheets for all classes this coach teaches
+    await loadSpreadsheets(profileId, classIds);
+  }, [supabase, loadSpreadsheets]); // eslint-disable-line react-hooks/exhaustive-deps
 
-   
+
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data: { user: u } }) => {
       if (!u) { router.push("/login"); return; }
@@ -2852,9 +2926,9 @@ export default function CoachPage() {
     : overlay === "leave-history"
     ? <LeaveHistory back={() => setOverlay(null)} coachId={coachId} />
     : {
-        home:    <>{SuspendBanner}{IncompleteBanner}<CoachHome setOverlay={setOverlay} setActive={(tab) => setActive(tab as TabId)} coachId={coachId} branchId={branchId} profile={profile} classes={classes} holidayClassIds={holidayClassIds} clockedInIds={clockedInIds} setClockedInIds={setClockedInIds} /></>,
+        home:    <>{SuspendBanner}{IncompleteBanner}<CoachHome setOverlay={setOverlay} setActive={(tab) => setActive(tab as TabId)} coachId={coachId} branchId={branchId} profile={profile} classes={classes} holidayClassIds={holidayClassIds} clockedInIds={clockedInIds} setClockedInIds={setClockedInIds} ownSpreadsheets={ownSpreadsheets} /></>,
         absen:   <>{SuspendBanner}{IncompleteBanner}{locked ? <LockedNotice feature="Absensi" reason={lockReason} /> : <CoachAbsensi setOverlay={setOverlay} coachId={coachId} branchId={branchId} classes={classes} holidayClassIds={holidayClassIds} clockedInIds={clockedInIds} />}</>,
-        kelas:   <CoachKelas classes={classes} coachId={coachId} onRefreshClasses={refreshClasses} />,
+        kelas:   <CoachKelas classes={classes} coachId={coachId} classSpreadsheets={classSpreadsheets} ownSpreadsheets={ownSpreadsheets} onRefreshClasses={refreshClasses} />,
         invoice: <>{SuspendBanner}{IncompleteBanner}{locked ? <LockedNotice feature="Invoice" reason={lockReason} /> : <CoachInvoice coachId={coachId} branchId={branchId} profile={profile} />}</>,
         rapor:   <>{SuspendBanner}{IncompleteBanner}{locked ? <LockedNotice feature="Rapor" reason={lockReason} /> : <CoachRapor coachId={coachId} branchId={branchId} />}</>,
         profile: <CoachProfile profile={profile} onRefresh={() => user && loadProfile(user.id)} onLogout={logout} onAvatarChange={url => setProfile(prev => prev ? { ...prev, avatar_url: url } : prev)} />,

@@ -74,6 +74,13 @@ function normalizeMemberType(raw: unknown): "reguler" | "private" | "school_affi
 
 interface ScheduleSlot { day: string; time_start: string; time_end: string }
 
+interface CoachSpreadsheetEntry {
+  coach_id: string;
+  spreadsheet_url: string;
+  updated_at: string;
+  coach?: { full_name: string } | null;
+}
+
 interface ClassRow {
   id: string; name: string; branch_id: string; status: string;
   capacity: number; enrolled: number; price_monthly: number;
@@ -87,6 +94,7 @@ interface ClassRow {
   spreadsheet_filled?: boolean;
   branch?: { name: string } | null;
   class_coaches?: { profile: { full_name: string; id: string } | null }[];
+  coach_spreadsheets?: CoachSpreadsheetEntry[];
 }
 
 /**
@@ -650,7 +658,7 @@ function AdminClass({ branchId }: { branchId: string }) {
 
   const load = useCallback(async () => {
     const { data } = await supabase.from("classes")
-      .select("id, name, branch_id, status, capacity, enrolled, price_monthly, price_per_session, class_type, schedule_days, time_start, time_end, schedule_times, goals, description, photo_url, spreadsheet_url, spreadsheet_filled, class_coaches(profile:profiles(full_name, id))")
+      .select("id, name, branch_id, status, capacity, enrolled, price_monthly, price_per_session, class_type, schedule_days, time_start, time_end, schedule_times, goals, description, photo_url, spreadsheet_url, spreadsheet_filled, class_coaches(profile:profiles(full_name, id)), coach_spreadsheets:class_coach_spreadsheets(coach_id, spreadsheet_url, updated_at, coach:profiles(full_name))")
       .eq("branch_id", branchId).order("name");
     if (data) setClasses(data as unknown as ClassRow[]);
   }, [branchId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -865,11 +873,10 @@ function AdminClass({ branchId }: { branchId: string }) {
                   </div>
                 </div>
                 <div className="mt-3 flex items-center gap-1.5">
-                  {c.spreadsheet_filled && c.spreadsheet_url ? (
-                    <a href={c.spreadsheet_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
-                      className="inline-flex items-center gap-1 text-[10px] font-semibold text-ok-600 hover:underline">
-                      <Icon name="link" className="w-3 h-3" />Spreadsheet
-                    </a>
+                  {(c.coach_spreadsheets ?? []).length > 0 ? (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-ok-600">
+                      <Icon name="link" className="w-3 h-3" />{c.coach_spreadsheets!.length} spreadsheet
+                    </span>
                   ) : (
                     <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-warn-500">
                       <Icon name="warning" className="w-3 h-3" />Belum ada spreadsheet
@@ -1050,22 +1057,25 @@ function AdminClass({ branchId }: { branchId: string }) {
           {editTarget && (
             <div className="border-t border-line pt-4 space-y-2">
               <div className="text-xs font-bold uppercase tracking-widest text-ink-faint">Spreadsheet Program</div>
-              {editTarget.spreadsheet_filled && editTarget.spreadsheet_url ? (
-                <div className="flex items-center gap-3 p-3 rounded-xl bg-ok-50 border border-ok-200">
-                  <Icon name="link" className="w-4 h-4 text-ok-600 shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-xs text-ok-700 font-semibold">Sudah diisi coach</div>
-                    <a href={editTarget.spreadsheet_url} target="_blank" rel="noreferrer"
-                      className="text-xs text-ocean-600 hover:underline truncate block max-w-xs">{editTarget.spreadsheet_url}</a>
-                  </div>
-                  <a href={editTarget.spreadsheet_url} target="_blank" rel="noreferrer">
-                    <Btn variant="soft" size="sm" icon="link">Buka</Btn>
-                  </a>
-                </div>
-              ) : (
+              {(editTarget.coach_spreadsheets ?? []).length === 0 ? (
                 <div className="flex items-center gap-2 p-3 rounded-xl bg-warn-50 border border-warn-200 text-sm text-warn-700">
                   <Icon name="warning" className="w-4 h-4 shrink-0 text-warn-500" />
-                  Spreadsheet program belum diisi oleh coach.
+                  Belum ada coach yang mengisi spreadsheet program.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {editTarget.coach_spreadsheets!.map(s => (
+                    <div key={s.coach_id} className="flex items-center gap-3 p-3 rounded-xl bg-ok-50 border border-ok-100">
+                      <Avatar name={s.coach?.full_name ?? "?"} size={28} />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs text-ok-700 font-semibold truncate">{s.coach?.full_name ?? s.coach_id}</div>
+                        <div className="text-[10px] text-ink-faint font-mono">{new Date(s.updated_at).toLocaleDateString("id-ID")}</div>
+                      </div>
+                      <a href={s.spreadsheet_url} target="_blank" rel="noreferrer">
+                        <Btn variant="soft" size="sm" icon="link">Buka</Btn>
+                      </a>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>

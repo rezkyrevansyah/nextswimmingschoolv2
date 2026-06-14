@@ -42,6 +42,13 @@ interface AdminProfile {
   branch?: { name: string } | null;
 }
 
+interface CoachSpreadsheetEntry {
+  coach_id: string;
+  spreadsheet_url: string;
+  updated_at: string;
+  coach?: { full_name: string } | null;
+}
+
 interface ClassRow {
   id: string;
   name: string;
@@ -58,6 +65,7 @@ interface ClassRow {
   spreadsheet_filled?: boolean;
   branch?: { name: string } | null;
   class_coaches?: { profile: { full_name: string } | null }[];
+  coach_spreadsheets?: CoachSpreadsheetEntry[];
 }
 
 interface CoachRate {
@@ -553,7 +561,7 @@ function Classes({ branches }: { branches: Branch[] }) {
     setLoading(true);
     const { data } = await supabase
       .from("classes")
-      .select("id, name, branch_id, status, capacity, enrolled, price_monthly, schedule_days, time_start, time_end, goals, description, spreadsheet_url, spreadsheet_filled, branch:branches(name), class_coaches(profile:profiles(full_name))")
+      .select("id, name, branch_id, status, capacity, enrolled, price_monthly, schedule_days, time_start, time_end, goals, description, spreadsheet_url, spreadsheet_filled, branch:branches(name), class_coaches(profile:profiles(full_name)), coach_spreadsheets:class_coach_spreadsheets(coach_id, spreadsheet_url, updated_at, coach:profiles(full_name))")
       .eq("status", "active")
       .order("branch_id")
       .order("name");
@@ -746,8 +754,8 @@ function Classes({ branches }: { branches: Branch[] }) {
                         <span className={`font-mono font-semibold ${pct >= 1 ? "text-danger-600" : pct > 0.7 ? "text-warn-600" : "text-ok-600"}`}>
                           {c.enrolled}/{c.capacity}
                         </span>
-                        {c.spreadsheet_filled && c.spreadsheet_url
-                          ? <a href={c.spreadsheet_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-ok-600 font-semibold hover:underline"><Icon name="link" className="w-3 h-3" />Spreadsheet</a>
+                        {(c.coach_spreadsheets ?? []).length > 0
+                          ? <span className="inline-flex items-center gap-1 text-ok-600 font-semibold"><Icon name="link" className="w-3 h-3" />{c.coach_spreadsheets!.length} spreadsheet</span>
                           : <span className="text-warn-500 font-semibold">Belum ada spreadsheet</span>
                         }
                       </div>
@@ -803,10 +811,21 @@ function Classes({ branches }: { branches: Branch[] }) {
                     <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Harga Bulanan</div>
                     <div className="text-sm font-mono text-ink">{detailClass.price_monthly != null ? `Rp ${Number(detailClass.price_monthly).toLocaleString("id-ID")}` : "—"}</div>
                   </div>
-                  {detailClass.spreadsheet_url && (
-                    <div className="space-y-2">
-                      <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Spreadsheet</div>
-                      <a href={detailClass.spreadsheet_url} target="_blank" rel="noreferrer" className="text-sm text-ocean-600 hover:underline inline-flex items-center gap-1"><Icon name="link" className="w-3 h-3" />Buka Spreadsheet</a>
+                  {(detailClass.coach_spreadsheets ?? []).length > 0 && (
+                    <div className="space-y-2 sm:col-span-2">
+                      <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Spreadsheet Program</div>
+                      <div className="space-y-1.5">
+                        {detailClass.coach_spreadsheets!.map(s => (
+                          <div key={s.coach_id} className="flex items-center gap-2.5 p-2.5 rounded-xl border border-line bg-paper-tint">
+                            <Avatar name={s.coach?.full_name ?? "?"} size={24} />
+                            <span className="flex-1 text-sm font-medium text-ink truncate">{s.coach?.full_name ?? "—"}</span>
+                            <a href={s.spreadsheet_url} target="_blank" rel="noreferrer"
+                              className="text-xs font-semibold text-ocean-600 hover:underline inline-flex items-center gap-1">
+                              <Icon name="link" className="w-3 h-3" />Buka
+                            </a>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>
