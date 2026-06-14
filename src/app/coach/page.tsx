@@ -731,7 +731,7 @@ function minutesLate(clockInTime: string, classTimeStart: string): number {
   return toMin(clockInTime) - toMin(classTimeStart);
 }
 
-function CoachHome({ setOverlay, setActive, coachId, profile, classes, holidayClassIds, clockedInIds, setClockedInIds, ownSpreadsheets }: {
+function CoachHome({ setOverlay, setActive, coachId, branchId, profile, classes, holidayClassIds, clockedInIds, setClockedInIds, ownSpreadsheets }: {
   setOverlay: (v: string) => void;
   setActive: (tab: string) => void;
   coachId: string; branchId?: string;
@@ -747,6 +747,7 @@ function CoachHome({ setOverlay, setActive, coachId, profile, classes, holidayCl
   const [subClasses, setSubClasses] = useState<{ classId: string; className: string; originalCoach: string }[]>([]);
   // Class IDs the coach is on leave for today (clock-in blocked)
   const [leaveClassIds, setLeaveClassIds] = useState<Set<string>>(new Set());
+  const [latestAnnouncement, setLatestAnnouncement] = useState<{ title: string; body: string } | null>(null);
 
   // Classes where THIS coach hasn't filled their own spreadsheet yet
   const unfilledClasses = classes.filter(c => !ownSpreadsheets.has(c.id));
@@ -807,7 +808,26 @@ function CoachHome({ setOverlay, setActive, coachId, profile, classes, holidayCl
         );
         setLeaveClassIds(ids);
       });
-  }, [coachId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Load latest announcement targeted to coach
+    if (branchId) {
+      supabase.from("announcements")
+        .select("title, body, valid_from, valid_until")
+        .eq("branch_id", branchId)
+        .eq("active", true)
+        .contains("target_roles", ["coach"])
+        .order("created_at", { ascending: false })
+        .limit(5)
+        .then(({ data: annData }) => {
+          const match = (annData ?? []).find((a: { title: string; body: string; valid_from: string | null; valid_until: string | null }) => {
+            if (a.valid_from && a.valid_from > today) return false;
+            if (a.valid_until && a.valid_until < today) return false;
+            return true;
+          });
+          setLatestAnnouncement(match ? { title: match.title, body: match.body } : null);
+        });
+    }
+  }, [coachId, branchId]); // eslint-disable-line react-hooks/exhaustive-deps
    
 
   const todayName = new Date().toLocaleDateString("id-ID", { weekday: "long" });
@@ -815,6 +835,20 @@ function CoachHome({ setOverlay, setActive, coachId, profile, classes, holidayCl
 
   return (
     <div className="space-y-5">
+      {latestAnnouncement && (
+        <Card>
+          <div className="flex items-start gap-3">
+            <span className="w-11 h-11 rounded-xl bg-ocean-50 text-ocean-700 flex items-center justify-center shrink-0">
+              <Icon name="bell" className="w-5 h-5" />
+            </span>
+            <div className="flex-1 min-w-0">
+              <Status kind="active" className="!text-[10px] mb-1">PENGUMUMAN</Status>
+              <div className="font-display font-bold text-ink">{latestAnnouncement.title}</div>
+              <p className="text-sm text-ink-soft mt-1.5 leading-relaxed">{latestAnnouncement.body}</p>
+            </div>
+          </div>
+        </Card>
+      )}
       {unfilledClasses.length > 0 && (
         <div className="rounded-2xl border border-warn-200 bg-warn-50 p-4 flex gap-3 items-start">
           <span className="w-9 h-9 rounded-xl bg-warn-100 text-warn-600 flex items-center justify-center shrink-0 mt-0.5">

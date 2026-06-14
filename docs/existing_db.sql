@@ -172,7 +172,7 @@ CREATE TABLE public.coach_attendances (
   manual_reason text,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   clock_in_time text,
-  status text NOT NULL DEFAULT 'present'::text CHECK (status = ANY (ARRAY['present'::text, 'absent'::text])),
+  status text NOT NULL DEFAULT 'present'::text CHECK (status = ANY (ARRAY['present'::text, 'absent'::text, 'late'::text])),
   manual_note text,
   invoice_id uuid,
   CONSTRAINT coach_attendances_pkey PRIMARY KEY (id),
@@ -220,9 +220,11 @@ CREATE TABLE public.coach_leaves (
 CREATE TABLE public.coach_leave_classes (
   leave_id uuid NOT NULL,
   class_id uuid NOT NULL,
+  substitute_id uuid,
   CONSTRAINT coach_leave_classes_pkey PRIMARY KEY (leave_id, class_id),
   CONSTRAINT coach_leave_classes_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.classes(id),
-  CONSTRAINT coach_leave_classes_leave_id_fkey FOREIGN KEY (leave_id) REFERENCES public.coach_leaves(id)
+  CONSTRAINT coach_leave_classes_leave_id_fkey FOREIGN KEY (leave_id) REFERENCES public.coach_leaves(id),
+  CONSTRAINT coach_leave_classes_substitute_id_fkey FOREIGN KEY (substitute_id) REFERENCES public.profiles(id)
 );
 CREATE TABLE public.member_leaves (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -328,6 +330,7 @@ CREATE TABLE public.announcements (
   valid_from date NOT NULL DEFAULT CURRENT_DATE,
   valid_until date,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
+  target_roles ARRAY NOT NULL DEFAULT '{}'::text[],
   CONSTRAINT announcements_pkey PRIMARY KEY (id),
   CONSTRAINT announcements_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id),
   CONSTRAINT announcements_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branches(id)
@@ -558,4 +561,14 @@ CREATE TABLE public.coach_branches (
   CONSTRAINT coach_branches_pkey PRIMARY KEY (id),
   CONSTRAINT coach_branches_coach_id_fkey FOREIGN KEY (coach_id) REFERENCES public.profiles(id),
   CONSTRAINT coach_branches_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branches(id)
+);
+CREATE TABLE public.class_coach_spreadsheets (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  class_id uuid NOT NULL,
+  coach_id uuid NOT NULL,
+  spreadsheet_url text NOT NULL,
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT class_coach_spreadsheets_pkey PRIMARY KEY (id),
+  CONSTRAINT class_coach_spreadsheets_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.classes(id),
+  CONSTRAINT class_coach_spreadsheets_coach_id_fkey FOREIGN KEY (coach_id) REFERENCES public.profiles(id)
 );

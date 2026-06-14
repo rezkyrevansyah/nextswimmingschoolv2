@@ -53,6 +53,7 @@ export type Database = {
           created_by: string
           id: string
           target_all: boolean
+          target_roles: string[]
           title: string
           valid_from: string
           valid_until: string | null
@@ -65,6 +66,7 @@ export type Database = {
           created_by: string
           id?: string
           target_all?: boolean
+          target_roles?: string[]
           title: string
           valid_from?: string
           valid_until?: string | null
@@ -77,6 +79,7 @@ export type Database = {
           created_by?: string
           id?: string
           target_all?: boolean
+          target_roles?: string[]
           title?: string
           valid_from?: string
           valid_until?: string | null

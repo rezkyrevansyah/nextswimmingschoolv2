@@ -178,16 +178,20 @@ function MemberHome({
         // Fetch all active announcements for the branch
         const today = new Date().toISOString().slice(0, 10);
         const { data: allAnns } = await supabase.from("announcements")
-          .select("title, body, target_all, valid_from, valid_until, announcement_classes(class_id)")
+          .select("title, body, target_all, valid_from, valid_until, target_roles, announcement_classes(class_id)")
           .eq("branch_id", branchId).eq("active", true)
           .order("created_at", { ascending: false }).limit(20);
         if (!allAnns) return;
         // Filter: valid_from <= today AND (valid_until is null OR valid_until >= today)
-        // Show first announcement that is target_all OR has a matching class
-        const match = (allAnns as unknown as { title: string; body: string; target_all: boolean; valid_from: string | null; valid_until: string | null; announcement_classes: { class_id: string }[] }[])
+        // Show first announcement that targets member (or legacy empty target_roles)
+        // AND is target_all OR has a matching class
+        const match = (allAnns as unknown as { title: string; body: string; target_all: boolean; valid_from: string | null; valid_until: string | null; target_roles: string[]; announcement_classes: { class_id: string }[] }[])
           .find((a) => {
             if (a.valid_from && a.valid_from > today) return false;
             if (a.valid_until && a.valid_until < today) return false;
+            // Backward compat: empty target_roles = legacy, show to member
+            const roles = a.target_roles ?? [];
+            if (roles.length > 0 && !roles.includes("member")) return false;
             return a.target_all || a.announcement_classes.some((ac) => classIds.includes(ac.class_id));
           });
         if (match) setLatestAnnouncement({ title: match.title, body: match.body });
