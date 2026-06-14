@@ -196,6 +196,12 @@ interface LeaveRow {
   profile?: { full_name: string; role: string } | null;
   leave_classes?: { class: { name: string } | null }[];
   substitute_profile?: { full_name: string } | null;
+  coach_leave_classes?: {
+    class_id: string;
+    substitute_id: string | null;
+    class?: { name: string; schedule_days: string[] } | null;
+    substitute?: { full_name: string } | null;
+  }[];
 }
 
 interface BillRow {
@@ -4748,7 +4754,8 @@ function AdminIzin({ branchId }: { branchId: string }) {
   const [leaves, setLeaves] = useState<LeaveRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [approveTarget, setApproveTarget] = useState<LeaveRow | null>(null);
-  const [substituteId, setSubstituteId] = useState("");
+  // classSubstitutes: map of class_id → substitute_id (per-class, for approve modal)
+  const [classSubstitutes, setClassSubstitutes] = useState<Record<string, string>>({});
   const [approving, setApproving] = useState(false);
   const [allCoaches, setAllCoaches] = useState<CoachProfile[]>([]);
   const [rejectTarget, setRejectTarget] = useState<LeaveRow | null>(null);
@@ -4758,14 +4765,14 @@ function AdminIzin({ branchId }: { branchId: string }) {
   const [creating, setCreating] = useState(false);
   const [allMembers, setAllMembers] = useState<{ id: string; full_name: string }[]>([]);
   const [allClasses, setAllClasses] = useState<{ id: string; name: string }[]>([]);
-  const [createForm, setCreateForm] = useState({ target_id: "", type: "sakit", date_from: "", date_to: "", reason: "", class_ids: [] as string[], substitute_id: "" });
+  const [createForm, setCreateForm] = useState({ target_id: "", type: "sakit", date_from: "", date_to: "", reason: "", class_ids: [] as string[], class_substitutes: {} as Record<string, string> });
 
   const load = useCallback(async () => {
     setLoading(true);
     let data: Record<string, unknown>[] | null = null;
     if (tab === "coach") {
       const { data: d } = await supabase.from("coach_leaves")
-        .select("id, coach_id, type, reason, date_from, date_to, status, substitute_id, substitute_profile:profiles!coach_leaves_substitute_id_fkey(full_name), coach:profiles!coach_leaves_coach_id_fkey(full_name, role, branch_id)")
+        .select("id, coach_id, type, reason, date_from, date_to, status, substitute_id, substitute_profile:profiles!coach_leaves_substitute_id_fkey(full_name), coach:profiles!coach_leaves_coach_id_fkey(full_name, role, branch_id), coach_leave_classes(class_id, substitute_id, class:classes(name, schedule_days), substitute:profiles!coach_leave_classes_substitute_id_fkey(full_name))")
         .order("created_at", { ascending: false });
       data = (d as Record<string, unknown>[] | null)?.filter(
         l => (l.coach as { branch_id?: string } | null)?.branch_id === branchId
@@ -4791,8 +4798,8 @@ function AdminIzin({ branchId }: { branchId: string }) {
   useEffect(() => {
     load();
     const today = new Date().toISOString().split("T")[0];
-    // Only load non-suspended coaches for substitute dropdown (per PRD)
-    supabase.from("profiles").select("id, full_name, suspend_until").eq("branch_id", branchId).eq("role", "coach").order("full_name")
+    // Load all coaches cross-branch for substitute dropdown
+    supabase.from("profiles").select("id, full_name, suspend_until").eq("role", "coach").order("full_name")
       .then(({ data }) => {
         if (!data) return;
         const active = (data as (CoachProfile & { suspend_until: string | null })[])
@@ -4842,7 +4849,16 @@ function AdminIzin({ branchId }: { branchId: string }) {
   const decide = async (id: string, status: "approved" | "rejected") => {
     if (status === "approved" && tab === "coach") {
       const leave = leaves.find(l => l.id === id);
-      if (leave) { setApproveTarget(leave); setSubstituteId(leave.substitute_profile?.full_name ? (allCoaches.find(c => c.full_name === leave.substitute_profile?.full_name)?.id ?? "") : ""); return; }
+      if (leave) {
+        setApproveTarget(leave);
+        // Pre-fill classSubstitutes from per-class data set by coach
+        const prefilled: Record<string, string> = {};
+        for (const lc of leave.coach_leave_classes ?? []) {
+          prefilled[lc.class_id] = lc.substitute_id ?? "";
+        }
+        setClassSubstitutes(prefilled);
+        return;
+      }
     }
     if (status === "rejected") {
       const leave = leaves.find(l => l.id === id);
@@ -4906,26 +4922,36 @@ function AdminIzin({ branchId }: { branchId: string }) {
     if (!createForm.target_id || !createForm.date_from || !createForm.date_to) return toast.error("Target, tanggal mulai, dan selesai wajib diisi");
     setCreating(true);
     if (tab === "coach") {
-      const ins: Database["public"]["Tables"]["coach_leaves"]["Insert"] = { coach_id: createForm.target_id, type: createForm.type as Database["public"]["Enums"]["leave_type"], date_from: createForm.date_from, date_to: createForm.date_to, reason: createForm.reason || null, status: "approved" as Database["public"]["Enums"]["leave_status"], created_by_admin: true, reviewed_at: new Date().toISOString(), substitute_id: createForm.substitute_id || null };
+      const primarySubId = Object.values(createForm.class_substitutes).find(s => !!s) ?? null;
+      const ins: Database["public"]["Tables"]["coach_leaves"]["Insert"] = { coach_id: createForm.target_id, type: createForm.type as Database["public"]["Enums"]["leave_type"], date_from: createForm.date_from, date_to: createForm.date_to, reason: createForm.reason || null, status: "approved" as Database["public"]["Enums"]["leave_status"], created_by_admin: true, reviewed_at: new Date().toISOString(), substitute_id: primarySubId || null };
       const { data, error } = await supabase.from("coach_leaves").insert(ins).select("id").single();
       if (error || !data) { setCreating(false); return toast.error("Gagal membuat izin", error?.message); }
       if (createForm.class_ids.length > 0) {
-        await supabase.from("coach_leave_classes").insert(createForm.class_ids.map(cid => ({ leave_id: data.id, class_id: cid })));
+        await supabase.from("coach_leave_classes").insert(
+          createForm.class_ids.map(cid => ({
+            leave_id: data.id,
+            class_id: cid,
+            substitute_id: createForm.class_substitutes[cid] || null,
+          }))
+        );
       }
-      // Auto-create substitute attendance records
-      if (createForm.substitute_id && createForm.class_ids.length > 0) {
+      // Auto-create substitute attendance records per class
+      const classSubsEntries = createForm.class_ids.filter(cid => createForm.class_substitutes[cid]);
+      if (classSubsEntries.length > 0) {
         const adminId = (await supabase.auth.getUser()).data.user?.id ?? null;
-        const { data: clsRows } = await supabase.from("classes").select("id, schedule_days").in("id", createForm.class_ids);
+        const { data: clsRows } = await supabase.from("classes").select("id, schedule_days").in("id", classSubsEntries);
         const dayNames = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
         const from = new Date(createForm.date_from);
         const to   = new Date(createForm.date_to);
         const rows: { branch_id: string; coach_id: string; class_id: string; session_date: string; status: string; is_manual: boolean; manual_by: string | null }[] = [];
         for (const cls of (clsRows ?? []) as { id: string; schedule_days: string[] }[]) {
+          const subId = createForm.class_substitutes[cls.id];
+          if (!subId) continue;
           const d = new Date(from);
           while (d <= to) {
             const dayName = dayNames[d.getDay()];
             if (cls.schedule_days.length === 0 || cls.schedule_days.includes(dayName)) {
-              rows.push({ branch_id: branchId, coach_id: createForm.substitute_id, class_id: cls.id, session_date: d.toISOString().slice(0, 10), status: "present", is_manual: true, manual_by: adminId });
+              rows.push({ branch_id: branchId, coach_id: subId, class_id: cls.id, session_date: d.toISOString().slice(0, 10), status: "present", is_manual: true, manual_by: adminId });
             }
             d.setDate(d.getDate() + 1);
           }
@@ -4958,9 +4984,27 @@ function AdminIzin({ branchId }: { branchId: string }) {
   const confirmApprove = async () => {
     if (!approveTarget) return;
     setApproving(true);
-    const upd: Database["public"]["Tables"]["coach_leaves"]["Update"] = { status: "approved" as Database["public"]["Enums"]["leave_status"], reviewed_at: new Date().toISOString(), substitute_id: substituteId || null };
+
+    // Determine primary substitute (first class's substitute, backward compat)
+    const primarySubId = Object.values(classSubstitutes).find(s => !!s) ?? null;
+
+    const upd: Database["public"]["Tables"]["coach_leaves"]["Update"] = {
+      status: "approved" as Database["public"]["Enums"]["leave_status"],
+      reviewed_at: new Date().toISOString(),
+      substitute_id: primarySubId || null,
+    };
     const { error } = await supabase.from("coach_leaves").update(upd).eq("id", approveTarget.id);
     if (error) { setApproving(false); return toast.error("Gagal menyetujui izin", error.message); }
+
+    // Upsert per-class substitute_id
+    const perClassRows = Object.entries(classSubstitutes).map(([class_id, substitute_id]) => ({
+      leave_id: approveTarget.id,
+      class_id,
+      substitute_id: substitute_id || null,
+    }));
+    if (perClassRows.length > 0) {
+      await supabase.from("coach_leave_classes").upsert(perClassRows, { onConflict: "leave_id,class_id" });
+    }
 
     // Fetch leave detail for substitute attendance + notifications
     const { data: leaveDetail } = await supabase
@@ -4974,20 +5018,23 @@ function AdminIzin({ branchId }: { branchId: string }) {
       coach_leave_classes: { class_id: string; class: { name: string; schedule_days: string[] } | null }[];
     } | null;
 
-    // Auto-create coach_attendances for substitute
-    if (substituteId && detail) {
+    // Auto-create coach_attendances per class per substitute
+    if (detail && Object.keys(classSubstitutes).length > 0) {
       const dayNames = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
       const from = new Date(detail.date_from);
       const to   = new Date(detail.date_to);
-      const rows: { branch_id: string; coach_id: string; class_id: string; session_date: string; status: string; is_manual: boolean; manual_by: string | null }[] = [];
       const adminId = (await supabase.auth.getUser()).data.user?.id ?? null;
+      const rows: { branch_id: string; coach_id: string; class_id: string; session_date: string; status: string; is_manual: boolean; manual_by: string | null }[] = [];
+
       for (const lc of detail.coach_leave_classes) {
+        const subId = classSubstitutes[lc.class_id];
+        if (!subId) continue;
         const scheduleDays: string[] = lc.class?.schedule_days ?? [];
         const d = new Date(from);
         while (d <= to) {
           const dayName = dayNames[d.getDay()];
           if (scheduleDays.length === 0 || scheduleDays.includes(dayName)) {
-            rows.push({ branch_id: branchId, coach_id: substituteId, class_id: lc.class_id, session_date: d.toISOString().slice(0, 10), status: "present", is_manual: true, manual_by: adminId });
+            rows.push({ branch_id: branchId, coach_id: subId, class_id: lc.class_id, session_date: d.toISOString().slice(0, 10), status: "present", is_manual: true, manual_by: adminId });
           }
           d.setDate(d.getDate() + 1);
         }
@@ -4997,7 +5044,7 @@ function AdminIzin({ branchId }: { branchId: string }) {
       }
     }
 
-    // Notify coach that leave was approved
+    // Notify leaving coach
     if (detail?.coach_id) {
       const classNames = detail.coach_leave_classes.map(lc => lc.class?.name).filter(Boolean).join(", ");
       await supabase.from("notifications").insert({
@@ -5009,20 +5056,28 @@ function AdminIzin({ branchId }: { branchId: string }) {
       });
     }
 
-    // Notify substitute coach that they've been assigned
-    if (substituteId && detail) {
-      const classNames = detail.coach_leave_classes.map(lc => lc.class?.name).filter(Boolean).join(", ");
-      await supabase.from("notifications").insert({
-        user_id: substituteId,
-        title: "Anda ditambahkan sebagai coach pengganti",
-        body: `Anda menggantikan coach untuk kelas ${classNames || "—"} pada ${detail.date_from === detail.date_to ? detail.date_from : `${detail.date_from} – ${detail.date_to}`}.`,
-        icon: "refresh",
-        kind: "info",
-      });
+    // Notify each unique substitute coach
+    if (detail) {
+      const uniqueSubs = new Map<string, string[]>(); // subId → class names
+      for (const lc of detail.coach_leave_classes) {
+        const subId = classSubstitutes[lc.class_id];
+        if (!subId) continue;
+        if (!uniqueSubs.has(subId)) uniqueSubs.set(subId, []);
+        uniqueSubs.get(subId)!.push(lc.class?.name ?? "—");
+      }
+      for (const [subId, classNames] of uniqueSubs) {
+        await supabase.from("notifications").insert({
+          user_id: subId,
+          title: "Anda ditambahkan sebagai coach pengganti",
+          body: `Anda menggantikan coach untuk kelas ${classNames.join(", ")} pada ${detail.date_from === detail.date_to ? detail.date_from : `${detail.date_from} – ${detail.date_to}`}.`,
+          icon: "refresh",
+          kind: "info",
+        });
+      }
     }
 
     setApproving(false);
-    toast.success("Izin disetujui" + (substituteId ? " & sesi dialihkan ke pengganti" : ""));
+    toast.success("Izin disetujui" + (primarySubId ? " & sesi dialihkan ke pengganti" : ""));
     setApproveTarget(null);
     load();
   };
@@ -5031,7 +5086,7 @@ function AdminIzin({ branchId }: { branchId: string }) {
     <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div><h2 className="font-display font-bold text-2xl">Manajemen Izin</h2><p className="text-ink-mute text-sm mt-0.5">Approve pengajuan izin coach & member.</p></div>
-        <Btn variant="primary" icon="plus" onClick={() => { setCreateForm({ target_id: "", type: "sakit", date_from: "", date_to: "", reason: "", class_ids: [], substitute_id: "" }); setOpenCreate(true); }}>Buat Izin</Btn>
+        <Btn variant="primary" icon="plus" onClick={() => { setCreateForm({ target_id: "", type: "sakit", date_from: "", date_to: "", reason: "", class_ids: [], class_substitutes: {} }); setOpenCreate(true); }}>Buat Izin</Btn>
       </div>
       <Card padded={false}>
         <div className="px-5 py-3 border-b border-line flex items-center gap-2">
@@ -5057,7 +5112,17 @@ function AdminIzin({ branchId }: { branchId: string }) {
                     <td className="text-ink-soft hidden sm:table-cell">{fmtDate(l.date_from)}</td>
                     <td className="text-ink-soft hidden sm:table-cell">{fmtDate(l.date_to)}</td>
                     <td><Status kind={l.status as "pending" | "approved" | "rejected"}>{l.status === "pending" ? "Menunggu" : l.status === "approved" ? "Disetujui" : "Ditolak"}</Status></td>
-                    <td className="text-ink-soft text-xs hidden md:table-cell">{l.substitute_profile?.full_name ?? "—"}</td>
+                    <td className="text-ink-soft text-xs hidden md:table-cell">
+                      {(() => {
+                        const hasPerClass = l.coach_leave_classes && l.coach_leave_classes.length > 0;
+                        if (hasPerClass) {
+                          const filled = l.coach_leave_classes!.filter(lc => lc.substitute_id).length;
+                          const total = l.coach_leave_classes!.length;
+                          return <span className={filled === total ? "text-ok-600 font-semibold" : "text-warn-600"}>{filled}/{total} kelas</span>;
+                        }
+                        return l.substitute_profile?.full_name ?? "—";
+                      })()}
+                    </td>
                     <td className="px-5">{l.status === "pending" && (
                       <div className="flex gap-1 justify-end">
                         <Btn variant="ghost" size="sm" className="text-danger-500" onClick={() => decide(l.id, "rejected")}>Tolak</Btn>
@@ -5073,23 +5138,54 @@ function AdminIzin({ branchId }: { branchId: string }) {
         )}
       </Card>
 
-      {/* Approve coach leave + assign substitute modal */}
+      {/* Approve coach leave + assign per-class substitute modal */}
       <Modal open={!!approveTarget} onClose={() => setApproveTarget(null)} title="Setujui Izin Coach" size="sm"
-        footer={<><Btn variant="ghost" onClick={() => setApproveTarget(null)}>Batal</Btn><Btn variant="primary" icon="check" onClick={confirmApprove} disabled={approving}>{approving ? "Menyetujui…" : "Setujui Izin"}</Btn></>}>
+        footer={<>
+          <Btn variant="ghost" onClick={() => setApproveTarget(null)}>Batal</Btn>
+          <Btn variant="primary" icon="check" onClick={confirmApprove}
+            disabled={approving || (approveTarget?.coach_leave_classes?.length ? approveTarget.coach_leave_classes.some(lc => !classSubstitutes[lc.class_id]) : false)}>
+            {approving ? "Menyetujui…" : "Setujui Izin"}
+          </Btn>
+        </>}>
         <div className="space-y-4">
           <Card className="!p-3 bg-paper-tint">
             <div className="text-sm font-semibold text-ink">{approveTarget?.profile?.full_name}</div>
             <div className="text-xs text-ink-mute mt-0.5">{fmtDate(approveTarget?.date_from ?? "")} – {fmtDate(approveTarget?.date_to ?? "")} · {approveTarget?.type}</div>
             {approveTarget?.reason && <div className="text-xs text-ink-soft mt-1">{approveTarget.reason}</div>}
           </Card>
-          <Field label="Assign Coach Pengganti" hint="Opsional. Pengganti muncul di coach page mereka dengan label 'Pengganti' selama tanggal izin.">
-            <Select value={substituteId} onChange={e => setSubstituteId(e.target.value)}>
-              <option value="">— tanpa pengganti —</option>
-              {allCoaches
-                .filter(c => c.full_name !== approveTarget?.profile?.full_name)
-                .map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
-            </Select>
-          </Field>
+          {approveTarget?.coach_leave_classes && approveTarget.coach_leave_classes.length > 0 ? (
+            <div>
+              <div className="text-xs font-semibold text-ink-mute uppercase tracking-wider mb-2">Pengganti per Kelas</div>
+              <div className="space-y-3">
+                {approveTarget.coach_leave_classes.map(lc => (
+                  <div key={lc.class_id} className="space-y-1.5">
+                    <div className="text-sm font-semibold text-ink">{lc.class?.name ?? "—"}</div>
+                    <Select
+                      value={classSubstitutes[lc.class_id] ?? ""}
+                      onChange={e => setClassSubstitutes(prev => ({ ...prev, [lc.class_id]: e.target.value }))}
+                    >
+                      <option value="">— pilih coach pengganti —</option>
+                      {allCoaches
+                        .filter(c => c.full_name !== approveTarget?.profile?.full_name)
+                        .map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
+                    </Select>
+                    {!classSubstitutes[lc.class_id] && (
+                      <p className="text-xs text-warn-600">Wajib pilih pengganti untuk kelas ini</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <Field label="Assign Coach Pengganti" hint="Opsional. Pengganti muncul di coach page mereka dengan label 'Pengganti' selama tanggal izin.">
+              <Select value={classSubstitutes["__single__"] ?? ""} onChange={e => setClassSubstitutes({ "__single__": e.target.value })}>
+                <option value="">— tanpa pengganti —</option>
+                {allCoaches
+                  .filter(c => c.full_name !== approveTarget?.profile?.full_name)
+                  .map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
+              </Select>
+            </Field>
+          )}
         </div>
       </Modal>
 
@@ -5137,7 +5233,12 @@ function AdminIzin({ branchId }: { branchId: string }) {
                 const sel = createForm.class_ids.includes(c.id);
                 return (
                   <button key={c.id} type="button"
-                    onClick={() => setCreateForm(f => ({ ...f, class_ids: sel ? f.class_ids.filter(id => id !== c.id) : [...f.class_ids, c.id] }))}
+                    onClick={() => setCreateForm(f => {
+                      const newIds = sel ? f.class_ids.filter(id => id !== c.id) : [...f.class_ids, c.id];
+                      const newSubs = { ...f.class_substitutes };
+                      if (sel) delete newSubs[c.id];
+                      return { ...f, class_ids: newIds, class_substitutes: newSubs };
+                    })}
                     className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors ${sel ? "bg-ocean-700 text-white border-ocean-700" : "bg-paper-tint border-line text-ink-soft hover:border-ocean-300"}`}>
                     {c.name}
                   </button>
@@ -5145,13 +5246,24 @@ function AdminIzin({ branchId }: { branchId: string }) {
               })}
             </div>
           </Field>
-          {tab === "coach" && (
-            <Field label="Coach pengganti" hint="Opsional">
-              <Select value={createForm.substitute_id} onChange={e => setCreateForm(f => ({ ...f, substitute_id: e.target.value }))}>
-                <option value="">— tanpa pengganti —</option>
-                {allCoaches.filter(c => c.id !== createForm.target_id).map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
-              </Select>
-            </Field>
+          {tab === "coach" && createForm.class_ids.length > 0 && (
+            <div>
+              <div className="text-xs font-semibold text-ink-mute uppercase tracking-wider mb-2">Coach Pengganti per Kelas</div>
+              <div className="space-y-3">
+                {allClasses.filter(c => createForm.class_ids.includes(c.id)).map(c => (
+                  <div key={c.id} className="space-y-1.5">
+                    <div className="text-sm font-semibold text-ink">{c.name}</div>
+                    <Select
+                      value={createForm.class_substitutes[c.id] ?? ""}
+                      onChange={e => setCreateForm(f => ({ ...f, class_substitutes: { ...f.class_substitutes, [c.id]: e.target.value } }))}
+                    >
+                      <option value="">— tanpa pengganti —</option>
+                      {allCoaches.filter(c2 => c2.id !== createForm.target_id).map(c2 => <option key={c2.id} value={c2.id}>{c2.full_name}</option>)}
+                    </Select>
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
           <Field label="Keterangan" hint="Opsional">
             <Textarea rows={2} value={createForm.reason} onChange={e => setCreateForm(f => ({ ...f, reason: e.target.value }))} placeholder="Mis. Demam sejak kemarin." />

@@ -831,14 +831,17 @@ export type Database = {
         Row: {
           class_id: string
           leave_id: string
+          substitute_id: string | null
         }
         Insert: {
           class_id: string
           leave_id: string
+          substitute_id?: string | null
         }
         Update: {
           class_id?: string
           leave_id?: string
+          substitute_id?: string | null
         }
         Relationships: [
           {
@@ -853,6 +856,13 @@ export type Database = {
             columns: ["leave_id"]
             isOneToOne: false
             referencedRelation: "coach_leaves"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "coach_leave_classes_substitute_id_fkey"
+            columns: ["substitute_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]

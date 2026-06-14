@@ -334,7 +334,7 @@ interface LeaveHistoryRow {
   id: string; type: string; date_from: string; date_to: string;
   status: string; reason: string | null; reject_reason: string | null;
   substitute_profile?: { full_name: string } | null;
-  coach_leave_classes?: { class: { name: string } | null }[];
+  coach_leave_classes?: { class: { name: string } | null; substitute: { full_name: string } | null }[];
 }
 
 function LeaveHistory({ back, coachId }: { back: () => void; coachId: string }) {
@@ -346,7 +346,7 @@ function LeaveHistory({ back, coachId }: { back: () => void; coachId: string }) 
   useEffect(() => {
     if (!coachId) { setLoading(false); return; }
     supabase.from("coach_leaves")
-      .select("id, type, date_from, date_to, status, reason, reject_reason, substitute_profile:profiles!coach_leaves_substitute_id_fkey(full_name), coach_leave_classes(class:classes(name))")
+      .select("id, type, date_from, date_to, status, reason, reject_reason, substitute_profile:profiles!coach_leaves_substitute_id_fkey(full_name), coach_leave_classes(class:classes(name), substitute:profiles!coach_leave_classes_substitute_id_fkey(full_name))")
       .eq("coach_id", coachId)
       .order("created_at", { ascending: false })
       .limit(30)
@@ -372,21 +372,33 @@ function LeaveHistory({ back, coachId }: { back: () => void; coachId: string }) 
         ) : (
           <div className="space-y-3">
             {leaves.map((l) => {
-              const classes = l.coach_leave_classes?.map(lc => lc.class?.name).filter(Boolean) ?? [];
+              const hasPerClassSub = l.coach_leave_classes?.some(lc => lc.substitute?.full_name);
               return (
                 <div key={l.id} className="rounded-xl border border-line p-3.5 space-y-2">
                   <div className="flex items-center justify-between gap-2 flex-wrap">
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-sm text-ink">{typeLabel[l.type] ?? l.type}</span>
-                      {classes.length > 0 && <span className="text-xs text-ink-mute">· {classes.join(", ")}</span>}
-                    </div>
+                    <span className="font-semibold text-sm text-ink">{typeLabel[l.type] ?? l.type}</span>
                     <Status kind={statusKind[l.status] ?? "pending"}>{statusLabel[l.status] ?? l.status}</Status>
                   </div>
                   <div className="text-xs text-ink-mute font-mono">
                     {fmtDate(l.date_from)}{l.date_from !== l.date_to ? ` — ${fmtDate(l.date_to)}` : ""}
                   </div>
                   {l.reason && <p className="text-xs text-ink-soft">{l.reason}</p>}
-                  {l.substitute_profile && (
+                  {/* Per-class substitute listing (new format) */}
+                  {hasPerClassSub && l.coach_leave_classes && l.coach_leave_classes.length > 0 && (
+                    <div className="space-y-1 pt-1">
+                      {l.coach_leave_classes.map((lc, i) => (
+                        <div key={i} className="text-xs flex items-center gap-1.5 text-ink-mute">
+                          <Icon name="swim" className="w-3 h-3 shrink-0" />
+                          <span className="font-medium text-ink">{lc.class?.name ?? "—"}</span>
+                          {lc.substitute?.full_name && (
+                            <><span>→</span><span className="font-semibold text-ocean-700">{lc.substitute.full_name}</span></>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {/* Fallback: old single-substitute display for pre-migration leaves */}
+                  {!hasPerClassSub && l.substitute_profile && (
                     <div className="text-xs text-ink-mute">Pengganti: <span className="font-semibold text-ink">{l.substitute_profile.full_name}</span></div>
                   )}
                   {l.status === "rejected" && l.reject_reason && (
@@ -413,45 +425,69 @@ function LeaveForm({ back, coachId, branchId, classes }: { back: () => void; coa
   const [type, setType] = useState("sakit");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
-  const [classId, setClassId] = useState("");
   const [reason, setReason] = useState("");
-  const [substituteId, setSubstituteId] = useState("");
-  const [coachList, setCoachList] = useState<{ id: string; full_name: string }[]>([]);
+  // selectedClasses: array of { class_id, substitute_id } — one entry per checked class
+  const [selectedClasses, setSelectedClasses] = useState<{ class_id: string; substitute_id: string }[]>([]);
+  const [allCoaches, setAllCoaches] = useState<{ id: string; full_name: string }[]>([]);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (!branchId) return;
+    // Cross-branch: load ALL active coaches (not filtered by branchId)
     const today = new Date().toISOString().split("T")[0];
-    // Load coaches in the same branch via coach_branches junction
-    supabase.from("coach_branches")
-      .select("coach_id, profile:profiles!coach_branches_coach_id_fkey(id, full_name, suspend_until)")
-      .eq("branch_id", branchId)
-      .neq("coach_id", coachId)
+    supabase.from("profiles")
+      .select("id, full_name, suspend_until")
+      .eq("role", "coach")
+      .neq("id", coachId)
+      .order("full_name")
       .then(({ data }) => {
         if (!data) return;
-        const profiles = (data as { profile: { id: string; full_name: string; suspend_until: string | null } | null }[])
-          .map(r => r.profile)
-          .filter((p): p is { id: string; full_name: string; suspend_until: string | null } => !!p)
+        const active = (data as { id: string; full_name: string; suspend_until: string | null }[])
           .filter(c => !c.suspend_until || c.suspend_until < today);
-        setCoachList(profiles);
+        setAllCoaches(active);
       });
-  }, [branchId, coachId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [coachId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const toggleClass = (classId: string, checked: boolean) => {
+    if (checked) {
+      setSelectedClasses(prev => [...prev, { class_id: classId, substitute_id: "" }]);
+    } else {
+      setSelectedClasses(prev => prev.filter(c => c.class_id !== classId));
+    }
+  };
+
+  const setSubstituteForClass = (classId: string, substituteId: string) => {
+    setSelectedClasses(prev => prev.map(c => c.class_id === classId ? { ...c, substitute_id: substituteId } : c));
+  };
+
+  const canSubmit = selectedClasses.length > 0 && selectedClasses.every(c => !!c.substitute_id);
 
   const submit = async () => {
     if (!startDate || !endDate) return toast.error("Tanggal mulai dan selesai wajib diisi");
+    if (selectedClasses.length === 0) return toast.error("Pilih minimal 1 kelas terdampak");
+    if (!selectedClasses.every(c => c.substitute_id)) return toast.error("Setiap kelas wajib memiliki coach pengganti");
     setSaving(true);
+
     const { data: leave, error } = await supabase.from("coach_leaves").insert({
       coach_id: coachId,
       branch_id: branchId || null,
-      type: type as "izin" | "sakit" | "lainnya", date_from: startDate, date_to: endDate, reason: reason || null, status: "pending" as const,
-      substitute_id: substituteId || null,
+      type: type as "izin" | "sakit" | "lainnya",
+      date_from: startDate, date_to: endDate,
+      reason: reason || null,
+      status: "pending" as const,
+      // backward compat: primary substitute = first class's substitute
+      substitute_id: selectedClasses[0]?.substitute_id || null,
     }).select("id").single();
 
-    if (error) { toast.error("Gagal mengajukan izin", error.message); setSaving(false); return; }
+    if (error || !leave) { toast.error("Gagal mengajukan izin", error?.message ?? ""); setSaving(false); return; }
 
-    if (classId && leave) {
-      await supabase.from("coach_leave_classes").insert({ leave_id: leave.id, class_id: classId });
-    }
+    // Insert per-class entries with individual substitute_id
+    await supabase.from("coach_leave_classes").insert(
+      selectedClasses.map(c => ({
+        leave_id: leave.id,
+        class_id: c.class_id,
+        substitute_id: c.substitute_id || null,
+      }))
+    );
 
     setSaving(false);
     toast.success("Pengajuan terkirim", "Menunggu persetujuan admin");
@@ -479,22 +515,59 @@ function LeaveForm({ back, coachId, branchId, classes }: { back: () => void; coa
             <Field label="Mulai" required><Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} /></Field>
             <Field label="Selesai" required><Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} /></Field>
           </div>
-          <Field label="Kelas terdampak">
-            <Select value={classId} onChange={e => setClassId(e.target.value)}>
-              <option value="">— pilih kelas —</option>
-              {classes.map(c => <option key={c.id} value={c.id}>{c.name} — {(c.schedule_days ?? []).join(", ")} {c.time_start?.slice(0,5)}{c.time_end ? `–${c.time_end.slice(0,5)}` : ""}</option>)}
-            </Select>
+
+          <Field label="Kelas terdampak" required hint="Pilih semua kelas yang terdampak. Setiap kelas wajib memiliki coach pengganti.">
+            <div className="space-y-2 mt-1">
+              {classes.length === 0 && <p className="text-xs text-ink-mute">Tidak ada kelas terdaftar.</p>}
+              {classes.map(c => {
+                const sel = selectedClasses.find(s => s.class_id === c.id);
+                const isChecked = !!sel;
+                const scheduleLabel = `${(c.schedule_days ?? []).join(", ")} ${c.time_start?.slice(0, 5) ?? ""}${c.time_end ? `–${c.time_end.slice(0, 5)}` : ""}`.trim();
+                return (
+                  <div key={c.id} className={`rounded-xl border transition-colors ${isChecked ? "border-ocean-400 bg-ocean-50/40" : "border-line"}`}>
+                    <label className="flex items-start gap-3 px-3 py-2.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={e => toggleClass(c.id, e.target.checked)}
+                        className="mt-0.5 accent-ocean-600 w-4 h-4 shrink-0"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-semibold text-ink">{c.name}</div>
+                        {scheduleLabel && <div className="text-xs text-ink-mute">{scheduleLabel}</div>}
+                      </div>
+                      {isChecked && (
+                        sel?.substitute_id
+                          ? <Icon name="check" className="w-4 h-4 text-ok-600 shrink-0 mt-0.5" />
+                          : <Icon name="warn" className="w-4 h-4 text-warn-500 shrink-0 mt-0.5" />
+                      )}
+                    </label>
+                    {isChecked && (
+                      <div className="px-3 pb-2.5">
+                        <Select
+                          value={sel?.substitute_id ?? ""}
+                          onChange={e => setSubstituteForClass(c.id, e.target.value)}
+                        >
+                          <option value="">— pilih coach pengganti —</option>
+                          {allCoaches.map(coach => (
+                            <option key={coach.id} value={coach.id}>{coach.full_name}</option>
+                          ))}
+                        </Select>
+                        {!sel?.substitute_id && (
+                          <p className="text-xs text-warn-600 mt-1">Wajib pilih coach pengganti untuk kelas ini</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </Field>
-          {coachList.length > 0 && (
-            <Field label="Coach pengganti (opsional)">
-              <Select value={substituteId} onChange={e => setSubstituteId(e.target.value)}>
-                <option value="">— tidak ada pengganti —</option>
-                {coachList.map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
-              </Select>
-            </Field>
-          )}
+
           <Field label="Alasan / deskripsi"><Textarea rows={3} value={reason} onChange={e => setReason(e.target.value)} placeholder="Mis. Demam dan tidak fit" /></Field>
-          <Btn variant="primary" size="lg" className="w-full" onClick={submit} disabled={saving}>{saving ? "Mengirim…" : "Submit pengajuan"}</Btn>
+          <Btn variant="primary" size="lg" className="w-full" onClick={submit} disabled={saving || !canSubmit}>
+            {saving ? "Mengirim…" : !canSubmit && selectedClasses.length > 0 ? "Lengkapi pengganti tiap kelas" : "Submit pengajuan"}
+          </Btn>
         </div>
       </Card>
     </div>
