@@ -209,6 +209,11 @@ function ClockInFlow({ back, coachId, branchId, classes, preselectedClassId, onS
     const today = new Date().toISOString().split("T")[0];
     const nowTime = new Date().toTimeString().slice(0, 8);
 
+    // Determine late status: coach late if > 15 minutes after class start
+    const selectedClass = classes.find(c => c.id === classId);
+    const lateMinutes = selectedClass?.time_start ? minutesLate(nowTime, selectedClass.time_start) : 0;
+    const coachStatus: "present" | "late" = lateMinutes > 15 ? "late" : "present";
+
     let selfieUrl: string | null = null;
     if (photoFile) {
       try {
@@ -221,14 +226,18 @@ function ClockInFlow({ back, coachId, branchId, classes, preselectedClassId, onS
     const { error } = await supabase.from("coach_attendances").insert({
       branch_id: branchId, coach_id: coachId, class_id: classId,
       session_date: today, clock_in_time: nowTime,
-      status: "present", is_manual: false,
+      status: coachStatus, is_manual: false,
       selfie_url: selfieUrl,
       distance_meters: distanceMeters,
     });
 
     setSubmitting(false);
     if (error) { toast.error("Gagal menyimpan absensi", error.message); return; }
-    toast.success("Absensi Berhasil!", "Data tersimpan ke history & admin panel");
+    if (coachStatus === "late") {
+      toast.error("Absensi tercatat — Telat", `Anda clock-in ${lateMinutes} menit setelah kelas dimulai`);
+    } else {
+      toast.success("Absensi Berhasil!", "Data tersimpan ke history & admin panel");
+    }
     onSuccess?.(classId);
     setStep(3);
   };
@@ -591,6 +600,7 @@ function QRScanner({ coachId, classes, onClose }: {
   // Find the class that's active right now (schedule_days includes today)
   const todayName = new Date().toLocaleDateString("id-ID", { weekday: "long" });
   const activeClassId = classes.find(c => (c.schedule_days ?? []).includes(todayName))?.id ?? classes[0]?.id ?? "";
+  const activeClass = classes.find(c => c.id === activeClassId);
 
   const markAttendance = async (qrCode: string) => {
     // Lookup member by qr_code, join profile for suspend check
@@ -617,17 +627,24 @@ function QRScanner({ coachId, classes, onClose }: {
       return;
     }
 
+    // Determine late status: member late if > 1 minute after class start
+    const scanTime = new Date().toTimeString().slice(0, 8);
+    const memberLateMin = activeClass?.time_start ? minutesLate(scanTime, activeClass.time_start) : -999;
+    const memberStatus: "hadir" | "telat" = memberLateMin > 1 ? "telat" : "hadir";
+
     const { error } = await supabase.from("member_attendances").upsert({
       member_id: typedMember.id,
       class_id: activeClassId,
       session_date: today,
-      status: "hadir",
+      status: memberStatus,
       method: "qr",
       marked_by: coachId,
     }, { onConflict: "class_id,member_id,session_date" });
 
     if (error) {
       toast.error(`Gagal absen ${name}`, error.message);
+    } else if (memberStatus === "telat") {
+      toast.error(`${name} hadir — Telat`, `${memberLateMin} menit setelah kelas dimulai`);
     } else {
       toast.success(`✓ ${name} hadir`, "Absensi tercatat");
     }
@@ -690,14 +707,20 @@ function QRScanner({ coachId, classes, onClose }: {
 
 // ── Home ───────────────────────────────────────────────────────────────────────
 
-// Returns true if current time is within 1 hour before session start until session end
+// Returns true if current time is within 3 hours before session start until session end
 function isInClockInWindow(timeStart: string, timeEnd: string): boolean {
   const now = new Date();
   const toMinutes = (t: string) => { const [h, m] = t.split(":").map(Number); return h * 60 + m; };
   const nowMin = now.getHours() * 60 + now.getMinutes();
   const startMin = toMinutes(timeStart);
   const endMin = toMinutes(timeEnd);
-  return nowMin >= startMin - 60 && nowMin <= endMin;
+  return nowMin >= startMin - 180 && nowMin <= endMin;
+}
+
+/** Returns minutes since class start (HH:MM:SS or HH:MM). Negative = early. */
+function minutesLate(clockInTime: string, classTimeStart: string): number {
+  const toMin = (t: string) => { const [h, m] = t.split(":").map(Number); return h * 60 + m; };
+  return toMin(clockInTime) - toMin(classTimeStart);
 }
 
 function CoachHome({ setOverlay, setActive, coachId, profile, classes, holidayClassIds, clockedInIds, setClockedInIds }: {
@@ -1104,7 +1127,7 @@ function CoachAbsensi({ setOverlay, coachId, classes, holidayClassIds, clockedIn
     if (!manualClassId || !manualDate) return toast.error("Kelas dan tanggal wajib diisi");
     if (memberAtt.length === 0) return toast.error("Tidak ada member di kelas ini");
     setSaving(true);
-    const rows = memberAtt.map(m => ({ class_id: manualClassId, member_id: m.member_id, session_date: manualDate, status: (attStatus[m.member_id] ?? "hadir") as "hadir" | "izin" | "sakit" | "tidak_hadir", method: "manual" as const }));
+    const rows = memberAtt.map(m => ({ class_id: manualClassId, member_id: m.member_id, session_date: manualDate, status: (attStatus[m.member_id] ?? "hadir") as "hadir" | "telat" | "izin" | "sakit" | "tidak_hadir", method: "manual" as const }));
     const { error } = await supabase.from("member_attendances").upsert(rows, { onConflict: "class_id,member_id,session_date" });
     setSaving(false);
     if (error) return toast.error("Gagal menyimpan", error.message);
@@ -1269,13 +1292,14 @@ function CoachAbsensi({ setOverlay, coachId, classes, holidayClassIds, clockedIn
             <div className="divide-y divide-line">
               {history.map((h) => (
                 <div key={h.id} className="px-5 py-3 flex items-center gap-3 hover:bg-paper-tint">
-                  <span className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${h.is_manual ? "bg-manual-50 text-manual-500" : "bg-ok-50 text-ok-600"}`}>
+                  <span className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${h.is_manual ? "bg-manual-50 text-manual-500" : h.status === "late" ? "bg-warn-50 text-warn-600" : "bg-ok-50 text-ok-600"}`}>
                     <Icon name={h.is_manual ? "edit" : "check"} className="w-4 h-4" strokeWidth={2.4} />
                   </span>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <div className="font-semibold text-ink text-sm">{h.class?.name}</div>
                       {h.is_manual && <Status kind="manual">Manual</Status>}
+                      {!h.is_manual && h.status === "late" && <Status kind="late">Telat</Status>}
                     </div>
                     <div className="text-xs text-ink-mute font-mono">{fmtDate(h.session_date)} · {h.clock_in_time?.slice(0, 5) ?? "—"}{h.distance_meters != null ? ` · ${h.distance_meters}m` : ""}</div>
                     {h.is_manual && h.manual_by_profile && (
@@ -1361,10 +1385,14 @@ function CoachAbsensi({ setOverlay, coachId, classes, holidayClassIds, clockedIn
                   <Avatar name={m.member?.full_name ?? "?"} size={36} />
                   <div className="flex-1 min-w-0"><div className="font-semibold text-ink text-sm truncate">{m.member?.full_name}</div></div>
                   <div className="flex flex-wrap gap-1">
-                    {[["hadir", "Hadir"], ["izin", "Izin"], ["sakit", "Sakit"], ["tidak_hadir", "Absen"]].map(([id, l]) => (
-                      <button key={id} onClick={() => setAttStatus(s => ({ ...s, [m.member_id]: id }))}
-                        className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border ${attStatus[m.member_id] === id ? "border-ok-500 bg-ok-50 text-ok-600" : "border-line text-ink-mute hover:bg-paper-tint"}`}>{l}</button>
-                    ))}
+                    {([["hadir", "Hadir"], ["telat", "Telat"], ["izin", "Izin"], ["sakit", "Sakit"], ["tidak_hadir", "Absen"]] as const).map(([id, l]) => {
+                      const active = (attStatus[m.member_id] ?? "hadir") === id;
+                      const activeStyle = id === "hadir" ? "border-ok-500 bg-ok-50 text-ok-600" : id === "telat" ? "border-warn-500 bg-warn-50 text-warn-600" : id === "tidak_hadir" ? "border-danger-500 bg-danger-50 text-danger-600" : "border-warn-400 bg-warn-50 text-warn-500";
+                      return (
+                        <button key={id} onClick={() => setAttStatus(s => ({ ...s, [m.member_id]: id }))}
+                          className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border ${active ? activeStyle : "border-line text-ink-mute hover:bg-paper-tint"}`}>{l}</button>
+                      );
+                    })}
                   </div>
                 </div>
               ))}

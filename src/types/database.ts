@@ -639,7 +639,7 @@ export type Database = {
           manual_reason: string | null
           selfie_url: string | null
           session_date: string
-          status: string
+          status: "present" | "absent" | "late"
         }
         Insert: {
           branch_id: string
@@ -657,7 +657,7 @@ export type Database = {
           manual_reason?: string | null
           selfie_url?: string | null
           session_date: string
-          status?: string
+          status?: "present" | "absent" | "late"
         }
         Update: {
           branch_id?: string
@@ -675,7 +675,7 @@ export type Database = {
           manual_reason?: string | null
           selfie_url?: string | null
           session_date?: string
-          status?: string
+          status?: "present" | "absent" | "late"
         }
         Relationships: [
           {
@@ -2101,7 +2101,7 @@ export type Database = {
     }
     Enums: {
       attendance_method: "selfie" | "qr" | "manual"
-      attendance_status: "hadir" | "izin" | "sakit" | "tidak_hadir"
+      attendance_status: "hadir" | "izin" | "sakit" | "tidak_hadir" | "telat"
       bill_type: "monthly" | "package" | "custom" | "session_pack"
       cert_status: "pending" | "approved" | "rejected"
       coach_status: "active" | "suspended" | "archived"
@@ -2240,7 +2240,7 @@ export const Constants = {
   public: {
     Enums: {
       attendance_method: ["selfie", "qr", "manual"],
-      attendance_status: ["hadir", "izin", "sakit", "tidak_hadir"],
+      attendance_status: ["hadir", "izin", "sakit", "tidak_hadir", "telat"],
       bill_type: ["monthly", "package", "custom", "session_pack"],
       cert_status: ["pending", "approved", "rejected"],
       coach_status: ["active", "suspended", "archived"],

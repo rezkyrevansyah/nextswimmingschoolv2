@@ -630,15 +630,15 @@ function MemberAbsensi({ memberId }: { memberId: string }) {
             const dateStr = `${d.getDate()} ${monthNames[d.getMonth()]} ${d.getFullYear()}`;
             return (
               <div key={r.id} className="px-5 py-3 flex items-center gap-3">
-                <span className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${r.status === "hadir" ? "bg-ok-50 text-ok-600" : (r.status === "tidak_hadir" || r.status === "absent") ? "bg-danger-50 text-danger-500" : "bg-warn-50 text-warn-600"}`}>
+                <span className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${r.status === "hadir" ? "bg-ok-50 text-ok-600" : r.status === "telat" ? "bg-warn-50 text-warn-600" : (r.status === "tidak_hadir" || r.status === "absent") ? "bg-danger-50 text-danger-500" : "bg-warn-50 text-warn-600"}`}>
                   <Icon name={r.status === "hadir" ? "check" : (r.status === "tidak_hadir" || r.status === "absent") ? "x" : "info"} className="w-4 h-4" strokeWidth={2.5} />
                 </span>
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-semibold text-ink">{r.class_name}</div>
                   <div className="text-xs text-ink-mute font-mono">{dateStr} · {r.time}{r.notes ? ` · ${r.notes}` : ""}</div>
                 </div>
-                <Status kind={r.status === "hadir" ? "present" : (r.status === "tidak_hadir" || r.status === "absent") ? "absent" : r.status === "izin" ? "excused" : "sick"}>
-                  {r.status === "hadir" ? "Hadir" : (r.status === "tidak_hadir" || r.status === "absent") ? "Absen" : r.status === "izin" ? "Izin" : "Sakit"}
+                <Status kind={r.status === "hadir" ? "present" : r.status === "telat" ? "telat" : (r.status === "tidak_hadir" || r.status === "absent") ? "absent" : r.status === "izin" ? "excused" : "sick"}>
+                  {r.status === "hadir" ? "Hadir" : r.status === "telat" ? "Telat" : (r.status === "tidak_hadir" || r.status === "absent") ? "Absen" : r.status === "izin" ? "Izin" : "Sakit"}
                 </Status>
               </div>
             );

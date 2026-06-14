@@ -4142,7 +4142,7 @@ function AdminAbsensiMember({ branchId }: { branchId: string }) {
       .order("created_at", { ascending: false })
       .range(pg * PAGE_SIZE, pg * PAGE_SIZE + PAGE_SIZE);
 
-    if (filterStatus !== "all") q = q.eq("status", filterStatus as "hadir" | "izin" | "sakit" | "tidak_hadir");
+    if (filterStatus !== "all") q = q.eq("status", filterStatus as "hadir" | "telat" | "izin" | "sakit" | "tidak_hadir");
 
     const { data } = await q;
     const rows = (data ?? []) as unknown as MemberAttendanceRow[];
@@ -4188,6 +4188,7 @@ function AdminAbsensiMember({ branchId }: { branchId: string }) {
         <Select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
           <option value="all">Semua Status</option>
           <option value="hadir">Hadir</option>
+          <option value="telat">Telat</option>
           <option value="izin">Izin</option>
           <option value="sakit">Sakit</option>
           <option value="tidak_hadir">Tidak Hadir</option>
@@ -4220,6 +4221,8 @@ function AdminAbsensiMember({ branchId }: { branchId: string }) {
                       <td className="py-3">
                         {r.status === "hadir"
                           ? <Status kind="approved" dot={false}>Hadir</Status>
+                          : r.status === "telat"
+                          ? <Status kind="telat" dot={false}>Telat</Status>
                           : r.status === "izin"
                           ? <Status kind="excused" dot={false}>Izin</Status>
                           : r.status === "sakit"
@@ -4273,6 +4276,7 @@ function AdminAbsensiCoach({ branchId }: { branchId: string }) {
   const [classes, setClasses] = useState<ClassRow[]>([]);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ coach_id: "", class_id: "", session_date: "", clock_in_time: "", note: "" });
+  const [manualStatus, setManualStatus] = useState<"present" | "late" | "absent">("present");
   const [coachClassIds, setCoachClassIds] = useState<Set<string>>(new Set());
   const [sessionDates, setSessionDates] = useState<{ value: string; label: string }[]>([]);
 
@@ -4382,7 +4386,7 @@ function AdminAbsensiCoach({ branchId }: { branchId: string }) {
         is_manual: true,
         manual_by: user?.id ?? null,
         manual_note: form.note || null,
-        status: "present",
+        status: manualStatus,
       }).eq("id", editTarget.id);
       setSaving(false);
       if (error) return toast.error("Gagal menyimpan", error.message);
@@ -4393,7 +4397,7 @@ function AdminAbsensiCoach({ branchId }: { branchId: string }) {
         session_date: form.session_date,
         clock_in_time: clockInTime,
         is_manual: true, manual_by: user?.id ?? null,
-        manual_note: form.note || null, status: "present",
+        manual_note: form.note || null, status: manualStatus,
       });
       setSaving(false);
       if (error) return toast.error("Gagal menyimpan", error.message);
@@ -4432,6 +4436,7 @@ function AdminAbsensiCoach({ branchId }: { branchId: string }) {
     }
     setSessionDates(dates);
     setForm({ coach_id: r.coach_id, class_id: r.class_id, session_date: r.session_date, clock_in_time: r.clock_in_time?.slice(0, 5) ?? "", note: r.manual_note ?? "" });
+    setManualStatus((r.status as "present" | "late" | "absent") ?? "present");
     setOpenManual(true);
   };
 
@@ -4463,7 +4468,7 @@ function AdminAbsensiCoach({ branchId }: { branchId: string }) {
           <Input type="date" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)} className="flex-1" />
         </div>
         <div className="flex justify-end">
-          <Btn variant="primary" icon="plus" onClick={() => { setEditTarget(null); setForm({ coach_id: "", class_id: "", session_date: "", clock_in_time: "", note: "" }); setCoachClassIds(new Set()); setSessionDates([]); setOpenManual(true); }}>Absensi Manual</Btn>
+          <Btn variant="primary" icon="plus" onClick={() => { setEditTarget(null); setForm({ coach_id: "", class_id: "", session_date: "", clock_in_time: "", note: "" }); setManualStatus("present"); setCoachClassIds(new Set()); setSessionDates([]); setOpenManual(true); }}>Absensi Manual</Btn>
         </div>
       </div>
       {/* Quick month filter */}
@@ -4500,7 +4505,12 @@ function AdminAbsensiCoach({ branchId }: { branchId: string }) {
                       <td className="text-ink-soft">{r.class?.name}</td>
                       <td className="font-mono">{r.clock_in_time?.slice(0, 5) ?? "—"}</td>
                       <td className="font-mono hidden sm:table-cell">{r.distance_meters != null ? `${r.distance_meters} m` : "—"}</td>
-                      <td className="hidden sm:table-cell">{r.is_manual ? <Status kind="manual">Manual</Status> : <Status kind="active">Selfie + GPS</Status>}</td>
+                      <td className="hidden sm:table-cell">
+                        <div className="flex flex-col gap-1">
+                          {r.is_manual ? <Status kind="manual">Manual</Status> : <Status kind="active">Selfie + GPS</Status>}
+                          {r.status === "late" && <Status kind="late">Telat</Status>}
+                        </div>
+                      </td>
                       <td className="pr-5">
                         <div className="flex items-center gap-1">
                           <button onClick={() => openEdit(r)} className="p-1.5 rounded hover:bg-paper-tint text-ink-mute hover:text-ink" title="Edit"><Icon name="edit" className="w-4 h-4" /></button>
@@ -4548,6 +4558,13 @@ function AdminAbsensiCoach({ branchId }: { branchId: string }) {
             </Field>
             <Field label="Jam clock-in"><TimePicker value={form.clock_in_time} onChange={v => setForm(f => ({ ...f, clock_in_time: v }))} /></Field>
           </div>
+          <Field label="Status kehadiran">
+            <Select value={manualStatus} onChange={e => setManualStatus(e.target.value as "present" | "late" | "absent")}>
+              <option value="present">Hadir (Tepat Waktu)</option>
+              <option value="late">Telat</option>
+              <option value="absent">Tidak Hadir</option>
+            </Select>
+          </Field>
           <Field label="Catatan / alasan"><Textarea rows={3} value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} placeholder="Mis. Coach lupa clock-in, sudah konfirmasi via WA." /></Field>
         </div>
       </Modal>
@@ -4948,7 +4965,7 @@ function AdminIzin({ branchId }: { branchId: string }) {
         const dayNames = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
         const from = new Date(createForm.date_from);
         const to   = new Date(createForm.date_to);
-        const rows: { branch_id: string; coach_id: string; class_id: string; session_date: string; status: string; is_manual: boolean; manual_by: string | null }[] = [];
+        const rows: { branch_id: string; coach_id: string; class_id: string; session_date: string; status: "present" | "absent" | "late"; is_manual: boolean; manual_by: string | null }[] = [];
         for (const cls of (clsRows ?? []) as { id: string; schedule_days: string[] }[]) {
           const subId = createForm.class_substitutes[cls.id];
           if (!subId) continue;
@@ -4956,7 +4973,7 @@ function AdminIzin({ branchId }: { branchId: string }) {
           while (d <= to) {
             const dayName = dayNames[d.getDay()];
             if (cls.schedule_days.length === 0 || cls.schedule_days.includes(dayName)) {
-              rows.push({ branch_id: branchId, coach_id: subId, class_id: cls.id, session_date: d.toISOString().slice(0, 10), status: "present", is_manual: true, manual_by: adminId });
+              rows.push({ branch_id: branchId, coach_id: subId, class_id: cls.id, session_date: d.toISOString().slice(0, 10), status: "present" as const, is_manual: true, manual_by: adminId });
             }
             d.setDate(d.getDate() + 1);
           }
@@ -5029,7 +5046,7 @@ function AdminIzin({ branchId }: { branchId: string }) {
       const from = new Date(detail.date_from);
       const to   = new Date(detail.date_to);
       const adminId = (await supabase.auth.getUser()).data.user?.id ?? null;
-      const rows: { branch_id: string; coach_id: string; class_id: string; session_date: string; status: string; is_manual: boolean; manual_by: string | null }[] = [];
+      const rows: { branch_id: string; coach_id: string; class_id: string; session_date: string; status: "present" | "absent" | "late"; is_manual: boolean; manual_by: string | null }[] = [];
 
       for (const lc of detail.coach_leave_classes) {
         const subId = classSubstitutes[lc.class_id];
@@ -5039,7 +5056,7 @@ function AdminIzin({ branchId }: { branchId: string }) {
         while (d <= to) {
           const dayName = dayNames[d.getDay()];
           if (scheduleDays.length === 0 || scheduleDays.includes(dayName)) {
-            rows.push({ branch_id: branchId, coach_id: subId, class_id: lc.class_id, session_date: d.toISOString().slice(0, 10), status: "present", is_manual: true, manual_by: adminId });
+            rows.push({ branch_id: branchId, coach_id: subId, class_id: lc.class_id, session_date: d.toISOString().slice(0, 10), status: "present" as const, is_manual: true, manual_by: adminId });
           }
           d.setDate(d.getDate() + 1);
         }

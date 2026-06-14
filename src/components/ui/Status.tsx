@@ -19,6 +19,8 @@ const STATUS_STYLES: Record<string, string> = {
   manual:         "bg-manual-50 text-manual-600 ring-manual-500/30",
   excused:        "bg-warn-50 text-warn-600 ring-warn-500/30",
   sick:           "bg-warn-50 text-warn-600 ring-warn-500/30",
+  late:           "bg-warn-50 text-warn-600 ring-warn-500/30",
+  telat:          "bg-warn-50 text-warn-600 ring-warn-500/30",
   free:           "bg-paper-deep text-ink-mute ring-line",
   school_covered: "bg-paper-deep text-ink-soft ring-line",
 };
