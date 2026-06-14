@@ -27,6 +27,9 @@ interface Branch {
   address: string;
   status: string;
   wa_numbers?: string[];
+  bank_name?: string | null;
+  bank_account?: string | null;
+  bank_holder?: string | null;
   color?: string;
   member_count?: number;
   coach_count?: number;
@@ -210,21 +213,29 @@ function Branches({ branches, onRefresh }: { branches: Branch[]; onRefresh: () =
   const [city, setCity] = useState("");
   const [address, setAddress] = useState("");
   const [waNumbers, setWaNumbers] = useState<string[]>([""]);
+  const [bankName, setBankName] = useState("");
+  const [bankAccount, setBankAccount] = useState("");
+  const [bankHolder, setBankHolder] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const openAdd = () => { setName(""); setCity(""); setAddress(""); setWaNumbers([""]); setEditItem(null); setShowAdd(true); };
-  const openEdit = (b: Branch) => { setName(b.name); setCity(b.city); setAddress(b.address); setWaNumbers(b.wa_numbers?.length ? b.wa_numbers : [""]); setEditItem(b); setShowAdd(true); };
+  const openAdd = () => { setName(""); setCity(""); setAddress(""); setWaNumbers([""]); setBankName(""); setBankAccount(""); setBankHolder(""); setEditItem(null); setShowAdd(true); };
+  const openEdit = (b: Branch) => { setName(b.name); setCity(b.city); setAddress(b.address); setWaNumbers(b.wa_numbers?.length ? b.wa_numbers : [""]); setBankName(b.bank_name ?? ""); setBankAccount(b.bank_account ?? ""); setBankHolder(b.bank_holder ?? ""); setEditItem(b); setShowAdd(true); };
 
   const save = async () => {
     if (!name || !city) return toast.error("Nama dan kota wajib diisi");
     setSaving(true);
     const cleanWa = waNumbers.map(n => n.trim()).filter(Boolean);
+    const bankFields = {
+      bank_name: bankName.trim() || null,
+      bank_account: bankAccount.trim() || null,
+      bank_holder: bankHolder.trim() || null,
+    };
     if (editItem) {
-      const { error } = await supabase.from("branches").update({ name, city, address, wa_numbers: cleanWa }).eq("id", editItem.id);
+      const { error } = await supabase.from("branches").update({ name, city, address, wa_numbers: cleanWa, ...bankFields }).eq("id", editItem.id);
       if (error) { toast.error("Gagal menyimpan", error.message); setSaving(false); return; }
       toast.success("Cabang diperbarui");
     } else {
-      const { error } = await supabase.from("branches").insert({ name, city, address, wa_numbers: cleanWa, status: "active" });
+      const { error } = await supabase.from("branches").insert({ name, city, address, wa_numbers: cleanWa, status: "active", ...bankFields });
       if (error) { toast.error("Gagal membuat cabang", error.message); setSaving(false); return; }
       toast.success("Cabang baru dibuat");
     }
@@ -284,6 +295,12 @@ function Branches({ branches, onRefresh }: { branches: Branch[]; onRefresh: () =
               <div className="flex items-center gap-2 text-sm text-ink-mute">
                 <Icon name="pin" className="w-4 h-4 text-ocean-500" />{b.address || b.city}
               </div>
+              {b.bank_name && (
+                <div className="mt-1.5 flex items-center gap-1.5 text-xs text-ink-mute">
+                  <Icon name="card" className="w-3.5 h-3.5 shrink-0" />
+                  <span className="font-mono">{b.bank_name} · {b.bank_account}</span>
+                </div>
+              )}
               <div className="mt-4 grid grid-cols-3 gap-2 text-center">
                 <div className="p-2.5 rounded-xl bg-paper-tint"><div className="font-display font-bold text-lg text-ink">{b.member_count ?? 0}</div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Member</div></div>
                 <div className="p-2.5 rounded-xl bg-paper-tint"><div className="font-display font-bold text-lg text-ink">{b.coach_count ?? 0}</div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Coach</div></div>
@@ -333,6 +350,13 @@ function Branches({ branches, onRefresh }: { branches: Branch[]; onRefresh: () =
                 </div>
               ))}
               <Btn variant="ghost" size="sm" icon="plus" onClick={() => setWaNumbers(prev => [...prev, ""])}>Tambah nomor</Btn>
+            </div>
+          </Field>
+          <Field label="Informasi Rekening" hint="Ditampilkan ke member di halaman tagihan saat ada tagihan aktif.">
+            <div className="space-y-2">
+              <Input value={bankName} onChange={e => setBankName(e.target.value)} placeholder="Nama Bank (contoh: BCA)" />
+              <Input value={bankAccount} onChange={e => setBankAccount(e.target.value)} placeholder="Nomor Rekening" className="font-mono" />
+              <Input value={bankHolder} onChange={e => setBankHolder(e.target.value)} placeholder="Atas Nama" />
             </div>
           </Field>
         </div>
@@ -1467,7 +1491,7 @@ export default function OwnerPage() {
 
   const loadBranches = useCallback(async () => {
     const [{ data: branchData }, { data: members }, { data: coaches }, { data: classes }] = await Promise.all([
-      supabase.from("branches").select("id, name, city, address, status, wa_numbers").order("name"),
+      supabase.from("branches").select("id, name, city, address, status, wa_numbers, bank_name, bank_account, bank_holder").order("name"),
       supabase.from("members").select("id, branch_id").eq("status", "active"),
       supabase.from("profiles").select("id, branch_id").eq("role", "coach"),
       supabase.from("classes").select("id, branch_id").eq("status", "active"),

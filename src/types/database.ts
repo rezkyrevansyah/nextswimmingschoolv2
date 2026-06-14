@@ -206,6 +206,9 @@ export type Database = {
       branches: {
         Row: {
           address: string | null
+          bank_account: string | null
+          bank_holder: string | null
+          bank_name: string | null
           city: string | null
           created_at: string
           id: string
@@ -219,6 +222,9 @@ export type Database = {
         }
         Insert: {
           address?: string | null
+          bank_account?: string | null
+          bank_holder?: string | null
+          bank_name?: string | null
           city?: string | null
           created_at?: string
           id?: string
@@ -232,6 +238,9 @@ export type Database = {
         }
         Update: {
           address?: string | null
+          bank_account?: string | null
+          bank_holder?: string | null
+          bank_name?: string | null
           city?: string | null
           created_at?: string
           id?: string

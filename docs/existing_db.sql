@@ -13,6 +13,9 @@ CREATE TABLE public.branches (
   city text,
   phone text,
   status text NOT NULL DEFAULT 'active'::text CHECK (status = ANY (ARRAY['active'::text, 'archived'::text])),
+  bank_name text,
+  bank_account text,
+  bank_holder text,
   CONSTRAINT branches_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.profiles (

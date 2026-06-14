@@ -662,19 +662,21 @@ function MemberBills({ memberId, memberName, branchId }: { memberId: string; mem
   const [activeBills, setActiveBills] = useState<{ id: string; period_label: string; amount: number; discount: number; discount_reason: string | null; total: number; class_name: string; type: string; sessions_total: number | null; sessions_used: number }[]>([]);
   const [history, setHistory] = useState<{ id: string; period_label: string; amount: number; paid_at: string; payment_method: string | null }[]>([]);
   const [adminWa, setAdminWa] = useState<string | null>(null);
+  const [bankInfo, setBankInfo] = useState<{ bank_name: string | null; bank_account: string | null; bank_holder: string | null } | null>(null);
 
-   
+
   useEffect(() => {
     if (!branchId) return;
-    supabase.from("branches").select("wa_numbers").eq("id", branchId).single()
+    supabase.from("branches").select("wa_numbers, bank_name, bank_account, bank_holder").eq("id", branchId).single()
       .then(({ data }) => {
         if (data) {
-          const numbers = (data as unknown as { wa_numbers: string[] }).wa_numbers;
-          if (numbers?.length) setAdminWa(numbers[0]);
+          const d = data as unknown as { wa_numbers: string[]; bank_name: string | null; bank_account: string | null; bank_holder: string | null };
+          if (d.wa_numbers?.length) setAdminWa(d.wa_numbers[0]);
+          if (d.bank_name) setBankInfo({ bank_name: d.bank_name, bank_account: d.bank_account, bank_holder: d.bank_holder });
         }
       });
   }, [branchId]); // eslint-disable-line react-hooks/exhaustive-deps
-   
+
 
   const load = useCallback(async () => {
     if (!memberId) return;
@@ -756,6 +758,23 @@ function MemberBills({ memberId, memberName, branchId }: { memberId: string; mem
                   {(b.sessions_total - b.sessions_used) <= 1 && <span className="ml-auto text-warn-700 font-bold text-xs">Hampir habis!</span>}
                 </div>
               )}
+              {bankInfo?.bank_name && (
+                <div className="mt-3 rounded-xl bg-ocean-50 border border-ocean-500/20 p-3 space-y-1.5">
+                  <div className="text-[10px] uppercase tracking-widest font-bold text-ocean-600">Rekening Pembayaran</div>
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-ink-soft">Bank</span>
+                    <span className="font-bold text-ink">{bankInfo.bank_name}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-ink-soft">No. Rekening</span>
+                    <span className="font-mono font-bold text-ink">{bankInfo.bank_account}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-ink-soft">Atas Nama</span>
+                    <span className="font-bold text-ink">{bankInfo.bank_holder}</span>
+                  </div>
+                </div>
+              )}
               {adminWa && (
                 <div className="mt-3 flex flex-wrap items-center gap-2 px-3 py-2 rounded-xl bg-white border border-warn-500/20">
                   <Icon name="whatsapp" className="w-4 h-4 text-ok-600 shrink-0" />
@@ -766,7 +785,11 @@ function MemberBills({ memberId, memberName, branchId }: { memberId: string; mem
               <a href={`https://wa.me/${adminWa?.replace(/\D/g, "") ?? ""}?text=${encodeURIComponent(`Halo Admin, saya ingin konfirmasi pembayaran tagihan ${b.period_label} untuk ${memberName}. Bukti transfer terlampir.`)}`} target="_blank" rel="noreferrer" className="mt-3 inline-flex w-full">
                 <Btn variant="wa" icon="whatsapp" size="lg" className="w-full">Hubungi Admin untuk konfirmasi</Btn>
               </a>
-              <div className="mt-2 text-[11px] text-ink-mute text-center">Transfer ke rekening yang diberikan admin lalu kirim bukti via WA.</div>
+              <div className="mt-2 text-[11px] text-ink-mute text-center">
+                {bankInfo?.bank_name
+                  ? "Transfer ke rekening di atas lalu kirim bukti via WA ke admin."
+                  : "Hubungi admin via WhatsApp untuk mendapat info rekening dan konfirmasi pembayaran."}
+              </div>
             </Card>
           ))}
         </>
