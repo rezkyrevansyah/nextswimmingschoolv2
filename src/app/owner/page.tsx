@@ -2585,6 +2585,428 @@ function OwnerActivityLog({ branches }: { branches: Branch[] }) {
   );
 }
 
+// ── R2 Storage ─────────────────────────────────────────────────────────────────
+
+interface StorageCategory { prefix: string; label: string; icon: string; count: number; size: number }
+interface StorageStats { categories: StorageCategory[]; totalSize: number; totalCount: number; fetchedAt: string }
+interface BackupFile { key: string; label: string; category: string; url: string }
+
+function fmtBytes(n: number): string {
+  if (n >= 1e9) return (n / 1e9).toFixed(2) + " GB";
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + " MB";
+  if (n >= 1e3) return (n / 1e3).toFixed(0) + " KB";
+  return n + " B";
+}
+
+function fmtRelTime(iso: string): string {
+  const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (diff < 60) return "baru saja";
+  if (diff < 3600) return `${Math.floor(diff / 60)} menit lalu`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)} jam lalu`;
+  return `${Math.floor(diff / 86400)} hari lalu`;
+}
+
+const CATEGORY_COLORS = [
+  "bg-ocean-500", "bg-wave-500", "bg-ok-500", "bg-warn-500",
+  "bg-suspend-500", "bg-manual-500", "bg-danger-400", "bg-archive-500", "bg-ink-soft",
+];
+
+const BACKUP_CATEGORIES = [
+  { key: "avatars",     label: "Avatar Profil"   },
+  { key: "logos",       label: "Logo Cabang"      },
+  { key: "classes",     label: "Foto Kelas"       },
+  { key: "payments",    label: "Bukti Pembayaran" },
+  { key: "certs",       label: "Sertifikat Coach" },
+  { key: "attendances", label: "Selfie Absensi"   },
+  { key: "qrcodes",     label: "QR Code Member"   },
+];
+
+const BACKUP_PAGE_SIZE = 20;
+
+function OwnerStorage({ userId, userName }: { userId: string; userName: string }) {
+  const supabase = createClient();
+  const toast = useToast();
+
+  const [statsLoading, setStatsLoading] = useState(true);
+  const [stats, setStats] = useState<StorageStats | null>(null);
+  const [statsError, setStatsError] = useState(false);
+
+  const [backupList, setBackupList] = useState<BackupFile[]>([]);
+  const [backupLoading, setBackupLoading] = useState(false);
+  const [backupLoaded, setBackupLoaded] = useState(false);
+  const [backupPage, setBackupPage] = useState(0);
+
+  const [selectedCats, setSelectedCats] = useState<Set<string>>(new Set(["all"]));
+  const [downloading, setDownloading] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState<{ done: number; total: number } | null>(null);
+
+  const loadStats = useCallback(async () => {
+    setStatsLoading(true);
+    setStatsError(false);
+    try {
+      const res = await fetch("/api/r2/stats");
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json() as StorageStats;
+      setStats(data);
+    } catch {
+      setStatsError(true);
+    }
+    setStatsLoading(false);
+  }, []);
+
+  useEffect(() => { loadStats(); }, [loadStats]);
+
+  const loadBackupList = async () => {
+    setBackupLoading(true);
+    setBackupLoaded(false);
+    try {
+      // Fetch per selected category (or all)
+      if (selectedCats.has("all")) {
+        const res = await fetch("/api/r2/backup-list?category=all");
+        if (!res.ok) throw new Error();
+        const data = await res.json() as { files: BackupFile[] };
+        setBackupList(data.files);
+      } else {
+        const allFiles: BackupFile[] = [];
+        for (const cat of selectedCats) {
+          const res = await fetch(`/api/r2/backup-list?category=${cat}`);
+          if (!res.ok) continue;
+          const data = await res.json() as { files: BackupFile[] };
+          allFiles.push(...data.files);
+        }
+        setBackupList(allFiles);
+      }
+      setBackupLoaded(true);
+      setBackupPage(0);
+    } catch {
+      toast.error("Gagal memuat daftar file");
+    }
+    setBackupLoading(false);
+  };
+
+  const toggleCat = (key: string) => {
+    setSelectedCats(prev => {
+      const next = new Set(prev);
+      if (key === "all") {
+        return new Set(["all"]);
+      }
+      next.delete("all");
+      if (next.has(key)) {
+        next.delete(key);
+        if (next.size === 0) return new Set(["all"]);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+    setBackupLoaded(false);
+    setBackupList([]);
+  };
+
+  const downloadBackup = async () => {
+    if (backupList.length === 0) return;
+    setDownloading(true);
+    setDownloadProgress({ done: 0, total: backupList.length });
+    let successCount = 0;
+    try {
+      const JSZip = (await import("jszip")).default;
+      const zip = new JSZip();
+      for (let i = 0; i < backupList.length; i++) {
+        const f = backupList[i];
+        try {
+          const res = await fetch(`/api/r2?key=${encodeURIComponent(f.key)}`);
+          if (res.ok) {
+            const blob = await res.blob();
+            const folder = f.category.replace(/[\s/\\]/g, "_");
+            const filename = f.key.split("/").filter(Boolean).pop() ?? f.key;
+            zip.file(`${folder}/${filename}`, blob);
+            successCount++;
+          }
+        } catch { /* skip failed file */ }
+        setDownloadProgress({ done: i + 1, total: backupList.length });
+      }
+      const blob = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `R2-Backup-${new Date().toISOString().slice(0, 10)}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success(`Backup selesai (${successCount} file berhasil diunduh)`);
+      logActivity(supabase, {
+        userId, userRole: "owner", userName,
+        entityType: "r2_storage", entityId: "backup",
+        action: "create",
+        label: `Backup R2 storage diunduh (${successCount}/${backupList.length} file)`,
+        meta: { success_count: successCount, total_count: backupList.length },
+      });
+    } catch {
+      toast.error("Backup gagal", "Terjadi kesalahan saat membuat ZIP.");
+    }
+    setDownloading(false);
+    setDownloadProgress(null);
+  };
+
+  // Pagination for backup list
+  const totalBackupPages = Math.max(1, Math.ceil(backupList.length / BACKUP_PAGE_SIZE));
+  const safeBackupPage   = Math.min(backupPage, Math.max(0, totalBackupPages - 1));
+  const paginatedBackup  = backupList.slice(safeBackupPage * BACKUP_PAGE_SIZE, (safeBackupPage + 1) * BACKUP_PAGE_SIZE);
+
+  // Group backup list by category for summary
+  const backupByCat = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const f of backupList) map[f.category] = (map[f.category] ?? 0) + 1;
+    return map;
+  }, [backupList]);
+
+  return (
+    <div className="space-y-5">
+      {/* ── Stats hero ── */}
+      {statsLoading ? (
+        <div className="grid grid-cols-3 gap-4">
+          {[0,1,2].map(i => (
+            <div key={i} className="bg-white rounded-2xl border border-line shadow-card p-5 space-y-2">
+              <div className="skeleton h-3 w-20 rounded" />
+              <div className="skeleton h-7 w-14 rounded" />
+            </div>
+          ))}
+        </div>
+      ) : statsError ? (
+        <Card>
+          <div className="flex items-center gap-3 text-danger-600">
+            <Icon name="warning" className="w-5 h-5 shrink-0" />
+            <div className="flex-1">
+              <div className="font-semibold text-sm">Gagal memuat data R2</div>
+              <div className="text-xs text-ink-mute mt-0.5">Pastikan env vars R2 sudah dikonfigurasi.</div>
+            </div>
+            <Btn variant="ghost" size="sm" icon="refresh" onClick={loadStats}>Retry</Btn>
+          </div>
+        </Card>
+      ) : stats ? (
+        <div className="grid grid-cols-3 gap-4">
+          <div className="bg-ocean-700 text-white rounded-2xl shadow-card p-5 relative overflow-hidden">
+            <div className="absolute -right-6 -bottom-6 w-24 h-24 rounded-full bg-wave-500/30 blur-2xl" />
+            <div className="relative">
+              <div className="text-wave-200 text-[10px] uppercase tracking-widest font-bold">Total Ukuran</div>
+              <div className="font-display font-bold text-2xl mt-1">{fmtBytes(stats.totalSize)}</div>
+              <div className="text-white/60 text-xs mt-1">R2 Free: 10 GB</div>
+            </div>
+          </div>
+          <div className="bg-white rounded-2xl border border-line shadow-card p-5">
+            <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Total File</div>
+            <div className="font-display font-bold text-2xl text-ink mt-1 tabular-nums">{stats.totalCount.toLocaleString("id-ID")}</div>
+            <div className="text-xs text-ink-mute mt-1">{stats.categories.filter(c => c.count > 0).length} kategori aktif</div>
+          </div>
+          <div className="bg-white rounded-2xl border border-line shadow-card p-5">
+            <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Diperbarui</div>
+            <div className="font-semibold text-ink text-sm mt-1">{fmtRelTime(stats.fetchedAt)}</div>
+            <button
+              type="button"
+              onClick={loadStats}
+              className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-ocean-600 hover:underline"
+            >
+              <Icon name="refresh" className="w-3.5 h-3.5" />
+              Refresh
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {/* ── Distribusi Storage ── */}
+      {stats && stats.totalCount > 0 && (
+        <Card>
+          <SectionTitle sub="Penggunaan storage per kategori file">Distribusi Storage</SectionTitle>
+          {/* Stacked bar */}
+          <div className="h-4 rounded-full overflow-hidden flex mt-4 mb-5">
+            {stats.categories.filter(c => c.size > 0).map((cat, i) => (
+              <div
+                key={cat.prefix}
+                style={{ width: `${(cat.size / stats.totalSize) * 100}%` }}
+                className={`h-full ${CATEGORY_COLORS[i % CATEGORY_COLORS.length]} transition-all`}
+                title={`${cat.label}: ${fmtBytes(cat.size)}`}
+              />
+            ))}
+          </div>
+          {/* Legend + table */}
+          <div className="space-y-0">
+            <div className="grid grid-cols-4 gap-2 text-[10px] uppercase tracking-widest font-bold text-ink-faint pb-2 border-b border-line">
+              <div className="col-span-2">Kategori</div>
+              <div className="text-right">File</div>
+              <div className="text-right">Ukuran</div>
+            </div>
+            {stats.categories.map((cat, i) => {
+              const pct = stats.totalSize > 0 ? (cat.size / stats.totalSize) * 100 : 0;
+              return (
+                <div key={cat.prefix} className="grid grid-cols-4 gap-2 py-2.5 border-b border-line last:border-0 items-center">
+                  <div className="col-span-2 flex items-center gap-2.5">
+                    <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${CATEGORY_COLORS[i % CATEGORY_COLORS.length]}`} />
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-ink truncate">{cat.label}</div>
+                      <div className="h-1 bg-paper-deep rounded-full overflow-hidden mt-0.5 w-24">
+                        <div className={`h-full ${CATEGORY_COLORS[i % CATEGORY_COLORS.length]}`} style={{ width: `${pct}%` }} />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-right text-sm text-ink-soft tabular-nums">{cat.count.toLocaleString("id-ID")}</div>
+                  <div className="text-right">
+                    <div className="text-sm font-semibold text-ink tabular-nums">{fmtBytes(cat.size)}</div>
+                    <div className="text-[10px] text-ink-faint">{pct.toFixed(1)}%</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
+      {/* ── Backup System ── */}
+      <Card>
+        <SectionTitle sub="Unduh file R2 tersusun rapi dalam folder per kategori">Backup Files</SectionTitle>
+
+        {/* Category selector */}
+        <div className="mt-4 space-y-2">
+          <div className="text-xs font-semibold text-ink-mute uppercase tracking-wider">Pilih Kategori</div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => { setSelectedCats(new Set(["all"])); setBackupLoaded(false); setBackupList([]); }}
+              className={`px-3 py-1.5 rounded-lg text-sm font-semibold border transition ${selectedCats.has("all") ? "bg-ocean-700 text-white border-ocean-700" : "bg-white border-line text-ink-soft hover:border-ocean-300"}`}
+            >
+              Semua Kategori
+            </button>
+            {BACKUP_CATEGORIES.map(cat => (
+              <button
+                key={cat.key}
+                type="button"
+                onClick={() => toggleCat(cat.key)}
+                className={`px-3 py-1.5 rounded-lg text-sm font-semibold border transition ${!selectedCats.has("all") && selectedCats.has(cat.key) ? "bg-ocean-700 text-white border-ocean-700" : "bg-white border-line text-ink-soft hover:border-ocean-300"}`}
+              >
+                {cat.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Load preview button */}
+        <div className="mt-4 flex items-center gap-3 flex-wrap">
+          <Btn variant="soft" size="sm" icon="eye" disabled={backupLoading} onClick={loadBackupList}>
+            {backupLoading ? "Memuat…" : "Lihat Daftar File"}
+          </Btn>
+          {backupLoaded && (
+            <span className="text-sm text-ink-mute">
+              {backupList.length} file ditemukan
+              {Object.keys(backupByCat).length > 1 && (
+                <> · {Object.entries(backupByCat).map(([cat, n]) => `${cat} (${n})`).join(", ")}</>
+              )}
+            </span>
+          )}
+        </div>
+
+        {/* File list preview */}
+        {backupLoaded && backupList.length > 0 && (
+          <div className="mt-4 border border-line rounded-xl overflow-hidden">
+            <div className="divide-y divide-line max-h-72 overflow-y-auto no-scrollbar">
+              {paginatedBackup.map((f, i) => (
+                <div key={`${f.key}-${i}`} className="flex items-center gap-3 px-4 py-2.5 hover:bg-paper-tint transition-colors">
+                  <Icon name="archive" className="w-4 h-4 text-ink-faint shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm text-ink truncate font-medium">{f.label}</div>
+                    <div className="text-[11px] text-ink-faint truncate font-mono">{f.key}</div>
+                  </div>
+                  <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-ocean-50 text-ocean-700 shrink-0">{f.category}</span>
+                </div>
+              ))}
+            </div>
+            {totalBackupPages > 1 && (
+              <div className="px-4 py-2.5 border-t border-line flex items-center justify-between bg-paper-tint">
+                <span className="text-xs text-ink-mute">{backupList.length} file · hal. {safeBackupPage + 1}/{totalBackupPages}</span>
+                <div className="flex gap-1">
+                  <button type="button" disabled={safeBackupPage === 0} onClick={() => setBackupPage(p => p - 1)}
+                    className="px-2.5 py-1 rounded-lg border border-line text-xs disabled:opacity-40 hover:bg-white transition">‹</button>
+                  <button type="button" disabled={safeBackupPage === totalBackupPages - 1} onClick={() => setBackupPage(p => p + 1)}
+                    className="px-2.5 py-1 rounded-lg border border-line text-xs disabled:opacity-40 hover:bg-white transition">›</button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {backupLoaded && backupList.length === 0 && (
+          <div className="mt-4 py-8 text-center text-sm text-ink-mute">
+            <Icon name="archive" className="w-8 h-8 text-ink-faint mx-auto mb-2" />
+            Tidak ada file ditemukan untuk kategori yang dipilih
+          </div>
+        )}
+
+        {/* Download button + progress */}
+        <div className="mt-4 space-y-3">
+          {downloadProgress ? (
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="font-semibold text-ink">Mengunduh file…</span>
+                <span className="text-ink-mute tabular-nums">{downloadProgress.done}/{downloadProgress.total}</span>
+              </div>
+              <div className="h-2 bg-paper-deep rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-ocean-500 rounded-full transition-all duration-200"
+                  style={{ width: `${(downloadProgress.done / downloadProgress.total) * 100}%` }}
+                />
+              </div>
+              <div className="text-xs text-ink-mute">ZIP dibuat di browser — jangan tutup tab ini</div>
+            </div>
+          ) : (
+            <Btn
+              variant="primary"
+              icon="download"
+              disabled={!backupLoaded || backupList.length === 0 || downloading}
+              onClick={downloadBackup}
+            >
+              {downloading ? "Memproses…" : `Unduh Backup ZIP${backupLoaded ? ` (${backupList.length} file)` : ""}`}
+            </Btn>
+          )}
+        </div>
+
+        {/* Warning note */}
+        <div className="mt-4 p-3.5 bg-warn-50 border border-warn-200 rounded-xl flex items-start gap-2.5">
+          <Icon name="warning" className="w-4 h-4 text-warn-600 shrink-0 mt-0.5" />
+          <div className="text-xs text-warn-700 leading-relaxed">
+            <span className="font-semibold">Perhatian:</span> Backup diproses di browser.
+            Kategori selfie absensi bisa sangat banyak dan memakan waktu lama.
+            Disarankan backup per-kategori untuk file yang banyak.
+            Pastikan RAM browser mencukupi untuk ZIP besar.
+          </div>
+        </div>
+      </Card>
+
+      {/* ── Info card ── */}
+      <Card className="bg-wave-50 border-wave-100">
+        <div className="flex items-start gap-3">
+          <span className="w-10 h-10 rounded-xl bg-white text-wave-700 flex items-center justify-center shrink-0">
+            <Icon name="info" className="w-5 h-5" />
+          </span>
+          <div>
+            <div className="font-display font-bold text-ink text-sm">Cloudflare R2 Free Tier</div>
+            <div className="mt-1.5 space-y-1">
+              <div className="text-xs text-ink-soft">
+                <span className="font-semibold text-ink">10 GB</span> storage gratis per bulan
+              </div>
+              <div className="text-xs text-ink-soft">
+                <span className="font-semibold text-ink">1 juta</span> operasi Class A (tulis) gratis per bulan
+              </div>
+              <div className="text-xs text-ink-soft">
+                <span className="font-semibold text-ink">10 juta</span> operasi Class B (baca) gratis per bulan
+              </div>
+            </div>
+            <p className="text-xs text-ink-mute mt-2 leading-relaxed">
+              Pantau penggunaan aktual via Cloudflare Dashboard → R2 → nama bucket → Metrics.
+            </p>
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
 // ── Nav items ──────────────────────────────────────────────────────────────────
 
 const NAV_ITEMS: NavItem[] = [
@@ -2601,6 +3023,7 @@ const NAV_ITEMS: NavItem[] = [
   { section: "Konten" },
   { id: "landing",   label: "Landing Page",  icon: "star"      },
   { section: "Sistema" },
+  { id: "storage",   label: "R2 Storage",    icon: "archive"   },
   { id: "activity",  label: "Activity Log",  icon: "clipboard" },
 ];
 
@@ -2613,6 +3036,7 @@ const TITLES: Record<string, [string, string]> = {
   invoices:  ["Invoice Coach",  "Invoice masuk dari semua coach"],
   financial: ["Financial",      "Income, expenses & payroll semua cabang"],
   landing:   ["Landing Page",   "Kelola konten halaman depan"],
+  storage:   ["R2 Storage",     "Monitoring & backup Cloudflare R2 storage"],
   activity:  ["Activity Log",   "Semua aktivitas CRUD lintas cabang"],
 };
 
@@ -2700,6 +3124,7 @@ export default function OwnerPage() {
     invoices:  <Invoices branches={branches} userId={userId} userName={ownerName} />,
     financial: <OwnerFinancial branches={branches} userId={userId} userName={ownerName} />,
     landing:   <LandingCMS />,
+    storage:   <OwnerStorage userId={userId} userName={ownerName} />,
     activity:  <OwnerActivityLog branches={branches} />,
   };
 
