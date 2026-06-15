@@ -18,11 +18,384 @@ import Status from "@/components/ui/Status";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import Modal from "@/components/ui/Modal";
 import Bell from "@/components/layout/Bell";
-import { waLink } from "@/lib/utils";
+import { fmtDate, waLink } from "@/lib/utils";
 import { printSingleRapor, printSchoolRekap, type PrintCriterion } from "@/lib/printRapor";
 import { createClient } from "@/utils/supabase/client";
 
 type Criterion = PrintCriterion;
+
+// ── Absensi ────────────────────────────────────────────────────────────────────
+
+interface SchoolAttRow {
+  id: string;
+  member_id: string;
+  member_name: string;
+  class_id: string;
+  class_name: string;
+  session_date: string;
+  status: "hadir" | "izin" | "sakit" | "tidak_hadir" | "telat";
+  method: "selfie" | "qr" | "manual" | null;
+}
+
+const ATT_STATUS_KIND: Record<string, string> = {
+  hadir: "present", izin: "excused", sakit: "sick", tidak_hadir: "absent", telat: "late",
+};
+const ATT_STATUS_LABEL: Record<string, string> = {
+  hadir: "Hadir", izin: "Izin", sakit: "Sakit", tidak_hadir: "Tidak Hadir", telat: "Telat",
+};
+const METHOD_LABEL: Record<string, string> = { qr: "QR", selfie: "Selfie", manual: "Manual" };
+
+const ATT_PAGE_SIZE = 20;
+
+function SchoolAbsensi({ schoolId, schoolName, members }: {
+  schoolId: string;
+  schoolName: string;
+  members: { id: string; name: string }[];
+}) {
+  const supabase = createClient();
+  const today = new Date().toISOString().split("T")[0];
+  const defaultFrom = today.slice(0, 7) + "-01"; // first day of current month
+
+  const [rows, setRows] = useState<SchoolAttRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [filterDateFrom, setFilterDateFrom] = useState(defaultFrom);
+  const [filterDateTo, setFilterDateTo] = useState(today);
+  const [filterMember, setFilterMember] = useState("all");
+  const [filterStatus, setFilterStatus] = useState("all");
+  const [page, setPage] = useState(0);
+  const [downloading, setDownloading] = useState(false);
+
+  const load = useCallback(async () => {
+    if (members.length === 0) { setRows([]); return; }
+    setLoading(true);
+    const memberIds = members.map(m => m.id);
+    let q = supabase
+      .from("member_attendances")
+      .select("id, member_id, class_id, session_date, status, method, member:members(profile:profiles(full_name)), class:classes(name)")
+      .in("member_id", memberIds)
+      .gte("session_date", filterDateFrom)
+      .lte("session_date", filterDateTo)
+      .order("session_date", { ascending: false })
+      .order("created_at", { ascending: false })
+      .limit(2000);
+    const { data } = await q;
+    const mapped: SchoolAttRow[] = (data ?? []).map((r) => {
+      const raw = r as unknown as {
+        id: string; member_id: string; class_id: string; session_date: string;
+        status: SchoolAttRow["status"]; method: SchoolAttRow["method"];
+        member: { profile: { full_name: string } | null } | null;
+        class: { name: string } | null;
+      };
+      return {
+        id: raw.id,
+        member_id: raw.member_id,
+        member_name: raw.member?.profile?.full_name ?? members.find(m => m.id === raw.member_id)?.name ?? "—",
+        class_id: raw.class_id,
+        class_name: raw.class?.name ?? "—",
+        session_date: raw.session_date,
+        status: raw.status,
+        method: raw.method,
+      };
+    });
+    setRows(mapped);
+    setLoading(false);
+    setPage(0);
+  }, [members, filterDateFrom, filterDateTo]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { load(); }, [load]);
+
+  // Quick preset helpers
+  const applyPreset = (preset: "week" | "month" | "3month") => {
+    const d = new Date();
+    if (preset === "week") {
+      const dow = d.getDay(); // 0=Sun
+      const diff = dow === 0 ? 6 : dow - 1;
+      const mon = new Date(d); mon.setDate(d.getDate() - diff);
+      setFilterDateFrom(mon.toISOString().slice(0, 10));
+      setFilterDateTo(today);
+    } else if (preset === "month") {
+      setFilterDateFrom(today.slice(0, 7) + "-01");
+      setFilterDateTo(today);
+    } else {
+      const from = new Date(d); from.setMonth(d.getMonth() - 2); from.setDate(1);
+      setFilterDateFrom(from.toISOString().slice(0, 10));
+      setFilterDateTo(today);
+    }
+  };
+
+  // Client-side filter by member & status (server already filters by date + members)
+  const filtered = useMemo(() => {
+    let r = rows;
+    if (filterMember !== "all") r = r.filter(a => a.member_id === filterMember);
+    if (filterStatus !== "all") r = r.filter(a => a.status === filterStatus);
+    return r;
+  }, [rows, filterMember, filterStatus]);
+
+  // Stats — computed from date-filtered rows (before member/status filter)
+  const statsHadir     = rows.filter(r => r.status === "hadir").length;
+  const statsTidakHadir = rows.filter(r => r.status === "tidak_hadir").length;
+  const statsIzinSakit  = rows.filter(r => r.status === "izin" || r.status === "sakit").length;
+  const statsDates      = new Set(rows.map(r => r.session_date)).size;
+
+  // Pagination
+  const totalPages = Math.max(1, Math.ceil(filtered.length / ATT_PAGE_SIZE));
+  const safePage   = Math.min(page, Math.max(0, totalPages - 1));
+  const paginated  = filtered.slice(safePage * ATT_PAGE_SIZE, (safePage + 1) * ATT_PAGE_SIZE);
+
+  const downloadExcel = async () => {
+    if (filtered.length === 0) return;
+    setDownloading(true);
+    try {
+      const XLSX = await import("xlsx");
+      const sheetRows = filtered.map(r => ({
+        "Tanggal": r.session_date,
+        "Siswa": r.member_name,
+        "Kelas": r.class_name,
+        "Status": ATT_STATUS_LABEL[r.status] ?? r.status,
+        "Metode": r.method ? (METHOD_LABEL[r.method] ?? r.method) : "—",
+      }));
+      const ws = XLSX.utils.json_to_sheet(sheetRows);
+      ws["!cols"] = [{ wch: 14 }, { wch: 28 }, { wch: 24 }, { wch: 14 }, { wch: 12 }];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Absensi Siswa");
+      const safeName = schoolName.replace(/[^a-zA-Z0-9]/g, "-");
+      XLSX.writeFile(wb, `Absensi-${safeName}-${filterDateFrom}-sd-${filterDateTo}.xlsx`);
+    } catch {
+      // silent
+    }
+    setDownloading(false);
+  };
+
+  return (
+    <div className="space-y-5">
+      {/* Stat cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="bg-white rounded-2xl border border-line shadow-card p-4">
+          <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-1">Total Sesi</div>
+          <div className="font-display font-bold text-2xl text-ink">{statsDates}</div>
+          <div className="text-xs text-ink-mute mt-0.5">{rows.length} record</div>
+        </div>
+        <div className="bg-white rounded-2xl border border-line shadow-card p-4">
+          <div className="text-[10px] uppercase tracking-widest font-bold text-ok-500 mb-1">Hadir</div>
+          <div className="font-display font-bold text-2xl text-ok-600">{statsHadir}</div>
+          <div className="text-xs text-ink-mute mt-0.5">{rows.length > 0 ? Math.round(statsHadir / rows.length * 100) : 0}% kehadiran</div>
+        </div>
+        <div className="bg-white rounded-2xl border border-line shadow-card p-4">
+          <div className="text-[10px] uppercase tracking-widest font-bold text-danger-500 mb-1">Tidak Hadir</div>
+          <div className="font-display font-bold text-2xl text-danger-600">{statsTidakHadir}</div>
+          <div className="text-xs text-ink-mute mt-0.5">tanpa keterangan</div>
+        </div>
+        <div className="bg-white rounded-2xl border border-line shadow-card p-4">
+          <div className="text-[10px] uppercase tracking-widest font-bold text-warn-500 mb-1">Izin / Sakit</div>
+          <div className="font-display font-bold text-2xl text-warn-600">{statsIzinSakit}</div>
+          <div className="text-xs text-ink-mute mt-0.5">dengan keterangan</div>
+        </div>
+      </div>
+
+      {/* Main table card */}
+      <Card padded={false}>
+        {/* Toolbar */}
+        <div className="px-4 sm:px-5 pt-4 pb-3 border-b border-line space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <SectionTitle sub={`${filtered.length} record absensi`}>Data Absensi</SectionTitle>
+            <button
+              type="button"
+              disabled={filtered.length === 0 || downloading}
+              onClick={downloadExcel}
+              className="inline-flex items-center gap-2 text-sm font-semibold px-3.5 py-2 rounded-xl border border-ocean-300 bg-ocean-50 text-ocean-700 hover:bg-ocean-100 disabled:opacity-50 disabled:cursor-not-allowed transition"
+            >
+              <Icon name="download" className="w-4 h-4" />
+              {downloading ? "Mengunduh…" : "Unduh Excel"}
+            </button>
+          </div>
+
+          {/* Filters */}
+          <div className="flex flex-wrap items-end gap-2">
+            {/* Quick presets */}
+            <div className="flex gap-1">
+              {(["week", "month", "3month"] as const).map(p => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => applyPreset(p)}
+                  className="text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-line bg-white text-ink-soft hover:border-ocean-400 hover:text-ocean-700 transition"
+                >
+                  {p === "week" ? "Minggu ini" : p === "month" ? "Bulan ini" : "3 Bulan"}
+                </button>
+              ))}
+            </div>
+
+            {/* Date range */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <input
+                type="date"
+                value={filterDateFrom}
+                onChange={e => setFilterDateFrom(e.target.value)}
+                className="text-xs border border-line rounded-lg px-2.5 py-1.5 bg-white outline-none focus:border-ocean-400 transition"
+              />
+              <span className="text-xs text-ink-faint">–</span>
+              <input
+                type="date"
+                value={filterDateTo}
+                onChange={e => setFilterDateTo(e.target.value)}
+                className="text-xs border border-line rounded-lg px-2.5 py-1.5 bg-white outline-none focus:border-ocean-400 transition"
+              />
+            </div>
+
+            {/* Member filter */}
+            <select
+              value={filterMember}
+              onChange={e => { setFilterMember(e.target.value); setPage(0); }}
+              className="text-xs border border-line rounded-lg px-2.5 py-1.5 bg-white text-ink-soft outline-none hover:border-ocean-400 transition"
+            >
+              <option value="all">Semua Siswa</option>
+              {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+            </select>
+
+            {/* Status filter */}
+            <select
+              value={filterStatus}
+              onChange={e => { setFilterStatus(e.target.value); setPage(0); }}
+              className="text-xs border border-line rounded-lg px-2.5 py-1.5 bg-white text-ink-soft outline-none hover:border-ocean-400 transition"
+            >
+              <option value="all">Semua Status</option>
+              <option value="hadir">Hadir</option>
+              <option value="izin">Izin</option>
+              <option value="sakit">Sakit</option>
+              <option value="tidak_hadir">Tidak Hadir</option>
+              <option value="telat">Telat</option>
+            </select>
+
+            {(filterMember !== "all" || filterStatus !== "all") && (
+              <button
+                type="button"
+                onClick={() => { setFilterMember("all"); setFilterStatus("all"); setPage(0); }}
+                className="text-xs font-semibold text-danger-600 hover:underline px-1"
+              >
+                Reset filter
+              </button>
+            )}
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="p-10 text-center text-sm text-ink-mute">Memuat data absensi…</div>
+        ) : members.length === 0 ? (
+          <div className="p-10 text-center">
+            <Icon name="users" className="w-9 h-9 text-ink-faint mx-auto mb-3" />
+            <div className="text-sm font-semibold text-ink-mute">Belum ada siswa terdaftar</div>
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="p-10 text-center">
+            <Icon name="calendar" className="w-9 h-9 text-ink-faint mx-auto mb-3" />
+            <div className="text-sm font-semibold text-ink-mute">Tidak ada data absensi</div>
+            <div className="text-xs text-ink-faint mt-1">Coba ubah rentang tanggal atau hapus filter</div>
+          </div>
+        ) : (
+          <>
+            {/* Desktop table */}
+            <div className="hidden sm:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-[11px] uppercase tracking-widest text-ink-faint font-bold border-b border-line">
+                    <th className="text-left py-3 px-5 font-bold">Tanggal</th>
+                    <th className="text-left py-3 font-bold">Siswa</th>
+                    <th className="text-left py-3 font-bold">Kelas</th>
+                    <th className="text-left py-3 font-bold">Status</th>
+                    <th className="text-left py-3 pr-5 font-bold">Metode</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line">
+                  {paginated.map(r => (
+                    <tr key={r.id} className="hover:bg-paper-tint transition-colors">
+                      <td className="py-3.5 px-5">
+                        <div className="font-semibold text-ink text-sm">{fmtDate(r.session_date)}</div>
+                      </td>
+                      <td className="py-3.5">
+                        <div className="flex items-center gap-2.5">
+                          <Avatar name={r.member_name} size={32} />
+                          <span className="font-medium text-ink">{r.member_name}</span>
+                        </div>
+                      </td>
+                      <td className="text-ink-soft text-sm">{r.class_name}</td>
+                      <td className="py-3.5">
+                        <Status kind={ATT_STATUS_KIND[r.status] ?? "pending"} dot={false}>
+                          {ATT_STATUS_LABEL[r.status] ?? r.status}
+                        </Status>
+                      </td>
+                      <td className="py-3.5 pr-5 text-ink-mute text-xs">
+                        {r.method ? (METHOD_LABEL[r.method] ?? r.method) : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile card list */}
+            <div className="sm:hidden divide-y divide-line">
+              {paginated.map(r => (
+                <div key={r.id} className="px-4 py-3.5 flex items-center gap-3">
+                  <div className="text-center shrink-0 w-12">
+                    <div className="font-bold text-sm text-ink leading-tight">{r.session_date.slice(8, 10)}</div>
+                    <div className="text-[10px] text-ink-mute uppercase">
+                      {new Date(r.session_date + "T00:00:00").toLocaleDateString("id-ID", { month: "short" })}
+                    </div>
+                  </div>
+                  <Avatar name={r.member_name} size={36} />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-ink text-sm truncate">{r.member_name}</div>
+                    <div className="text-xs text-ink-mute truncate">{r.class_name}</div>
+                  </div>
+                  <div className="shrink-0 flex flex-col items-end gap-1">
+                    <Status kind={ATT_STATUS_KIND[r.status] ?? "pending"} dot={false}>
+                      {ATT_STATUS_LABEL[r.status] ?? r.status}
+                    </Status>
+                    {r.method && <span className="text-[10px] text-ink-faint">{METHOD_LABEL[r.method] ?? r.method}</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="px-4 sm:px-5 py-3.5 border-t border-line flex items-center justify-between flex-wrap gap-3">
+                <span className="text-xs text-ink-mute tabular-nums">
+                  {filtered.length} record · halaman {safePage + 1} dari {totalPages}
+                </span>
+                <div className="flex items-center gap-1">
+                  <button type="button" disabled={safePage === 0} onClick={() => setPage(0)}
+                    className="px-2 py-1.5 rounded-lg border border-line text-ink-mute text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-paper-tint transition">«</button>
+                  <button type="button" disabled={safePage === 0} onClick={() => setPage(p => p - 1)}
+                    className="px-3 py-1.5 rounded-lg border border-line text-ink-mute text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-paper-tint transition hidden sm:inline-flex">‹ Sebelumnya</button>
+                  {Array.from({ length: totalPages }, (_, i) => i)
+                    .filter(i => i === 0 || i === totalPages - 1 || Math.abs(i - safePage) <= 1)
+                    .reduce<(number | "…")[]>((acc, i, idx, arr) => {
+                      if (idx > 0 && (i as number) - (arr[idx - 1] as number) > 1) acc.push("…");
+                      acc.push(i);
+                      return acc;
+                    }, [])
+                    .map((item, idx) => item === "…"
+                      ? <span key={`e${idx}`} className="px-2 text-ink-faint text-sm">…</span>
+                      : <button key={item} type="button" onClick={() => setPage(item as number)}
+                          className={`w-8 h-8 rounded-lg text-sm font-semibold transition ${safePage === item ? "bg-ocean-600 text-white" : "border border-line text-ink-mute hover:bg-paper-tint"}`}>{(item as number) + 1}</button>
+                    )
+                  }
+                  <button type="button" disabled={safePage === totalPages - 1} onClick={() => setPage(p => p + 1)}
+                    className="px-3 py-1.5 rounded-lg border border-line text-ink-mute text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-paper-tint transition hidden sm:inline-flex">Berikutnya ›</button>
+                  <button type="button" disabled={safePage === totalPages - 1} onClick={() => setPage(totalPages - 1)}
+                    className="px-2 py-1.5 rounded-lg border border-line text-ink-mute text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-paper-tint transition">»</button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+// ── Student Rapor ──────────────────────────────────────────────────────────────
 
 interface Student {
   id: string;
@@ -37,15 +410,19 @@ interface Student {
   criteria: Criterion[];
 }
 
+type SchoolTab = "rapor" | "absensi";
+
 export default function SchoolPage() {
   const supabase = createClient();
   const [schoolName, setSchoolName] = useState("School Panel");
+  const [schoolId, setSchoolId] = useState("");
   const [userId, setUserId] = useState("");
   const [adminWaPhone, setAdminWaPhone] = useState("");
   const [students, setStudents] = useState<Student[]>([]);
   const [activePeriod, setActivePeriod] = useState<{ id: string; label: string; date_from: string; date_to: string } | null>(null);
   const [open, setOpen] = useState<Student | null>(null);
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<SchoolTab>("rapor");
 
   // Filter & sort state
   const [search, setSearch] = useState("");
@@ -135,6 +512,7 @@ export default function SchoolPage() {
 
       if (!school) { setLoading(false); return; }
       setSchoolName(school.name);
+      setSchoolId(school.id);
 
       const { data: branch } = await supabase.from("branches").select("wa_numbers").eq("id", school.branch_id).single();
       const waNumbers = (branch as unknown as { wa_numbers: string[] } | null)?.wa_numbers;
@@ -312,8 +690,35 @@ export default function SchoolPage() {
           </div>
         </div>
 
-        {/* Students table card */}
-        <Card padded={false}>
+        {/* Tab switcher */}
+        <div className="flex gap-1 p-1 bg-paper-tint rounded-xl border border-line w-fit">
+          <button
+            type="button"
+            onClick={() => setTab("rapor")}
+            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${tab === "rapor" ? "bg-white shadow-card text-ocean-700 font-semibold" : "text-ink-mute hover:text-ink"}`}
+          >
+            Rapor
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab("absensi")}
+            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${tab === "absensi" ? "bg-white shadow-card text-ocean-700 font-semibold" : "text-ink-mute hover:text-ink"}`}
+          >
+            Absensi
+          </button>
+        </div>
+
+        {/* Absensi tab */}
+        {tab === "absensi" && schoolId && (
+          <SchoolAbsensi
+            schoolId={schoolId}
+            schoolName={schoolName}
+            members={students.map(s => ({ id: s.id, name: s.full_name }))}
+          />
+        )}
+
+        {/* Rapor tab */}
+        {tab === "rapor" && (<Card padded={false}>
           {/* Toolbar */}
           <div className="px-4 sm:px-5 pt-4 pb-3 border-b border-line space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -636,7 +1041,7 @@ export default function SchoolPage() {
               )}
             </>
           )}
-        </Card>
+        </Card>)}
 
         {/* Info card */}
         <Card className="bg-wave-50 border-wave-100">
