@@ -1451,6 +1451,798 @@ function Invoices({ branches }: { branches: Branch[] }) {
   );
 }
 
+// ── OwnerFinancial ─────────────────────────────────────────────────────────────
+
+interface OwnerFinancialBill {
+  id: string; branch_id: string; member_id: string; period_label: string;
+  amount: number; discount: number; total: number; status: string; type: string;
+  paid_at: string | null; paid_method: string | null; created_at: string;
+  member?: { profile: { full_name: string } | null } | null;
+  class?: { name: string } | null;
+  branch?: { name: string } | null;
+}
+
+interface OwnerFinancialExpense {
+  id: string; coach_id: string; branch_id: string; period_label: string;
+  total_amount: number; status: string; paid_at: string | null; created_at: string;
+  invoice_number: string | null;
+  coach?: { full_name: string } | null;
+  branch?: { name: string } | null;
+}
+
+interface OwnerPayslipRow {
+  id: string; coach_id: string; branch_id: string; invoice_id: string | null;
+  period_label: string; gross_amount: number; deductions: number; net_amount: number;
+  notes: string | null; status: string; published_at: string | null;
+  published_by: string | null; created_at: string;
+  coach?: { full_name: string } | null;
+  branch?: { name: string } | null;
+}
+
+type FinancialTab = "overview" | "income" | "expenses" | "moneyflow" | "payroll";
+
+function OwnerFinancial({ branches, userId }: { branches: Branch[]; userId: string }) {
+  const supabase = createClient();
+  const toast = useToast();
+  const confirm = useConfirm();
+  const [tab, setTab] = useState<FinancialTab>("overview");
+
+  // ── Data ────────────────────────────────────────────────────────────────────
+  const [bills, setBills] = useState<OwnerFinancialBill[]>([]);
+  const [expenses, setExpenses] = useState<OwnerFinancialExpense[]>([]);
+  const [payslips, setPayslips] = useState<OwnerPayslipRow[]>([]);
+  const [loadingBills, setLoadingBills] = useState(true);
+  const [loadingExpenses, setLoadingExpenses] = useState(true);
+  const [loadingPayslips, setLoadingPayslips] = useState(true);
+
+  // ── Payroll state ───────────────────────────────────────────────────────────
+  const [showGenModal, setShowGenModal] = useState(false);
+  const [genForm, setGenForm] = useState({ invoice_id: "", period_label: "", gross_amount: 0, deductions: 0, notes: "" });
+  const [savingSlip, setSavingSlip] = useState(false);
+  const [publishingId, setPublishingId] = useState<string | null>(null);
+  const [viewSlip, setViewSlip] = useState<OwnerPayslipRow | null>(null);
+  const [payslipBranchFilter, setPayslipBranchFilter] = useState("all");
+  const [payslipStatusFilter, setPayslipStatusFilter] = useState("all");
+
+  // ── Income filters ──────────────────────────────────────────────────────────
+  const [incomeSearch, setIncomeSearch] = useState("");
+  const [incomeStatus, setIncomeStatus] = useState("");
+  const [incomeBranch, setIncomeBranch] = useState("all");
+  const [incomeType, setIncomeType] = useState("");
+  const [incomeMethod, setIncomeMethod] = useState("");
+  const [incomeDateFrom, setIncomeDateFrom] = useState("");
+  const [incomeDateTo, setIncomeDateTo] = useState("");
+  const [incomePage, setIncomePage] = useState(0);
+  const [incomeSortBy, setIncomeSortBy] = useState<"paid_at" | "total">("paid_at");
+  const [incomeSortDir, setIncomeSortDir] = useState<"asc" | "desc">("desc");
+
+  // ── Expenses filters ────────────────────────────────────────────────────────
+  const [expenseSearch, setExpenseSearch] = useState("");
+  const [expenseStatus, setExpenseStatus] = useState("");
+  const [expenseBranch, setExpenseBranch] = useState("all");
+  const [expensePage, setExpensePage] = useState(0);
+
+  const PAGE_SIZE = 25;
+
+  /* eslint-disable react-hooks/set-state-in-effect -- async data loaders */
+  useEffect(() => {
+    setLoadingBills(true);
+    supabase.from("bills")
+      .select("id, branch_id, member_id, period_label, amount, discount, total, status, type, paid_at, paid_method, created_at, member:members(profile:profiles(full_name)), class:classes(name), branch:branches(name)")
+      .order("created_at", { ascending: false })
+      .limit(2000)
+      .then(({ data }) => { if (data) setBills(data as unknown as OwnerFinancialBill[]); setLoadingBills(false); });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    setLoadingExpenses(true);
+    supabase.from("coach_invoices")
+      .select("id, coach_id, branch_id, period_label, total_amount, status, paid_at, created_at, invoice_number, coach:profiles!coach_invoices_coach_id_fkey(full_name), branch:branches(name)")
+      .order("submitted_at", { ascending: false })
+      .limit(2000)
+      .then(({ data }) => { if (data) setExpenses(data as unknown as OwnerFinancialExpense[]); setLoadingExpenses(false); });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const loadPayslips = useCallback(async () => {
+    setLoadingPayslips(true);
+    const { data } = await supabase.from("payslips")
+      .select("id, coach_id, branch_id, invoice_id, period_label, gross_amount, deductions, net_amount, notes, status, published_at, published_by, created_at, coach:profiles!payslips_coach_id_fkey(full_name), branch:branches(name)")
+      .order("created_at", { ascending: false });
+    if (data) setPayslips(data as unknown as OwnerPayslipRow[]);
+    setLoadingPayslips(false);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { loadPayslips(); }, [loadPayslips]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  // ── Computed: income summary ────────────────────────────────────────────────
+  const paidBills = useMemo(() => bills.filter(b => b.status === "paid"), [bills]);
+  const totalIncome = useMemo(() => paidBills.reduce((s, b) => s + b.total, 0), [paidBills]);
+  const totalExpenses = useMemo(() => expenses.filter(e => e.status === "paid").reduce((s, e) => s + e.total_amount, 0), [expenses]);
+  const netAmount = totalIncome - totalExpenses;
+  const publishedSlipsCount = useMemo(() => payslips.filter(p => p.status === "published").length, [payslips]);
+
+  // ── Last 6 months bar chart data ────────────────────────────────────────────
+  const barChartData = useMemo(() => {
+    const months: { label: string; key: string; income: number; expense: number }[] = [];
+    const now = new Date();
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      const label = d.toLocaleDateString("id-ID", { month: "short", year: "2-digit" });
+      const income = paidBills.filter(b => (b.paid_at ?? b.created_at).startsWith(key)).reduce((s, b) => s + b.total, 0);
+      const expense = expenses.filter(e => e.status === "paid" && (e.paid_at ?? e.created_at).startsWith(key)).reduce((s, e) => s + e.total_amount, 0);
+      months.push({ label, key, income, expense });
+    }
+    return months;
+  }, [paidBills, expenses]);
+
+  const barMax = useMemo(() => Math.max(1, ...barChartData.map(m => Math.max(m.income, m.expense))), [barChartData]);
+
+  // ── Branch income breakdown ─────────────────────────────────────────────────
+  const branchIncomeMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    paidBills.forEach(b => { map[b.branch_id] = (map[b.branch_id] ?? 0) + b.total; });
+    return map;
+  }, [paidBills]);
+  const maxBranchIncome = useMemo(() => Math.max(1, ...Object.values(branchIncomeMap)), [branchIncomeMap]);
+
+  // ── Income table filtered ───────────────────────────────────────────────────
+  const filteredIncome = useMemo(() => {
+    let r = bills;
+    if (incomeStatus) r = r.filter(b => b.status === incomeStatus);
+    if (incomeBranch !== "all") r = r.filter(b => b.branch_id === incomeBranch);
+    if (incomeType) r = r.filter(b => b.type === incomeType);
+    if (incomeMethod) r = r.filter(b => b.paid_method === incomeMethod);
+    if (incomeDateFrom) r = r.filter(b => (b.paid_at ?? b.created_at) >= incomeDateFrom);
+    if (incomeDateTo) r = r.filter(b => (b.paid_at ?? b.created_at) <= incomeDateTo + "T23:59:59");
+    if (incomeSearch) {
+      const q = incomeSearch.toLowerCase();
+      r = r.filter(b =>
+        b.member?.profile?.full_name?.toLowerCase().includes(q) ||
+        b.period_label.toLowerCase().includes(q) ||
+        b.class?.name?.toLowerCase().includes(q) ||
+        b.branch?.name?.toLowerCase().includes(q)
+      );
+    }
+    r = [...r].sort((a, b) => {
+      const va = incomeSortBy === "total" ? (a.total ?? 0) : (a[incomeSortBy] ?? "");
+      const vb = incomeSortBy === "total" ? (b.total ?? 0) : (b[incomeSortBy] ?? "");
+      return incomeSortDir === "asc" ? (va > vb ? 1 : -1) : (va < vb ? 1 : -1);
+    });
+    return r;
+  }, [bills, incomeStatus, incomeBranch, incomeType, incomeMethod, incomeDateFrom, incomeDateTo, incomeSearch, incomeSortBy, incomeSortDir]);
+
+  useEffect(() => { setIncomePage(0); }, [incomeStatus, incomeBranch, incomeType, incomeMethod, incomeDateFrom, incomeDateTo, incomeSearch]);
+
+  const incomeTotalPages = Math.max(1, Math.ceil(filteredIncome.length / PAGE_SIZE));
+  const incomeSafePage = Math.min(incomePage, Math.max(0, incomeTotalPages - 1));
+  const incomePagedRows = filteredIncome.slice(incomeSafePage * PAGE_SIZE, (incomeSafePage + 1) * PAGE_SIZE);
+
+  // ── Expenses table filtered ─────────────────────────────────────────────────
+  const filteredExpenses = useMemo(() => {
+    let r = expenses;
+    if (expenseStatus) r = r.filter(e => e.status === expenseStatus);
+    if (expenseBranch !== "all") r = r.filter(e => e.branch_id === expenseBranch);
+    if (expenseSearch) {
+      const q = expenseSearch.toLowerCase();
+      r = r.filter(e =>
+        e.coach?.full_name?.toLowerCase().includes(q) ||
+        e.period_label.toLowerCase().includes(q) ||
+        e.branch?.name?.toLowerCase().includes(q) ||
+        (e.invoice_number ?? "").toLowerCase().includes(q)
+      );
+    }
+    return r;
+  }, [expenses, expenseStatus, expenseBranch, expenseSearch]);
+
+  useEffect(() => { setExpensePage(0); }, [expenseStatus, expenseBranch, expenseSearch]);
+
+  const expenseTotalPages = Math.max(1, Math.ceil(filteredExpenses.length / PAGE_SIZE));
+  const expenseSafePage = Math.min(expensePage, Math.max(0, expenseTotalPages - 1));
+  const expensePagedRows = filteredExpenses.slice(expenseSafePage * PAGE_SIZE, (expenseSafePage + 1) * PAGE_SIZE);
+
+  // ── Money Flow monthly data ─────────────────────────────────────────────────
+  const moneyFlowData = useMemo(() => {
+    const months: { label: string; key: string; income: number; expense: number; net: number }[] = [];
+    const now = new Date();
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      const label = d.toLocaleDateString("id-ID", { month: "long", year: "numeric" });
+      const income = paidBills.filter(b => (b.paid_at ?? b.created_at).startsWith(key)).reduce((s, b) => s + b.total, 0);
+      const expense = expenses.filter(e => e.status === "paid" && (e.paid_at ?? e.created_at).startsWith(key)).reduce((s, e) => s + e.total_amount, 0);
+      months.push({ label, key, income, expense, net: income - expense });
+    }
+    return months.filter(m => m.income > 0 || m.expense > 0);
+  }, [paidBills, expenses]);
+
+  // ── Payslip filter ──────────────────────────────────────────────────────────
+  const filteredPayslips = useMemo(() => {
+    let r = payslips;
+    if (payslipBranchFilter !== "all") r = r.filter(p => p.branch_id === payslipBranchFilter);
+    if (payslipStatusFilter !== "all") r = r.filter(p => p.status === payslipStatusFilter);
+    return r;
+  }, [payslips, payslipBranchFilter, payslipStatusFilter]);
+
+  // ── Payroll: available invoices (paid, no payslip yet) ──────────────────────
+  const invoicesWithoutSlip = useMemo(() => {
+    const usedInvoiceIds = new Set(payslips.map(p => p.invoice_id).filter(Boolean));
+    return expenses.filter(e => e.status === "paid" && !usedInvoiceIds.has(e.id));
+  }, [expenses, payslips]);
+
+  // ── Actions ─────────────────────────────────────────────────────────────────
+  const handleGenInvoiceChange = (invoiceId: string) => {
+    const inv = expenses.find(e => e.id === invoiceId);
+    if (inv) {
+      setGenForm(f => ({ ...f, invoice_id: invoiceId, period_label: inv.period_label, gross_amount: inv.total_amount, deductions: 0, notes: "" }));
+    } else {
+      setGenForm(f => ({ ...f, invoice_id: invoiceId }));
+    }
+  };
+
+  const savePayslip = async () => {
+    if (!genForm.invoice_id) return toast.error("Pilih invoice terlebih dahulu");
+    if (!genForm.period_label.trim()) return toast.error("Period label kosong");
+    const inv = expenses.find(e => e.id === genForm.invoice_id);
+    if (!inv) return toast.error("Invoice tidak ditemukan");
+    setSavingSlip(true);
+    const { error } = await supabase.from("payslips").insert({
+      coach_id: inv.coach_id,
+      branch_id: inv.branch_id,
+      invoice_id: genForm.invoice_id,
+      period_label: genForm.period_label.trim(),
+      gross_amount: genForm.gross_amount,
+      deductions: genForm.deductions,
+      net_amount: genForm.gross_amount - genForm.deductions,
+      notes: genForm.notes.trim() || null,
+      status: "draft",
+    });
+    setSavingSlip(false);
+    if (error) return toast.error("Gagal simpan", error.message);
+    toast.success("Slip gaji berhasil dibuat (draft)");
+    setShowGenModal(false);
+    setGenForm({ invoice_id: "", period_label: "", gross_amount: 0, deductions: 0, notes: "" });
+    loadPayslips();
+  };
+
+  const publishPayslip = async (p: OwnerPayslipRow) => {
+    const ok = await confirm({ title: "Terbitkan Slip Gaji?", body: `Slip gaji ${p.coach?.full_name ?? "coach"} periode ${p.period_label} akan diterbitkan dan dapat dilihat coach.`, confirmLabel: "Terbitkan" });
+    if (!ok) return;
+    setPublishingId(p.id);
+    const { error } = await supabase.from("payslips").update({ status: "published", published_at: new Date().toISOString(), published_by: userId }).eq("id", p.id);
+    setPublishingId(null);
+    if (error) return toast.error("Gagal terbitkan", error.message);
+    toast.success("Slip gaji diterbitkan");
+    setPayslips(prev => prev.map(s => s.id === p.id ? { ...s, status: "published", published_at: new Date().toISOString() } : s));
+  };
+
+  const deletePayslip = async (p: OwnerPayslipRow) => {
+    const ok = await confirm({ title: "Hapus Slip Gaji?", body: "Slip gaji draft ini akan dihapus.", confirmLabel: "Hapus", danger: true });
+    if (!ok) return;
+    const { error } = await supabase.from("payslips").delete().eq("id", p.id);
+    if (error) return toast.error("Gagal hapus", error.message);
+    toast.success("Slip gaji dihapus");
+    setPayslips(prev => prev.filter(s => s.id !== p.id));
+  };
+
+  const printPayslip = (p: OwnerPayslipRow) => {
+    const w = window.open("", "_blank", "width=700,height=700");
+    if (!w) return;
+    w.document.write(`<!DOCTYPE html><html><head><title>Slip Gaji ${p.period_label}</title>
+    <style>body{font-family:sans-serif;padding:32px;color:#0f172a;max-width:600px;margin:auto}
+    h1{font-size:20px;font-weight:700;margin-bottom:2px}.sub{font-size:13px;color:#64748b;margin-bottom:24px}
+    .section{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94a3b8;margin:20px 0 6px}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;background:#f8fafc;border-radius:8px;padding:12px 16px;font-size:13px;line-height:2}
+    .row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #e2e8f0;font-size:13px}
+    .total{display:flex;justify-content:space-between;padding:12px 0;font-weight:700;font-size:16px;border-top:2px solid #0f172a;margin-top:4px}
+    .net{color:#166534;font-size:18px}
+    footer{margin-top:40px;border-top:1px solid #e2e8f0;padding-top:12px;font-size:11px;color:#94a3b8;text-align:center}
+    </style></head><body>
+    <h1>Slip Gaji Coach</h1>
+    <div class="sub">${p.period_label} &nbsp;·&nbsp; ${p.branch?.name ?? "—"}</div>
+    <div class="section">Informasi</div>
+    <div class="grid">
+      <div><b>Coach</b></div><div>${p.coach?.full_name ?? "—"}</div>
+      <div><b>Periode</b></div><div>${p.period_label}</div>
+      <div><b>Cabang</b></div><div>${p.branch?.name ?? "—"}</div>
+      <div><b>Diterbitkan</b></div><div>${p.published_at ? new Date(p.published_at).toLocaleDateString("id-ID", { dateStyle: "long" }) : "—"}</div>
+    </div>
+    <div class="section">Rincian</div>
+    <div class="row"><span>Gaji Kotor</span><span>Rp ${p.gross_amount.toLocaleString("id-ID")}</span></div>
+    <div class="row"><span>Potongan</span><span>- Rp ${p.deductions.toLocaleString("id-ID")}</span></div>
+    <div class="total"><span>Gaji Bersih</span><span class="net">Rp ${p.net_amount.toLocaleString("id-ID")}</span></div>
+    ${p.notes ? `<div class="section">Catatan</div><p style="font-size:13px;color:#334155">${p.notes}</p>` : ""}
+    <footer>Next Swimming School &nbsp;·&nbsp; Dicetak ${new Date().toLocaleDateString("id-ID", { dateStyle: "long" })}</footer>
+    </body></html>`);
+    w.document.close(); w.focus(); w.print();
+  };
+
+  // ── Sub-tab nav ──────────────────────────────────────────────────────────────
+  const FTABS: { id: FinancialTab; label: string; icon: string }[] = [
+    { id: "overview",  label: "Overview",    icon: "grid"    },
+    { id: "income",    label: "Income",      icon: "wallet"  },
+    { id: "expenses",  label: "Expenses",    icon: "invoice" },
+    { id: "moneyflow", label: "Money Flow",  icon: "chart"   },
+    { id: "payroll",   label: "Payroll",     icon: "users"   },
+  ];
+
+  return (
+    <div className="space-y-5">
+      {/* Header */}
+      <div>
+        <h2 className="font-display font-bold text-2xl">Financial</h2>
+        <p className="text-ink-mute text-sm mt-0.5">Income, expenses & payroll semua cabang.</p>
+      </div>
+
+      {/* Sub-tabs */}
+      <div className="flex gap-1 flex-wrap bg-paper-tint border border-line rounded-xl p-1">
+        {FTABS.map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-semibold transition-colors ${tab === t.id ? "bg-white text-ocean-700 shadow-card" : "text-ink-soft hover:bg-white/60"}`}>
+            <Icon name={t.icon} className="w-4 h-4" /> {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── OVERVIEW ────────────────────────────────────────────────────────── */}
+      {tab === "overview" && (
+        <div className="space-y-5">
+          {/* Stat cards */}
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Stat label="Total Income" value={fmtIDR(totalIncome)} icon="wallet" tone="ok" sub={`${paidBills.length} transaksi lunas`} />
+            <Stat label="Total Expenses" value={fmtIDR(totalExpenses)} icon="invoice" tone="danger" sub={`${expenses.filter(e=>e.status==="paid").length} invoice coach`} />
+            <Stat label="Net" value={fmtIDR(netAmount)} icon="chart" tone={netAmount >= 0 ? "ocean" : "warn"} />
+            <Stat label="Slip Gaji Terbit" value={publishedSlipsCount} icon="users" tone="ocean" sub={`${payslips.length} total slip`} />
+          </div>
+
+          {/* Bar chart: Income vs Expenses per month */}
+          <div className="bg-white border border-line rounded-2xl p-5">
+            <div className="font-display font-bold text-base mb-4">Income vs Expenses — 6 Bulan Terakhir</div>
+            {loadingBills || loadingExpenses ? (
+              <div className="h-32 flex items-center justify-center text-ink-mute text-sm">Memuat…</div>
+            ) : (
+              <div className="space-y-3">
+                {barChartData.map(m => (
+                  <div key={m.key} className="space-y-1">
+                    <div className="text-xs font-semibold text-ink-mute">{m.label}</div>
+                    <div className="flex items-center gap-2">
+                      <div className="text-xs text-ok-700 w-16 shrink-0 text-right">{fmtIDR(m.income)}</div>
+                      <div className="flex-1 h-4 bg-paper-tint rounded-full overflow-hidden">
+                        <div className="h-full bg-ok-400 rounded-full transition-all" style={{ width: `${(m.income / barMax) * 100}%` }} />
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="text-xs text-danger-700 w-16 shrink-0 text-right">{fmtIDR(m.expense)}</div>
+                      <div className="flex-1 h-4 bg-paper-tint rounded-full overflow-hidden">
+                        <div className="h-full bg-danger-400 rounded-full transition-all" style={{ width: `${(m.expense / barMax) * 100}%` }} />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                <div className="flex gap-4 pt-2 text-xs text-ink-mute">
+                  <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-ok-400 inline-block" /> Income</span>
+                  <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-danger-400 inline-block" /> Expenses</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Top cabang by income */}
+          {branches.length > 0 && (
+            <div className="bg-white border border-line rounded-2xl p-5">
+              <div className="font-display font-bold text-base mb-4">Income per Cabang</div>
+              <div className="space-y-3">
+                {branches.map(b => {
+                  const inc = branchIncomeMap[b.id] ?? 0;
+                  return (
+                    <div key={b.id} className="flex items-center gap-3">
+                      <div className="w-28 shrink-0 text-sm font-semibold truncate text-ink">{b.name}</div>
+                      <div className="flex-1 h-3 bg-paper-tint rounded-full overflow-hidden">
+                        <div className="h-full bg-ocean-400 rounded-full" style={{ width: `${(inc / maxBranchIncome) * 100}%` }} />
+                      </div>
+                      <div className="text-xs font-mono text-ink-mute w-24 text-right shrink-0">{fmtIDR(inc)}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── INCOME ──────────────────────────────────────────────────────────── */}
+      {tab === "income" && (
+        <div className="space-y-4">
+          {/* Filters */}
+          <div className="bg-white border border-line rounded-2xl p-4 space-y-3">
+            <div className="flex gap-2 flex-wrap">
+              <div className="flex-1 min-w-48 relative">
+                <Icon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-faint pointer-events-none" />
+                <input value={incomeSearch} onChange={e => setIncomeSearch(e.target.value)} placeholder="Cari member, kelas, periode…" className="w-full pl-9 pr-3 py-2 text-sm rounded-xl border border-line bg-paper-tint focus:outline-none focus:ring-1 focus:ring-ocean-400" />
+              </div>
+              <select value={incomeBranch} onChange={e => setIncomeBranch(e.target.value)} className="text-sm rounded-xl border border-line bg-paper-tint px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
+                <option value="all">Semua cabang</option>
+                {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+              <select value={incomeStatus} onChange={e => setIncomeStatus(e.target.value)} className="text-sm rounded-xl border border-line bg-paper-tint px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
+                <option value="">Semua status</option>
+                <option value="unpaid">Belum Bayar</option>
+                <option value="paid">Lunas</option>
+                <option value="partial">Sebagian</option>
+                <option value="school_covered">Sekolah</option>
+                <option value="free">Gratis</option>
+              </select>
+              <select value={incomeType} onChange={e => setIncomeType(e.target.value)} className="text-sm rounded-xl border border-line bg-paper-tint px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
+                <option value="">Semua tipe</option>
+                <option value="monthly">Bulanan</option>
+                <option value="session_pack">Paket Sesi</option>
+                <option value="custom">Custom</option>
+              </select>
+              <select value={incomeMethod} onChange={e => setIncomeMethod(e.target.value)} className="text-sm rounded-xl border border-line bg-paper-tint px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
+                <option value="">Semua metode</option>
+                <option value="transfer">Transfer</option>
+                <option value="cash">Cash</option>
+                <option value="qris">QRIS</option>
+              </select>
+            </div>
+            <div className="flex gap-2 flex-wrap items-center">
+              <input type="date" value={incomeDateFrom} onChange={e => setIncomeDateFrom(e.target.value)} className="text-sm rounded-xl border border-line bg-paper-tint px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400" />
+              <span className="text-ink-faint text-sm">—</span>
+              <input type="date" value={incomeDateTo} onChange={e => setIncomeDateTo(e.target.value)} className="text-sm rounded-xl border border-line bg-paper-tint px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400" />
+              {(incomeSearch || incomeStatus || incomeBranch !== "all" || incomeType || incomeMethod || incomeDateFrom || incomeDateTo) && (
+                <button onClick={() => { setIncomeSearch(""); setIncomeStatus(""); setIncomeBranch("all"); setIncomeType(""); setIncomeMethod(""); setIncomeDateFrom(""); setIncomeDateTo(""); }} className="text-xs text-ocean-600 hover:underline">Reset filter</button>
+              )}
+              <span className="text-xs text-ink-mute ml-auto">{filteredIncome.length} baris</span>
+            </div>
+          </div>
+
+          {/* Table */}
+          <div className="bg-white border border-line rounded-2xl overflow-hidden">
+            {loadingBills ? (
+              <div className="p-10 text-center text-ink-mute">Memuat data…</div>
+            ) : incomePagedRows.length === 0 ? (
+              <div className="p-10 text-center text-ink-mute">Tidak ada data.</div>
+            ) : (
+              <>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-line bg-paper-tint">
+                        <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs">Cabang</th>
+                        <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs">Member</th>
+                        <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs">Kelas</th>
+                        <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs">Periode</th>
+                        <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs">Tipe</th>
+                        <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs">Metode</th>
+                        <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs cursor-pointer select-none hover:text-ocean-600" onClick={() => { setIncomeSortBy("paid_at"); setIncomeSortDir(d => d === "asc" ? "desc" : "asc"); }}>
+                          Tanggal {incomeSortBy === "paid_at" ? (incomeSortDir === "asc" ? "↑" : "↓") : ""}
+                        </th>
+                        <th className="text-right px-4 py-2.5 font-semibold text-ink-mute text-xs cursor-pointer select-none hover:text-ocean-600" onClick={() => { setIncomeSortBy("total"); setIncomeSortDir(d => d === "asc" ? "desc" : "asc"); }}>
+                          Total {incomeSortBy === "total" ? (incomeSortDir === "asc" ? "↑" : "↓") : ""}
+                        </th>
+                        <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-line">
+                      {incomePagedRows.map(b => (
+                        <tr key={b.id} className="hover:bg-paper-tint">
+                          <td className="px-4 py-2.5 text-xs text-ink-mute">{b.branch?.name ?? "—"}</td>
+                          <td className="px-4 py-2.5 font-medium">{b.member?.profile?.full_name ?? "—"}</td>
+                          <td className="px-4 py-2.5 text-xs text-ink-mute">{b.class?.name ?? "—"}</td>
+                          <td className="px-4 py-2.5 text-xs">{b.period_label}</td>
+                          <td className="px-4 py-2.5 text-xs">
+                            <span className="px-2 py-0.5 rounded-full bg-ocean-50 text-ocean-700 font-semibold">{b.type === "monthly" ? "Bulanan" : b.type === "session_pack" ? "Paket" : b.type === "custom" ? "Custom" : b.type}</span>
+                          </td>
+                          <td className="px-4 py-2.5 text-xs text-ink-mute capitalize">{b.paid_method ?? "—"}</td>
+                          <td className="px-4 py-2.5 text-xs text-ink-mute">{b.paid_at ? new Date(b.paid_at).toLocaleDateString("id-ID", { dateStyle: "short" }) : "—"}</td>
+                          <td className="px-4 py-2.5 text-right font-mono font-bold text-sm">{fmtIDR(b.total)}</td>
+                          <td className="px-4 py-2.5">
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${b.status === "paid" ? "bg-ok-50 text-ok-700" : b.status === "unpaid" ? "bg-warn-50 text-warn-700" : b.status === "partial" ? "bg-ocean-50 text-ocean-700" : "bg-paper-deep text-ink-mute"}`}>
+                              {b.status === "paid" ? "Lunas" : b.status === "unpaid" ? "Belum" : b.status === "partial" ? "Sebagian" : b.status === "school_covered" ? "Sekolah" : "Gratis"}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {/* Pagination */}
+                <div className="flex items-center justify-between px-4 py-3 border-t border-line text-sm">
+                  <div className="text-ink-mute text-xs">{filteredIncome.length} baris · hal. {incomeSafePage + 1}/{incomeTotalPages}</div>
+                  <div className="flex gap-1">
+                    {[{ label: "«", act: () => setIncomePage(0) }, { label: "‹", act: () => setIncomePage(p => Math.max(0, p - 1)) }, { label: "›", act: () => setIncomePage(p => Math.min(incomeTotalPages - 1, p + 1)) }, { label: "»", act: () => setIncomePage(incomeTotalPages - 1) }].map((btn, i) => (
+                      <button key={i} onClick={btn.act} disabled={(i < 2 && incomeSafePage === 0) || (i >= 2 && incomeSafePage >= incomeTotalPages - 1)} className="w-8 h-8 rounded-lg border border-line text-sm hover:bg-paper-tint disabled:opacity-30 disabled:cursor-not-allowed">{btn.label}</button>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── EXPENSES ────────────────────────────────────────────────────────── */}
+      {tab === "expenses" && (
+        <div className="space-y-4">
+          <div className="bg-white border border-line rounded-2xl p-4 space-y-3">
+            <div className="flex gap-2 flex-wrap">
+              <div className="flex-1 min-w-48 relative">
+                <Icon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-faint pointer-events-none" />
+                <input value={expenseSearch} onChange={e => setExpenseSearch(e.target.value)} placeholder="Cari coach, periode, nomor invoice…" className="w-full pl-9 pr-3 py-2 text-sm rounded-xl border border-line bg-paper-tint focus:outline-none focus:ring-1 focus:ring-ocean-400" />
+              </div>
+              <select value={expenseBranch} onChange={e => setExpenseBranch(e.target.value)} className="text-sm rounded-xl border border-line bg-paper-tint px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
+                <option value="all">Semua cabang</option>
+                {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+              <select value={expenseStatus} onChange={e => setExpenseStatus(e.target.value)} className="text-sm rounded-xl border border-line bg-paper-tint px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
+                <option value="">Semua status</option>
+                <option value="pending">Pending</option>
+                <option value="paid">Lunas</option>
+              </select>
+              {(expenseSearch || expenseStatus || expenseBranch !== "all") && (
+                <button onClick={() => { setExpenseSearch(""); setExpenseStatus(""); setExpenseBranch("all"); }} className="text-xs text-ocean-600 hover:underline">Reset</button>
+              )}
+              <span className="text-xs text-ink-mute ml-auto">{filteredExpenses.length} invoice</span>
+            </div>
+          </div>
+
+          <div className="bg-white border border-line rounded-2xl overflow-hidden">
+            {loadingExpenses ? (
+              <div className="p-10 text-center text-ink-mute">Memuat data…</div>
+            ) : expensePagedRows.length === 0 ? (
+              <div className="p-10 text-center text-ink-mute">Tidak ada data.</div>
+            ) : (
+              <>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-line bg-paper-tint">
+                        <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs">Cabang</th>
+                        <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs">Coach</th>
+                        <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs">Nomor Invoice</th>
+                        <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs">Periode</th>
+                        <th className="text-right px-4 py-2.5 font-semibold text-ink-mute text-xs">Total</th>
+                        <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs">Status</th>
+                        <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs">Dibayar</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-line">
+                      {expensePagedRows.map(e => (
+                        <tr key={e.id} className="hover:bg-paper-tint">
+                          <td className="px-4 py-2.5 text-xs text-ink-mute">{e.branch?.name ?? "—"}</td>
+                          <td className="px-4 py-2.5 font-medium">{e.coach?.full_name ?? "—"}</td>
+                          <td className="px-4 py-2.5 font-mono text-xs text-ocean-700">{e.invoice_number ?? "—"}</td>
+                          <td className="px-4 py-2.5 text-xs">{e.period_label}</td>
+                          <td className="px-4 py-2.5 text-right font-mono font-bold">{fmtIDR(e.total_amount)}</td>
+                          <td className="px-4 py-2.5">
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${e.status === "paid" ? "bg-ok-50 text-ok-700" : "bg-warn-50 text-warn-700"}`}>
+                              {e.status === "paid" ? "Lunas" : "Pending"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2.5 text-xs text-ink-mute">{e.paid_at ? new Date(e.paid_at).toLocaleDateString("id-ID", { dateStyle: "short" }) : "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="flex items-center justify-between px-4 py-3 border-t border-line text-sm">
+                  <div className="text-ink-mute text-xs">{filteredExpenses.length} invoice · hal. {expenseSafePage + 1}/{expenseTotalPages}</div>
+                  <div className="flex gap-1">
+                    {[{ label: "«", act: () => setExpensePage(0) }, { label: "‹", act: () => setExpensePage(p => Math.max(0, p - 1)) }, { label: "›", act: () => setExpensePage(p => Math.min(expenseTotalPages - 1, p + 1)) }, { label: "»", act: () => setExpensePage(expenseTotalPages - 1) }].map((btn, i) => (
+                      <button key={i} onClick={btn.act} disabled={(i < 2 && expenseSafePage === 0) || (i >= 2 && expenseSafePage >= expenseTotalPages - 1)} className="w-8 h-8 rounded-lg border border-line text-sm hover:bg-paper-tint disabled:opacity-30 disabled:cursor-not-allowed">{btn.label}</button>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── MONEY FLOW ──────────────────────────────────────────────────────── */}
+      {tab === "moneyflow" && (
+        <div className="space-y-3">
+          {loadingBills || loadingExpenses ? (
+            <div className="p-10 text-center text-ink-mute">Memuat data…</div>
+          ) : moneyFlowData.length === 0 ? (
+            <div className="p-10 text-center text-ink-mute">Belum ada data transaksi.</div>
+          ) : (
+            <>
+              <div className="grid sm:grid-cols-3 gap-4">
+                <Stat label="Total Income (12 bln)" value={fmtIDR(moneyFlowData.reduce((s, m) => s + m.income, 0))} icon="wallet" tone="ok" />
+                <Stat label="Total Expenses (12 bln)" value={fmtIDR(moneyFlowData.reduce((s, m) => s + m.expense, 0))} icon="invoice" tone="danger" />
+                <Stat label="Net (12 bln)" value={fmtIDR(moneyFlowData.reduce((s, m) => s + m.net, 0))} icon="chart" tone="ocean" />
+              </div>
+
+              <div className="bg-white border border-line rounded-2xl overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-line bg-paper-tint">
+                        <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs">Bulan</th>
+                        <th className="text-right px-4 py-2.5 font-semibold text-ok-700 text-xs">Income</th>
+                        <th className="text-right px-4 py-2.5 font-semibold text-danger-700 text-xs">Expenses</th>
+                        <th className="text-right px-4 py-2.5 font-semibold text-ink-mute text-xs">Net</th>
+                        <th className="px-4 py-2.5 w-48"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-line">
+                      {[...moneyFlowData].reverse().map(m => {
+                        const mfMax = Math.max(1, ...moneyFlowData.map(x => Math.max(x.income, x.expense)));
+                        return (
+                          <tr key={m.key} className="hover:bg-paper-tint">
+                            <td className="px-4 py-3 font-semibold text-ink">{m.label}</td>
+                            <td className="px-4 py-3 text-right font-mono text-ok-700">{fmtIDR(m.income)}</td>
+                            <td className="px-4 py-3 text-right font-mono text-danger-700">{fmtIDR(m.expense)}</td>
+                            <td className={`px-4 py-3 text-right font-mono font-bold ${m.net >= 0 ? "text-ok-700" : "text-danger-700"}`}>{fmtIDR(m.net)}</td>
+                            <td className="px-4 py-3">
+                              <div className="space-y-1">
+                                <div className="h-2 bg-paper-tint rounded-full overflow-hidden">
+                                  <div className="h-full bg-ok-400 rounded-full" style={{ width: `${(m.income / mfMax) * 100}%` }} />
+                                </div>
+                                <div className="h-2 bg-paper-tint rounded-full overflow-hidden">
+                                  <div className="h-full bg-danger-400 rounded-full" style={{ width: `${(m.expense / mfMax) * 100}%` }} />
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ── PAYROLL ─────────────────────────────────────────────────────────── */}
+      {tab === "payroll" && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <div className="font-display font-bold text-lg">Slip Gaji Coach</div>
+              <p className="text-sm text-ink-mute">Generate, terbitkan, dan kelola slip gaji dari invoice yang sudah lunas.</p>
+            </div>
+            <Btn variant="primary" icon="plus" onClick={() => { setGenForm({ invoice_id: "", period_label: "", gross_amount: 0, deductions: 0, notes: "" }); setShowGenModal(true); }}>
+              Generate Slip Gaji
+            </Btn>
+          </div>
+
+          {/* Filters */}
+          <div className="flex gap-2 flex-wrap">
+            <select value={payslipBranchFilter} onChange={e => setPayslipBranchFilter(e.target.value)} className="text-sm rounded-xl border border-line bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
+              <option value="all">Semua cabang</option>
+              {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+            <select value={payslipStatusFilter} onChange={e => setPayslipStatusFilter(e.target.value)} className="text-sm rounded-xl border border-line bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
+              <option value="all">Semua status</option>
+              <option value="draft">Draft</option>
+              <option value="published">Diterbitkan</option>
+            </select>
+            <span className="text-xs text-ink-mute self-center ml-auto">{filteredPayslips.length} slip</span>
+          </div>
+
+          {/* Payslip list */}
+          <div className="bg-white border border-line rounded-2xl overflow-hidden">
+            {loadingPayslips ? (
+              <div className="p-10 text-center text-ink-mute">Memuat data…</div>
+            ) : filteredPayslips.length === 0 ? (
+              <div className="p-10 text-center text-ink-mute">Belum ada slip gaji. Klik "Generate Slip Gaji" untuk membuat.</div>
+            ) : (
+              <div className="divide-y divide-line">
+                {filteredPayslips.map(p => (
+                  <div key={p.id} className="flex items-center gap-3 px-5 py-3.5 hover:bg-paper-tint">
+                    <span className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${p.status === "published" ? "bg-ok-50 text-ok-700" : "bg-warn-50 text-warn-700"}`}>
+                      <Icon name="invoice" className="w-5 h-5" />
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-semibold text-sm">{p.coach?.full_name ?? "—"}</span>
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${p.status === "published" ? "bg-ok-50 text-ok-700" : "bg-warn-50 text-warn-700"}`}>
+                          {p.status === "published" ? "Diterbitkan" : "Draft"}
+                        </span>
+                      </div>
+                      <div className="text-xs text-ink-mute mt-0.5">{p.period_label} · {p.branch?.name ?? "—"}</div>
+                      <div className="text-xs text-ink-mute">Gross {fmtIDR(p.gross_amount)} · Potongan {fmtIDR(p.deductions)} · <span className="text-ok-700 font-semibold">Net {fmtIDR(p.net_amount)}</span></div>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button onClick={() => setViewSlip(p)} className="w-8 h-8 rounded-lg border border-line hover:bg-paper-tint flex items-center justify-center text-ink-mute hover:text-ocean-600" title="Lihat / Cetak">
+                        <Icon name="eye" className="w-4 h-4" />
+                      </button>
+                      {p.status === "draft" && (
+                        <>
+                          <Btn variant="soft" size="sm" onClick={() => publishPayslip(p)} disabled={publishingId === p.id}>
+                            {publishingId === p.id ? "…" : "Terbitkan"}
+                          </Btn>
+                          <button onClick={() => deletePayslip(p)} className="w-8 h-8 rounded-lg border border-line hover:bg-danger-50 flex items-center justify-center text-ink-mute hover:text-danger-600" title="Hapus">
+                            <Icon name="trash" className="w-4 h-4" />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal: Generate Slip Gaji ──────────────────────────────────────── */}
+      <Modal open={showGenModal} onClose={() => setShowGenModal(false)} title="Generate Slip Gaji" size="md"
+        footer={
+          <div className="flex gap-2 justify-end w-full">
+            <Btn variant="ghost" onClick={() => setShowGenModal(false)}>Batal</Btn>
+            <Btn variant="primary" onClick={savePayslip} disabled={savingSlip || !genForm.invoice_id}>
+              {savingSlip ? "Menyimpan…" : "Simpan sebagai Draft"}
+            </Btn>
+          </div>
+        }>
+        <div className="space-y-4">
+          <Field label="Invoice Coach (sudah lunas)">
+            <Select value={genForm.invoice_id} onChange={e => handleGenInvoiceChange(e.target.value)}>
+              <option value="">— Pilih invoice —</option>
+              {invoicesWithoutSlip.map(inv => (
+                <option key={inv.id} value={inv.id}>{inv.coach?.full_name ?? "—"} · {inv.period_label} · {fmtIDR(inv.total_amount)} ({inv.branch?.name ?? "—"})</option>
+              ))}
+            </Select>
+          </Field>
+          {invoicesWithoutSlip.length === 0 && (
+            <p className="text-xs text-ink-mute">Semua invoice lunas sudah memiliki slip gaji, atau belum ada invoice yang lunas.</p>
+          )}
+          <Field label="Periode"><Input value={genForm.period_label} onChange={e => setGenForm(f => ({ ...f, period_label: e.target.value }))} placeholder="Contoh: Juni 2026" /></Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Gaji Kotor (Rp)"><Input type="number" value={genForm.gross_amount} onChange={e => setGenForm(f => ({ ...f, gross_amount: Number(e.target.value) }))} min={0} /></Field>
+            <Field label="Potongan (Rp)"><Input type="number" value={genForm.deductions} onChange={e => setGenForm(f => ({ ...f, deductions: Number(e.target.value) }))} min={0} /></Field>
+          </div>
+          {/* Preview net */}
+          <div className="bg-ok-50 border border-ok-200 rounded-xl px-4 py-3 flex items-center justify-between">
+            <span className="text-sm font-semibold text-ok-900">Gaji Bersih</span>
+            <span className="font-mono font-bold text-ok-700 text-lg">{fmtIDR(genForm.gross_amount - genForm.deductions)}</span>
+          </div>
+          <Field label="Catatan (opsional)"><Textarea value={genForm.notes} onChange={e => setGenForm(f => ({ ...f, notes: e.target.value }))} rows={2} placeholder="Catatan untuk coach…" /></Field>
+        </div>
+      </Modal>
+
+      {/* ── Modal: View / Print payslip ────────────────────────────────────── */}
+      <Modal open={!!viewSlip} onClose={() => setViewSlip(null)} title="Detail Slip Gaji" size="md"
+        footer={
+          <div className="flex gap-2 justify-between w-full">
+            <Btn variant="ghost" icon="print" onClick={() => viewSlip && printPayslip(viewSlip)}>Cetak</Btn>
+            <Btn variant="ghost" onClick={() => setViewSlip(null)}>Tutup</Btn>
+          </div>
+        }>
+        {viewSlip && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Coach</div><div className="font-semibold">{viewSlip.coach?.full_name ?? "—"}</div></div>
+              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Cabang</div><div className="font-semibold">{viewSlip.branch?.name ?? "—"}</div></div>
+              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Periode</div><div>{viewSlip.period_label}</div></div>
+              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Status</div>
+                <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${viewSlip.status === "published" ? "bg-ok-50 text-ok-700" : "bg-warn-50 text-warn-700"}`}>
+                  {viewSlip.status === "published" ? "Diterbitkan" : "Draft"}
+                </span>
+              </div>
+              {viewSlip.published_at && <div className="col-span-2"><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Diterbitkan pada</div><div>{new Date(viewSlip.published_at).toLocaleDateString("id-ID", { dateStyle: "long" })}</div></div>}
+            </div>
+            <div className="border-t border-line pt-4 space-y-2">
+              <div className="flex justify-between py-2 border-b border-line text-sm"><span>Gaji Kotor</span><span className="font-mono font-semibold">{fmtIDR(viewSlip.gross_amount)}</span></div>
+              <div className="flex justify-between py-2 border-b border-line text-sm text-danger-700"><span>Potongan</span><span className="font-mono">- {fmtIDR(viewSlip.deductions)}</span></div>
+              <div className="flex justify-between py-2 text-base font-bold"><span>Gaji Bersih</span><span className="font-mono text-ok-700">{fmtIDR(viewSlip.net_amount)}</span></div>
+            </div>
+            {viewSlip.notes && (
+              <div className="bg-paper-tint rounded-xl p-3 text-sm text-ink-mute">{viewSlip.notes}</div>
+            )}
+          </div>
+        )}
+      </Modal>
+    </div>
+  );
+}
+
 // ── Nav items ──────────────────────────────────────────────────────────────────
 
 const NAV_ITEMS: NavItem[] = [
@@ -1463,6 +2255,7 @@ const NAV_ITEMS: NavItem[] = [
   { section: "Keuangan" },
   { id: "rates",     label: "Tarif Coach",   icon: "settings"},
   { id: "invoices",  label: "Invoice Coach", icon: "invoice" },
+  { id: "financial", label: "Financial",    icon: "chart"   },
   { section: "Konten" },
   { id: "landing",   label: "Landing Page",  icon: "star"    },
 ];
@@ -1474,6 +2267,7 @@ const TITLES: Record<string, [string, string]> = {
   classes:   ["Kelas",          "Semua kelas lintas cabang"],
   rates:     ["Settings Tarif", "Tarif coach per kelas"],
   invoices:  ["Invoice Coach",  "Invoice masuk dari semua coach"],
+  financial: ["Financial",      "Income, expenses & payroll semua cabang"],
   landing:   ["Landing Page",   "Kelola konten halaman depan"],
 };
 
@@ -1558,6 +2352,7 @@ export default function OwnerPage() {
     classes:   <Classes branches={branches} />,
     rates:     <SettingsTarif branches={branches} />,
     invoices:  <Invoices branches={branches} />,
+    financial: <OwnerFinancial branches={branches} userId={userId} />,
     landing:   <LandingCMS />,
   };
 

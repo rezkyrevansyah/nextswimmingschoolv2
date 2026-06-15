@@ -1863,6 +1863,83 @@ export type Database = {
           },
         ]
       }
+      payslips: {
+        Row: {
+          branch_id: string
+          coach_id: string
+          created_at: string
+          deductions: number
+          gross_amount: number
+          id: string
+          invoice_id: string | null
+          net_amount: number
+          notes: string | null
+          period_label: string
+          published_at: string | null
+          published_by: string | null
+          status: string
+        }
+        Insert: {
+          branch_id: string
+          coach_id: string
+          created_at?: string
+          deductions?: number
+          gross_amount?: number
+          id?: string
+          invoice_id?: string | null
+          net_amount?: number
+          notes?: string | null
+          period_label: string
+          published_at?: string | null
+          published_by?: string | null
+          status?: string
+        }
+        Update: {
+          branch_id?: string
+          coach_id?: string
+          created_at?: string
+          deductions?: number
+          gross_amount?: number
+          id?: string
+          invoice_id?: string | null
+          net_amount?: number
+          notes?: string | null
+          period_label?: string
+          published_at?: string | null
+          published_by?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payslips_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payslips_coach_id_fkey"
+            columns: ["coach_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payslips_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "coach_invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payslips_published_by_fkey"
+            columns: ["published_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       rapor_entries: {
         Row: {
           class_id: string

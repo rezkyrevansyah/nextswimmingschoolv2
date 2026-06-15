@@ -23,15 +23,16 @@ import { useUpload } from "@/hooks/useUpload";
 import type { User } from "@supabase/supabase-js";
 
 
-type TabId = "home" | "absen" | "kelas" | "invoice" | "rapor" | "profile";
+type TabId = "home" | "absen" | "kelas" | "invoice" | "rapor" | "payslip" | "profile";
 
 const NAV_ITEMS: MobileNavItem[] = [
-  { id: "home",    label: "Home",    short: "Home",    icon: "home"    },
-  { id: "absen",   label: "Absensi", short: "Absen",   icon: "check"   },
-  { id: "kelas",   label: "Kelas",   short: "Kelas",   icon: "swim"    },
-  { id: "invoice", label: "Invoice", short: "Invoice", icon: "invoice" },
-  { id: "rapor",   label: "Rapor",   short: "Rapor",   icon: "book"    },
-  { id: "profile", label: "Profile", short: "Saya",    icon: "user"    },
+  { id: "home",    label: "Home",      short: "Home",    icon: "home"    },
+  { id: "absen",   label: "Absensi",   short: "Absen",   icon: "check"   },
+  { id: "kelas",   label: "Kelas",     short: "Kelas",   icon: "swim"    },
+  { id: "invoice", label: "Invoice",   short: "Invoice", icon: "invoice" },
+  { id: "rapor",   label: "Rapor",     short: "Rapor",   icon: "book"    },
+  { id: "payslip", label: "Slip Gaji", short: "Slip",    icon: "wallet"  },
+  { id: "profile", label: "Profile",   short: "Saya",    icon: "user"    },
 ];
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -2754,6 +2755,130 @@ function CoachProfile({ profile, onRefresh, onLogout, onAvatarChange }: { profil
   );
 }
 
+// ── CoachPayslip ───────────────────────────────────────────────────────────────
+
+interface CoachPayslipItem {
+  id: string; period_label: string; gross_amount: number; deductions: number;
+  net_amount: number; notes: string | null; status: string;
+  published_at: string | null; created_at: string;
+  branch?: { name: string } | null;
+}
+
+function CoachPayslip({ coachId }: { coachId: string }) {
+  const supabase = createClient();
+  const [payslips, setPayslips] = useState<CoachPayslipItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  /* eslint-disable react-hooks/set-state-in-effect -- async data loader */
+  useEffect(() => {
+    setLoading(true);
+    supabase.from("payslips")
+      .select("id, period_label, gross_amount, deductions, net_amount, notes, status, published_at, created_at, branch:branches(name)")
+      .eq("coach_id", coachId)
+      .eq("status", "published")
+      .order("published_at", { ascending: false })
+      .then(({ data }) => {
+        if (data) setPayslips(data as unknown as CoachPayslipItem[]);
+        setLoading(false);
+      });
+  }, [coachId]); // eslint-disable-line react-hooks/exhaustive-deps
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  const printSlip = (p: CoachPayslipItem) => {
+    const w = window.open("", "_blank", "width=700,height=700");
+    if (!w) return;
+    w.document.write(`<!DOCTYPE html><html><head><title>Slip Gaji ${p.period_label}</title>
+    <style>body{font-family:sans-serif;padding:32px;color:#0f172a;max-width:600px;margin:auto}
+    h1{font-size:20px;font-weight:700;margin-bottom:2px}.sub{font-size:13px;color:#64748b;margin-bottom:24px}
+    .section{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94a3b8;margin:20px 0 6px}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;background:#f8fafc;border-radius:8px;padding:12px 16px;font-size:13px;line-height:2}
+    .row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #e2e8f0;font-size:13px}
+    .total{display:flex;justify-content:space-between;padding:12px 0;font-weight:700;font-size:16px;border-top:2px solid #0f172a;margin-top:4px}
+    .net{color:#166534}
+    footer{margin-top:40px;border-top:1px solid #e2e8f0;padding-top:12px;font-size:11px;color:#94a3b8;text-align:center}
+    </style></head><body>
+    <h1>Slip Gaji Coach</h1>
+    <div class="sub">${p.period_label} &nbsp;·&nbsp; ${p.branch?.name ?? "—"}</div>
+    <div class="section">Informasi</div>
+    <div class="grid">
+      <div><b>Periode</b></div><div>${p.period_label}</div>
+      <div><b>Cabang</b></div><div>${p.branch?.name ?? "—"}</div>
+      <div><b>Diterbitkan</b></div><div>${p.published_at ? new Date(p.published_at).toLocaleDateString("id-ID", { dateStyle: "long" }) : "—"}</div>
+    </div>
+    <div class="section">Rincian</div>
+    <div class="row"><span>Gaji Kotor</span><span>Rp ${p.gross_amount.toLocaleString("id-ID")}</span></div>
+    <div class="row"><span>Potongan</span><span>- Rp ${p.deductions.toLocaleString("id-ID")}</span></div>
+    <div class="total"><span>Gaji Bersih</span><span class="net">Rp ${p.net_amount.toLocaleString("id-ID")}</span></div>
+    ${p.notes ? `<div class="section">Catatan</div><p style="font-size:13px">${p.notes}</p>` : ""}
+    <footer>Next Swimming School &nbsp;·&nbsp; Dicetak ${new Date().toLocaleDateString("id-ID", { dateStyle: "long" })}</footer>
+    </body></html>`);
+    w.document.close(); w.focus(); w.print();
+  };
+
+  return (
+    <div className="space-y-4">
+      <SectionTitle sub="Slip gaji yang telah diterbitkan oleh owner.">Slip Gaji</SectionTitle>
+
+      {loading ? (
+        <Card className="!p-10 text-center text-ink-mute">Memuat data…</Card>
+      ) : payslips.length === 0 ? (
+        <Card className="!p-10 text-center">
+          <Icon name="invoice" className="w-10 h-10 text-ink-faint mx-auto mb-3" />
+          <div className="font-display font-bold text-ink">Belum ada slip gaji</div>
+          <p className="text-sm text-ink-mute mt-1">Slip gaji akan muncul di sini setelah owner menerbitkannya.</p>
+        </Card>
+      ) : (
+        <div className="space-y-3">
+          {payslips.map(p => (
+            <div key={p.id} className="bg-white border border-line rounded-2xl overflow-hidden shadow-card">
+              <button className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-paper-tint" onClick={() => setExpanded(expanded === p.id ? null : p.id)}>
+                <span className="w-10 h-10 rounded-xl bg-ok-50 text-ok-700 flex items-center justify-center shrink-0">
+                  <Icon name="wallet" className="w-5 h-5" />
+                </span>
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-ink">{p.period_label}</div>
+                  <div className="text-xs text-ink-mute mt-0.5">{p.branch?.name ?? "—"} · {p.published_at ? new Date(p.published_at).toLocaleDateString("id-ID", { dateStyle: "long" }) : "—"}</div>
+                </div>
+                <div className="text-right shrink-0">
+                  <div className="font-mono font-bold text-ok-700">{fmtIDR(p.net_amount)}</div>
+                  <div className="text-xs text-ink-mute">Gaji Bersih</div>
+                </div>
+                <Icon name={expanded === p.id ? "chevronD" : "chevron"} className="w-4 h-4 text-ink-faint shrink-0 rotate-0" />
+              </button>
+
+              {expanded === p.id && (
+                <div className="border-t border-line px-4 py-4 space-y-3 bg-paper-tint">
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                    <div>
+                      <div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Gaji Kotor</div>
+                      <div className="font-mono font-semibold">{fmtIDR(p.gross_amount)}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Potongan</div>
+                      <div className="font-mono font-semibold text-danger-700">- {fmtIDR(p.deductions)}</div>
+                    </div>
+                    <div className="col-span-2 bg-ok-50 border border-ok-200 rounded-xl px-3 py-2 flex items-center justify-between">
+                      <span className="text-sm font-semibold text-ok-900">Gaji Bersih</span>
+                      <span className="font-mono font-bold text-ok-700 text-base">{fmtIDR(p.net_amount)}</span>
+                    </div>
+                  </div>
+                  {p.notes && (
+                    <div className="text-sm text-ink-mute bg-white rounded-xl px-3 py-2 border border-line">{p.notes}</div>
+                  )}
+                  <Btn variant="outline" icon="print" size="sm" className="w-full" onClick={() => printSlip(p)}>
+                    Cetak Slip Gaji
+                  </Btn>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function LockedNotice({ feature, reason }: { feature: string; reason: string }) {
   return (
     <Card className="!p-8 text-center border-dashed border-2">
@@ -2890,11 +3015,12 @@ export default function CoachPage() {
 
   const todayName = new Date().toLocaleDateString("id-ID", { weekday: "long" });
   const title = active === "home" ? (profile?.full_name ?? "Coach") : {
-    absen: "Absensi", kelas: "Kelas", invoice: "Invoice", rapor: "Rapor", profile: "Profile"
+    absen: "Absensi", kelas: "Kelas", invoice: "Invoice", rapor: "Rapor", payslip: "Slip Gaji", profile: "Profile"
   }[active] ?? "";
   const sub = active === "home" ? `${todayName} · ${fmtDateLong(new Date())}` : {
     absen: "Clock-in & scan QR", kelas: "Kelas yang Anda handle",
     invoice: "Generate invoice bulanan", rapor: "Isi rapor member",
+    payslip: "Slip gaji yang diterbitkan owner",
     profile: "Data pribadi & sertifikasi"
   }[active] ?? "";
 
@@ -2965,6 +3091,7 @@ export default function CoachPage() {
         kelas:   <CoachKelas classes={classes} coachId={coachId} classSpreadsheets={classSpreadsheets} ownSpreadsheets={ownSpreadsheets} onRefreshClasses={refreshClasses} />,
         invoice: <>{SuspendBanner}{IncompleteBanner}{locked ? <LockedNotice feature="Invoice" reason={lockReason} /> : <CoachInvoice coachId={coachId} branchId={branchId} profile={profile} />}</>,
         rapor:   <>{SuspendBanner}{IncompleteBanner}{locked ? <LockedNotice feature="Rapor" reason={lockReason} /> : <CoachRapor coachId={coachId} branchId={branchId} />}</>,
+        payslip: <CoachPayslip coachId={coachId} />,
         profile: <CoachProfile profile={profile} onRefresh={() => user && loadProfile(user.id)} onLogout={logout} onAvatarChange={url => setProfile(prev => prev ? { ...prev, avatar_url: url } : prev)} />,
       }[active];
 
