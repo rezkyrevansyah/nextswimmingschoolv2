@@ -575,3 +575,52 @@ CREATE TABLE public.class_coach_spreadsheets (
   CONSTRAINT class_coach_spreadsheets_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.classes(id),
   CONSTRAINT class_coach_spreadsheets_coach_id_fkey FOREIGN KEY (coach_id) REFERENCES public.profiles(id)
 );
+CREATE TABLE public.class_packages (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  class_id uuid NOT NULL,
+  name text NOT NULL,
+  sessions integer NOT NULL CHECK (sessions > 0),
+  price integer NOT NULL CHECK (price >= 0),
+  sort_order integer NOT NULL DEFAULT 0,
+  active boolean NOT NULL DEFAULT true,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT class_packages_pkey PRIMARY KEY (id),
+  CONSTRAINT class_packages_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.classes(id)
+);
+CREATE TABLE public.payslips (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  coach_id uuid NOT NULL,
+  branch_id uuid NOT NULL,
+  invoice_id uuid,
+  period_label text NOT NULL,
+  gross_amount integer NOT NULL DEFAULT 0,
+  deductions integer NOT NULL DEFAULT 0,
+  net_amount integer NOT NULL DEFAULT 0,
+  notes text,
+  status text NOT NULL DEFAULT 'draft'::text CHECK (status = ANY (ARRAY['draft'::text, 'published'::text])),
+  published_at timestamp with time zone,
+  published_by uuid,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT payslips_pkey PRIMARY KEY (id),
+  CONSTRAINT payslips_coach_id_fkey FOREIGN KEY (coach_id) REFERENCES public.profiles(id),
+  CONSTRAINT payslips_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branches(id),
+  CONSTRAINT payslips_invoice_id_fkey FOREIGN KEY (invoice_id) REFERENCES public.coach_invoices(id),
+  CONSTRAINT payslips_published_by_fkey FOREIGN KEY (published_by) REFERENCES public.profiles(id)
+);
+CREATE TABLE public.activity_logs (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id text NOT NULL,
+  user_role text NOT NULL,
+  user_name text NOT NULL,
+  branch_id uuid,
+  branch_name text,
+  entity_type text NOT NULL,
+  entity_id text NOT NULL,
+  entity_label text,
+  action text NOT NULL CHECK (action = ANY (ARRAY['create'::text, 'update'::text, 'delete'::text, 'approve'::text, 'reject'::text, 'publish'::text, 'archive'::text, 'restore'::text, 'suspend'::text, 'unsuspend'::text])),
+  label text NOT NULL,
+  meta jsonb,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT activity_logs_pkey PRIMARY KEY (id),
+  CONSTRAINT activity_logs_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branches(id)
+);

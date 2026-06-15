@@ -13,6 +13,7 @@ import Sidebar, { type NavItem } from "@/components/layout/Sidebar";
 import Topbar from "@/components/layout/Topbar";
 import Bell from "@/components/layout/Bell";
 import { fmtIDR } from "@/lib/utils";
+import { logActivity } from "@/lib/activityLog";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
@@ -197,7 +198,7 @@ function Dashboard({ branches }: { branches: Branch[] }) {
   );
 }
 
-function Branches({ branches, onRefresh }: { branches: Branch[]; onRefresh: () => void }) {
+function Branches({ branches, onRefresh, userId, userName }: { branches: Branch[]; onRefresh: () => void; userId: string; userName: string }) {
   const toast = useToast();
   const confirm = useConfirm();
   const router = useRouter();
@@ -234,10 +235,12 @@ function Branches({ branches, onRefresh }: { branches: Branch[]; onRefresh: () =
       const { error } = await supabase.from("branches").update({ name, city, address, wa_numbers: cleanWa, ...bankFields }).eq("id", editItem.id);
       if (error) { toast.error("Gagal menyimpan", error.message); setSaving(false); return; }
       toast.success("Cabang diperbarui");
+      logActivity(supabase, { userId, userRole: "owner", userName, entityType: "branches", entityId: editItem.id, entityLabel: name, action: "update", label: `Cabang ${name} diperbarui` });
     } else {
-      const { error } = await supabase.from("branches").insert({ name, city, address, wa_numbers: cleanWa, status: "active", ...bankFields });
+      const { data: inserted, error } = await supabase.from("branches").insert({ name, city, address, wa_numbers: cleanWa, status: "active", ...bankFields }).select("id").single();
       if (error) { toast.error("Gagal membuat cabang", error.message); setSaving(false); return; }
       toast.success("Cabang baru dibuat");
+      logActivity(supabase, { userId, userRole: "owner", userName, entityType: "branches", entityId: inserted?.id ?? "new", entityLabel: name, action: "create", label: `Cabang ${name} (${city}) dibuat` });
     }
     setSaving(false);
     setShowAdd(false);
@@ -250,6 +253,7 @@ function Branches({ branches, onRefresh }: { branches: Branch[]; onRefresh: () =
     const { error } = await supabase.from("branches").update({ status: "archived" }).eq("id", b.id);
     if (error) return toast.error("Gagal mengarsipkan", error.message);
     toast.success("Cabang diarsipkan");
+    logActivity(supabase, { userId, userRole: "owner", userName, entityType: "branches", entityId: b.id, entityLabel: b.name, action: "archive", label: `Cabang ${b.name} diarsipkan` });
     onRefresh();
   };
 
@@ -1258,7 +1262,7 @@ function SettingsTarif({ branches }: { branches: Branch[] }) {
   );
 }
 
-function Invoices({ branches }: { branches: Branch[] }) {
+function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: string; userName: string }) {
   const supabase = createClient();
   const toast = useToast();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -1290,9 +1294,11 @@ function Invoices({ branches }: { branches: Branch[] }) {
     const { error } = await supabase.from("coach_invoices").update({ status: "paid", paid_at: new Date().toISOString() }).eq("id", id);
     setMarking(null);
     if (error) return toast.error("Gagal update", error.message);
+    const inv = invoices.find(i => i.id === id);
     setInvoices(prev => prev.map(i => i.id === id ? { ...i, status: "paid", paid_at: new Date().toISOString() } : i));
     if (detail?.id === id) setDetail(prev => prev ? { ...prev, status: "paid", paid_at: new Date().toISOString() } : prev);
     toast.success("Invoice ditandai lunas");
+    logActivity(supabase, { userId, userRole: "owner", userName, branchId: inv?.branch?.name ? undefined : undefined, entityType: "coach_invoices", entityId: id, entityLabel: inv?.invoice_number ?? id, action: "update", label: `Invoice ${inv?.invoice_number ?? id} — ${inv?.coach?.full_name ?? "coach"} ditandai lunas (${fmtIDR(inv?.total_amount ?? 0)})`, meta: { amount: inv?.total_amount, coach: inv?.coach?.full_name } });
   };
 
   const printInvoice = (iv: Invoice) => {
@@ -1481,7 +1487,7 @@ interface OwnerPayslipRow {
 
 type FinancialTab = "overview" | "income" | "expenses" | "moneyflow" | "payroll";
 
-function OwnerFinancial({ branches, userId }: { branches: Branch[]; userId: string }) {
+function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; userId: string; userName: string }) {
   const supabase = createClient();
   const toast = useToast();
   const confirm = useConfirm();
@@ -1701,6 +1707,7 @@ function OwnerFinancial({ branches, userId }: { branches: Branch[]; userId: stri
     setSavingSlip(false);
     if (error) return toast.error("Gagal simpan", error.message);
     toast.success("Slip gaji berhasil dibuat (draft)");
+    logActivity(supabase, { userId, userRole: "owner", userName, branchId: inv.branch_id, entityType: "payslips", entityId: inv.coach_id, entityLabel: inv.coach?.full_name ?? undefined, action: "create", label: `Slip gaji ${inv.coach?.full_name ?? "coach"} periode ${genForm.period_label.trim()} dibuat (draft)`, meta: { gross_amount: genForm.gross_amount, deductions: genForm.deductions, net_amount: genForm.gross_amount - genForm.deductions } });
     setShowGenModal(false);
     setGenForm({ invoice_id: "", period_label: "", gross_amount: 0, deductions: 0, notes: "" });
     loadPayslips();
@@ -1714,6 +1721,7 @@ function OwnerFinancial({ branches, userId }: { branches: Branch[]; userId: stri
     setPublishingId(null);
     if (error) return toast.error("Gagal terbitkan", error.message);
     toast.success("Slip gaji diterbitkan");
+    logActivity(supabase, { userId, userRole: "owner", userName, branchId: p.branch_id, entityType: "payslips", entityId: p.id, entityLabel: p.coach?.full_name ?? undefined, action: "publish", label: `Slip gaji ${p.coach?.full_name ?? "coach"} periode ${p.period_label} diterbitkan`, meta: { net_amount: p.net_amount } });
     setPayslips(prev => prev.map(s => s.id === p.id ? { ...s, status: "published", published_at: new Date().toISOString() } : s));
   };
 
@@ -1723,6 +1731,7 @@ function OwnerFinancial({ branches, userId }: { branches: Branch[]; userId: stri
     const { error } = await supabase.from("payslips").delete().eq("id", p.id);
     if (error) return toast.error("Gagal hapus", error.message);
     toast.success("Slip gaji dihapus");
+    logActivity(supabase, { userId, userRole: "owner", userName, branchId: p.branch_id, entityType: "payslips", entityId: p.id, entityLabel: p.coach?.full_name ?? undefined, action: "delete", label: `Slip gaji draft ${p.coach?.full_name ?? "coach"} periode ${p.period_label} dihapus` });
     setPayslips(prev => prev.filter(s => s.id !== p.id));
   };
 
@@ -2243,6 +2252,339 @@ function OwnerFinancial({ branches, userId }: { branches: Branch[]; userId: stri
   );
 }
 
+// ── OwnerActivityLog ───────────────────────────────────────────────────────────
+
+interface ActivityLogRow {
+  id: string; user_id: string; user_role: string; user_name: string;
+  branch_id: string | null; branch_name: string | null;
+  entity_type: string; entity_id: string; entity_label: string | null;
+  action: string; label: string; meta: Record<string, unknown> | null;
+  created_at: string;
+}
+
+const ENTITY_LABELS: Record<string, string> = {
+  branches: "Cabang", members: "Member", member_classes: "Kelas Member",
+  classes: "Kelas", class_packages: "Paket", bills: "Tagihan",
+  coach_attendances: "Absensi Coach", coach_invoices: "Invoice Coach",
+  coach_leaves: "Izin Coach", certifications: "Sertifikasi",
+  announcements: "Pengumuman", payslips: "Slip Gaji",
+  registrations: "Registrasi", rapor_periods: "Rapor",
+  schools: "Sekolah", coach_rates: "Tarif Coach", profiles: "Profil",
+};
+
+const ACTION_BADGE: Record<string, string> = {
+  create: "active", update: "manual", delete: "rejected",
+  approve: "approved", reject: "rejected", publish: "active",
+  archive: "archived", restore: "ok", suspend: "suspend", unsuspend: "ok",
+};
+
+const ACTION_LABEL: Record<string, string> = {
+  create: "Buat", update: "Ubah", delete: "Hapus",
+  approve: "Setujui", reject: "Tolak", publish: "Terbitkan",
+  archive: "Arsip", restore: "Pulihkan", suspend: "Suspend", unsuspend: "Aktifkan",
+};
+
+const ENTITY_COLORS: Record<string, string> = {
+  branches: "bg-ocean-50 text-ocean-700", members: "bg-wave-50 text-wave-700",
+  bills: "bg-ok-50 text-ok-700", coach_invoices: "bg-warn-50 text-warn-700",
+  payslips: "bg-ok-50 text-ok-700", registrations: "bg-ocean-50 text-ocean-700",
+  certifications: "bg-wave-50 text-wave-700", coach_attendances: "bg-paper-deep text-ink-soft",
+  classes: "bg-ocean-50 text-ocean-700", announcements: "bg-wave-50 text-wave-700",
+};
+
+function OwnerActivityLog({ branches }: { branches: Branch[] }) {
+  const supabase = createClient();
+  const [logs, setLogs] = useState<ActivityLogRow[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [statsToday, setStatsToday] = useState(0);
+  const [statsWeek, setStatsWeek] = useState(0);
+  const [detailLog, setDetailLog] = useState<ActivityLogRow | null>(null);
+
+  // Filters
+  const [filterBranch, setFilterBranch] = useState("all");
+  const [filterEntity, setFilterEntity] = useState("all");
+  const [filterAction, setFilterAction] = useState("all");
+  const [filterRole, setFilterRole] = useState("all");
+  const [filterDateFrom, setFilterDateFrom] = useState("");
+  const [filterDateTo, setFilterDateTo] = useState("");
+  const [search, setSearch] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
+  const [page, setPage] = useState(0);
+  const PAGE_SIZE = 25;
+
+  const activeFilterCount = [filterBranch !== "all", filterEntity !== "all", filterAction !== "all", filterRole !== "all", filterDateFrom, filterDateTo].filter(Boolean).length;
+
+  /* eslint-disable react-hooks/set-state-in-effect -- async data loaders */
+  const load = useCallback(async () => {
+    setLoading(true);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let q: any = supabase
+      .from("activity_logs")
+      .select("*", { count: "exact" })
+      .order("created_at", { ascending: false })
+      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+
+    if (filterBranch !== "all")   q = q.eq("branch_id", filterBranch);
+    if (filterEntity !== "all")   q = q.eq("entity_type", filterEntity);
+    if (filterAction !== "all")   q = q.eq("action", filterAction);
+    if (filterRole !== "all")     q = q.eq("user_role", filterRole);
+    if (filterDateFrom)           q = q.gte("created_at", filterDateFrom + "T00:00:00");
+    if (filterDateTo)             q = q.lte("created_at", filterDateTo + "T23:59:59");
+    if (search.trim())            q = q.ilike("label", `%${search.trim()}%`);
+
+    const { data, count } = await q;
+    if (data) setLogs(data as ActivityLogRow[]);
+    if (count !== null) setTotal(count);
+    setLoading(false);
+  }, [supabase, page, filterBranch, filterEntity, filterAction, filterRole, filterDateFrom, filterDateTo, search]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const loadStats = useCallback(async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+    const [td, wk] = await Promise.all([
+      supabase.from("activity_logs").select("id", { count: "exact", head: true }).gte("created_at", today + "T00:00:00"),
+      supabase.from("activity_logs").select("id", { count: "exact", head: true }).gte("created_at", weekAgo + "T00:00:00"),
+    ]);
+    setStatsToday(td.count ?? 0);
+    setStatsWeek(wk.count ?? 0);
+  }, [supabase]); // eslint-disable-line react-hooks/exhaustive-deps
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  useEffect(() => { load(); }, [load]);
+  useEffect(() => { loadStats(); }, [loadStats]);
+  useEffect(() => { setPage(0); }, [filterBranch, filterEntity, filterAction, filterRole, filterDateFrom, filterDateTo, search]);
+
+  const resetFilters = () => {
+    setFilterBranch("all"); setFilterEntity("all"); setFilterAction("all");
+    setFilterRole("all"); setFilterDateFrom(""); setFilterDateTo(""); setSearch("");
+  };
+
+  const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
+  const fmtShortDate = (iso: string) => new Date(iso).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
+
+  const branchName = (log: ActivityLogRow) =>
+    log.branch_name ?? branches.find(b => b.id === log.branch_id)?.name ?? "Lintas cabang";
+
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  return (
+    <div className="space-y-5">
+      {/* Header */}
+      <div>
+        <h2 className="font-display font-bold text-2xl">Activity Log</h2>
+        <p className="text-ink-mute text-sm mt-0.5">Semua aktivitas CRUD dari semua role lintas cabang.</p>
+      </div>
+
+      {/* Stats */}
+      <div className="grid sm:grid-cols-3 gap-4">
+        <Stat label="Hari ini"   value={statsToday} icon="calendar"  tone="ocean" />
+        <Stat label="7 hari ini" value={statsWeek}  icon="chart"     tone="wave"  />
+        <Stat label="Total log"  value={total}      icon="clipboard" tone="ok"    />
+      </div>
+
+      {/* Search + filter bar */}
+      <div className="bg-white border border-line rounded-2xl p-4 space-y-3">
+        <div className="flex gap-2 flex-wrap">
+          <div className="flex-1 min-w-52 relative">
+            <Icon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-faint pointer-events-none" />
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Cari aktivitas…"
+              className="w-full pl-9 pr-3 py-2 text-sm rounded-xl border border-line bg-paper-tint focus:outline-none focus:ring-1 focus:ring-ocean-400" />
+          </div>
+          <button onClick={() => setShowFilters(f => !f)}
+            className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border text-sm font-semibold transition-colors ${showFilters ? "bg-ocean-50 border-ocean-200 text-ocean-700" : "border-line text-ink-soft hover:bg-paper-tint"}`}>
+            <Icon name="filter" className="w-4 h-4" /> Filter
+            {activeFilterCount > 0 && <span className="bg-ocean-600 text-white text-[10px] font-bold rounded-full w-4 h-4 inline-flex items-center justify-center">{activeFilterCount}</span>}
+          </button>
+          {(activeFilterCount > 0 || search) && (
+            <button onClick={resetFilters} className="text-xs text-ocean-600 hover:underline px-2">Reset</button>
+          )}
+          <span className="text-xs text-ink-mute self-center ml-auto">{total} aktivitas</span>
+        </div>
+
+        {showFilters && (
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-1 border-t border-line">
+            <div>
+              <label className="block text-xs font-semibold text-ink-faint mb-1">Cabang</label>
+              <select value={filterBranch} onChange={e => setFilterBranch(e.target.value)} className="w-full text-sm rounded-xl border border-line bg-paper-tint px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
+                <option value="all">Semua cabang</option>
+                {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-ink-faint mb-1">Entitas</label>
+              <select value={filterEntity} onChange={e => setFilterEntity(e.target.value)} className="w-full text-sm rounded-xl border border-line bg-paper-tint px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
+                <option value="all">Semua entitas</option>
+                {Object.entries(ENTITY_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-ink-faint mb-1">Aksi</label>
+              <select value={filterAction} onChange={e => setFilterAction(e.target.value)} className="w-full text-sm rounded-xl border border-line bg-paper-tint px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
+                <option value="all">Semua aksi</option>
+                {Object.entries(ACTION_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-ink-faint mb-1">Role</label>
+              <select value={filterRole} onChange={e => setFilterRole(e.target.value)} className="w-full text-sm rounded-xl border border-line bg-paper-tint px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
+                <option value="all">Semua role</option>
+                <option value="owner">Owner</option>
+                <option value="admin">Admin</option>
+                <option value="coach">Coach</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-ink-faint mb-1">Dari tanggal</label>
+              <input type="date" value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)} className="w-full text-sm rounded-xl border border-line bg-paper-tint px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-ink-faint mb-1">Sampai tanggal</label>
+              <input type="date" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)} className="w-full text-sm rounded-xl border border-line bg-paper-tint px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400" />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Activity feed */}
+      <div className="bg-white border border-line rounded-2xl overflow-hidden">
+        {loading ? (
+          <div className="p-10 text-center text-ink-mute">Memuat data…</div>
+        ) : logs.length === 0 ? (
+          <div className="p-10 text-center">
+            <Icon name="clipboard" className="w-10 h-10 text-ink-faint mx-auto mb-3" />
+            <div className="font-display font-bold text-ink">Belum ada aktivitas</div>
+            <p className="text-sm text-ink-mute mt-1">Aktivitas akan muncul setelah ada perubahan data.</p>
+          </div>
+        ) : (
+          <>
+            {/* Desktop table */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-line bg-paper-tint">
+                    <th className="text-left px-4 py-3 font-semibold text-ink-mute text-xs uppercase tracking-wide">Waktu</th>
+                    <th className="text-left px-4 py-3 font-semibold text-ink-mute text-xs uppercase tracking-wide">Cabang</th>
+                    <th className="text-left px-4 py-3 font-semibold text-ink-mute text-xs uppercase tracking-wide">Oleh</th>
+                    <th className="text-left px-4 py-3 font-semibold text-ink-mute text-xs uppercase tracking-wide">Entitas</th>
+                    <th className="text-left px-4 py-3 font-semibold text-ink-mute text-xs uppercase tracking-wide">Aksi</th>
+                    <th className="text-left px-4 py-3 font-semibold text-ink-mute text-xs uppercase tracking-wide">Keterangan</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line">
+                  {logs.map(log => (
+                    <tr key={log.id} className="hover:bg-paper-tint cursor-pointer" onClick={() => setDetailLog(log)}>
+                      <td className="px-4 py-3 shrink-0">
+                        <div className="text-xs font-semibold text-ink">{fmtShortDate(log.created_at)}</div>
+                        <div className="text-xs text-ink-faint">{fmtTime(log.created_at)}</div>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-ink-mute whitespace-nowrap">{branchName(log)}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <Avatar name={log.user_name} size={26} />
+                          <div>
+                            <div className="text-xs font-semibold leading-tight">{log.user_name}</div>
+                            <div className={`text-[10px] font-bold uppercase tracking-wide ${log.user_role === "owner" ? "text-ocean-600" : log.user_role === "admin" ? "text-wave-600" : "text-ink-mute"}`}>{log.user_role}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${ENTITY_COLORS[log.entity_type] ?? "bg-paper-deep text-ink-soft"}`}>
+                          {ENTITY_LABELS[log.entity_type] ?? log.entity_type}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <Status kind={ACTION_BADGE[log.action] ?? "manual"}>{ACTION_LABEL[log.action] ?? log.action}</Status>
+                      </td>
+                      <td className="px-4 py-3 max-w-xs">
+                        <span className="text-sm text-ink truncate block">{log.label}</span>
+                        {log.entity_label && <span className="text-xs text-ink-mute">{log.entity_label}</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile cards */}
+            <div className="md:hidden divide-y divide-line">
+              {logs.map(log => (
+                <div key={log.id} className="px-4 py-3 hover:bg-paper-tint cursor-pointer" onClick={() => setDetailLog(log)}>
+                  <div className="flex items-start gap-3">
+                    <Avatar name={log.user_name} size={32} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-semibold text-sm text-ink">{log.user_name}</span>
+                        <Status kind={ACTION_BADGE[log.action] ?? "manual"}>{ACTION_LABEL[log.action] ?? log.action}</Status>
+                        <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${ENTITY_COLORS[log.entity_type] ?? "bg-paper-deep text-ink-soft"}`}>
+                          {ENTITY_LABELS[log.entity_type] ?? log.entity_type}
+                        </span>
+                      </div>
+                      <div className="text-sm text-ink mt-0.5 leading-snug">{log.label}</div>
+                      <div className="text-xs text-ink-faint mt-1">{branchName(log)} · {fmtShortDate(log.created_at)} {fmtTime(log.created_at)}</div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Pagination */}
+            <div className="flex items-center justify-between px-4 py-3 border-t border-line text-sm">
+              <div className="text-xs text-ink-mute">
+                {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, total)} dari {total} aktivitas · hal. {page + 1}/{totalPages}
+              </div>
+              <div className="flex gap-1">
+                {[
+                  { label: "«", act: () => setPage(0),               dis: page === 0 },
+                  { label: "‹", act: () => setPage(p => p - 1),      dis: page === 0 },
+                  { label: "›", act: () => setPage(p => p + 1),      dis: page >= totalPages - 1 },
+                  { label: "»", act: () => setPage(totalPages - 1),   dis: page >= totalPages - 1 },
+                ].map((btn, i) => (
+                  <button key={i} onClick={btn.act} disabled={btn.dis}
+                    className="w-8 h-8 rounded-lg border border-line text-sm hover:bg-paper-tint disabled:opacity-30 disabled:cursor-not-allowed">
+                    {btn.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Detail modal */}
+      <Modal open={!!detailLog} onClose={() => setDetailLog(null)} title="Detail Aktivitas" size="md"
+        footer={<Btn variant="ghost" onClick={() => setDetailLog(null)}>Tutup</Btn>}>
+        {detailLog && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Waktu</div><div>{fmtShortDate(detailLog.created_at)} {fmtTime(detailLog.created_at)}</div></div>
+              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Cabang</div><div>{branchName(detailLog)}</div></div>
+              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Oleh</div><div className="font-semibold">{detailLog.user_name} <span className="text-xs text-ink-mute font-normal">({detailLog.user_role})</span></div></div>
+              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Entitas</div>
+                <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${ENTITY_COLORS[detailLog.entity_type] ?? "bg-paper-deep text-ink-soft"}`}>
+                  {ENTITY_LABELS[detailLog.entity_type] ?? detailLog.entity_type}
+                </span>
+              </div>
+              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Aksi</div><Status kind={ACTION_BADGE[detailLog.action] ?? "manual"}>{ACTION_LABEL[detailLog.action] ?? detailLog.action}</Status></div>
+              {detailLog.entity_label && <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Subjek</div><div className="font-semibold">{detailLog.entity_label}</div></div>}
+            </div>
+            <div className="border-t border-line pt-3">
+              <div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-1">Keterangan</div>
+              <p className="text-sm text-ink leading-relaxed">{detailLog.label}</p>
+            </div>
+            {detailLog.meta && Object.keys(detailLog.meta).length > 0 && (
+              <div>
+                <div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-1">Detail</div>
+                <pre className="bg-paper-tint rounded-xl p-3 text-xs font-mono overflow-auto text-ink-soft">{JSON.stringify(detailLog.meta, null, 2)}</pre>
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
+    </div>
+  );
+}
+
 // ── Nav items ──────────────────────────────────────────────────────────────────
 
 const NAV_ITEMS: NavItem[] = [
@@ -2257,7 +2599,9 @@ const NAV_ITEMS: NavItem[] = [
   { id: "invoices",  label: "Invoice Coach", icon: "invoice" },
   { id: "financial", label: "Financial",    icon: "chart"   },
   { section: "Konten" },
-  { id: "landing",   label: "Landing Page",  icon: "star"    },
+  { id: "landing",   label: "Landing Page",  icon: "star"      },
+  { section: "Sistema" },
+  { id: "activity",  label: "Activity Log",  icon: "clipboard" },
 ];
 
 const TITLES: Record<string, [string, string]> = {
@@ -2269,6 +2613,7 @@ const TITLES: Record<string, [string, string]> = {
   invoices:  ["Invoice Coach",  "Invoice masuk dari semua coach"],
   financial: ["Financial",      "Income, expenses & payroll semua cabang"],
   landing:   ["Landing Page",   "Kelola konten halaman depan"],
+  activity:  ["Activity Log",   "Semua aktivitas CRUD lintas cabang"],
 };
 
 // ── Main page ──────────────────────────────────────────────────────────────────
@@ -2345,15 +2690,17 @@ export default function OwnerPage() {
     window.location.href = "/login";
   };
 
+  const ownerName = profile?.full_name ?? "Owner";
   const pages: Record<string, React.ReactNode> = {
     dashboard: <Dashboard branches={branches} />,
-    branches:  <Branches branches={branches} onRefresh={loadBranches} />,
+    branches:  <Branches branches={branches} onRefresh={loadBranches} userId={userId} userName={ownerName} />,
     admins:    <Admins branches={branches} />,
     classes:   <Classes branches={branches} />,
     rates:     <SettingsTarif branches={branches} />,
-    invoices:  <Invoices branches={branches} />,
-    financial: <OwnerFinancial branches={branches} userId={userId} />,
+    invoices:  <Invoices branches={branches} userId={userId} userName={ownerName} />,
+    financial: <OwnerFinancial branches={branches} userId={userId} userName={ownerName} />,
     landing:   <LandingCMS />,
+    activity:  <OwnerActivityLog branches={branches} />,
   };
 
   const [title, sub] = TITLES[active] ?? ["Owner", ""];

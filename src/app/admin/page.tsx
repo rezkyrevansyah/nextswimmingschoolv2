@@ -27,6 +27,7 @@ import { useUpload } from "@/hooks/useUpload";
 import PhotoLightbox from "@/components/ui/PhotoLightbox";
 import type { User } from "@supabase/supabase-js";
 import type { Database, Json } from "@/types/database";
+import { logActivity } from "@/lib/activityLog";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -1819,12 +1820,14 @@ function AdminMember({ branchId }: { branchId: string }) {
   const doSuspendMember = async () => {
     if (!suspendMemberTarget || !suspendMemberForm.reason || !suspendMemberForm.until) return toast.error("Alasan dan tanggal berakhir wajib diisi");
     setSuspendingMember(true);
+    const user = (await supabase.auth.getUser()).data.user;
     const { error } = await supabase.from("members")
       .update({ status: "suspended", suspend_until: suspendMemberForm.until, suspend_reason: suspendMemberForm.reason })
       .eq("id", suspendMemberTarget.id);
     setSuspendingMember(false);
     if (error) return toast.error("Gagal suspend member", error.message);
     toast.success(`${suspendMemberTarget.profile?.full_name ?? "Member"} di-suspend`);
+    logActivity(supabase, { userId: user?.id ?? "unknown", userRole: "admin", userName: user?.user_metadata?.full_name ?? "Admin", branchId, entityType: "members", entityId: suspendMemberTarget.id, entityLabel: suspendMemberTarget.profile?.full_name ?? undefined, action: "suspend", label: `Member ${suspendMemberTarget.profile?.full_name ?? suspendMemberTarget.id} di-suspend hingga ${suspendMemberForm.until}`, meta: { reason: suspendMemberForm.reason, until: suspendMemberForm.until } });
     setSuspendMemberTarget(null);
     setDetail(null);
     load();
@@ -1844,11 +1847,13 @@ function AdminMember({ branchId }: { branchId: string }) {
   };
 
   const liftSuspendMember = async (m: MemberRow) => {
+    const user = (await supabase.auth.getUser()).data.user;
     const { error } = await supabase.from("members")
       .update({ status: "active", suspend_until: null, suspend_reason: null })
       .eq("id", m.id);
     if (error) return toast.error("Gagal mengakhiri suspend", error.message);
     toast.success("Suspend diakhiri");
+    logActivity(supabase, { userId: user?.id ?? "unknown", userRole: "admin", userName: user?.user_metadata?.full_name ?? "Admin", branchId, entityType: "members", entityId: m.id, entityLabel: m.profile?.full_name ?? undefined, action: "unsuspend", label: `Suspend member ${m.profile?.full_name ?? m.id} diakhiri` });
     setDetail(null);
     load();
   };
@@ -4594,6 +4599,7 @@ function AdminAbsensiCoach({ branchId }: { branchId: string }) {
       setSaving(false);
       if (error) return toast.error("Gagal menyimpan", error.message);
       toast.success("Absensi diperbarui");
+      logActivity(supabase, { userId: user?.id ?? "unknown", userRole: "admin", userName: user?.user_metadata?.full_name ?? "Admin", branchId, entityType: "coach_attendances", entityId: editTarget.id, action: "update", label: `Absensi manual coach tanggal ${form.session_date} diperbarui`, meta: { coach_id: form.coach_id, session_date: form.session_date, status: manualStatus } });
     } else {
       const { error } = await supabase.from("coach_attendances").insert({
         branch_id: branchId, coach_id: form.coach_id, class_id: form.class_id,
@@ -4605,6 +4611,7 @@ function AdminAbsensiCoach({ branchId }: { branchId: string }) {
       setSaving(false);
       if (error) return toast.error("Gagal menyimpan", error.message);
       toast.success("Absensi manual disimpan");
+      logActivity(supabase, { userId: user?.id ?? "unknown", userRole: "admin", userName: user?.user_metadata?.full_name ?? "Admin", branchId, entityType: "coach_attendances", entityId: form.coach_id, action: "create", label: `Absensi manual coach tanggal ${form.session_date} ditambahkan`, meta: { coach_id: form.coach_id, session_date: form.session_date, status: manualStatus } });
     }
     setOpenManual(false);
     setEditTarget(null);
@@ -5795,6 +5802,7 @@ function AdminPembayaran({ branchId }: { branchId: string }) {
       kind: "success",
     });
     toast.success("Pembayaran terverifikasi");
+    logActivity(supabase, { userId: user?.id ?? "unknown", userRole: "admin", userName: user?.user_metadata?.full_name ?? "Admin", branchId, entityType: "bills", entityId: verifyTarget.id, entityLabel: verifyTarget.member?.profile?.full_name ?? undefined, action: "update", label: `Tagihan ${verifyTarget.period_label} ${verifyTarget.member?.profile?.full_name ?? "member"} diverifikasi lunas`, meta: { amount: verifyTarget.total, paid_method: verifyForm.paid_method } });
     setVerifyTarget(null);
     load();
   };
@@ -5834,6 +5842,8 @@ function AdminPembayaran({ branchId }: { branchId: string }) {
       kind: "info",
     });
     toast.success("Tagihan berhasil dibuat");
+    const actUser = (await supabase.auth.getUser()).data.user;
+    logActivity(supabase, { userId: actUser?.id ?? "unknown", userRole: "admin", userName: actUser?.user_metadata?.full_name ?? "Admin", branchId, entityType: "bills", entityId: addForm.member_id, entityLabel: selectedMember?.full_name ?? undefined, action: "create", label: `Tagihan manual ${addForm.period_label} dibuat untuk ${selectedMember?.full_name ?? addForm.member_id} — ${fmtIDR(total)}`, meta: { amount, discount, total } });
     setOpenAdd(false);
     setSelectedPackage(null);
     setAddForm({ member_id: "", class_id: "", type: "monthly", period_label: "", amount: "", discount: "", discount_reason: "", admin_notes: "", sessions_total: "" });
@@ -6257,6 +6267,7 @@ function AdminApprovement({ branchId }: { branchId: string }) {
     await supabase.from("registrations").update({ status: "rejected", reject_reason: regRejectReason.trim(), reviewed_by: user?.id, reviewed_at: new Date().toISOString() }).eq("id", rejectRegTarget.id);
     setRejectingReg(false);
     toast.success("Pendaftaran ditolak");
+    logActivity(supabase, { userId: user?.id ?? "unknown", userRole: "admin", userName: user?.user_metadata?.full_name ?? "Admin", branchId, entityType: "registrations", entityId: rejectRegTarget.id, entityLabel: rejectRegTarget.full_name, action: "reject", label: `Registrasi ${rejectRegTarget.full_name} ditolak — ${regRejectReason.trim()}`, meta: { reason: regRejectReason.trim() } });
     setRejectRegTarget(null);
     setDetailReg(null);
     load();
@@ -6318,6 +6329,7 @@ function AdminApprovement({ branchId }: { branchId: string }) {
     await supabase.from("registrations").update(upd).eq("id", r.id);
 
     toast.success("Pendaftaran diapprove", "Member masuk ke menu Member — lengkapi data & kirim credential.");
+    logActivity(supabase, { userId: user?.id ?? "unknown", userRole: "admin", userName: user?.user_metadata?.full_name ?? "Admin", branchId, entityType: "registrations", entityId: r.id, entityLabel: r.full_name, action: "approve", label: `Registrasi ${r.full_name} (${r.email}) disetujui` });
     setApprovingId(null);
     setApproveTarget(null);
     setDetailReg(null);
@@ -6325,8 +6337,11 @@ function AdminApprovement({ branchId }: { branchId: string }) {
   };
 
   const approveCert = async (id: string) => {
+    const cert = certs.find(c => c.id === id);
+    const user = (await supabase.auth.getUser()).data.user;
     await supabase.from("certifications").update({ status: "approved", reject_reason: null }).eq("id", id);
     toast.success("Sertifikasi diverifikasi");
+    logActivity(supabase, { userId: user?.id ?? "unknown", userRole: "admin", userName: user?.user_metadata?.full_name ?? "Admin", branchId, entityType: "certifications", entityId: id, entityLabel: cert?.profile?.full_name ?? undefined, action: "approve", label: `Sertifikasi '${cert?.title ?? cert?.name ?? id}' coach ${cert?.profile?.full_name ?? "coach"} disetujui` });
     load();
   };
 
@@ -6334,9 +6349,11 @@ function AdminApprovement({ branchId }: { branchId: string }) {
     if (!rejectCertTarget) return;
     if (!certRejectReason.trim()) return toast.error("Alasan penolakan wajib diisi");
     setRejectingCert(true);
+    const user = (await supabase.auth.getUser()).data.user;
     await supabase.from("certifications").update({ status: "rejected", reject_reason: certRejectReason.trim() }).eq("id", rejectCertTarget.id);
     setRejectingCert(false);
     toast.success("Sertifikasi ditolak");
+    logActivity(supabase, { userId: user?.id ?? "unknown", userRole: "admin", userName: user?.user_metadata?.full_name ?? "Admin", branchId, entityType: "certifications", entityId: rejectCertTarget.id, entityLabel: rejectCertTarget.profile?.full_name ?? undefined, action: "reject", label: `Sertifikasi '${rejectCertTarget.title ?? rejectCertTarget.name}' coach ${rejectCertTarget.profile?.full_name ?? "coach"} ditolak`, meta: { reason: certRejectReason.trim() } });
     setRejectCertTarget(null);
     load();
   };

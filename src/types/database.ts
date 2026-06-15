@@ -101,6 +101,62 @@ export type Database = {
           },
         ]
       }
+      activity_logs: {
+        Row: {
+          action: string
+          branch_id: string | null
+          branch_name: string | null
+          created_at: string
+          entity_id: string
+          entity_label: string | null
+          entity_type: string
+          id: string
+          label: string
+          meta: Record<string, unknown> | null
+          user_id: string
+          user_name: string
+          user_role: string
+        }
+        Insert: {
+          action: string
+          branch_id?: string | null
+          branch_name?: string | null
+          created_at?: string
+          entity_id: string
+          entity_label?: string | null
+          entity_type: string
+          id?: string
+          label: string
+          meta?: Record<string, unknown> | null
+          user_id: string
+          user_name: string
+          user_role: string
+        }
+        Update: {
+          action?: string
+          branch_id?: string | null
+          branch_name?: string | null
+          created_at?: string
+          entity_id?: string
+          entity_label?: string | null
+          entity_type?: string
+          id?: string
+          label?: string
+          meta?: Record<string, unknown> | null
+          user_id?: string
+          user_name?: string
+          user_role?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_logs_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bills: {
         Row: {
           admin_notes: string | null
