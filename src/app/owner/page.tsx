@@ -1568,20 +1568,23 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
   const netAmount = totalIncome - totalExpenses;
   const publishedSlipsCount = useMemo(() => payslips.filter(p => p.status === "published").length, [payslips]);
 
-  // ── Last 6 months bar chart data ────────────────────────────────────────────
+  // ── Chart period selector ────────────────────────────────────────────────────
+  const [chartMonths, setChartMonths] = useState<3 | 6 | 12>(6);
+
+  // ── Bar chart data (dynamic period) ─────────────────────────────────────────
   const barChartData = useMemo(() => {
-    const months: { label: string; key: string; income: number; expense: number }[] = [];
+    const months: { label: string; key: string; income: number; expense: number; net: number }[] = [];
     const now = new Date();
-    for (let i = 5; i >= 0; i--) {
+    for (let i = chartMonths - 1; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
       const label = d.toLocaleDateString("id-ID", { month: "short", year: "2-digit" });
       const income = paidBills.filter(b => (b.paid_at ?? b.created_at).startsWith(key)).reduce((s, b) => s + b.total, 0);
       const expense = expenses.filter(e => e.status === "paid" && (e.paid_at ?? e.created_at).startsWith(key)).reduce((s, e) => s + e.total_amount, 0);
-      months.push({ label, key, income, expense });
+      months.push({ label, key, income, expense, net: income - expense });
     }
     return months;
-  }, [paidBills, expenses]);
+  }, [paidBills, expenses, chartMonths]);
 
   const barMax = useMemo(() => Math.max(1, ...barChartData.map(m => Math.max(m.income, m.expense))), [barChartData]);
 
@@ -1807,33 +1810,115 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
 
           {/* Bar chart: Income vs Expenses per month */}
           <div className="bg-white border border-line rounded-2xl p-5">
-            <div className="font-display font-bold text-base mb-4">Income vs Expenses — 6 Bulan Terakhir</div>
-            {loadingBills || loadingExpenses ? (
-              <div className="h-32 flex items-center justify-center text-ink-mute text-sm">Memuat…</div>
-            ) : (
-              <div className="space-y-3">
-                {barChartData.map(m => (
-                  <div key={m.key} className="space-y-1">
-                    <div className="text-xs font-semibold text-ink-mute">{m.label}</div>
-                    <div className="flex items-center gap-2">
-                      <div className="text-xs text-ok-700 w-16 shrink-0 text-right">{fmtIDR(m.income)}</div>
-                      <div className="flex-1 h-4 bg-paper-tint rounded-full overflow-hidden">
-                        <div className="h-full bg-ok-400 rounded-full transition-all" style={{ width: `${(m.income / barMax) * 100}%` }} />
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="text-xs text-danger-700 w-16 shrink-0 text-right">{fmtIDR(m.expense)}</div>
-                      <div className="flex-1 h-4 bg-paper-tint rounded-full overflow-hidden">
-                        <div className="h-full bg-danger-400 rounded-full transition-all" style={{ width: `${(m.expense / barMax) * 100}%` }} />
-                      </div>
-                    </div>
-                  </div>
-                ))}
-                <div className="flex gap-4 pt-2 text-xs text-ink-mute">
-                  <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-ok-400 inline-block" /> Income</span>
-                  <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-danger-400 inline-block" /> Expenses</span>
-                </div>
+            {/* Header row */}
+            <div className="flex items-start justify-between gap-3 mb-5">
+              <div>
+                <div className="font-display font-bold text-base text-ink">Income vs Expenses</div>
+                <div className="text-xs text-ink-mute mt-0.5">{chartMonths} bulan terakhir · perbandingan pemasukan &amp; pengeluaran</div>
               </div>
+              <div className="flex gap-1 shrink-0 bg-paper-tint rounded-xl p-1">
+                {([3, 6, 12] as const).map(n => (
+                  <button
+                    key={n}
+                    onClick={() => setChartMonths(n)}
+                    className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${chartMonths === n ? "bg-white shadow-card text-ocean-700" : "text-ink-mute hover:text-ink"}`}
+                  >
+                    {n}B
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {loadingBills || loadingExpenses ? (
+              <div className="h-48 flex items-center justify-center text-ink-mute text-sm">Memuat…</div>
+            ) : (
+              <>
+                {/* Vertical grouped bar chart */}
+                {/* Chart area: fixed height 180px for bars + 36px label row below */}
+                <div className="flex gap-1.5 px-1" style={{ height: "216px", alignItems: "flex-end" }}>
+                  {barChartData.map((m) => {
+                    const CHART_H = 160;
+                    const incH = m.income > 0 ? Math.max(4, Math.round((m.income / barMax) * CHART_H)) : 0;
+                    const expH = m.expense > 0 ? Math.max(4, Math.round((m.expense / barMax) * CHART_H)) : 0;
+                    const netPositive = m.net >= 0;
+                    return (
+                      <div key={m.key} className="flex-1 group relative flex flex-col justify-end items-center" style={{ height: "216px" }}>
+                        {/* Tooltip */}
+                        <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-ink text-white text-[10px] leading-tight rounded-lg px-2.5 py-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 w-36 shadow-float">
+                          <div className="font-semibold mb-1">{m.label}</div>
+                          <div className="flex justify-between gap-2"><span className="text-ok-300">Income</span><span>{fmtIDR(m.income)}</span></div>
+                          <div className="flex justify-between gap-2"><span className="text-danger-300">Expenses</span><span>{fmtIDR(m.expense)}</span></div>
+                          <div className={`flex justify-between gap-2 mt-1 pt-1 border-t border-white/20 font-semibold ${netPositive ? "text-ok-300" : "text-danger-300"}`}>
+                            <span>Net</span><span>{netPositive ? "+" : ""}{fmtIDR(m.net)}</span>
+                          </div>
+                        </div>
+                        {/* Bars + labels */}
+                        <div className="w-full flex items-end justify-center gap-0.5" style={{ height: `${CHART_H}px` }}>
+                          {/* Income bar */}
+                          {incH > 0 ? (
+                            <div
+                              className="flex-1 rounded-t-md bg-ok-500 transition-all duration-500"
+                              style={{ height: `${incH}px` }}
+                            />
+                          ) : (
+                            <div className="flex-1 rounded-t-sm bg-ok-50" style={{ height: "3px" }} />
+                          )}
+                          {/* Expense bar */}
+                          {expH > 0 ? (
+                            <div
+                              className="flex-1 rounded-t-md bg-danger-500 transition-all duration-500"
+                              style={{ height: `${expH}px` }}
+                            />
+                          ) : (
+                            <div className="flex-1 rounded-t-sm bg-danger-50" style={{ height: "3px" }} />
+                          )}
+                        </div>
+                        {/* Net dot */}
+                        <div className={`w-1.5 h-1.5 rounded-full mt-1 ${netPositive ? "bg-ok-500" : "bg-danger-500"}`} />
+                        {/* Month label */}
+                        <div className={`text-[10px] font-semibold text-center leading-tight mt-1 text-ink-mute ${chartMonths === 12 ? "text-[9px]" : ""}`}>{m.label}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Y-axis guide lines (decorative) */}
+                <div className="mt-4 pt-3 border-t border-line flex items-center justify-between">
+                  <div className="flex gap-4 text-xs text-ink-mute">
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-3 h-3 rounded-sm bg-ok-500 inline-block" />
+                      Income
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-3 h-3 rounded-sm bg-danger-500 inline-block" />
+                      Expenses
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-ok-500 inline-block" />
+                      Net +
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-danger-500 inline-block" />
+                      Net −
+                    </span>
+                  </div>
+                  <div className="text-xs text-ink-faint">
+                    Maks: {fmtIDR(barMax)}
+                  </div>
+                </div>
+
+                {/* Monthly net summary strip */}
+                <div className="mt-3 grid gap-2" style={{ gridTemplateColumns: `repeat(${Math.min(chartMonths, 6)}, 1fr)` }}>
+                  {barChartData.slice(-Math.min(chartMonths, 6)).map(m => (
+                    <div key={m.key} className={`rounded-xl px-2.5 py-2 text-center ${m.net >= 0 ? "bg-ok-50" : "bg-danger-50"}`}>
+                      <div className="text-[10px] text-ink-mute font-medium">{m.label}</div>
+                      <div className={`text-xs font-bold mt-0.5 ${m.net >= 0 ? "text-ok-700" : "text-danger-700"}`}>
+                        {m.net >= 0 ? "+" : ""}{fmtIDR(m.net)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
             )}
           </div>
 
@@ -2088,10 +2173,10 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
                             <td className="px-4 py-3">
                               <div className="space-y-1">
                                 <div className="h-2 bg-paper-tint rounded-full overflow-hidden">
-                                  <div className="h-full bg-ok-400 rounded-full" style={{ width: `${(m.income / mfMax) * 100}%` }} />
+                                  <div className="h-full bg-ok-500 rounded-full" style={{ width: `${(m.income / mfMax) * 100}%` }} />
                                 </div>
                                 <div className="h-2 bg-paper-tint rounded-full overflow-hidden">
-                                  <div className="h-full bg-danger-400 rounded-full" style={{ width: `${(m.expense / mfMax) * 100}%` }} />
+                                  <div className="h-full bg-danger-500 rounded-full" style={{ width: `${(m.expense / mfMax) * 100}%` }} />
                                 </div>
                               </div>
                             </td>
@@ -2608,7 +2693,7 @@ function fmtRelTime(iso: string): string {
 
 const CATEGORY_COLORS = [
   "bg-ocean-500", "bg-wave-500", "bg-ok-500", "bg-warn-500",
-  "bg-suspend-500", "bg-manual-500", "bg-danger-400", "bg-archive-500", "bg-ink-soft",
+  "bg-suspend-500", "bg-manual-500", "bg-danger-500", "bg-archive-500", "bg-ink-soft",
 ];
 
 const BACKUP_CATEGORIES = [
