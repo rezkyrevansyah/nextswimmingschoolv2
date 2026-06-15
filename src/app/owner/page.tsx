@@ -2799,7 +2799,7 @@ function OwnerStorage({ userId, userName }: { userId: string; userName: string }
       for (let i = 0; i < backupList.length; i++) {
         const f = backupList[i];
         try {
-          const res = await fetch(`/api/r2?key=${encodeURIComponent(f.key)}`);
+          const res = await fetch(`/api/r2?key=${encodeURIComponent(f.key)}&stream=1`);
           if (res.ok) {
             const blob = await res.blob();
             const folder = f.category.replace(/[\s/\\]/g, "_");
