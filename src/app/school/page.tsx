@@ -407,6 +407,9 @@ interface Student {
   entry_id: string | null;
   scores: Record<string, number | string>;
   notes: string | null;
+  personality: string | null;
+  motivation: string | null;
+  learning_achievements: string | null;
   criteria: Criterion[];
 }
 
@@ -461,7 +464,7 @@ export default function SchoolPage() {
           )
         ),
         rapor_entries(
-          id, scores, notes, period_id
+          id, scores, notes, personality, motivation, learning_achievements, period_id
         )
       `)
       .eq("school_id", sId)
@@ -475,7 +478,7 @@ export default function SchoolPage() {
       const cls = mc?.classes;
       const firstCoach = cls?.class_coaches?.[0]?.profile;
       const entry = pid
-        ? (m.rapor_entries as unknown as { id: string; scores: Record<string, number | string>; notes: string | null; period_id: string }[])
+        ? (m.rapor_entries as unknown as { id: string; scores: Record<string, number | string>; notes: string | null; personality: string | null; motivation: string | null; learning_achievements: string | null; period_id: string }[])
           ?.find((e) => e.period_id === pid)
         : undefined;
       const criteria: Criterion[] = [...(cls?.class_criteria ?? [])]
@@ -491,6 +494,9 @@ export default function SchoolPage() {
         entry_id: entry?.id ?? null,
         scores: entry?.scores ?? {},
         notes: entry?.notes ?? null,
+        personality: entry?.personality ?? null,
+        motivation: entry?.motivation ?? null,
+        learning_achievements: entry?.learning_achievements ?? null,
         criteria,
       };
     });
@@ -595,7 +601,9 @@ export default function SchoolPage() {
   // Print helpers
   const toPrintStudent = (s: Student) => ({
     full_name: s.full_name, class_name: s.class_name, coach_name: s.coach_name,
-    period_label: s.period_label ?? "—", scores: s.scores, notes: s.notes, criteria: s.criteria,
+    period_label: s.period_label ?? "—", scores: s.scores, notes: s.notes,
+    personality: s.personality, motivation: s.motivation, learning_achievements: s.learning_achievements,
+    criteria: s.criteria,
   });
 
   const handlePrintAll = () => printSchoolRekap(schoolName, activePeriod?.label ?? "—", students.map(toPrintStudent));

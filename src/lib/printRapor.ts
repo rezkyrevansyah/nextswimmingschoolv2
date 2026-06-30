@@ -1,7 +1,7 @@
 /**
  * Shared rapor print/PDF utility.
- * Opens a styled print window with logo, scores, and coach notes.
- * Used by: school/page.tsx, member/page.tsx, admin rapor.
+ * Reproduces the NEXT Swimming School Report Card design exactly.
+ * Used by: school/page.tsx, member/page.tsx, coach/page.tsx
  */
 
 export interface PrintCriterion {
@@ -20,193 +20,24 @@ export interface PrintStudent {
   full_name: string;
   member_no?: string | null;
   class_name: string;
+  level?: string | null;
   coach_name: string;
   period_label: string;
   birth_date?: string | null;
+  age?: number | null;
   location?: string | null;
+  avatar_url?: string | null;
   scores: Record<string, number | string>;
   notes: string | null;
   personality?: string | null;
   motivation?: string | null;
   learning_achievements?: string | null;
-  attendance_rate?: number | null;  // 0–100 percentage
+  attendance_rate?: number | null; // 0–100 percentage
   best_times?: PrintBestTime[];
   criteria?: PrintCriterion[];
 }
 
-/** Compute a letter grade + color from a numeric percentage */
-function gradeInfo(pct: number): { grade: string; color: string; bg: string } {
-  if (pct >= 90) return { grade: "A+", color: "#15803d", bg: "#f0fdf4" };
-  if (pct >= 80) return { grade: "A",  color: "#16a34a", bg: "#f0fdf4" };
-  if (pct >= 70) return { grade: "B+", color: "#0369a1", bg: "#f0f9ff" };
-  if (pct >= 60) return { grade: "B",  color: "#0284c7", bg: "#f0f9ff" };
-  if (pct >= 50) return { grade: "C+", color: "#b45309", bg: "#fffbeb" };
-  if (pct >= 40) return { grade: "C",  color: "#d97706", bg: "#fffbeb" };
-  return           { grade: "D",  color: "#b91c1c", bg: "#fef2f2" };
-}
-
-/** Render one score criterion row */
-function scoreRowHtml(label: string, val: number | string, kind: string): string {
-  if (typeof val === "number") {
-    const max  = kind === "score_10" ? 10 : 100;
-    const pct  = Math.round((val / max) * 100);
-    const bar  = pct >= 70 ? "#22c55e" : pct >= 40 ? "#0ea5e9" : "#f59e0b";
-    const { grade, color, bg } = gradeInfo(pct);
-    return `
-      <div class="criterion">
-        <div class="crit-header">
-          <span class="crit-label">${label}</span>
-          <div class="crit-right">
-            <span class="crit-score">${val}<span class="crit-max">/${max}</span></span>
-            <span class="grade-badge" style="color:${color};background:${bg};border-color:${color}30">${grade}</span>
-          </div>
-        </div>
-        <div class="bar-track">
-          <div class="bar-fill" style="width:${pct}%;background:${bar}"></div>
-        </div>
-        <div class="bar-pct">${pct}%</div>
-      </div>`;
-  }
-  return `
-    <div class="criterion">
-      <div class="crit-header"><span class="crit-label">${label}</span></div>
-      <div class="text-val">${val}</div>
-    </div>`;
-}
-
-/** Compute overall average pct across all numeric scores */
-function overallPct(scores: Record<string, number | string>, criteria: PrintCriterion[]): number | null {
-  const criteriaMap = new Map(criteria.map(c => [c.id, c]));
-  const nums: number[] = [];
-  for (const [key, val] of Object.entries(scores)) {
-    if (typeof val !== "number") continue;
-    const crit = criteriaMap.get(key);
-    const max  = crit?.kind === "score_10" ? 10 : crit?.kind === "score_100" ? 100 : (val <= 10 ? 10 : 100);
-    nums.push(Math.round((val / max) * 100));
-  }
-  if (nums.length === 0) return null;
-  return Math.round(nums.reduce((a, b) => a + b, 0) / nums.length);
-}
-
-const SHARED_STYLES = `
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-  *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:'Inter',system-ui,Arial,sans-serif;color:#0f172a;background:#f8fafc;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-  .page{background:#fff;max-width:720px;margin:0 auto;min-height:100vh}
-
-  /* ── Header ── */
-  .rp-header{background:linear-gradient(135deg,#0c4a6e 0%,#0369a1 60%,#0ea5e9 100%);padding:28px 36px 24px;position:relative;overflow:hidden}
-  .rp-header::before{content:'';position:absolute;right:-60px;top:-60px;width:260px;height:260px;border-radius:50%;background:rgba(255,255,255,.07)}
-  .rp-header::after{content:'';position:absolute;right:60px;bottom:-80px;width:180px;height:180px;border-radius:50%;background:rgba(14,165,233,.25)}
-  .header-top{display:flex;align-items:center;justify-content:space-between;position:relative;z-index:1}
-  .logo-row{display:flex;align-items:center;gap:10px}
-  .logo-circle{width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,.2);backdrop-filter:blur(4px);border:2px solid rgba(255,255,255,.4);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;font-size:16px;letter-spacing:-1px}
-  .brand{font-size:14px;font-weight:700;color:rgba(255,255,255,.95);letter-spacing:.02em}
-  .brand-sub{font-size:10px;color:rgba(255,255,255,.6);margin-top:1px}
-  .doc-type{font-size:10px;font-weight:700;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:.1em;background:rgba(255,255,255,.12);padding:4px 10px;border-radius:20px;border:1px solid rgba(255,255,255,.2)}
-  .header-title{margin-top:20px;position:relative;z-index:1}
-  .header-title h1{font-size:26px;font-weight:800;color:#fff;letter-spacing:-.02em;line-height:1.1}
-  .header-title p{font-size:13px;color:rgba(255,255,255,.75);margin-top:4px}
-
-  /* ── Info grid ── */
-  .info-section{padding:20px 36px 0}
-  .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:0}
-  .info-box{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:10px 14px}
-  .info-box .lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94a3b8;margin-bottom:3px}
-  .info-box .val{font-size:13px;font-weight:600;color:#0f172a}
-
-  /* ── Overall score ── */
-  .overall-section{padding:16px 36px}
-  .overall-card{background:linear-gradient(135deg,#f0f9ff,#e0f2fe);border:1px solid #bae6fd;border-radius:12px;padding:14px 18px;display:flex;align-items:center;gap:16px}
-  .overall-circle{width:56px;height:56px;border-radius:50%;border:3px solid;display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0}
-  .overall-grade{font-size:18px;font-weight:800;line-height:1}
-  .overall-pct{font-size:10px;font-weight:600;margin-top:2px;opacity:.8}
-  .overall-text .title{font-size:13px;font-weight:700;color:#0c4a6e}
-  .overall-text .sub{font-size:11px;color:#64748b;margin-top:2px}
-
-  /* ── Score section ── */
-  .scores-section{padding:0 36px}
-  .section-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94a3b8;margin:18px 0 12px;display:flex;align-items:center;gap:8px}
-  .section-title::after{content:'';flex:1;height:1px;background:#e2e8f0}
-  .criterion{margin-bottom:14px}
-  .crit-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
-  .crit-label{font-size:13px;font-weight:600;color:#1e293b}
-  .crit-right{display:flex;align-items:center;gap:8px}
-  .crit-score{font-family:monospace;font-size:14px;font-weight:700;color:#0369a1}
-  .crit-max{font-size:11px;font-weight:500;color:#94a3b8}
-  .grade-badge{font-size:11px;font-weight:700;padding:2px 7px;border-radius:6px;border:1px solid}
-  .bar-track{height:8px;background:#e2e8f0;border-radius:4px;overflow:hidden}
-  .bar-fill{height:100%;border-radius:4px}
-  .bar-pct{font-size:10px;color:#94a3b8;margin-top:3px;text-align:right}
-  .text-val{font-size:13px;color:#475569;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;margin-top:4px;line-height:1.5}
-
-  /* ── Notes ── */
-  .notes-box{background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:14px 16px;margin-top:4px}
-  .notes-box .lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#0369a1;margin-bottom:6px}
-  .notes-box p{font-size:13px;color:#334155;line-height:1.7}
-  .no-scores{text-align:center;padding:32px;color:#94a3b8;font-size:13px;font-style:italic;background:#f8fafc;border-radius:10px;border:1px dashed #e2e8f0}
-
-  /* ── Attendance & character ── */
-  .att-bar-wrap{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:14px;margin-top:4px}
-  .att-bar-track{flex:1;height:10px;background:#dcfce7;border-radius:5px;overflow:hidden}
-  .att-bar-fill{height:100%;border-radius:5px;background:#22c55e}
-  .att-pct{font-size:16px;font-weight:800;color:#16a34a;flex-shrink:0}
-  .char-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:4px}
-  .char-box{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:10px 14px}
-  .char-box.full{grid-column:1/-1}
-  .char-box .lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94a3b8;margin-bottom:4px}
-  .char-box .val{font-size:13px;color:#334155;line-height:1.5}
-
-  /* ── Best times ── */
-  .bt-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:4px}
-  .bt-table th{text-align:left;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#94a3b8;padding:4px 8px;border-bottom:1px solid #e2e8f0}
-  .bt-table td{padding:6px 8px;border-bottom:1px solid #f1f5f9;color:#334155}
-  .bt-table tr:last-child td{border-bottom:none}
-  .bt-table .time-val{font-family:monospace;font-weight:700;color:#0369a1}
-
-  /* ── Sign ── */
-  .sign-section{padding:20px 36px 0;display:grid;grid-template-columns:1fr 1fr;gap:16px}
-  .sign-box{text-align:center}
-  .sign-label{font-size:10px;color:#64748b;margin-bottom:40px}
-  .sign-line{border-top:1.5px solid #cbd5e1;padding-top:6px}
-  .sign-name{font-size:12px;font-weight:600;color:#0f172a}
-  .sign-role{font-size:10px;color:#94a3b8}
-
-  /* ── Footer ── */
-  .rp-footer{margin:24px 36px 0;border-top:1px solid #e2e8f0;padding:12px 0 28px;display:flex;justify-content:space-between;align-items:center}
-  .rp-footer .left{font-size:10px;color:#94a3b8}
-  .rp-footer .right{font-size:10px;color:#94a3b8;text-align:right}
-  .rp-footer .watermark{font-size:9px;color:#cbd5e1;margin-top:2px}
-
-  /* ── Multi-student (rekap) ── */
-  .student-block{page-break-inside:avoid;page-break-after:always}
-  .student-block:last-child{page-break-after:auto}
-  .student-name-header{font-size:15px;font-weight:700;color:#0c4a6e;margin-bottom:2px}
-
-  /* ── Cover page (rekap) ── */
-  .cover-page{min-height:100vh;display:flex;flex-direction:column;background:linear-gradient(160deg,#0c4a6e 0%,#0369a1 50%,#0ea5e9 100%);position:relative;overflow:hidden;page-break-after:always}
-  .cover-page::before{content:'';position:absolute;right:-120px;top:-120px;width:500px;height:500px;border-radius:50%;background:rgba(255,255,255,.05)}
-  .cover-page::after{content:'';position:absolute;left:-80px;bottom:-80px;width:380px;height:380px;border-radius:50%;background:rgba(14,165,233,.2)}
-  .cover-content{position:relative;z-index:1;flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 48px;text-align:center}
-  .cover-logo-circle{width:72px;height:72px;border-radius:50%;background:rgba(255,255,255,.15);border:2px solid rgba(255,255,255,.35);display:flex;align-items:center;justify-content:center;color:#fff;font-size:28px;font-weight:900;margin:0 auto 16px}
-  .cover-brand{font-size:16px;font-weight:700;color:rgba(255,255,255,.9);letter-spacing:.04em;margin-bottom:4px}
-  .cover-divider{width:48px;height:2px;background:rgba(255,255,255,.3);margin:20px auto}
-  .cover-doc{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.15em;color:rgba(255,255,255,.5);margin-bottom:12px}
-  .cover-school{font-size:30px;font-weight:800;color:#fff;letter-spacing:-.02em;margin-bottom:8px;line-height:1.1}
-  .cover-period{font-size:15px;color:rgba(255,255,255,.75);margin-bottom:32px}
-  .cover-stats{display:flex;gap:20px;justify-content:center}
-  .cover-stat{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:14px;padding:16px 28px;text-align:center;backdrop-filter:blur(4px)}
-  .cover-stat .num{font-size:32px;font-weight:800;color:#fff;line-height:1}
-  .cover-stat .lbl{font-size:10px;font-weight:600;color:rgba(255,255,255,.6);margin-top:4px;text-transform:uppercase;letter-spacing:.06em}
-  .cover-footer{position:relative;z-index:1;padding:20px 48px;display:flex;justify-content:space-between;align-items:center;border-top:1px solid rgba(255,255,255,.1)}
-  .cover-footer span{font-size:10px;color:rgba(255,255,255,.45)}
-
-  @media print{
-    body{background:#fff}
-    .page{min-height:auto}
-    @page{margin:.5cm;size:A4}
-  }
-`;
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
 /** Format seconds (e.g. 75.34) as "1:15.34" */
 function fmtSwimTime(secs: number): string {
@@ -216,267 +47,634 @@ function fmtSwimTime(secs: number): string {
   return m > 0 ? `${m}:${sPad}` : `${sPad}`;
 }
 
-/** Capitalise stroke names */
-function fmtStroke(stroke: string): string {
-  const map: Record<string, string> = {
-    freestyle: "Freestyle", backstroke: "Backstroke",
-    breaststroke: "Breaststroke", butterfly: "Butterfly", IM: "Individual Medley",
-  };
-  return map[stroke] ?? stroke;
+/** Get the best time for a specific stroke+distance combo */
+function getBest(times: PrintBestTime[], stroke: string, distance: number): string {
+  const hit = times.filter(t => t.stroke === stroke && t.distance === distance)
+    .sort((a, b) => a.time_seconds - b.time_seconds)[0];
+  return hit ? fmtSwimTime(hit.time_seconds) : "NT";
 }
 
-function logoHtml(white = false, logoSrc?: string): string {
-  const imgTag = logoSrc
-    ? `<img src="${logoSrc}" alt="Logo" style="width:38px;height:38px;border-radius:50%;object-fit:cover;border:2px solid ${white ? "rgba(255,255,255,.4)" : "rgba(12,74,110,.3)"}" />`
-    : `<div class="logo-circle"${white ? "" : ' style="background:#0c4a6e;border:none"'}>N</div>`;
-  if (white) {
-    return `<div class="logo-row">
-      ${imgTag}
-      <div><div class="brand">Next Swimming School</div><div class="brand-sub">Report Card</div></div>
-    </div>`;
+/** Render a score value as criteria string (for choice/text kinds or numeric) */
+function scoreLabel(val: number | string, kind: string): string {
+  if (typeof val === "string") return val;
+  const max = kind === "score_10" ? 10 : 100;
+  const pct = (val / max) * 100;
+  if (pct >= 90) return "EXCELLENT";
+  if (pct >= 75) return "ADVANCE";
+  if (pct >= 60) return "GOOD";
+  if (pct >= 45) return "SATISFYING";
+  if (pct >= 30) return "EMERGING";
+  return "BEGINNING";
+}
+
+// ── CSS ───────────────────────────────────────────────────────────────────────
+
+const STYLES = `
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Inter',Arial,sans-serif;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+
+  /* ── Page ── */
+  .page{
+    width:595px;
+    min-height:842px;
+    background:#fff;
+    position:relative;
+    overflow:hidden;
+    margin:0 auto;
   }
-  return `<div class="logo-row">
-    ${imgTag}
-    <div><div class="brand" style="color:#0c4a6e">Next Swimming School</div><div class="brand-sub" style="color:#64748b">Report Card</div></div>
+
+  /* ── Large diagonal watermark logo (bottom-left) ── */
+  .watermark{
+    position:absolute;
+    left:-30px;
+    top:60px;
+    width:320px;
+    height:320px;
+    opacity:0.06;
+    z-index:0;
+    pointer-events:none;
+  }
+  .watermark img{width:100%;height:100%;object-fit:contain}
+
+  /* ── Content above watermark ── */
+  .content{position:relative;z-index:1}
+
+  /* ── Header ── */
+  .header{
+    background:#155689;
+    padding:0;
+    display:flex;
+    align-items:stretch;
+    min-height:54px;
+  }
+  .header-left{
+    background:#fff;
+    width:14px;
+    flex-shrink:0;
+  }
+  .header-title-block{
+    flex:1;
+    padding:10px 14px 10px 18px;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+  }
+  .header-report{
+    font-size:22px;
+    font-weight:900;
+    color:#fff;
+    letter-spacing:.04em;
+    line-height:1;
+    text-transform:uppercase;
+  }
+  .header-periode{
+    font-size:8px;
+    font-weight:600;
+    color:rgba(255,255,255,.75);
+    letter-spacing:.12em;
+    text-transform:uppercase;
+    margin-top:3px;
+  }
+  .header-logo{
+    padding:6px 14px;
+    display:flex;
+    align-items:center;
+    justify-content:flex-end;
+    flex-shrink:0;
+  }
+  .header-logo img{
+    height:40px;
+    width:auto;
+    object-fit:contain;
+    filter:brightness(0) invert(1);
+  }
+  .header-logo .logo-text{
+    font-size:20px;
+    font-weight:900;
+    color:#fff;
+    letter-spacing:.06em;
+  }
+
+  /* ── Info section ── */
+  .info-section{
+    display:flex;
+    gap:0;
+    padding:14px 20px 10px 20px;
+    border-bottom:2px solid #155689;
+  }
+  .avatar-col{
+    width:72px;
+    flex-shrink:0;
+    margin-right:16px;
+  }
+  .avatar-circle{
+    width:68px;
+    height:68px;
+    border-radius:50%;
+    background:#e0e9f0;
+    border:2px solid #155689;
+    overflow:hidden;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    color:#155689;
+    font-size:24px;
+    font-weight:700;
+  }
+  .avatar-circle img{width:100%;height:100%;object-fit:cover}
+
+  .info-grid{
+    flex:1;
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:2px 24px;
+  }
+  .info-row{
+    display:flex;
+    align-items:baseline;
+    gap:0;
+    font-size:8.5px;
+    line-height:1.7;
+  }
+  .info-label{
+    font-weight:700;
+    color:#000;
+    text-transform:uppercase;
+    letter-spacing:.04em;
+    min-width:60px;
+    flex-shrink:0;
+  }
+  .info-colon{
+    margin:0 6px;
+    color:#000;
+    font-weight:700;
+  }
+  .info-value{
+    color:#000;
+    font-weight:500;
+  }
+
+  /* ── Section heading ── */
+  .section-heading{
+    background:#155689;
+    color:#fff;
+    font-size:9px;
+    font-weight:800;
+    letter-spacing:.12em;
+    text-transform:uppercase;
+    padding:5px 20px;
+    margin-top:0;
+  }
+
+  /* ── Skill table ── */
+  .skill-table{
+    width:100%;
+    border-collapse:collapse;
+    font-size:8.5px;
+  }
+  .skill-table th{
+    background:#155689;
+    color:#fff;
+    font-weight:700;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    padding:5px 20px;
+    text-align:left;
+  }
+  .skill-table th:last-child{text-align:center;width:140px}
+  .skill-table td{
+    padding:5px 20px;
+    border-bottom:1px solid #e8ecef;
+    color:#000;
+    font-weight:500;
+    text-transform:uppercase;
+    letter-spacing:.04em;
+  }
+  .skill-table td:last-child{text-align:center;font-weight:700}
+  .skill-table tr:nth-child(even) td{background:#f5f8fb}
+
+  /* ── Personal best time table ── */
+  .pbt-table{
+    width:100%;
+    border-collapse:collapse;
+    font-size:8.5px;
+    margin-top:0;
+  }
+  .pbt-table th{
+    background:#155689;
+    color:#fff;
+    font-weight:700;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    padding:5px 0;
+    text-align:center;
+  }
+  .pbt-table th:first-child{text-align:left;padding-left:20px;width:30%}
+  .pbt-table td{
+    padding:5px 0;
+    text-align:center;
+    border-bottom:1px solid #e8ecef;
+    color:#000;
+    font-weight:500;
+    font-family:monospace;
+    text-transform:uppercase;
+  }
+  .pbt-table td:first-child{text-align:left;padding-left:20px;font-family:inherit;font-weight:600}
+  .pbt-table tr:nth-child(even) td{background:#f5f8fb}
+
+  /* ── Note box ── */
+  .note-section{
+    padding:6px 20px 0;
+  }
+  .note-label{
+    font-size:8px;
+    font-weight:800;
+    color:#000;
+    text-transform:uppercase;
+    letter-spacing:.08em;
+    margin-bottom:2px;
+  }
+  .note-box{
+    border:1px solid #c5cdd4;
+    border-radius:2px;
+    min-height:38px;
+    padding:6px 8px;
+    font-size:8.5px;
+    color:#222;
+    line-height:1.5;
+  }
+
+  /* ── Bottom character row ── */
+  .char-row{
+    display:grid;
+    grid-template-columns:1fr 1fr 1fr 1fr;
+    gap:0;
+    padding:8px 20px 0;
+    border-top:1px solid #dde2e7;
+    margin-top:8px;
+  }
+  .char-item{}
+  .char-item .clbl{
+    font-size:7.5px;
+    font-weight:700;
+    color:#000;
+    text-transform:uppercase;
+    letter-spacing:.06em;
+  }
+  .char-item .cval{
+    font-size:8.5px;
+    color:#222;
+    margin-top:1px;
+    font-weight:500;
+  }
+
+  /* ── Signature section ── */
+  .sign-section{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:0;
+    padding:10px 20px 8px;
+    margin-top:6px;
+  }
+  .sign-col{
+    text-align:center;
+    position:relative;
+  }
+  .sign-col .sign-role{
+    font-size:7.5px;
+    font-weight:700;
+    color:#000;
+    text-transform:uppercase;
+    letter-spacing:.08em;
+    margin-bottom:28px;
+  }
+  .sign-col .sign-line{
+    border-top:1.5px solid #000;
+    padding-top:3px;
+  }
+  .sign-col .sign-name{
+    font-size:8px;
+    font-weight:700;
+    color:#000;
+    text-transform:uppercase;
+    letter-spacing:.04em;
+  }
+  .sign-col .sign-title{
+    font-size:7.5px;
+    color:#555;
+    text-transform:uppercase;
+    letter-spacing:.04em;
+  }
+  .sign-col .sign-stamp{
+    position:absolute;
+    right:10px;
+    bottom:0;
+    width:52px;
+    height:52px;
+    opacity:.35;
+  }
+  .sign-col .sign-stamp img{width:100%;height:100%;object-fit:contain}
+
+  /* ── Footer ── */
+  .footer{
+    border-top:2px solid #155689;
+    padding:5px 20px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin-top:4px;
+  }
+  .footer-social{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    font-size:7px;
+    color:#155689;
+    font-weight:600;
+  }
+  .footer-social span{display:flex;align-items:center;gap:3px}
+  .footer-social svg{flex-shrink:0}
+  .footer-right{
+    font-size:7px;
+    color:#888;
+    text-align:right;
+  }
+
+  @media print{
+    body{background:#fff}
+    .page{margin:0;width:100%}
+    @page{margin:0;size:A4 portrait}
+  }
+`;
+
+// ── SVG icons for footer ──────────────────────────────────────────────────────
+
+const ICON_IG = `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#155689" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="5"/><circle cx="17.5" cy="6.5" r="1" fill="#155689" stroke="none"/></svg>`;
+const ICON_FB = `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#155689" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>`;
+const ICON_EMAIL = `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#155689" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>`;
+
+// ── Main HTML builder ─────────────────────────────────────────────────────────
+
+function buildRaporHtml(s: PrintStudent, logoSrc: string, schoolBrandName = "NEXT"): string {
+  const criteriaMap = new Map((s.criteria ?? []).map(c => [c.id, c]));
+  const scoreEntries = Object.entries(s.scores);
+  const bestTimes = s.best_times ?? [];
+  const STROKES = ["FREESTYLE", "BACKSTROKE", "BREASTSTROKE", "BUTTERFLY"];
+  const DISTANCES = [25, 50, 100];
+
+  // Info rows
+  const infoLeft = [
+    { label: "ID NUMBER", value: s.member_no ?? "—" },
+    { label: "FULL NAME",  value: s.full_name },
+    { label: "AGE",        value: s.age != null ? `${s.age}` : (s.birth_date ? calcAgeFromDate(s.birth_date).toString() : "—") },
+  ];
+  const infoRight = [
+    { label: "LEVEL",    value: s.level ?? s.class_name ?? "—" },
+    { label: "CLASS",    value: s.class_name },
+    { label: "LOCATION", value: s.location ?? "—" },
+  ];
+
+  // Avatar
+  const avatarInitial = s.full_name.charAt(0).toUpperCase();
+  const avatarHtml = s.avatar_url
+    ? `<img src="${s.avatar_url}" alt="${s.full_name}" />`
+    : `<span>${avatarInitial}</span>`;
+
+  // Skill rows
+  const skillRows = scoreEntries.length > 0
+    ? scoreEntries.map(([key, val]) => {
+        const crit  = criteriaMap.get(key);
+        const label = crit?.label ?? key.replace(/_/g, " ");
+        const kind  = crit?.kind ?? (typeof val === "number" && val <= 10 ? "score_10" : typeof val === "number" ? "score_100" : "text");
+        const display = scoreLabel(val, kind);
+        return `<tr><td>${label.toUpperCase()}</td><td>${display}</td></tr>`;
+      }).join("")
+    : `<tr><td colspan="2" style="text-align:center;color:#888;font-style:italic;padding:12px">Belum ada penilaian</td></tr>`;
+
+  // PBT rows
+  const pbtRows = STROKES.map(stroke => {
+    const strokeKey = stroke.toLowerCase();
+    const cells = DISTANCES.map(d => {
+      const hit = bestTimes.find(t =>
+        t.stroke.toLowerCase() === strokeKey && t.distance === d
+      );
+      return `<td>${hit ? fmtSwimTime(hit.time_seconds) : "NT"}</td>`;
+    }).join("");
+    return `<tr><td>${stroke}</td>${cells}</tr>`;
+  }).join("");
+
+  // Character bottom row
+  const attendance = s.attendance_rate != null ? `${Math.round(s.attendance_rate)}%` : "—";
+  const personality = s.personality || "—";
+  const motivation  = s.motivation  || "—";
+  const learningAch = s.learning_achievements || "—";
+
+  return `
+  <div class="page">
+    <!-- Watermark -->
+    <div class="watermark">
+      <img src="${logoSrc}" alt="" />
+    </div>
+
+    <div class="content">
+      <!-- Header -->
+      <div class="header">
+        <div class="header-left"></div>
+        <div class="header-title-block">
+          <div class="header-report">REPORT CARD</div>
+          <div class="header-periode">PERIODE : ${s.period_label.toUpperCase()}</div>
+        </div>
+        <div class="header-logo">
+          <img src="${logoSrc}" alt="${schoolBrandName}" onerror="this.style.display='none';this.parentNode.innerHTML='<span class=\\'logo-text\\'>${schoolBrandName}</span>'" />
+        </div>
+      </div>
+
+      <!-- Info section -->
+      <div class="info-section">
+        <div class="avatar-col">
+          <div class="avatar-circle">${avatarHtml}</div>
+        </div>
+        <div class="info-grid">
+          ${infoLeft.map((r, i) => `
+            <div class="info-row">
+              <span class="info-label">${r.label}</span>
+              <span class="info-colon">:</span>
+              <span class="info-value">${r.value}</span>
+            </div>
+          `).join("")}
+          ${infoRight.map(r => `
+            <div class="info-row">
+              <span class="info-label">${r.label}</span>
+              <span class="info-colon">:</span>
+              <span class="info-value">${r.value}</span>
+            </div>
+          `).join("")}
+        </div>
+      </div>
+
+      <!-- Skill & Criteria -->
+      <table class="skill-table">
+        <thead>
+          <tr>
+            <th>SKILL</th>
+            <th>CRITERIA</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${skillRows}
+        </tbody>
+      </table>
+
+      <!-- Personal Best Time -->
+      <div class="section-heading">PERSONAL BEST TIME</div>
+      <table class="pbt-table">
+        <thead>
+          <tr>
+            <th>STYLE</th>
+            ${DISTANCES.map(d => `<th>${d}M</th>`).join("")}
+          </tr>
+        </thead>
+        <tbody>
+          ${pbtRows}
+        </tbody>
+      </table>
+
+      <!-- Note -->
+      <div class="note-section">
+        <div class="note-label">NOTE:</div>
+        <div class="note-box">${s.notes ? escapeHtml(s.notes) : ""}</div>
+      </div>
+
+      <!-- Character row -->
+      <div class="char-row">
+        <div class="char-item">
+          <div class="clbl">Attendance</div>
+          <div class="cval">${attendance}</div>
+        </div>
+        <div class="char-item">
+          <div class="clbl">Personality</div>
+          <div class="cval">${escapeHtml(personality)}</div>
+        </div>
+        <div class="char-item">
+          <div class="clbl">Motivation to learn</div>
+          <div class="cval">${escapeHtml(motivation)}</div>
+        </div>
+        <div class="char-item">
+          <div class="clbl">Learning Achievements</div>
+          <div class="cval">${escapeHtml(learningAch)}</div>
+        </div>
+      </div>
+
+      <!-- Signatures -->
+      <div class="sign-section">
+        <div class="sign-col">
+          <div class="sign-role">Head Coach</div>
+          <div class="sign-line">
+            <div class="sign-name">${escapeHtml(s.coach_name)}</div>
+            <div class="sign-title">Head Coach</div>
+          </div>
+        </div>
+        <div class="sign-col">
+          <div class="sign-role">Head Dept / Headmaster</div>
+          <div class="sign-stamp">
+            <img src="${logoSrc}" alt="" />
+          </div>
+          <div class="sign-line">
+            <div class="sign-name">Syahril Sidik</div>
+            <div class="sign-title">Head Dept / Headmaster</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="footer">
+        <div class="footer-social">
+          <span>${ICON_IG} @nextswim</span>
+          <span>${ICON_FB} @nextswimmingschool</span>
+          <span>${ICON_EMAIL} nextswimschool@gmail.com</span>
+        </div>
+        <div class="footer-right">Dicetak ${new Date().toLocaleDateString("id-ID", { dateStyle: "long" })}</div>
+      </div>
+    </div>
   </div>`;
 }
 
-function studentBodyHtml(s: PrintStudent, showInfoGrid = true): string {
-  const scoreEntries = Object.entries(s.scores);
-  const hasContent   = scoreEntries.length > 0 || s.notes;
-  const criteriaMap  = new Map((s.criteria ?? []).map(c => [c.id, c]));
+// ── Utilities ─────────────────────────────────────────────────────────────────
 
-  const scoreRows = scoreEntries.map(([key, val]) => {
-    const crit  = criteriaMap.get(key);
-    const label = crit?.label ?? key.replace(/_/g, " ");
-    const kind  = crit?.kind ?? (typeof val === "number" && val <= 10 ? "score_10" : typeof val === "number" ? "score_100" : "text");
-    return scoreRowHtml(label, val, kind);
-  }).join("");
-
-  const avg = overallPct(s.scores, s.criteria ?? []);
-  const { grade, color, bg } = avg !== null ? gradeInfo(avg) : { grade: "—", color: "#94a3b8", bg: "#f8fafc" };
-
-  // Attendance bar
-  const attHtml = s.attendance_rate != null ? `
-    <div class="section-title">Kehadiran</div>
-    <div class="att-bar-wrap">
-      <div class="att-bar-track"><div class="att-bar-fill" style="width:${s.attendance_rate}%"></div></div>
-      <div class="att-pct">${s.attendance_rate}%</div>
-    </div>` : "";
-
-  // Best times table
-  const btHtml = s.best_times && s.best_times.length > 0 ? `
-    <div class="section-title">Personal Best Time</div>
-    <table class="bt-table">
-      <thead><tr><th>Gaya</th><th>Jarak</th><th>Waktu Terbaik</th></tr></thead>
-      <tbody>
-        ${s.best_times.map(t => `<tr>
-          <td>${fmtStroke(t.stroke)}</td>
-          <td>${t.distance} m</td>
-          <td class="time-val">${fmtSwimTime(t.time_seconds)}</td>
-        </tr>`).join("")}
-      </tbody>
-    </table>` : "";
-
-  // Character evaluation
-  const hasChar = s.personality || s.motivation || s.learning_achievements;
-  const charHtml = hasChar ? `
-    <div class="section-title">Evaluasi Karakter</div>
-    <div class="char-grid">
-      ${s.personality ? `<div class="char-box"><div class="lbl">Kepribadian</div><div class="val">${s.personality}</div></div>` : ""}
-      ${s.motivation ? `<div class="char-box"><div class="lbl">Motivasi Belajar</div><div class="val">${s.motivation}</div></div>` : ""}
-      ${s.learning_achievements ? `<div class="char-box full"><div class="lbl">Capaian Pembelajaran</div><div class="val">${s.learning_achievements}</div></div>` : ""}
-    </div>` : "";
-
-  return `
-    ${showInfoGrid ? `
-    <div class="info-section">
-      <div class="info-grid">
-        <div class="info-box"><div class="lbl">Nama Siswa</div><div class="val">${s.full_name}</div></div>
-        ${s.member_no ? `<div class="info-box"><div class="lbl">Nomor Induk</div><div class="val" style="font-family:monospace">${s.member_no}</div></div>` : `<div class="info-box"><div class="lbl">Kelas</div><div class="val">${s.class_name}</div></div>`}
-        <div class="info-box"><div class="lbl">Coach</div><div class="val">${s.coach_name}</div></div>
-        <div class="info-box"><div class="lbl">Periode</div><div class="val">${s.period_label}</div></div>
-        ${s.member_no ? `<div class="info-box"><div class="lbl">Kelas</div><div class="val">${s.class_name}</div></div>` : ""}
-        ${s.location ? `<div class="info-box"><div class="lbl">Lokasi</div><div class="val">${s.location}</div></div>` : ""}
-      </div>
-    </div>` : ""}
-
-    ${avg !== null ? `
-    <div class="overall-section">
-      <div class="overall-card">
-        <div class="overall-circle" style="border-color:${color};color:${color};background:${bg}">
-          <div class="overall-grade">${grade}</div>
-          <div class="overall-pct">${avg}%</div>
-        </div>
-        <div class="overall-text">
-          <div class="title">Nilai Keseluruhan</div>
-          <div class="sub">${avg >= 70 ? "Pencapaian yang baik! Pertahankan." : avg >= 40 ? "Ada ruang untuk berkembang lebih baik." : "Perlu perhatian dan latihan lebih intensif."}</div>
-        </div>
-      </div>
-    </div>` : ""}
-
-    <div class="scores-section">
-      ${hasContent ? `
-        <div class="section-title">Detail Penilaian</div>
-        ${scoreRows}
-        ${s.notes ? `<div class="section-title">Catatan Coach</div><div class="notes-box"><p>${s.notes}</p></div>` : ""}
-      ` : `<div class="no-scores">Belum ada penilaian untuk periode ini.</div>`}
-      ${attHtml}
-      ${btHtml}
-      ${charHtml}
-    </div>
-  `;
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
+
+function calcAgeFromDate(birthDate: string): number {
+  const birth = new Date(birthDate);
+  const today = new Date();
+  let age = today.getFullYear() - birth.getFullYear();
+  const m = today.getMonth() - birth.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+  return age;
+}
+
+// ── Public API ────────────────────────────────────────────────────────────────
 
 /** Print a single student's rapor */
 export function printSingleRapor(student: PrintStudent): void {
-  const w = window.open("", "_blank", "width=780,height=1040");
+  const w = window.open("", "_blank", "width=680,height=960");
   if (!w) return;
-  const date = new Date().toLocaleDateString("id-ID", { dateStyle: "long" });
   const logoSrc = `${window.location.origin}/logo.png`;
 
   w.document.write(`<!DOCTYPE html><html lang="id"><head>
     <meta charset="utf-8">
-    <title>Rapor — ${student.full_name}</title>
-    <style>${SHARED_STYLES}</style>
+    <title>Rapor — ${escapeHtml(student.full_name)}</title>
+    <style>${STYLES}</style>
   </head><body>
-  <div class="page">
-    <div class="rp-header">
-      <div class="header-top">
-        ${logoHtml(true, logoSrc)}
-        <span class="doc-type">Rapor Siswa</span>
-      </div>
-      <div class="header-title">
-        <h1>Rapor Perkembangan Siswa</h1>
-        <p>${student.period_label} &nbsp;·&nbsp; ${student.class_name}</p>
-      </div>
-    </div>
-
-    ${studentBodyHtml(student, true)}
-
-    <div class="sign-section">
-      <div class="sign-box">
-        <div class="sign-label">Coach</div>
-        <div class="sign-line">
-          <div class="sign-name">${student.coach_name}</div>
-          <div class="sign-role">Coach / Pelatih</div>
-        </div>
-      </div>
-      <div class="sign-box">
-        <div class="sign-label">Kepala Sekolah</div>
-        <div class="sign-line">
-          <div class="sign-name">Syahril Sidik</div>
-          <div class="sign-role">Kepala Sekolah</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="rp-footer">
-      <div class="left">
-        <div>Next Swimming School</div>
-        <div class="watermark">Dokumen ini dicetak otomatis dari sistem.</div>
-      </div>
-      <div class="right">
-        <div>Dicetak pada ${date}</div>
-        <div class="watermark">${student.period_label}</div>
-      </div>
-    </div>
-  </div>
+    ${buildRaporHtml(student, logoSrc)}
   </body></html>`);
   w.document.close();
   w.focus();
-  setTimeout(() => w.print(), 500);
+  setTimeout(() => w.print(), 600);
 }
 
 /** Print rekap rapor semua siswa sekolah afiliasi */
 export function printSchoolRekap(schoolName: string, periodLabel: string, students: PrintStudent[]): void {
-  const w = window.open("", "_blank", "width=780,height=1040");
+  const w = window.open("", "_blank", "width=680,height=960");
   if (!w) return;
-  const date = new Date().toLocaleDateString("id-ID", { dateStyle: "long" });
   const logoSrc = `${window.location.origin}/logo.png`;
-  const done = students.filter(s => Object.keys(s.scores).length > 0 || s.notes);
+  const date = new Date().toLocaleDateString("id-ID", { dateStyle: "long" });
 
-  const studentBlocks = students.map(s => `
-    <div class="student-block">
-      <div class="rp-header" style="padding:20px 36px 16px">
-        <div class="header-top">
-          ${logoHtml(true, logoSrc)}
-          <span class="doc-type">Rapor Siswa</span>
+  const coverHtml = `
+  <div style="min-height:100vh;background:#155689;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;color:#fff;page-break-after:always">
+    <img src="${logoSrc}" style="width:80px;height:80px;object-fit:contain;margin-bottom:16px;filter:brightness(0) invert(1)" alt="" />
+    <div style="font-size:11px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;opacity:.6;margin-bottom:8px">REKAP RAPOR PERKEMBANGAN SISWA</div>
+    <div style="font-size:28px;font-weight:900;letter-spacing:.02em;margin-bottom:6px">${escapeHtml(schoolName)}</div>
+    <div style="font-size:14px;opacity:.75;margin-bottom:32px">${escapeHtml(periodLabel)}</div>
+    <div style="display:flex;gap:20px">
+      ${[["Total Siswa", students.length], ["Rapor Tersedia", students.filter(s => Object.keys(s.scores).length > 0 || s.notes).length], ["Belum Diisi", students.filter(s => Object.keys(s.scores).length === 0 && !s.notes).length]].map(([lbl, num]) => `
+        <div style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);border-radius:12px;padding:16px 28px">
+          <div style="font-size:32px;font-weight:900">${num}</div>
+          <div style="font-size:10px;font-weight:600;opacity:.6;text-transform:uppercase;letter-spacing:.06em;margin-top:4px">${lbl}</div>
         </div>
-      </div>
-      <div class="info-section" style="padding-top:16px">
-        <div class="info-grid">
-          <div class="info-box"><div class="lbl">Nama Siswa</div><div class="val">${s.full_name}</div></div>
-          <div class="info-box"><div class="lbl">Kelas</div><div class="val">${s.class_name}</div></div>
-          <div class="info-box"><div class="lbl">Coach</div><div class="val">${s.coach_name}</div></div>
-          <div class="info-box"><div class="lbl">Sekolah</div><div class="val">${schoolName}</div></div>
-        </div>
-      </div>
-      ${studentBodyHtml({ ...s, period_label: periodLabel }, false)}
-      <div class="sign-section">
-        <div class="sign-box">
-          <div class="sign-label">Coach</div>
-          <div class="sign-line">
-            <div class="sign-name">${s.coach_name}</div>
-            <div class="sign-role">Coach / Pelatih</div>
-          </div>
-        </div>
-        <div class="sign-box">
-          <div class="sign-label">Kepala Sekolah</div>
-          <div class="sign-line">
-            <div class="sign-name">Syahril Sidik</div>
-            <div class="sign-role">Kepala Sekolah</div>
-          </div>
-        </div>
-      </div>
-      <div class="rp-footer">
-        <div class="left"><div>Next Swimming School · ${schoolName}</div><div class="watermark">Dokumen ini dicetak otomatis dari sistem.</div></div>
-        <div class="right"><div>Dicetak pada ${date}</div><div class="watermark">${periodLabel}</div></div>
-      </div>
+      `).join("")}
     </div>
-  `).join("");
+    <div style="position:absolute;bottom:20px;font-size:10px;opacity:.4">Dicetak pada ${date}</div>
+  </div>`;
+
+  const studentPages = students.map(s => `
+    <div style="page-break-after:always">
+      ${buildRaporHtml(s, logoSrc)}
+    </div>`).join("");
 
   w.document.write(`<!DOCTYPE html><html lang="id"><head>
     <meta charset="utf-8">
-    <title>Rekap Rapor — ${schoolName}</title>
-    <style>${SHARED_STYLES}</style>
+    <title>Rekap Rapor — ${escapeHtml(schoolName)}</title>
+    <style>${STYLES}
+      body{position:relative}
+    </style>
   </head><body>
-
-  <!-- Cover page -->
-  <div class="cover-page">
-    <div class="cover-content">
-      <div class="cover-logo-circle"><img src="${logoSrc}" alt="Logo" style="width:48px;height:48px;border-radius:50%;object-fit:cover" onerror="this.style.display='none';this.parentNode.textContent='N'" /></div>
-      <div class="cover-brand">Next Swimming School</div>
-      <div class="cover-divider"></div>
-      <div class="cover-doc">Rekap Rapor Perkembangan Siswa</div>
-      <div class="cover-school">${schoolName}</div>
-      <div class="cover-period">${periodLabel}</div>
-      <div class="cover-stats">
-        <div class="cover-stat">
-          <div class="num">${students.length}</div>
-          <div class="lbl">Total Siswa</div>
-        </div>
-        <div class="cover-stat">
-          <div class="num">${done.length}</div>
-          <div class="lbl">Rapor Tersedia</div>
-        </div>
-        <div class="cover-stat">
-          <div class="num">${students.length - done.length}</div>
-          <div class="lbl">Belum Diisi</div>
-        </div>
-      </div>
-    </div>
-    <div class="cover-footer">
-      <span>Next Swimming School</span>
-      <span>Dicetak pada ${date}</span>
-    </div>
-  </div>
-
-  <!-- Per-student pages -->
-  ${studentBlocks}
-
+    ${coverHtml}
+    ${studentPages}
   </body></html>`);
   w.document.close();
   w.focus();
-  setTimeout(() => w.print(), 500);
+  setTimeout(() => w.print(), 600);
 }

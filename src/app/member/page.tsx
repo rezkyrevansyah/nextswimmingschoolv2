@@ -963,6 +963,7 @@ interface RaporEntryFull {
   id: string; period: string; period_id: string; period_is_open: boolean; class_name: string; coach_id: string; coach_name: string;
   class_id: string;
   scores: Record<string, number | string>; notes: string | null;
+  personality: string | null; motivation: string | null; learning_achievements: string | null;
   review_stars: number | null; review_message: string | null; review_id: string | null;
   criteria: PrintCriterion[];
 }
@@ -980,7 +981,7 @@ function MemberRapor({ memberId, memberName }: { memberId: string; memberName: s
   const load = useCallback(async () => {
     if (!memberId) return;
     const { data } = await supabase.from("rapor_entries")
-      .select("id, scores, notes, coach_id, period_id, class_id, rapor_periods(label, is_open), classes(name), coach:profiles!rapor_entries_coach_id_fkey(full_name)")
+      .select("id, scores, notes, personality, motivation, learning_achievements, coach_id, period_id, class_id, rapor_periods(label, is_open), classes(name), coach:profiles!rapor_entries_coach_id_fkey(full_name)")
       .eq("member_id", memberId)
       .order("created_at", { ascending: false });
     if (!data) return;
@@ -1020,6 +1021,9 @@ function MemberRapor({ memberId, memberName }: { memberId: string; memberName: s
         coach_name: prof?.full_name ?? "—",
         scores: (e.scores as unknown as Record<string, number | string>) ?? {},
         notes: e.notes,
+        personality: (e as unknown as { personality: string | null }).personality ?? null,
+        motivation: (e as unknown as { motivation: string | null }).motivation ?? null,
+        learning_achievements: (e as unknown as { learning_achievements: string | null }).learning_achievements ?? null,
         review_stars: review?.stars ?? null,
         review_message: review?.message ?? null,
         review_id: review?.id ?? null,
@@ -1122,6 +1126,9 @@ function MemberRapor({ memberId, memberName }: { memberId: string; memberName: s
                   period_label: selectedEntry.period,
                   scores: selectedEntry.scores,
                   notes: selectedEntry.notes,
+                  personality: selectedEntry.personality,
+                  motivation: selectedEntry.motivation,
+                  learning_achievements: selectedEntry.learning_achievements,
                   criteria: selectedEntry.criteria,
                 })}>
                 Cetak / PDF
