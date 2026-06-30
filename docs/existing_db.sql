@@ -129,6 +129,7 @@ CREATE TABLE public.members (
   pay_status USER-DEFINED NOT NULL DEFAULT 'unpaid'::payment_status,
   admin_notes text,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
+  member_no text,
   CONSTRAINT members_pkey PRIMARY KEY (id),
   CONSTRAINT members_profile_id_fkey FOREIGN KEY (profile_id) REFERENCES public.profiles(id),
   CONSTRAINT members_school_id_fkey FOREIGN KEY (school_id) REFERENCES public.schools(id),
@@ -381,6 +382,9 @@ CREATE TABLE public.rapor_entries (
   filled_at timestamp with time zone,
   locked boolean NOT NULL DEFAULT false,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
+  personality text,
+  motivation text,
+  learning_achievements text,
   CONSTRAINT rapor_entries_pkey PRIMARY KEY (id),
   CONSTRAINT rapor_entries_coach_id_fkey FOREIGN KEY (coach_id) REFERENCES public.profiles(id),
   CONSTRAINT rapor_entries_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.classes(id),
@@ -623,4 +627,20 @@ CREATE TABLE public.activity_logs (
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT activity_logs_pkey PRIMARY KEY (id),
   CONSTRAINT activity_logs_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branches(id)
+);
+CREATE TABLE public.member_best_times (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  member_id uuid NOT NULL,
+  branch_id uuid NOT NULL,
+  stroke text NOT NULL CHECK (stroke = ANY (ARRAY['freestyle'::text, 'backstroke'::text, 'breaststroke'::text, 'butterfly'::text, 'IM'::text])),
+  distance integer NOT NULL CHECK (distance = ANY (ARRAY[25, 50, 100, 200, 400])),
+  time_seconds numeric NOT NULL,
+  recorded_at date NOT NULL DEFAULT CURRENT_DATE,
+  coach_id uuid,
+  notes text,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT member_best_times_pkey PRIMARY KEY (id),
+  CONSTRAINT member_best_times_member_id_fkey FOREIGN KEY (member_id) REFERENCES public.members(id),
+  CONSTRAINT member_best_times_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branches(id),
+  CONSTRAINT member_best_times_coach_id_fkey FOREIGN KEY (coach_id) REFERENCES public.profiles(id)
 );

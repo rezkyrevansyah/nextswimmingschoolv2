@@ -10,13 +10,27 @@ export interface PrintCriterion {
   kind: "score_10" | "score_100" | "choice" | "text";
 }
 
+export interface PrintBestTime {
+  stroke: string;
+  distance: number;
+  time_seconds: number;
+}
+
 export interface PrintStudent {
   full_name: string;
+  member_no?: string | null;
   class_name: string;
   coach_name: string;
   period_label: string;
+  birth_date?: string | null;
+  location?: string | null;
   scores: Record<string, number | string>;
   notes: string | null;
+  personality?: string | null;
+  motivation?: string | null;
+  learning_achievements?: string | null;
+  attendance_rate?: number | null;  // 0–100 percentage
+  best_times?: PrintBestTime[];
   criteria?: PrintCriterion[];
 }
 
@@ -132,6 +146,24 @@ const SHARED_STYLES = `
   .notes-box p{font-size:13px;color:#334155;line-height:1.7}
   .no-scores{text-align:center;padding:32px;color:#94a3b8;font-size:13px;font-style:italic;background:#f8fafc;border-radius:10px;border:1px dashed #e2e8f0}
 
+  /* ── Attendance & character ── */
+  .att-bar-wrap{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:14px;margin-top:4px}
+  .att-bar-track{flex:1;height:10px;background:#dcfce7;border-radius:5px;overflow:hidden}
+  .att-bar-fill{height:100%;border-radius:5px;background:#22c55e}
+  .att-pct{font-size:16px;font-weight:800;color:#16a34a;flex-shrink:0}
+  .char-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:4px}
+  .char-box{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:10px 14px}
+  .char-box.full{grid-column:1/-1}
+  .char-box .lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94a3b8;margin-bottom:4px}
+  .char-box .val{font-size:13px;color:#334155;line-height:1.5}
+
+  /* ── Best times ── */
+  .bt-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:4px}
+  .bt-table th{text-align:left;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#94a3b8;padding:4px 8px;border-bottom:1px solid #e2e8f0}
+  .bt-table td{padding:6px 8px;border-bottom:1px solid #f1f5f9;color:#334155}
+  .bt-table tr:last-child td{border-bottom:none}
+  .bt-table .time-val{font-family:monospace;font-weight:700;color:#0369a1}
+
   /* ── Sign ── */
   .sign-section{padding:20px 36px 0;display:grid;grid-template-columns:1fr 1fr;gap:16px}
   .sign-box{text-align:center}
@@ -176,6 +208,23 @@ const SHARED_STYLES = `
   }
 `;
 
+/** Format seconds (e.g. 75.34) as "1:15.34" */
+function fmtSwimTime(secs: number): string {
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  const sPad = s < 10 ? `0${s.toFixed(2)}` : s.toFixed(2);
+  return m > 0 ? `${m}:${sPad}` : `${sPad}`;
+}
+
+/** Capitalise stroke names */
+function fmtStroke(stroke: string): string {
+  const map: Record<string, string> = {
+    freestyle: "Freestyle", backstroke: "Backstroke",
+    breaststroke: "Breaststroke", butterfly: "Butterfly", IM: "Individual Medley",
+  };
+  return map[stroke] ?? stroke;
+}
+
 function logoHtml(white = false, logoSrc?: string): string {
   const imgTag = logoSrc
     ? `<img src="${logoSrc}" alt="Logo" style="width:38px;height:38px;border-radius:50%;object-fit:cover;border:2px solid ${white ? "rgba(255,255,255,.4)" : "rgba(12,74,110,.3)"}" />`
@@ -207,14 +256,48 @@ function studentBodyHtml(s: PrintStudent, showInfoGrid = true): string {
   const avg = overallPct(s.scores, s.criteria ?? []);
   const { grade, color, bg } = avg !== null ? gradeInfo(avg) : { grade: "—", color: "#94a3b8", bg: "#f8fafc" };
 
+  // Attendance bar
+  const attHtml = s.attendance_rate != null ? `
+    <div class="section-title">Kehadiran</div>
+    <div class="att-bar-wrap">
+      <div class="att-bar-track"><div class="att-bar-fill" style="width:${s.attendance_rate}%"></div></div>
+      <div class="att-pct">${s.attendance_rate}%</div>
+    </div>` : "";
+
+  // Best times table
+  const btHtml = s.best_times && s.best_times.length > 0 ? `
+    <div class="section-title">Personal Best Time</div>
+    <table class="bt-table">
+      <thead><tr><th>Gaya</th><th>Jarak</th><th>Waktu Terbaik</th></tr></thead>
+      <tbody>
+        ${s.best_times.map(t => `<tr>
+          <td>${fmtStroke(t.stroke)}</td>
+          <td>${t.distance} m</td>
+          <td class="time-val">${fmtSwimTime(t.time_seconds)}</td>
+        </tr>`).join("")}
+      </tbody>
+    </table>` : "";
+
+  // Character evaluation
+  const hasChar = s.personality || s.motivation || s.learning_achievements;
+  const charHtml = hasChar ? `
+    <div class="section-title">Evaluasi Karakter</div>
+    <div class="char-grid">
+      ${s.personality ? `<div class="char-box"><div class="lbl">Kepribadian</div><div class="val">${s.personality}</div></div>` : ""}
+      ${s.motivation ? `<div class="char-box"><div class="lbl">Motivasi Belajar</div><div class="val">${s.motivation}</div></div>` : ""}
+      ${s.learning_achievements ? `<div class="char-box full"><div class="lbl">Capaian Pembelajaran</div><div class="val">${s.learning_achievements}</div></div>` : ""}
+    </div>` : "";
+
   return `
     ${showInfoGrid ? `
     <div class="info-section">
       <div class="info-grid">
         <div class="info-box"><div class="lbl">Nama Siswa</div><div class="val">${s.full_name}</div></div>
-        <div class="info-box"><div class="lbl">Kelas</div><div class="val">${s.class_name}</div></div>
+        ${s.member_no ? `<div class="info-box"><div class="lbl">Nomor Induk</div><div class="val" style="font-family:monospace">${s.member_no}</div></div>` : `<div class="info-box"><div class="lbl">Kelas</div><div class="val">${s.class_name}</div></div>`}
         <div class="info-box"><div class="lbl">Coach</div><div class="val">${s.coach_name}</div></div>
         <div class="info-box"><div class="lbl">Periode</div><div class="val">${s.period_label}</div></div>
+        ${s.member_no ? `<div class="info-box"><div class="lbl">Kelas</div><div class="val">${s.class_name}</div></div>` : ""}
+        ${s.location ? `<div class="info-box"><div class="lbl">Lokasi</div><div class="val">${s.location}</div></div>` : ""}
       </div>
     </div>` : ""}
 
@@ -238,6 +321,9 @@ function studentBodyHtml(s: PrintStudent, showInfoGrid = true): string {
         ${scoreRows}
         ${s.notes ? `<div class="section-title">Catatan Coach</div><div class="notes-box"><p>${s.notes}</p></div>` : ""}
       ` : `<div class="no-scores">Belum ada penilaian untuk periode ini.</div>`}
+      ${attHtml}
+      ${btHtml}
+      ${charHtml}
     </div>
   `;
 }

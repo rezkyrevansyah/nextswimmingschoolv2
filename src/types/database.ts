@@ -1707,6 +1707,67 @@ export type Database = {
           },
         ]
       }
+      member_best_times: {
+        Row: {
+          branch_id: string
+          coach_id: string | null
+          created_at: string
+          distance: number
+          id: string
+          member_id: string
+          notes: string | null
+          recorded_at: string
+          stroke: string
+          time_seconds: number
+        }
+        Insert: {
+          branch_id: string
+          coach_id?: string | null
+          created_at?: string
+          distance: number
+          id?: string
+          member_id: string
+          notes?: string | null
+          recorded_at?: string
+          stroke: string
+          time_seconds: number
+        }
+        Update: {
+          branch_id?: string
+          coach_id?: string | null
+          created_at?: string
+          distance?: number
+          id?: string
+          member_id?: string
+          notes?: string | null
+          recorded_at?: string
+          stroke?: string
+          time_seconds?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "member_best_times_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "member_best_times_coach_id_fkey"
+            columns: ["coach_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "member_best_times_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       members: {
         Row: {
           admin_notes: string | null
@@ -1714,6 +1775,7 @@ export type Database = {
           created_at: string
           date_start: string
           id: string
+          member_no: string | null
           pay_status: Database["public"]["Enums"]["payment_status"]
           profile_id: string
           qr_code: string
@@ -1731,6 +1793,7 @@ export type Database = {
           created_at?: string
           date_start?: string
           id?: string
+          member_no?: string | null
           pay_status?: Database["public"]["Enums"]["payment_status"]
           profile_id: string
           qr_code?: string
@@ -1748,6 +1811,7 @@ export type Database = {
           created_at?: string
           date_start?: string
           id?: string
+          member_no?: string | null
           pay_status?: Database["public"]["Enums"]["payment_status"]
           profile_id?: string
           qr_code?: string
@@ -2003,10 +2067,13 @@ export type Database = {
           created_at: string
           filled_at: string | null
           id: string
+          learning_achievements: string | null
           locked: boolean
           member_id: string
+          motivation: string | null
           notes: string | null
           period_id: string
+          personality: string | null
           scores: Json
         }
         Insert: {
@@ -2015,10 +2082,13 @@ export type Database = {
           created_at?: string
           filled_at?: string | null
           id?: string
+          learning_achievements?: string | null
           locked?: boolean
           member_id: string
+          motivation?: string | null
           notes?: string | null
           period_id: string
+          personality?: string | null
           scores?: Json
         }
         Update: {
@@ -2027,10 +2097,13 @@ export type Database = {
           created_at?: string
           filled_at?: string | null
           id?: string
+          learning_achievements?: string | null
           locked?: boolean
           member_id?: string
+          motivation?: string | null
           notes?: string | null
           period_id?: string
+          personality?: string | null
           scores?: Json
         }
         Relationships: [

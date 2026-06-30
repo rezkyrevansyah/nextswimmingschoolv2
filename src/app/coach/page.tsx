@@ -83,6 +83,9 @@ interface PastInvoice {
 
 interface RaporEntry {
   id: string; member_id: string; class_id: string; locked: boolean;
+  personality?: string | null;
+  motivation?: string | null;
+  learning_achievements?: string | null;
   member?: { profile: { full_name: string } | null } | null;
   class?: { name: string } | null;
 }
@@ -2082,6 +2085,9 @@ function CoachRapor({ coachId, branchId }: { coachId: string; branchId: string }
   const [open, setOpen] = useState<RaporEntry | null>(null);
   const [scores, setScores] = useState<Record<string, number | string>>({});
   const [notes, setNotes] = useState("");
+  const [personality, setPersonality] = useState("");
+  const [motivation, setMotivation] = useState("");
+  const [learningAchievements, setLearningAchievements] = useState("");
   const [saving, setSaving] = useState(false);
   const [page, setPage] = useState(0);
   const PAGE_SIZE = 10;
@@ -2130,7 +2136,7 @@ function CoachRapor({ coachId, branchId }: { coachId: string; branchId: string }
 
       // 4. Now fetch all entries for this coach + period
       const { data: e } = await supabase.from("rapor_entries")
-        .select("id, member_id, class_id, locked, scores, notes, member:members(profile:profiles(full_name)), class:classes(name, class_criteria(id, label, kind, options, sort_order))")
+        .select("id, member_id, class_id, locked, scores, notes, personality, motivation, learning_achievements, member:members(profile:profiles(full_name)), class:classes(name, class_criteria(id, label, kind, options, sort_order))")
         .eq("period_id", periodData.id).eq("coach_id", coachId);
       if (e) { setEntries(e as unknown as RaporEntry[]); setPage(0); }
       setLoading(false);
@@ -2147,6 +2153,9 @@ function CoachRapor({ coachId, branchId }: { coachId: string; branchId: string }
     const existing = (e as unknown as { scores?: Record<string, number | string> }).scores ?? {};
     setScores(existing);
     setNotes((e as unknown as { notes?: string }).notes ?? "");
+    setPersonality(e.personality ?? "");
+    setMotivation(e.motivation ?? "");
+    setLearningAchievements(e.learning_achievements ?? "");
     setOpen(e);
   };
 
@@ -2160,7 +2169,14 @@ function CoachRapor({ coachId, branchId }: { coachId: string; branchId: string }
     setSaving(true);
     const isNew = !open.locked;
     const { error } = await supabase.from("rapor_entries")
-      .update({ scores, notes, filled_at: new Date().toISOString(), locked: true })
+      .update({
+        scores, notes,
+        personality: personality || null,
+        motivation: motivation || null,
+        learning_achievements: learningAchievements || null,
+        filled_at: new Date().toISOString(),
+        locked: true,
+      })
       .eq("id", open.id);
     setSaving(false);
     if (error) return toast.error("Gagal menyimpan rapor", error.message);
@@ -2176,7 +2192,12 @@ function CoachRapor({ coachId, branchId }: { coachId: string; branchId: string }
     }
     toast.success("Rapor disimpan");
     setOpen(null);
-    setEntries(prev => prev.map(e => e.id === open.id ? { ...e, locked: true, scores, notes } : e));
+    setEntries(prev => prev.map(e => e.id === open.id ? {
+      ...e, locked: true, scores, notes,
+      personality: personality || null,
+      motivation: motivation || null,
+      learning_achievements: learningAchievements || null,
+    } : e));
   };
 
   // Derived values for summary & pagination
@@ -2343,6 +2364,18 @@ function CoachRapor({ coachId, branchId }: { coachId: string; branchId: string }
             </div>
           ))}
           <Field label="Catatan umum coach"><Textarea rows={3} value={notes} onChange={e => setNotes(e.target.value)} placeholder="Mis. Member menunjukkan progres yang baik bulan ini, terutama pada teknik pernapasan." /></Field>
+          <div className="border-t border-line pt-4 space-y-4">
+            <div className="text-xs font-bold uppercase tracking-widest text-ink-mute">Evaluasi Karakter</div>
+            <Field label="Kepribadian" hint="Mis. Disiplin, percaya diri, komunikatif">
+              <Input value={personality} onChange={e => setPersonality(e.target.value)} placeholder="Mis. Disiplin, kooperatif, antusias" />
+            </Field>
+            <Field label="Motivasi Belajar" hint="Seberapa besar semangat belajar member">
+              <Input value={motivation} onChange={e => setMotivation(e.target.value)} placeholder="Mis. Sangat antusias dan selalu tepat waktu" />
+            </Field>
+            <Field label="Capaian Pembelajaran" hint="Pencapaian spesifik yang dicapai dalam periode ini">
+              <Textarea rows={2} value={learningAchievements} onChange={e => setLearningAchievements(e.target.value)} placeholder="Mis. Berhasil menguasai teknik pernapasan freestyle dan mulai latihan backstroke." />
+            </Field>
+          </div>
         </div>
       </Modal>
 

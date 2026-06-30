@@ -23,6 +23,7 @@ import type { ClassRow, ClassPackage, School } from "../_types";
 interface MemberRow {
   id: string; profile_id: string; type: string; status: string;
   date_start: string; qr_code: string | null; school_id: string | null;
+  member_no: string | null;
   remaining_sessions: number | null; total_sessions: number | null;
   suspend_until?: string | null; suspend_reason?: string | null;
   profile?: {
@@ -131,7 +132,7 @@ export default function AdminMember({ branchId }: { branchId: string }) {
     if (!branchId) return;
     setLoading(true);
     const db = createClient();
-    const sel = "id, profile_id, type, status, date_start, qr_code, school_id, remaining_sessions, total_sessions, suspend_until, suspend_reason, profile:profiles(full_name, birth_date, phone, gender, address, health_notes, email, avatar_url), member_classes(class:classes(id, name))";
+    const sel = "id, profile_id, type, status, date_start, qr_code, school_id, member_no, remaining_sessions, total_sessions, suspend_until, suspend_reason, profile:profiles(full_name, birth_date, phone, gender, address, health_notes, email, avatar_url), member_classes(class:classes(id, name))";
     let q = db.from("members").select(sel).eq("branch_id", branchId).order("created_at", { ascending: false });
     if (tab === "suspended") q = db.from("members").select(sel).eq("branch_id", branchId).eq("status", "suspended") as typeof q;
     else if (tab !== "all") q = q.eq("type", tab as "reguler" | "private" | "school_affiliate");
@@ -213,6 +214,7 @@ export default function AdminMember({ branchId }: { branchId: string }) {
       type: m.type ?? "reguler",
       school_id: m.school_id ?? "",
       class_ids: m.member_classes?.map(mc => mc.class?.id).filter(Boolean) as string[] ?? [],
+      member_no: m.member_no ?? "",
     });
     setEditAvatarFile(null);
     setEditAvatarPreview(null);
@@ -251,10 +253,11 @@ export default function AdminMember({ branchId }: { branchId: string }) {
     }).eq("id", detail.profile_id);
     if (profileErr) { setSavingEdit(false); return toast.error("Gagal update profil", profileErr.message); }
 
-    // Update members row (type, school_id)
+    // Update members row (type, school_id, member_no)
     await createClient().from("members").update({
       type: editMemberForm.type as "reguler" | "private" | "school_affiliate",
       school_id: editMemberForm.type === "school_affiliate" ? (editMemberForm.school_id || null) : null,
+      member_no: editMemberForm.member_no || null,
     }).eq("id", detail.id);
 
     // Sync kelas — add new, remove removed
@@ -301,6 +304,7 @@ export default function AdminMember({ branchId }: { branchId: string }) {
     setDetail(prev => prev ? {
       ...prev,
       type: editMemberForm.type as MemberRow["type"],
+      member_no: editMemberForm.member_no || null,
       profile: prev.profile ? {
         ...prev.profile,
         full_name: editMemberForm.full_name,
@@ -334,7 +338,7 @@ export default function AdminMember({ branchId }: { branchId: string }) {
   const [editMemberForm, setEditMemberForm] = useState({
     full_name: "", email: "", birth_date: "", gender: "", phone: "", phone_owner: "self",
     parent_name: "", parent_phone: "", address: "", health_notes: "",
-    type: "reguler", school_id: "", class_ids: [] as string[],
+    type: "reguler", school_id: "", class_ids: [] as string[], member_no: "",
   });
   const [savingEdit, setSavingEdit] = useState(false);
   const [openResetPwd, setOpenResetPwd] = useState(false);
@@ -1309,6 +1313,7 @@ export default function AdminMember({ branchId }: { branchId: string }) {
           {/* Identitas */}
           <Field label="Nama lengkap" required><Input value={editMemberForm.full_name} onChange={e => setEditMemberForm(f => ({ ...f, full_name: e.target.value }))} /></Field>
           <Field label="Email" hint="Ubah email login akun member"><Input type="email" placeholder="nama@email.com" value={editMemberForm.email} onChange={e => setEditMemberForm(f => ({ ...f, email: e.target.value }))} /></Field>
+          <Field label="Nomor Induk Member" hint="Muncul di rapor sebagai ID member — opsional"><Input value={editMemberForm.member_no} onChange={e => setEditMemberForm(f => ({ ...f, member_no: e.target.value }))} placeholder="Mis. 2024-001" className="font-mono" /></Field>
           <Field label="Tanggal lahir"><DatePicker value={editMemberForm.birth_date} onChange={v => setEditMemberForm(f => ({ ...f, birth_date: v }))} /></Field>
           <Field label="Jenis kelamin">
             <Select value={editMemberForm.gender} onChange={e => setEditMemberForm(f => ({ ...f, gender: e.target.value }))}>
