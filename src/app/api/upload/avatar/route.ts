@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
   const db = targetId !== user.id ? getSupabaseAdmin() : supabase;
   await db
     .from("profiles")
-    .update({ avatar_url: url, is_profile_complete: true })
+    .update({ avatar_url: url })
     .eq("id", targetId);
 
   return NextResponse.json({ url });

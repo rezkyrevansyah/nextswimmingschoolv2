@@ -77,10 +77,11 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
 
   // link existing coach
   const [openLink, setOpenLink] = useState(false);
-  const [linkEmail, setLinkEmail] = useState("");
+  const [linkSearch, setLinkSearch] = useState("");
   const [linkResult, setLinkResult] = useState<{ id: string; full_name: string } | null>(null);
-  const [linkSearching, setLinkSearching] = useState(false);
   const [linkSaving, setLinkSaving] = useState(false);
+  const [linkCandidates, setLinkCandidates] = useState<{ id: string; full_name: string; email: string | null; specialization: string | null }[]>([]);
+  const [linkLoadingCandidates, setLinkLoadingCandidates] = useState(false);
 
   // assign class
   const [openAssign, setOpenAssign] = useState(false);
@@ -311,17 +312,18 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
     setShowNewPassword(false);
   };
 
-  const searchCoachByEmail = async () => {
-    if (!linkEmail.trim()) return;
-    setLinkSearching(true);
-    setLinkResult(null);
-    const { data } = await createClient().from("profiles").select("id, full_name").eq("email", linkEmail.trim()).eq("role", "coach").maybeSingle();
-    setLinkSearching(false);
-    if (!data) { return toast.error("Coach tidak ditemukan", "Pastikan email terdaftar sebagai coach"); }
-    // Check if already in this branch
-    const { data: existing } = await createClient().from("coach_branches").select("id").eq("coach_id", data.id).eq("branch_id", branchId).maybeSingle();
-    if (existing) { return toast.error("Coach sudah terdaftar di cabang ini"); }
-    setLinkResult(data);
+  const loadLinkCandidates = async () => {
+    setLinkLoadingCandidates(true);
+    setLinkCandidates([]);
+    // Get coach IDs already in this branch
+    const { data: cbData } = await createClient().from("coach_branches").select("coach_id").eq("branch_id", branchId);
+    const alreadyLinked = (cbData ?? []).map((r: { coach_id: string }) => r.coach_id);
+    // Query all coaches not in this branch
+    let query = createClient().from("profiles").select("id, full_name, email, specialization").eq("role", "coach").order("full_name");
+    if (alreadyLinked.length > 0) query = query.not("id", "in", `(${alreadyLinked.join(",")})`);
+    const { data } = await query;
+    setLinkCandidates((data ?? []) as { id: string; full_name: string; email: string | null; specialization: string | null }[]);
+    setLinkLoadingCandidates(false);
   };
 
   const linkCoachToBranch = async () => {
@@ -339,8 +341,9 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
     }
     toast.success(`${linkResult.full_name} berhasil ditambahkan ke cabang ini`);
     setOpenLink(false);
-    setLinkEmail("");
+    setLinkSearch("");
     setLinkResult(null);
+    setLinkCandidates([]);
     load();
   };
 
@@ -380,6 +383,15 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
 
   const visibleCoaches = showArchived ? coaches : coaches.filter(c => !c.is_archived);
 
+  const PAGE_SIZE = 10;
+  const [page, setPage] = useState(0);
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => { setPage(0); }, [showArchived]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+  const totalPages = Math.max(1, Math.ceil(visibleCoaches.length / PAGE_SIZE));
+  const safePage = Math.min(page, Math.max(0, totalPages - 1));
+  const pagedCoaches = visibleCoaches.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -393,86 +405,149 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
               {showArchived ? "Sembunyikan Arsip" : `Tampilkan Arsip (${coaches.filter(c => c.is_archived).length})`}
             </Btn>
           )}
-          <Btn variant="soft" icon="link" onClick={() => { setLinkEmail(""); setLinkResult(null); setOpenLink(true); }}>Link Coach Existing</Btn>
+          <Btn variant="soft" icon="link" onClick={() => { setLinkSearch(""); setLinkResult(null); setOpenLink(true); loadLinkCandidates(); }}>Link Coach Existing</Btn>
           <Btn variant="primary" icon="plus" onClick={() => { setForm(EMPTY_COACH_FORM); setCreateAvatarFile(null); setCreateAvatarPreview(null); setOpenAdd(true); }}>Tambah Coach</Btn>
         </div>
       </div>
 
-      {loading ? (
-        <div className="p-10 text-center text-ink-mute">Memuat data…</div>
-      ) : (
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          {visibleCoaches.map((c) => {
-            const activeCerts = c.certifications?.filter(ct => ct.status === "approved").map(ct => ct.title ?? ct.name) ?? [];
-            const suspended = isSuspended(c);
-            const archived = isArchived(c);
-            const assignedClasses = c.class_coaches?.filter(cc => cc.class) ?? [];
-            return (
-              <Card key={c.id} className={archived ? "opacity-60" : ""}>
-                <div className="flex items-start gap-3">
-                  <Avatar name={c.full_name} src={c.avatar_url ?? undefined} size={52} />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <div className="font-display font-bold text-ink truncate">{c.full_name}</div>
-                      <Status kind={coachStatus(c) as "active" | "suspended" | "archived"}>
-                        {archived ? "Diarsipkan" : suspended ? "Suspend" : "Aktif"}
-                      </Status>
-                    </div>
-                    {c.specialization && <div className="text-xs text-ocean-700 font-semibold mt-1">{c.specialization}</div>}
-                    {c.phone && <div className="text-xs text-ink-mute mt-0.5">{c.phone}</div>}
-                    {suspended && c.suspend_until && <div className="text-xs text-warn-600 mt-1">Suspend s/d {fmtDate(c.suspend_until)}</div>}
-                  </div>
-                </div>
-
-                {assignedClasses.length > 0 && (
-                  <div className="mt-3 flex flex-wrap gap-1">
-                    {assignedClasses.slice(0, 3).map(cc => (
-                      <span key={cc.class_id} className="text-[10px] font-semibold bg-ocean-50 text-ocean-700 px-2 py-0.5 rounded-full">{cc.class?.name}</span>
-                    ))}
-                    {assignedClasses.length > 3 && <span className="text-[10px] text-ink-mute">+{assignedClasses.length - 3} lainnya</span>}
-                  </div>
+      <Card padded={false}>
+        {loading ? (
+          <div className="p-10 text-center text-ink-mute">Memuat data…</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-[11px] uppercase tracking-widest text-ink-faint font-bold border-b border-line">
+                  <th className="text-left py-3 px-5 font-bold">Coach</th>
+                  <th className="text-left py-3 font-bold hidden sm:table-cell">Spesialisasi</th>
+                  <th className="text-left py-3 font-bold">Status</th>
+                  <th className="text-left py-3 font-bold hidden md:table-cell">No HP</th>
+                  <th className="text-left py-3 font-bold hidden md:table-cell">Kelas</th>
+                  <th className="py-3 px-5" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {pagedCoaches.map((c) => {
+                  const suspended = isSuspended(c);
+                  const archived = isArchived(c);
+                  const assignedClasses = c.class_coaches?.filter(cc => cc.class) ?? [];
+                  return (
+                    <tr key={c.id} className={`hover:bg-paper-tint cursor-pointer${archived ? " opacity-60" : ""}`} onClick={() => setDetail(c)}>
+                      <td className="py-3.5 px-5">
+                        <div className="flex items-center gap-3">
+                          <Avatar name={c.full_name} src={c.avatar_url ?? undefined} size={36} />
+                          <div className="min-w-0">
+                            <div className="font-semibold text-ink truncate">{c.full_name}</div>
+                            {c.nick_name && <div className="text-xs text-ink-faint truncate">{c.nick_name}</div>}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="text-xs text-ocean-700 font-semibold hidden sm:table-cell">
+                        {c.specialization ?? <span className="text-ink-faint">—</span>}
+                      </td>
+                      <td>
+                        <Status kind={coachStatus(c) as "active" | "suspended" | "archived"}>
+                          {archived ? "Diarsipkan" : suspended ? "Suspend" : "Aktif"}
+                        </Status>
+                      </td>
+                      <td className="text-sm text-ink-soft hidden md:table-cell">
+                        {c.phone ?? <span className="text-ink-faint">—</span>}
+                      </td>
+                      <td className="hidden md:table-cell">
+                        {assignedClasses.length > 0
+                          ? <span className="text-xs font-semibold bg-ocean-50 text-ocean-700 px-2 py-0.5 rounded-full">{assignedClasses.length} kelas</span>
+                          : <span className="text-xs text-ink-faint">—</span>}
+                      </td>
+                      <td className="px-5" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center gap-1 justify-end">
+                          <Btn variant="ghost" size="sm" icon="eye" onClick={() => setDetail(c)}>Detail</Btn>
+                          {!archived && c.phone && (
+                            <a href={waLink(`Halo ${c.full_name}, saya dari admin Next Swimming School.`, c.phone)} target="_blank" rel="noreferrer">
+                              <Btn variant="ghost" size="sm" icon="whatsapp" className="text-ok-600">WA</Btn>
+                            </a>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {visibleCoaches.length === 0 && (
+                  <tr><td colSpan={6} className="py-10 text-center text-ink-mute">
+                    {showArchived ? "Tidak ada coach diarsipkan." : "Belum ada coach di cabang ini."}
+                  </td></tr>
                 )}
-                {activeCerts.length > 0 && (
-                  <div className="mt-3 pt-3 border-t border-line">
-                    <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-1">Sertifikasi aktif</div>
-                    <div className="flex flex-wrap gap-1">{activeCerts.map(s => <span key={s} className="text-[10px] font-semibold text-ok-700 bg-ok-50 px-1.5 py-0.5 rounded">{s}</span>)}</div>
-                  </div>
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {!loading && totalPages > 1 && (
+          <div className="px-5 py-3.5 border-t border-line flex items-center justify-between flex-wrap gap-3">
+            <span className="text-xs text-ink-mute tabular-nums">
+              {visibleCoaches.length} coach · halaman {safePage + 1} dari {totalPages}
+            </span>
+            <div className="flex items-center gap-1">
+              <button type="button" disabled={safePage === 0} onClick={() => setPage(0)}
+                className="px-2 py-1.5 rounded-lg border border-line text-xs text-ink-mute disabled:opacity-40 disabled:cursor-not-allowed hover:bg-paper-tint transition">«</button>
+              <button type="button" disabled={safePage === 0} onClick={() => setPage(p => p - 1)}
+                className="px-2.5 py-1.5 rounded-lg border border-line text-xs text-ink-mute disabled:opacity-40 disabled:cursor-not-allowed hover:bg-paper-tint transition">‹</button>
+              {Array.from({ length: totalPages }, (_, i) => i)
+                .filter(i => i === 0 || i === totalPages - 1 || Math.abs(i - safePage) <= 1)
+                .reduce<(number | "...")[]>((acc, i, idx, arr) => {
+                  if (idx > 0 && i - (arr[idx - 1] as number) > 1) acc.push("...");
+                  acc.push(i); return acc;
+                }, [])
+                .map((item, idx) =>
+                  item === "..." ? (
+                    <span key={`e${idx}`} className="px-2 text-xs text-ink-faint">…</span>
+                  ) : (
+                    <button key={item} type="button" onClick={() => setPage(item as number)}
+                      className={`min-w-[32px] py-1.5 rounded-lg border text-xs transition ${safePage === item ? "bg-ocean-600 border-ocean-600 text-white font-bold" : "border-line text-ink-soft hover:bg-paper-tint"}`}>
+                      {(item as number) + 1}
+                    </button>
+                  )
                 )}
+              <button type="button" disabled={safePage === totalPages - 1} onClick={() => setPage(p => p + 1)}
+                className="px-2.5 py-1.5 rounded-lg border border-line text-xs text-ink-mute disabled:opacity-40 disabled:cursor-not-allowed hover:bg-paper-tint transition">›</button>
+              <button type="button" disabled={safePage === totalPages - 1} onClick={() => setPage(totalPages - 1)}
+                className="px-2 py-1.5 rounded-lg border border-line text-xs text-ink-mute disabled:opacity-40 disabled:cursor-not-allowed hover:bg-paper-tint transition">»</button>
+            </div>
+          </div>
+        )}
+      </Card>
 
-                <div className="mt-4 pt-3 border-t border-line flex gap-2 flex-wrap">
-                  <Btn variant="ghost" size="sm" icon="eye" onClick={() => setDetail(c)}>Detail</Btn>
-                  {!archived && c.phone && (
-                    <a href={waLink(`Halo ${c.full_name}, saya dari admin Next Swimming School.`, c.phone)} target="_blank" rel="noreferrer">
-                      <Btn variant="ghost" size="sm" icon="whatsapp" className="text-ok-600">WA</Btn>
-                    </a>
-                  )}
-                </div>
-              </Card>
-            );
-          })}
-          {visibleCoaches.length === 0 && (
-            <p className="text-ink-mute col-span-3">{showArchived ? "Tidak ada coach diarsipkan." : "Belum ada coach di cabang ini."}</p>
-          )}
-        </div>
-      )}
-
-      {/* ── Detail panel ── */}
+      {/* ── Detail modal ── */}
       {detail && (() => {
         const suspended = isSuspended(detail);
         const archived = isArchived(detail);
         const activeCerts = detail.certifications?.filter(ct => ct.status === "approved") ?? [];
         const assignedClasses = detail.class_coaches?.filter(cc => cc.class) ?? [];
         return (
-          <div className="fixed inset-0 z-50 flex">
-            <div className="flex-1 bg-black/40" onClick={() => setDetail(null)} />
-            <div className="w-full max-w-md bg-white h-full overflow-y-auto shadow-float flex flex-col">
-              {/* Header */}
-              <div className="sticky top-0 bg-white border-b border-line px-5 py-4 flex items-center justify-between z-10">
-                <div className="font-display font-bold text-lg">Detail Coach</div>
-                <button onClick={() => setDetail(null)} className="p-1.5 rounded-lg hover:bg-paper-tint text-ink-mute"><Icon name="close" className="w-5 h-5" /></button>
-              </div>
-
-              <div className="flex-1 overflow-y-auto p-5 space-y-5">
+          <Modal
+            size="xl"
+            open={!!detail}
+            onClose={() => setDetail(null)}
+            title="Detail Coach"
+            footer={
+              !archived ? (
+                <>
+                  <Btn variant="outline" size="sm" icon="edit" onClick={() => { setEditForm({ full_name: detail.full_name, nick_name: detail.nick_name ?? "", gender: detail.gender ?? "", birth_date: detail.birth_date ?? "", phone: detail.phone ?? "", specialization: detail.specialization ?? "", bio: detail.bio ?? "", address: detail.address ?? "", education_level: detail.education_level ?? "", education_institution: detail.education_institution ?? "", bank_name: detail.bank_name ?? "", bank_account: detail.bank_account ?? "", bank_holder: detail.bank_holder ?? "" }); setEditAvatarFile(null); setEditAvatarPreview(null); setOpenEdit(true); }}>Edit Data</Btn>
+                  <Btn variant="outline" size="sm" icon="lock" onClick={() => { setNewPassword(""); setOpenReset(true); }}>Reset Password</Btn>
+                  {suspended
+                    ? <Btn variant="soft" size="sm" icon="check" onClick={() => liftSuspend(detail)}>Akhiri Suspend</Btn>
+                    : <Btn variant="ghost" size="sm" className="text-warn-600" onClick={() => { setSuspendTarget(detail); setSuspendForm({ reason: "", until: "" }); }}>Suspend Coach</Btn>
+                  }
+                  <Btn variant="ghost" size="sm" className="text-ink-mute" onClick={() => toggleArchive(detail)}>Arsipkan</Btn>
+                </>
+              ) : (
+                <>
+                  <Btn variant="soft" size="sm" icon="check" onClick={() => toggleArchive(detail)}>Aktifkan Kembali</Btn>
+                  <Btn variant="ghost" size="sm" className="text-danger-600" onClick={() => deleteCoach(detail)}>Hapus Permanen</Btn>
+                </>
+              )
+            }
+          >
+            <div className="space-y-5">
                 {/* Profile summary */}
                 <div className="flex items-start gap-4">
                   <button type="button" onClick={() => detail.avatar_url && setPhotoView(detail.avatar_url)} className={detail.avatar_url ? "cursor-zoom-in shrink-0" : "cursor-default shrink-0"}>
@@ -644,60 +719,53 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
                     </div>
                   )}
                 </div>
-              </div>
-
-              {/* Action bar */}
-              <div className="sticky bottom-0 bg-white border-t border-line px-5 py-4 space-y-2">
-                {!archived && (
-                  <>
-                    <div className="flex gap-2">
-                      <Btn variant="outline" size="sm" icon="edit" className="flex-1" onClick={() => { setEditForm({ full_name: detail.full_name, nick_name: detail.nick_name ?? "", gender: detail.gender ?? "", birth_date: detail.birth_date ?? "", phone: detail.phone ?? "", specialization: detail.specialization ?? "", bio: detail.bio ?? "", address: detail.address ?? "", education_level: detail.education_level ?? "", education_institution: detail.education_institution ?? "", bank_name: detail.bank_name ?? "", bank_account: detail.bank_account ?? "", bank_holder: detail.bank_holder ?? "" }); setEditAvatarFile(null); setEditAvatarPreview(null); setOpenEdit(true); }}>Edit Data</Btn>
-                      <Btn variant="outline" size="sm" icon="lock" className="flex-1" onClick={() => { setNewPassword(""); setOpenReset(true); }}>Reset Password</Btn>
-                    </div>
-                    <div className="flex gap-2">
-                      {suspended
-                        ? <Btn variant="soft" size="sm" icon="check" className="flex-1" onClick={() => liftSuspend(detail)}>Akhiri Suspend</Btn>
-                        : <Btn variant="ghost" size="sm" className="flex-1 text-warn-600" onClick={() => { setSuspendTarget(detail); setSuspendForm({ reason: "", until: "" }); }}>Suspend Coach</Btn>
-                      }
-                      <Btn variant="ghost" size="sm" className="flex-1 text-ink-mute" onClick={() => toggleArchive(detail)}>Arsipkan</Btn>
-                    </div>
-                  </>
-                )}
-                {archived && (
-                  <div className="flex gap-2">
-                    <Btn variant="soft" size="sm" icon="check" className="flex-1" onClick={() => toggleArchive(detail)}>Aktifkan Kembali</Btn>
-                    <Btn variant="ghost" size="sm" className="flex-1 text-danger-600" onClick={() => deleteCoach(detail)}>Hapus Permanen</Btn>
-                  </div>
-                )}
-              </div>
             </div>
-          </div>
+          </Modal>
         );
       })()}
 
       {/* ── Link existing coach modal ── */}
-      <Modal open={openLink} onClose={() => { setOpenLink(false); setLinkEmail(""); setLinkResult(null); }} title="Hubungkan Coach ke Cabang Ini" size="sm"
+      <Modal open={openLink} onClose={() => { setOpenLink(false); setLinkSearch(""); setLinkResult(null); setLinkCandidates([]); }} title="Hubungkan Coach ke Cabang Ini" size="sm"
         footer={
           linkResult
-            ? <><Btn variant="ghost" onClick={() => { setOpenLink(false); setLinkEmail(""); setLinkResult(null); }}>Batal</Btn><Btn variant="primary" icon="link" onClick={linkCoachToBranch} disabled={linkSaving}>{linkSaving ? "Menghubungkan…" : "Hubungkan"}</Btn></>
-            : <Btn variant="ghost" onClick={() => { setOpenLink(false); setLinkEmail(""); setLinkResult(null); }}>Tutup</Btn>
+            ? <><Btn variant="ghost" onClick={() => { setOpenLink(false); setLinkSearch(""); setLinkResult(null); setLinkCandidates([]); }}>Batal</Btn><Btn variant="primary" icon="link" onClick={linkCoachToBranch} disabled={linkSaving}>{linkSaving ? "Menghubungkan…" : "Hubungkan"}</Btn></>
+            : <Btn variant="ghost" onClick={() => { setOpenLink(false); setLinkSearch(""); setLinkResult(null); setLinkCandidates([]); }}>Tutup</Btn>
         }>
-        <div className="space-y-4">
-          <p className="text-sm text-ink-soft">Coach yang sudah terdaftar di cabang lain dapat ditambahkan ke cabang ini tanpa membuat akun baru.</p>
-          <Field label="Email coach">
-            <div className="flex gap-2">
-              <Input type="email" value={linkEmail} onChange={e => setLinkEmail(e.target.value)} placeholder="coach@email.com" onKeyDown={e => e.key === "Enter" && searchCoachByEmail()} className="flex-1" />
-              <Btn variant="outline" onClick={searchCoachByEmail} disabled={linkSearching}>{linkSearching ? "…" : "Cari"}</Btn>
-            </div>
-          </Field>
-          {linkResult && (
+        <div className="space-y-3">
+          <p className="text-sm text-ink-soft">Pilih coach yang sudah terdaftar di cabang lain untuk ditambahkan ke cabang ini.</p>
+          {linkResult ? (
             <div className="flex items-center gap-3 p-3 rounded-xl bg-ok-50 border border-ok-200">
               <Avatar name={linkResult.full_name} size={40} />
-              <div>
+              <div className="flex-1 min-w-0">
                 <div className="font-semibold text-ink text-sm">{linkResult.full_name}</div>
-                <div className="text-xs text-ok-700">Coach ditemukan — siap dihubungkan ke cabang ini</div>
+                <div className="text-xs text-ok-700">Siap dihubungkan ke cabang ini</div>
               </div>
+              <button type="button" onClick={() => setLinkResult(null)} className="p-1 rounded hover:bg-ok-100 text-ok-600 transition-colors shrink-0">
+                <Icon name="x" className="w-4 h-4" />
+              </button>
             </div>
+          ) : (
+            <>
+              <Input placeholder="Cari nama coach…" value={linkSearch} onChange={e => setLinkSearch(e.target.value)} />
+              {linkLoadingCandidates ? (
+                <div className="py-6 text-center text-sm text-ink-mute">Memuat…</div>
+              ) : linkCandidates.length === 0 ? (
+                <div className="py-6 text-center text-sm text-ink-mute">Tidak ada coach tersedia di luar cabang ini.</div>
+              ) : (
+                <div className="max-h-64 overflow-y-auto space-y-1.5 pr-0.5">
+                  {linkCandidates.filter(c => !linkSearch.trim() || c.full_name.toLowerCase().includes(linkSearch.trim().toLowerCase()) || (c.email ?? "").toLowerCase().includes(linkSearch.trim().toLowerCase())).map(c => (
+                    <button key={c.id} type="button" onClick={() => setLinkResult({ id: c.id, full_name: c.full_name })}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border border-line bg-paper-tint hover:bg-white hover:border-ocean-300 transition-colors text-left">
+                      <Avatar name={c.full_name} size={36} />
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-sm text-ink truncate">{c.full_name}</div>
+                        <div className="text-xs text-ink-mute truncate">{c.specialization ?? c.email ?? "—"}</div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </div>
       </Modal>

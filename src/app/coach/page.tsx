@@ -243,6 +243,15 @@ function ClockInFlow({ back, coachId, branchId, classes, preselectedClassId, onS
       }
     }
 
+    // Check for existing attendance on same class + date before inserting
+    const { data: existing } = await supabase.from("coach_attendances")
+      .select("id").eq("coach_id", coachId).eq("class_id", classId).eq("session_date", today).maybeSingle();
+    if (existing) {
+      setSubmitting(false);
+      toast.error("Sudah absen sesi ini", "Anda sudah melakukan clock-in untuk kelas ini hari ini.");
+      return;
+    }
+
     const { error } = await supabase.from("coach_attendances").insert({
       branch_id: branchId, coach_id: coachId, class_id: classId,
       session_date: today, clock_in_time: nowTime,
@@ -252,7 +261,12 @@ function ClockInFlow({ back, coachId, branchId, classes, preselectedClassId, onS
     });
 
     setSubmitting(false);
-    if (error) { toast.error("Gagal menyimpan absensi", error.message); return; }
+    if (error) {
+      const isDuplicate = error.message.includes("duplicate key") || error.message.includes("unique constraint");
+      if (isDuplicate) { toast.error("Sudah absen sesi ini", "Anda sudah melakukan clock-in untuk kelas ini hari ini."); return; }
+      toast.error("Gagal menyimpan absensi", error.message);
+      return;
+    }
     if (coachStatus === "late") {
       toast.error("Absensi tercatat — Telat", `Anda clock-in ${lateMinutes} menit setelah kelas dimulai`);
     } else {
@@ -2721,6 +2735,15 @@ function CoachProfile({ profile, onRefresh, onLogout, onAvatarChange }: { profil
 
   const saveProfileInfo = async () => {
     setSavingProfile(true);
+    // Compute completeness with the values being saved (bank fields come from existing profile)
+    const nowComplete = !!(
+      (profileForm.phone || null) &&
+      (profileForm.gender || null) &&
+      (profileForm.birth_date || null) &&
+      (profile?.bank_name) &&
+      (profile?.bank_account) &&
+      (profile?.bank_holder)
+    );
     const { error } = await supabase.from("profiles").update({
       nick_name: profileForm.nick_name || null,
       gender: profileForm.gender || null,
@@ -2731,6 +2754,7 @@ function CoachProfile({ profile, onRefresh, onLogout, onAvatarChange }: { profil
       address: profileForm.address || null,
       education_level: profileForm.education_level || null,
       education_institution: profileForm.education_institution || null,
+      is_profile_complete: nowComplete,
     }).eq("id", profile?.id ?? "");
     setSavingProfile(false);
     if (error) return toast.error("Gagal menyimpan profil", error.message);
@@ -2746,8 +2770,13 @@ function CoachProfile({ profile, onRefresh, onLogout, onAvatarChange }: { profil
   const saveBank = async () => {
     if (!bankForm.bank_name || !bankForm.bank_account || !bankForm.bank_holder) return toast.error("Semua field rekening wajib diisi");
     setSavingBank(true);
+    const nowComplete = !!(
+      bankForm.bank_name && bankForm.bank_account && bankForm.bank_holder &&
+      profile?.phone && profile?.gender && profile?.birth_date
+    );
     const { error } = await supabase.from("profiles").update({
       bank_name: bankForm.bank_name, bank_account: bankForm.bank_account, bank_holder: bankForm.bank_holder,
+      is_profile_complete: nowComplete,
     }).eq("id", profile?.id ?? "");
     setSavingBank(false);
     if (error) return toast.error("Gagal menyimpan rekening", error.message);
@@ -3223,7 +3252,10 @@ export default function CoachPage() {
   };
 
   const isSuspended = profile?.suspend_until ? new Date(profile.suspend_until) >= new Date() : false;
-  const isProfileComplete = profile?.is_profile_complete ?? true; // default true until profile loaded
+  // Profile is complete when all required fields are filled (sertifikat opsional)
+  const isProfileComplete = profile == null
+    ? true // keep unlocked while loading — will lock once profile loads if incomplete
+    : !!(profile.phone && profile.gender && profile.birth_date && profile.bank_name && profile.bank_account && profile.bank_holder);
 
   const todayName = new Date().toLocaleDateString("id-ID", { weekday: "long" });
   const title = active === "home" ? (profile?.full_name ?? "Coach") : {
@@ -3274,13 +3306,29 @@ export default function CoachPage() {
     </Card>
   ) : null;
 
+  const missingFields = profile && !isProfileComplete ? [
+    !profile.phone && "No HP",
+    !profile.gender && "Jenis Kelamin",
+    !profile.birth_date && "Tanggal Lahir",
+    !profile.bank_name && "Nama Bank",
+    !profile.bank_account && "Nomor Rekening",
+    !profile.bank_holder && "Atas Nama Rekening",
+  ].filter(Boolean) : [];
+
   const IncompleteBanner = (!isSuspended && profile && !isProfileComplete) ? (
-    <Card className="bg-ocean-50 border-ocean-200 mb-4">
+    <Card className="bg-warn-50 border-warn-200 mb-4">
       <div className="flex items-start gap-3">
-        <span className="w-10 h-10 rounded-xl bg-ocean-100 text-ocean-600 flex items-center justify-center shrink-0"><Icon name="info" className="w-5 h-5" /></span>
+        <span className="w-10 h-10 rounded-xl bg-warn-100 text-warn-600 flex items-center justify-center shrink-0"><Icon name="warning" className="w-5 h-5" /></span>
         <div>
-          <div className="font-display font-bold text-ocean-700">Lengkapi profil Anda</div>
-          <p className="text-sm text-ocean-600 mt-1">Fitur Clock In, Invoice, dan Rapor akan terkunci sampai profil Anda dinyatakan lengkap oleh admin.</p>
+          <div className="font-display font-bold text-warn-700">Profil belum lengkap</div>
+          <p className="text-sm text-warn-600 mt-1">Lengkapi data berikut di tab <strong>Profile</strong> untuk mengaktifkan Clock In, Invoice, dan Rapor.</p>
+          {missingFields.length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-2">
+              {missingFields.map(f => (
+                <span key={f as string} className="text-xs font-semibold bg-warn-100 text-warn-700 px-2 py-0.5 rounded-full">{f}</span>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </Card>
