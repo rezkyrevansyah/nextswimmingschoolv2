@@ -19,7 +19,7 @@ import { Card, SectionTitle } from "@/components/ui/Card";
 import Modal from "@/components/ui/Modal";
 import Bell from "@/components/layout/Bell";
 import { fmtDate, waLink } from "@/lib/utils";
-import { printSingleRapor, printSchoolRekap, type PrintCriterion } from "@/lib/printRapor";
+import { printSingleRapor, printSchoolRekap, type PrintCriterion, type PrintBestTime } from "@/lib/printRapor";
 import { createClient } from "@/utils/supabase/client";
 
 type Criterion = PrintCriterion;
@@ -411,6 +411,7 @@ interface Student {
   motivation: string | null;
   learning_achievements: string | null;
   criteria: Criterion[];
+  best_times: PrintBestTime[];
 }
 
 type SchoolTab = "rapor" | "absensi";
@@ -419,6 +420,7 @@ export default function SchoolPage() {
   const supabase = createClient();
   const [schoolName, setSchoolName] = useState("School Panel");
   const [schoolId, setSchoolId] = useState("");
+  const [branchId, setBranchId] = useState("");
   const [userId, setUserId] = useState("");
   const [adminWaPhone, setAdminWaPhone] = useState("");
   const [students, setStudents] = useState<Student[]>([]);
@@ -449,7 +451,7 @@ export default function SchoolPage() {
     window.location.href = "/login";
   };
 
-  const load = useCallback(async (sId: string, pid: string | null, periodLabel: string | null) => {
+  const load = useCallback(async (sId: string, pid: string | null, periodLabel: string | null, bId: string) => {
     if (!sId) return;
     const { data } = await supabase
       .from("members")
@@ -471,6 +473,18 @@ export default function SchoolPage() {
       .eq("type", "school_affiliate");
 
     if (!data) { setLoading(false); return; }
+
+    // Fetch all best times for these members in one query
+    const memberIds = data.map(m => m.id);
+    const { data: btRows } = memberIds.length && bId
+      ? await supabase.from("member_best_times").select("member_id, stroke, distance, time_seconds").in("member_id", memberIds).eq("branch_id", bId)
+      : { data: [] };
+    const btByMember = new Map<string, PrintBestTime[]>();
+    for (const row of (btRows ?? []) as { member_id: string; stroke: string; distance: number; time_seconds: number }[]) {
+      const list = btByMember.get(row.member_id) ?? [];
+      list.push({ stroke: row.stroke, distance: row.distance, time_seconds: row.time_seconds });
+      btByMember.set(row.member_id, list);
+    }
 
     const rows: Student[] = data.map((m) => {
       const profile = (m.profile as unknown as { full_name: string } | null);
@@ -498,6 +512,7 @@ export default function SchoolPage() {
         motivation: entry?.motivation ?? null,
         learning_achievements: entry?.learning_achievements ?? null,
         criteria,
+        best_times: btByMember.get(m.id) ?? [],
       };
     });
     setStudents(rows);
@@ -519,6 +534,7 @@ export default function SchoolPage() {
       if (!school) { setLoading(false); return; }
       setSchoolName(school.name);
       setSchoolId(school.id);
+      setBranchId(school.branch_id);
 
       const { data: branch } = await supabase.from("branches").select("wa_numbers").eq("id", school.branch_id).single();
       const waNumbers = (branch as unknown as { wa_numbers: string[] } | null)?.wa_numbers;
@@ -535,9 +551,9 @@ export default function SchoolPage() {
 
       if (period) {
         setActivePeriod(period);
-        await load(school.id, period.id, period.label);
+        await load(school.id, period.id, period.label, school.branch_id);
       } else {
-        await load(school.id, null, null);
+        await load(school.id, null, null, school.branch_id);
       }
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -603,7 +619,7 @@ export default function SchoolPage() {
     full_name: s.full_name, class_name: s.class_name, coach_name: s.coach_name,
     period_label: s.period_label ?? "—", scores: s.scores, notes: s.notes,
     personality: s.personality, motivation: s.motivation, learning_achievements: s.learning_achievements,
-    criteria: s.criteria,
+    criteria: s.criteria, best_times: s.best_times,
   });
 
   const handlePrintAll = () => printSchoolRekap(schoolName, activePeriod?.label ?? "—", students.map(toPrintStudent));

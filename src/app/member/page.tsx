@@ -13,7 +13,7 @@ import MobileNav from "@/components/layout/MobileNav";
 import type { NavItem as MobileNavItem } from "@/components/layout/Sidebar";
 import Bell from "@/components/layout/Bell";
 import { fmtIDR, fmtDate, waLink } from "@/lib/utils";
-import { printSingleRapor, type PrintCriterion } from "@/lib/printRapor";
+import { printSingleRapor, type PrintCriterion, type PrintBestTime } from "@/lib/printRapor";
 import { createClient } from "@/utils/supabase/client";
 import { useUpload } from "@/hooks/useUpload";
 import PhotoLightbox from "@/components/ui/PhotoLightbox";
@@ -966,9 +966,10 @@ interface RaporEntryFull {
   personality: string | null; motivation: string | null; learning_achievements: string | null;
   review_stars: number | null; review_message: string | null; review_id: string | null;
   criteria: PrintCriterion[];
+  best_times: PrintBestTime[];
 }
 
-function MemberRapor({ memberId, memberName }: { memberId: string; memberName: string }) {
+function MemberRapor({ memberId, memberName, branchId }: { memberId: string; memberName: string; branchId: string }) {
   const supabase = createClient();
   const toast = useToast();
   const [open, setOpen] = useState(false);
@@ -1005,6 +1006,18 @@ function MemberRapor({ memberId, memberName }: { memberId: string; memberName: s
       criteriaByClass.set(c.class_id, list);
     }
 
+    // Load best times for this member
+    const { data: btRows } = await supabase
+      .from("member_best_times")
+      .select("stroke, distance, time_seconds")
+      .eq("member_id", memberId)
+      .eq("branch_id", branchId);
+    const bestTimesArr: PrintBestTime[] = (btRows ?? []).map(r => ({
+      stroke: (r as { stroke: string }).stroke,
+      distance: (r as { distance: number }).distance,
+      time_seconds: (r as { time_seconds: number }).time_seconds,
+    }));
+
     setEntries(data.map((e) => {
       const p = e.rapor_periods as unknown as { label: string; is_open: boolean } | null;
       const cls = e.classes as unknown as { name: string } | null;
@@ -1028,9 +1041,10 @@ function MemberRapor({ memberId, memberName }: { memberId: string; memberName: s
         review_message: review?.message ?? null,
         review_id: review?.id ?? null,
         criteria: criteriaByClass.get(e.class_id) ?? [],
+        best_times: bestTimesArr,
       };
     }));
-  }, [memberId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [memberId, branchId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* eslint-disable react-hooks/set-state-in-effect -- async data loader */
   useEffect(() => { load(); }, [load]);
@@ -1130,6 +1144,7 @@ function MemberRapor({ memberId, memberName }: { memberId: string; memberName: s
                   motivation: selectedEntry.motivation,
                   learning_achievements: selectedEntry.learning_achievements,
                   criteria: selectedEntry.criteria,
+                  best_times: selectedEntry.best_times,
                 })}>
                 Cetak / PDF
               </Btn>
@@ -1609,7 +1624,7 @@ export default function MemberPage() {
     absen:    <>{SuspendBanner}<MemberAbsensi memberId={memberId} /></>,
     bills:    <>{SuspendBanner}<MemberBills memberId={memberId} memberName={memberName} branchId={branchId} /></>,
     leave:    <>{SuspendBanner}<MemberLeave memberId={memberId} /></>,
-    rapor:    <>{SuspendBanner}<MemberRapor memberId={memberId} memberName={memberName} /></>,
+    rapor:    <>{SuspendBanner}<MemberRapor memberId={memberId} memberName={memberName} branchId={branchId} /></>,
     profile:  <MemberProfile memberId={memberId} memberName={memberName} onLogout={logout} onProfileComplete={onProfileComplete} onAvatarChange={url => setMemberAvatarUrl(url)} />,
   };
 

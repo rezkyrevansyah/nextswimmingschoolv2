@@ -90,6 +90,14 @@ interface RaporEntry {
   class?: { name: string } | null;
 }
 
+interface BestTimeRow {
+  id: string; stroke: string; distance: number; time_seconds: number;
+}
+
+const STROKES = ["freestyle", "backstroke", "breaststroke", "butterfly", "IM"] as const;
+const DISTANCES = [25, 50, 100] as const;
+type BtKey = `${typeof STROKES[number]}_${typeof DISTANCES[number]}`;
+
 interface ProfileData {
   id: string; full_name: string; email: string;
   nick_name: string | null; gender: string | null; birth_date: string | null;
@@ -2088,6 +2096,8 @@ function CoachRapor({ coachId, branchId }: { coachId: string; branchId: string }
   const [personality, setPersonality] = useState("");
   const [motivation, setMotivation] = useState("");
   const [learningAchievements, setLearningAchievements] = useState("");
+  const [bestTimes, setBestTimes] = useState<Partial<Record<BtKey, string>>>({});
+  const [bestTimeIds, setBestTimeIds] = useState<Partial<Record<BtKey, string>>>({});
   const [saving, setSaving] = useState(false);
   const [page, setPage] = useState(0);
   const PAGE_SIZE = 10;
@@ -2144,7 +2154,7 @@ function CoachRapor({ coachId, branchId }: { coachId: string; branchId: string }
   }, [coachId, branchId]); // eslint-disable-line react-hooks/exhaustive-deps
    
 
-  const openEntry = (e: RaporEntry) => {
+  const openEntry = async (e: RaporEntry) => {
     // Load criteria for this class
     const classCriteria = ((e as unknown as { class?: { class_criteria?: Criterion[] } }).class?.class_criteria ?? [])
       .sort((a, b) => ((a as unknown as { sort_order: number }).sort_order ?? 0) - ((b as unknown as { sort_order: number }).sort_order ?? 0));
@@ -2156,6 +2166,21 @@ function CoachRapor({ coachId, branchId }: { coachId: string; branchId: string }
     setPersonality(e.personality ?? "");
     setMotivation(e.motivation ?? "");
     setLearningAchievements(e.learning_achievements ?? "");
+    // Load best times for this member
+    const { data: btRows } = await supabase
+      .from("member_best_times")
+      .select("id, stroke, distance, time_seconds")
+      .eq("member_id", e.member_id)
+      .eq("branch_id", branchId);
+    const btMap: Partial<Record<BtKey, string>> = {};
+    const btIdMap: Partial<Record<BtKey, string>> = {};
+    for (const row of (btRows ?? []) as BestTimeRow[]) {
+      const key = `${row.stroke}_${row.distance}` as BtKey;
+      btMap[key] = String(row.time_seconds);
+      btIdMap[key] = row.id;
+    }
+    setBestTimes(btMap);
+    setBestTimeIds(btIdMap);
     setOpen(e);
   };
 
@@ -2178,8 +2203,25 @@ function CoachRapor({ coachId, branchId }: { coachId: string; branchId: string }
         locked: true,
       })
       .eq("id", open.id);
+    if (error) { setSaving(false); return toast.error("Gagal menyimpan rapor", error.message); }
+    // Upsert best times
+    for (const stroke of STROKES) {
+      for (const dist of DISTANCES) {
+        const key = `${stroke}_${dist}` as BtKey;
+        const val = bestTimes[key];
+        if (!val || val.trim() === "") continue;
+        const timeSec = parseFloat(val);
+        if (isNaN(timeSec) || timeSec <= 0) continue;
+        const existingId = bestTimeIds[key];
+        if (existingId) {
+          await supabase.from("member_best_times").update({ time_seconds: timeSec, coach_id: coachId, recorded_at: new Date().toISOString().split("T")[0] }).eq("id", existingId);
+        } else {
+          const { data: ins } = await supabase.from("member_best_times").insert({ member_id: open.member_id, branch_id: branchId, stroke, distance: dist, time_seconds: timeSec, coach_id: coachId }).select("id").single();
+          if (ins) setBestTimeIds(prev => ({ ...prev, [key]: ins.id }));
+        }
+      }
+    }
     setSaving(false);
-    if (error) return toast.error("Gagal menyimpan rapor", error.message);
     // Notify member when rapor is first filled (not on updates)
     if (isNew) {
       await supabase.from("notifications").insert({
@@ -2364,6 +2406,44 @@ function CoachRapor({ coachId, branchId }: { coachId: string; branchId: string }
             </div>
           ))}
           <Field label="Catatan umum coach"><Textarea rows={3} value={notes} onChange={e => setNotes(e.target.value)} placeholder="Mis. Member menunjukkan progres yang baik bulan ini, terutama pada teknik pernapasan." /></Field>
+
+          {/* Personal Best Time */}
+          <div className="border-t border-line pt-4 space-y-3">
+            <div className="text-xs font-bold uppercase tracking-widest text-ink-mute">Personal Best Time</div>
+            <p className="text-xs text-ink-mute -mt-1">Masukkan waktu terbaik (detik, mis. 34.58). Kosongkan jika belum ada catatan.</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-ink-mute uppercase tracking-widest">
+                    <th className="text-left pb-2 pr-3 font-bold">Gaya</th>
+                    {DISTANCES.map(d => <th key={d} className="text-center pb-2 px-1.5 font-bold w-20">{d}m</th>)}
+                  </tr>
+                </thead>
+                <tbody className="space-y-1">
+                  {STROKES.map(stroke => (
+                    <tr key={stroke} className="border-t border-line/50">
+                      <td className="py-1.5 pr-3 font-semibold text-ink capitalize whitespace-nowrap">{stroke === "IM" ? "IM" : stroke.charAt(0).toUpperCase() + stroke.slice(1)}</td>
+                      {DISTANCES.map(dist => {
+                        const key = `${stroke}_${dist}` as BtKey;
+                        return (
+                          <td key={dist} className="py-1.5 px-1.5">
+                            <input
+                              type="number" min="0" step="0.01"
+                              value={bestTimes[key] ?? ""}
+                              onChange={ev => setBestTimes(prev => ({ ...prev, [key]: ev.target.value }))}
+                              placeholder="—"
+                              className="w-full border border-line rounded-lg px-2 py-1 text-center font-mono text-xs focus:outline-none focus:ring-2 focus:ring-ocean-500 bg-white placeholder:text-ink-faint"
+                            />
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
           <div className="border-t border-line pt-4 space-y-4">
             <div className="text-xs font-bold uppercase tracking-widest text-ink-mute">Evaluasi Karakter</div>
             <Field label="Kepribadian" hint="Mis. Disiplin, percaya diri, komunikatif">
