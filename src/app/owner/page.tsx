@@ -213,19 +213,19 @@ function Branches({ branches, onRefresh, userId, userName }: { branches: Branch[
   const [name, setName] = useState("");
   const [city, setCity] = useState("");
   const [address, setAddress] = useState("");
-  const [waNumbers, setWaNumbers] = useState<string[]>([""]);
+  const [waPhone, setWaPhone] = useState("");
   const [bankName, setBankName] = useState("");
   const [bankAccount, setBankAccount] = useState("");
   const [bankHolder, setBankHolder] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const openAdd = () => { setName(""); setCity(""); setAddress(""); setWaNumbers([""]); setBankName(""); setBankAccount(""); setBankHolder(""); setEditItem(null); setShowAdd(true); };
-  const openEdit = (b: Branch) => { setName(b.name); setCity(b.city); setAddress(b.address); setWaNumbers(b.wa_numbers?.length ? b.wa_numbers : [""]); setBankName(b.bank_name ?? ""); setBankAccount(b.bank_account ?? ""); setBankHolder(b.bank_holder ?? ""); setEditItem(b); setShowAdd(true); };
+  const openAdd = () => { setName(""); setCity(""); setAddress(""); setWaPhone(""); setBankName(""); setBankAccount(""); setBankHolder(""); setEditItem(null); setShowAdd(true); };
+  const openEdit = (b: Branch) => { setName(b.name); setCity(b.city); setAddress(b.address); setWaPhone(b.wa_numbers?.[0] ?? ""); setBankName(b.bank_name ?? ""); setBankAccount(b.bank_account ?? ""); setBankHolder(b.bank_holder ?? ""); setEditItem(b); setShowAdd(true); };
 
   const save = async () => {
     if (!name || !city) return toast.error("Nama dan kota wajib diisi");
     setSaving(true);
-    const cleanWa = waNumbers.map(n => n.trim()).filter(Boolean);
+    const cleanWa = waPhone.trim() ? [waPhone.trim()] : [];
     const bankFields = {
       bank_name: bankName.trim() || null,
       bank_account: bankAccount.trim() || null,
@@ -342,19 +342,7 @@ function Branches({ branches, onRefresh, userId, userName }: { branches: Branch[
           <Field label="Kota" required><Input value={city} onChange={e => setCity(e.target.value)} placeholder="Jakarta" /></Field>
           <Field label="Alamat"><Input value={address} onChange={e => setAddress(e.target.value)} placeholder="Jl. Sudirman No. 1" /></Field>
           <Field label="Nomor WhatsApp Admin" hint="Dipakai di tombol hubungi admin. Format: 081234567890.">
-            <div className="space-y-2">
-              {waNumbers.map((num, i) => (
-                <div key={i} className="flex gap-2">
-                  <Input type="tel" value={num} onChange={e => setWaNumbers(prev => prev.map((n, j) => j === i ? e.target.value : n))} placeholder="081234567890" className="flex-1 font-mono" />
-                  {waNumbers.length > 1 && (
-                    <button onClick={() => setWaNumbers(prev => prev.filter((_, j) => j !== i))} className="w-9 h-9 rounded-lg text-ink-mute hover:text-danger-500 hover:bg-danger-50 flex items-center justify-center border border-line shrink-0">
-                      <Icon name="trash" className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
-              ))}
-              <Btn variant="ghost" size="sm" icon="plus" onClick={() => setWaNumbers(prev => [...prev, ""])}>Tambah nomor</Btn>
-            </div>
+            <Input type="tel" value={waPhone} onChange={e => setWaPhone(e.target.value)} placeholder="081234567890" className="font-mono" />
           </Field>
           <Field label="Informasi Rekening" hint="Ditampilkan ke member di halaman tagihan saat ada tagihan aktif.">
             <div className="space-y-2">

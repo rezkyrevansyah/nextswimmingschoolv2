@@ -15,7 +15,11 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const callerRole = user.user_metadata?.role as string | undefined;
+  let callerRole = user.user_metadata?.role as string | undefined;
+  if (!callerRole) {
+    const { data: prof } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+    callerRole = prof?.role ?? undefined;
+  }
   if (!callerRole || !["admin", "owner"].includes(callerRole)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

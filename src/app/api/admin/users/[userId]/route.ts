@@ -12,7 +12,11 @@ async function checkCaller() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
-  const role = user.user_metadata?.role as string | undefined;
+  let role = user.user_metadata?.role as string | undefined;
+  if (!role) {
+    const { data: prof } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+    role = prof?.role ?? undefined;
+  }
   if (!role || !["admin", "owner"].includes(role)) return null;
   return user;
 }

@@ -4,7 +4,6 @@ import Image from "next/image";
 import dynamic from "next/dynamic";
 const MapPicker = dynamic(() => import("@/components/ui/MapPicker"), { ssr: false, loading: () => <div className="rounded-xl border border-line bg-paper-tint h-[260px] flex items-center justify-center text-ink-mute text-sm">Memuat peta…</div> });
 import Logo from "@/components/ui/Logo";
-import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
 import { Field, Input } from "@/components/ui/FormFields";
 import { Card, SectionTitle } from "@/components/ui/Card";
@@ -21,7 +20,7 @@ export default function AdminSettings({ branch, onRefresh, userId }: { branch: B
   const [lng, setLng] = useState(branch?.lng?.toString() ?? "");
   const [name, setName] = useState(branch?.name ?? "");
   const [address, setAddress] = useState(branch?.address ?? "");
-  const [waNumbers, setWaNumbers] = useState<string[]>(branch?.wa_numbers ?? []);
+  const [waPhone, setWaPhone] = useState(branch?.wa_numbers?.[0] ?? "");
   const [saving, setSaving] = useState(false);
 
   // Admin profile state
@@ -57,7 +56,7 @@ export default function AdminSettings({ branch, onRefresh, userId }: { branch: B
       setAddress(branch.address ?? "");
       setLat(branch.lat?.toString() ?? "");
       setLng(branch.lng?.toString() ?? "");
-      setWaNumbers(branch.wa_numbers ?? []);
+      setWaPhone(branch.wa_numbers?.[0] ?? "");
     }
   }, [branch?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   /* eslint-enable react-hooks/set-state-in-effect */
@@ -65,7 +64,7 @@ export default function AdminSettings({ branch, onRefresh, userId }: { branch: B
   const save = async () => {
     if (!branch) return;
     setSaving(true);
-    const clean = waNumbers.map(n => n.trim()).filter(Boolean);
+    const clean = waPhone.trim() ? [waPhone.trim()] : [];
     const { error } = await supabase.from("branches").update({ name, address, lat: lat ? parseFloat(lat) : null, lng: lng ? parseFloat(lng) : null, wa_numbers: clean }).eq("id", branch.id);
     setSaving(false);
     if (error) return toast.error("Gagal menyimpan", error.message);
@@ -109,25 +108,9 @@ export default function AdminSettings({ branch, onRefresh, userId }: { branch: B
             <Field label="Alamat lengkap" required><Input value={address} onChange={e => setAddress(e.target.value)} /></Field>
           </div>
           <div className="pt-4 border-t border-line">
-            <Field label="Nomor WhatsApp Cabang" hint="Muncul di tombol 'Hubungi Admin' pada landing page, panel member, dan panel coach.">
-              <div className="space-y-2">
-                {waNumbers.map((num, i) => (
-                  <div key={i} className="flex gap-2">
-                    <Input type="tel" value={num}
-                      onChange={e => setWaNumbers(prev => prev.map((n, j) => j === i ? e.target.value : n))}
-                      placeholder="Mis. 081234567890" className="flex-1 font-mono" />
-                    <button onClick={() => setWaNumbers(prev => prev.filter((_, j) => j !== i))}
-                      className="w-9 h-9 rounded-lg text-ink-mute hover:text-danger-500 hover:bg-danger-50 flex items-center justify-center border border-line shrink-0">
-                      <Icon name="trash" className="w-4 h-4" />
-                    </button>
-                  </div>
-                ))}
-                <Btn variant="ghost" size="sm" icon="plus" onClick={() => setWaNumbers(prev => [...prev, ""])}>Tambah nomor</Btn>
-              </div>
+            <Field label="Nomor WhatsApp Cabang" hint="Muncul di tombol 'Hubungi Admin' pada panel member dan panel coach.">
+              <Input type="tel" value={waPhone} onChange={e => setWaPhone(e.target.value)} placeholder="Mis. 081234567890" className="font-mono" />
             </Field>
-          </div>
-          <div className="pt-2">
-            <Btn variant="primary" onClick={save} disabled={saving}>{saving ? "Menyimpan…" : "Simpan perubahan"}</Btn>
           </div>
         </Card>
 
@@ -152,6 +135,9 @@ export default function AdminSettings({ branch, onRefresh, userId }: { branch: B
           <div className="mt-3 grid sm:grid-cols-2 gap-3 max-w-sm">
             <Field label="Latitude"><Input value={lat} onChange={e => setLat(e.target.value)} className="font-mono" placeholder="-6.2615" /></Field>
             <Field label="Longitude"><Input value={lng} onChange={e => setLng(e.target.value)} className="font-mono" placeholder="106.8106" /></Field>
+          </div>
+          <div className="mt-4 pt-4 border-t border-line">
+            <Btn variant="primary" onClick={save} disabled={saving}>{saving ? "Menyimpan…" : "Simpan identitas & lokasi"}</Btn>
           </div>
         </div>
       </Card>
