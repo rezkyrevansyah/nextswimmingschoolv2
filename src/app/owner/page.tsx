@@ -1193,11 +1193,11 @@ function SettingsTarif({ branches }: { branches: Branch[] }) {
                   <div className="flex-1">
                     <Field label="Tarif umum (per sesi)" hint="Berlaku untuk semua coach di kelas ini, kecuali yang punya tarif khusus">
                       <Input
-                        type="number"
-                        value={generalRates[c.id] ?? ""}
-                        onChange={e => setGeneralRates(r => ({ ...r, [c.id]: e.target.value }))}
+                        type="text" inputMode="numeric"
+                        value={generalRates[c.id] ? Number(generalRates[c.id]).toLocaleString("id-ID") : ""}
+                        onChange={e => setGeneralRates(r => ({ ...r, [c.id]: e.target.value.replace(/\D/g, "") }))}
                         className="font-mono"
-                        placeholder="150000"
+                        placeholder="150.000"
                       />
                     </Field>
                   </div>
@@ -1221,9 +1221,9 @@ function SettingsTarif({ branches }: { branches: Branch[] }) {
                           </div>
                           <div className="flex-1">
                             <Input
-                              type="number"
-                              value={coachRates[key] ?? ""}
-                              onChange={e => setCoachRates(r => ({ ...r, [key]: e.target.value }))}
+                              type="text" inputMode="numeric"
+                              value={coachRates[key] ? Number(coachRates[key]).toLocaleString("id-ID") : ""}
+                              onChange={e => setCoachRates(r => ({ ...r, [key]: e.target.value.replace(/\D/g, "") }))}
                               className="font-mono text-sm"
                               placeholder={generalRates[c.id] ? `Pakai umum (${Number(generalRates[c.id]).toLocaleString("id-ID")})` : "Belum ada tarif umum"}
                             />
