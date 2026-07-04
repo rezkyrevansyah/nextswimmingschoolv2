@@ -17,7 +17,11 @@
       "Bash(git check-ignore *)",
       "Bash(echo \"exit:$?\")",
       "Bash(git restore *)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git config *)",
+      "Bash(git fetch *)",
+      "Bash(git reset *)"
     ]
   }
 }
