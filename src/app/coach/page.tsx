@@ -12,6 +12,7 @@ import Avatar from "@/components/ui/Avatar";
 import Placeholder from "@/components/ui/Placeholder";
 import Modal from "@/components/ui/Modal";
 import PhotoLightbox from "@/components/ui/PhotoLightbox";
+import MonthYearPicker from "@/components/ui/MonthYearPicker";
 import MobileNav from "@/components/layout/MobileNav";
 import type { NavItem as MobileNavItem } from "@/components/layout/Sidebar";
 import Bell from "@/components/layout/Bell";
@@ -97,6 +98,24 @@ interface BestTimeRow {
 const STROKES = ["freestyle", "backstroke", "breaststroke", "butterfly", "IM"] as const;
 const DISTANCES = [25, 50, 100] as const;
 type BtKey = `${typeof STROKES[number]}_${typeof DISTANCES[number]}`;
+
+const MONTHS_LONG_ID = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
+/** Formats "YYYY-MM" or "YYYY-MM-DD" → "Januari 2026" */
+function fmtMonthYear(val: string | null | undefined): string {
+  if (!val) return "";
+  const m = val.match(/^(\d{4})-(\d{2})/);
+  if (m) return `${MONTHS_LONG_ID[parseInt(m[2]) - 1]} ${m[1]}`;
+  return val;
+}
+/** "YYYY-MM" → "YYYY-MM-01" for DB date column */
+function toDbDate(ym: string): string {
+  return ym ? `${ym}-01` : ym;
+}
+/** "YYYY-MM-DD" → "YYYY-MM" for MonthYearPicker */
+function fromDbDate(d: string | null | undefined): string {
+  if (!d) return "";
+  return d.slice(0, 7); // "YYYY-MM"
+}
 
 interface ProfileData {
   id: string; full_name: string; email: string;
@@ -2607,6 +2626,7 @@ function CoachProfile({ profile, onRefresh, onLogout, onAvatarChange }: { profil
   const [editCertTarget, setEditCertTarget] = useState<{ id: string; title: string; issuer: string | null; valid_from: string | null; valid_until: string | null; photo_url: string | null; status: string; reject_reason: string | null } | null>(null);
   const [certForm, setCertForm] = useState({ title: "", issuer: "", issued_at: "", expires_at: "", no_expiry: false });
   const [certFile, setCertFile] = useState<File | null>(null);
+  const certFileInputRef = useRef<HTMLInputElement>(null);
   const [savingCert, setSavingCert] = useState(false);
 
   // Populate inline form when profile loads
@@ -2666,8 +2686,9 @@ function CoachProfile({ profile, onRefresh, onLogout, onAvatarChange }: { profil
     const { data: cert, error } = await supabase.from("certifications").insert({
       coach_id: profile.id, name: certForm.title, title: certForm.title,
       issuer: certForm.issuer || null,
-      valid_from: certForm.issued_at || null,
-      valid_until: certForm.no_expiry ? null : (certForm.expires_at || null),
+      valid_from: certForm.issued_at ? toDbDate(certForm.issued_at) : null,
+      valid_until: certForm.no_expiry ? null : (certForm.expires_at ? toDbDate(certForm.expires_at) : null),
+      no_expiry: certForm.no_expiry,
       status: "pending",
     }).select("id").single();
 
@@ -2688,7 +2709,7 @@ function CoachProfile({ profile, onRefresh, onLogout, onAvatarChange }: { profil
 
   const openCertEdit = (s: { id: string; title: string; issuer: string | null; valid_from: string | null; valid_until: string | null; photo_url: string | null; status: string; reject_reason: string | null }) => {
     setEditCertTarget(s);
-    setCertForm({ title: s.title, issuer: s.issuer ?? "", issued_at: s.valid_from ?? "", expires_at: s.valid_until ?? "", no_expiry: !s.valid_until });
+    setCertForm({ title: s.title, issuer: s.issuer ?? "", issued_at: fromDbDate(s.valid_from), expires_at: fromDbDate(s.valid_until), no_expiry: !s.valid_until });
     setCertFile(null);
     setOpenAddCert(true);
   };
@@ -2718,8 +2739,9 @@ function CoachProfile({ profile, onRefresh, onLogout, onAvatarChange }: { profil
     const needsReapproval = editCertTarget.status === "approved" || editCertTarget.status === "rejected";
     const { error } = await supabase.from("certifications").update({
       name: certForm.title, issuer: certForm.issuer || null,
-      valid_from: certForm.issued_at || null,
-      valid_until: certForm.no_expiry ? null : (certForm.expires_at || null),
+      valid_from: certForm.issued_at ? toDbDate(certForm.issued_at) : null,
+      valid_until: certForm.no_expiry ? null : (certForm.expires_at ? toDbDate(certForm.expires_at) : null),
+      no_expiry: certForm.no_expiry,
       ...(needsReapproval ? { status: "pending", reject_reason: null } : {}),
     }).eq("id", editCertTarget.id);
     if (!error && certFile) {
@@ -2883,7 +2905,7 @@ function CoachProfile({ profile, onRefresh, onLogout, onAvatarChange }: { profil
                 <span className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${s.status === "approved" ? "bg-ok-50 text-ok-600" : s.status === "rejected" ? "bg-danger-50 text-danger-600" : "bg-warn-50 text-warn-600"}`}><Icon name="shield" className="w-5 h-5" /></span>
                 <div className="flex-1 min-w-0">
                   <div className="font-semibold text-ink text-sm">{s.title}</div>
-                  {s.valid_from && <div className="text-xs text-ink-mute font-mono">{s.valid_from}{s.valid_until ? ` – ${s.valid_until}` : " · Tidak kedaluwarsa"}</div>}
+                  {s.valid_from && <div className="text-xs text-ink-mute">{fmtMonthYear(s.valid_from)}{s.valid_until ? ` – ${fmtMonthYear(s.valid_until)}` : " · Tidak kedaluwarsa"}</div>}
                 </div>
                 <Status kind={s.status}>{s.status === "approved" ? "Disetujui" : s.status === "rejected" ? "Ditolak" : "Menunggu"}</Status>
                 <div className="flex items-center gap-1">
@@ -2938,8 +2960,8 @@ function CoachProfile({ profile, onRefresh, onLogout, onAvatarChange }: { profil
           )}
           <Field label="Nama sertifikasi" required><Input value={certForm.title} onChange={e => setCertForm(f => ({ ...f, title: e.target.value }))} placeholder="Mis. Lifeguard ARC" /></Field>
           <Field label="Penerbit"><Input value={certForm.issuer} onChange={e => setCertForm(f => ({ ...f, issuer: e.target.value }))} placeholder="Mis. PMI / FINA" /></Field>
-          <Field label="Berlaku dari" required><Input type="date" value={certForm.issued_at} onChange={e => setCertForm(f => ({ ...f, issued_at: e.target.value }))} /></Field>
-          <Field label="Berlaku sampai"><Input type="date" value={certForm.expires_at} disabled={certForm.no_expiry} onChange={e => setCertForm(f => ({ ...f, expires_at: e.target.value }))} /></Field>
+          <Field label="Berlaku dari" required><MonthYearPicker value={certForm.issued_at} onChange={v => setCertForm(f => ({ ...f, issued_at: v }))} placeholder="Pilih bulan & tahun" /></Field>
+          <Field label="Berlaku sampai"><MonthYearPicker value={certForm.expires_at} onChange={v => setCertForm(f => ({ ...f, expires_at: v }))} placeholder="Pilih bulan & tahun" disabled={certForm.no_expiry} /></Field>
           <label className="flex items-center gap-2 text-sm text-ink-soft cursor-pointer">
             <input type="checkbox" checked={certForm.no_expiry} onChange={e => setCertForm(f => ({ ...f, no_expiry: e.target.checked, expires_at: "" }))} className="rounded" />
             Tidak ada kedaluwarsa
@@ -2950,16 +2972,18 @@ function CoachProfile({ profile, onRefresh, onLogout, onAvatarChange }: { profil
               <img src={editCertTarget.photo_url} alt="Foto saat ini" className="w-full max-h-36 object-cover rounded-xl border border-line mb-2" />
             )}
             {certFile && (
+              // eslint-disable-next-line @next/next/no-img-element -- blob URL from file picker
               <img src={URL.createObjectURL(certFile)} alt="Preview" className="w-full max-h-36 object-cover rounded-xl border border-line mb-2" />
             )}
-            <label className="flex items-center gap-3 cursor-pointer group">
-              <span className="flex items-center gap-2 px-3 py-2 rounded-lg border border-line bg-paper-tint hover:bg-white hover:border-ocean-400 transition-colors text-sm font-semibold text-ink-soft group-hover:text-ink">
+            <div className="flex items-center gap-3">
+              <button type="button" onClick={() => certFileInputRef.current?.click()}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg border border-line bg-paper-tint hover:bg-white hover:border-ocean-400 transition-colors text-sm font-semibold text-ink-soft hover:text-ink">
                 <Icon name="camera" className="w-4 h-4" />
                 {certFile ? "Ganti foto" : editCertTarget?.photo_url ? "Ganti foto" : "Pilih foto"}
-              </span>
+              </button>
               {certFile && <span className="text-sm text-ink-mute truncate max-w-[160px]">{certFile.name}</span>}
-              <input type="file" accept="image/*" className="sr-only" onChange={e => setCertFile(e.target.files?.[0] ?? null)} />
-            </label>
+              <input ref={certFileInputRef} type="file" accept="image/*" className="sr-only" onChange={e => setCertFile(e.target.files?.[0] ?? null)} />
+            </div>
           </div>
         </div>
       </Modal>

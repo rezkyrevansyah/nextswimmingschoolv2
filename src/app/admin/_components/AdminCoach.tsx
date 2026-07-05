@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
@@ -12,12 +12,23 @@ import Status from "@/components/ui/Status";
 import Avatar from "@/components/ui/Avatar";
 import QRBox from "@/components/ui/QRBox";
 import DatePicker from "@/components/ui/DatePicker";
+import MonthYearPicker from "@/components/ui/MonthYearPicker";
 import Modal from "@/components/ui/Modal";
 import PhotoLightbox from "@/components/ui/PhotoLightbox";
 import type { CoachProfile } from "../_types";
 import { calcAge, parseUserApiError } from "../_utils";
 import type { Database } from "@/types/database";
 import { fmtDate, waLink } from "@/lib/utils";
+
+const MONTHS_LONG_ID = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
+function fmtMonthYear(val: string | null | undefined): string {
+  if (!val) return "";
+  const m = val.match(/^(\d{4})-(\d{2})/);
+  if (m) return `${MONTHS_LONG_ID[parseInt(m[2]) - 1]} ${m[1]}`;
+  return val;
+}
+function toDbDate(ym: string): string { return ym ? `${ym}-01` : ym; }
+function fromDbDate(d: string | null | undefined): string { if (!d) return ""; return d.slice(0, 7); }
 
 interface CoachFull extends CoachProfile {
   suspend_until?: string | null;
@@ -62,6 +73,7 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
   const [openAddCert, setOpenAddCert] = useState(false);
   const [certForm, setCertForm] = useState({ title: "", issuer: "", issued_at: "", expires_at: "", no_expiry: false });
   const [certPhotoFile, setCertPhotoFile] = useState<File | null>(null);
+  const certPhotoInputRef = useRef<HTMLInputElement>(null);
   const [savingCert, setSavingCert] = useState(false);
 
   // suspend
@@ -151,8 +163,9 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
       const certRows: Database["public"]["Tables"]["certifications"]["Insert"][] = createCerts.filter(c => c.title).map(c => ({
         coach_id: uid, name: c.title, title: c.title,
         issuer: c.issuer || null,
-        valid_from: c.valid_from || null,
-        valid_until: c.no_expiry ? null : (c.valid_until || null),
+        valid_from: c.valid_from ? toDbDate(c.valid_from) : null,
+        valid_until: c.no_expiry ? null : (c.valid_until ? toDbDate(c.valid_until) : null),
+        no_expiry: c.no_expiry,
         status: "pending" as Database["public"]["Enums"]["cert_status"],
       }));
       if (certRows.length > 0) await db.from("certifications").insert(certRows);
@@ -226,8 +239,9 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
     const { data, error } = await createClient().from("certifications").insert({
       coach_id: detail.id, name: certForm.title, title: certForm.title,
       issuer: certForm.issuer || null,
-      valid_from: certForm.issued_at || null,
-      valid_until: certForm.no_expiry ? null : (certForm.expires_at || null),
+      valid_from: certForm.issued_at ? toDbDate(certForm.issued_at) : null,
+      valid_until: certForm.no_expiry ? null : (certForm.expires_at ? toDbDate(certForm.expires_at) : null),
+      no_expiry: certForm.no_expiry,
       status: "pending",
     }).select("id, name, title, status, valid_from, valid_until").single();
     if (error || !data) { setSavingCert(false); return toast.error("Gagal menambah sertifikasi", error?.message ?? "Data tidak tersimpan"); }
@@ -702,7 +716,7 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
                         <div key={ct.id} className="flex items-center justify-between px-4 py-3 bg-paper-tint rounded-xl">
                           <div>
                             <div className="font-semibold text-sm text-ink">{ct.title ?? ct.name}</div>
-                            {ct.valid_from && <div className="text-xs text-ink-mute font-mono mt-0.5">{ct.valid_from}{ct.valid_until ? ` – ${ct.valid_until}` : " · Tidak kedaluwarsa"}</div>}
+                            {ct.valid_from && <div className="text-xs text-ink-mute mt-0.5">{fmtMonthYear(ct.valid_from)}{ct.valid_until ? ` – ${fmtMonthYear(ct.valid_until)}` : " · Tidak kedaluwarsa"}</div>}
                           </div>
                           <div className="flex items-center gap-2">
                             <Status kind={ct.status === "approved" ? "active" : ct.status === "pending" ? "pending" : "inactive"}>
@@ -850,8 +864,8 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
                 <Input placeholder="Mis. Lifeguard Level 2" value={c.title} onChange={e => setCreateCerts(cs => cs.map((x, j) => j === i ? { ...x, title: e.target.value } : x))} />
                 <Input placeholder="Mis. PMI / PRSI" value={c.issuer} onChange={e => setCreateCerts(cs => cs.map((x, j) => j === i ? { ...x, issuer: e.target.value } : x))} />
                 <div className="grid grid-cols-2 gap-2">
-                  <div><label className="text-xs text-ink-mute mb-1 block">Berlaku dari</label><Input type="date" value={c.valid_from} onChange={e => setCreateCerts(cs => cs.map((x, j) => j === i ? { ...x, valid_from: e.target.value } : x))} /></div>
-                  <div><label className="text-xs text-ink-mute mb-1 block">Berlaku sampai</label><Input type="date" value={c.valid_until} disabled={c.no_expiry} onChange={e => setCreateCerts(cs => cs.map((x, j) => j === i ? { ...x, valid_until: e.target.value } : x))} /></div>
+                  <div><label className="text-xs text-ink-mute mb-1 block">Berlaku dari</label><MonthYearPicker value={c.valid_from} onChange={v => setCreateCerts(cs => cs.map((x, j) => j === i ? { ...x, valid_from: v } : x))} /></div>
+                  <div><label className="text-xs text-ink-mute mb-1 block">Berlaku sampai</label><MonthYearPicker value={c.valid_until} disabled={c.no_expiry} onChange={v => setCreateCerts(cs => cs.map((x, j) => j === i ? { ...x, valid_until: v } : x))} /></div>
                 </div>
                 <label className="flex items-center gap-2 text-sm text-ink-soft cursor-pointer">
                   <input type="checkbox" checked={c.no_expiry} onChange={e => setCreateCerts(cs => cs.map((x, j) => j === i ? { ...x, no_expiry: e.target.checked, valid_until: "" } : x))} className="rounded" />
@@ -1040,8 +1054,8 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
         <div className="space-y-4">
           <Field label="Nama sertifikasi" required><Input value={certForm.title} onChange={e => setCertForm(f => ({ ...f, title: e.target.value }))} placeholder="Mis. Renang Gaya Bebas Tingkat Lanjut" /></Field>
           <Field label="Lembaga penerbit"><Input value={certForm.issuer} onChange={e => setCertForm(f => ({ ...f, issuer: e.target.value }))} placeholder="Mis. PRSI, FINA" /></Field>
-          <Field label="Berlaku dari"><Input type="date" value={certForm.issued_at} onChange={e => setCertForm(f => ({ ...f, issued_at: e.target.value }))} /></Field>
-          <Field label="Berlaku sampai"><Input type="date" value={certForm.expires_at} disabled={certForm.no_expiry} onChange={e => setCertForm(f => ({ ...f, expires_at: e.target.value }))} /></Field>
+          <Field label="Berlaku dari"><MonthYearPicker value={certForm.issued_at} onChange={v => setCertForm(f => ({ ...f, issued_at: v }))} placeholder="Pilih bulan & tahun" /></Field>
+          <Field label="Berlaku sampai"><MonthYearPicker value={certForm.expires_at} onChange={v => setCertForm(f => ({ ...f, expires_at: v }))} placeholder="Pilih bulan & tahun" disabled={certForm.no_expiry} /></Field>
           <label className="flex items-center gap-2 text-sm text-ink-soft cursor-pointer">
             <input type="checkbox" checked={certForm.no_expiry} onChange={e => setCertForm(f => ({ ...f, no_expiry: e.target.checked, expires_at: "" }))} className="rounded" />
             Tidak ada kedaluwarsa
@@ -1051,14 +1065,15 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
             {certPhotoFile && (
               <img src={URL.createObjectURL(certPhotoFile)} alt="Preview" className="w-full max-h-36 object-cover rounded-xl border border-line mb-2" />
             )}
-            <label className="flex items-center gap-3 cursor-pointer group">
-              <span className="flex items-center gap-2 px-3 py-2 rounded-lg border border-line bg-paper-tint hover:bg-white hover:border-ocean-400 transition-colors text-sm font-semibold text-ink-soft group-hover:text-ink">
+            <div className="flex items-center gap-3">
+              <button type="button" onClick={() => certPhotoInputRef.current?.click()}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg border border-line bg-paper-tint hover:bg-white hover:border-ocean-400 transition-colors text-sm font-semibold text-ink-soft hover:text-ink">
                 <Icon name="camera" className="w-4 h-4" />
                 {certPhotoFile ? "Ganti foto" : "Pilih foto"}
-              </span>
+              </button>
               {certPhotoFile && <span className="text-sm text-ink-mute truncate max-w-[160px]">{certPhotoFile.name}</span>}
-              <input type="file" accept="image/*" className="sr-only" onChange={e => setCertPhotoFile(e.target.files?.[0] ?? null)} />
-            </label>
+              <input ref={certPhotoInputRef} type="file" accept="image/*" className="sr-only" onChange={e => setCertPhotoFile(e.target.files?.[0] ?? null)} />
+            </div>
           </div>
         </div>
       </Modal>

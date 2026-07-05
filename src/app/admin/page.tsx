@@ -81,10 +81,28 @@ export default function AdminPage() {
   const [resolvedBranchId, setResolvedBranchId] = useState("");
   const [ownerPreview, setOwnerPreview] = useState<{ id: string; name: string } | null>(null);
   const [initError, setInitError] = useState<string | null>(null);
+  const [approveBadge, setApproveBadge] = useState(0);
 
   const loadBranch = useCallback(async (branchId: string) => {
     const { data } = await supabase.from("branches").select("id, name, city, address, lat, lng, wa_numbers, logo_url").eq("id", branchId).single();
     if (data) setBranch(data as Branch);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const loadApproveBadge = useCallback(async (bid: string) => {
+    if (!bid) return;
+    const [{ count: regCount }, { data: certs }] = await Promise.all([
+      supabase
+        .from("registrations")
+        .select("id", { count: "exact", head: true })
+        .eq("branch_id", bid)
+        .eq("status", "pending"),
+      supabase
+        .from("certifications")
+        .select("profile:profiles!certifications_coach_id_fkey(branch_id), status")
+        .eq("status", "pending"),
+    ]);
+    const certCount = (certs ?? []).filter(c => (c.profile as any)?.branch_id === bid).length;
+    setApproveBadge((regCount ?? 0) + certCount);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* eslint-disable react-hooks/set-state-in-effect -- init from sessionStorage */
@@ -128,6 +146,19 @@ export default function AdminPage() {
   }, [loadBranch]); // eslint-disable-line react-hooks/exhaustive-deps
   /* eslint-enable react-hooks/set-state-in-effect */
 
+  useEffect(() => {
+    if (!resolvedBranchId) return;
+    loadApproveBadge(resolvedBranchId);
+    const channel = supabase
+      .channel(`approve_badge:${resolvedBranchId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "registrations", filter: `branch_id=eq.${resolvedBranchId}` },
+        () => loadApproveBadge(resolvedBranchId))
+      .on("postgres_changes", { event: "*", schema: "public", table: "certifications" },
+        () => loadApproveBadge(resolvedBranchId))
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [resolvedBranchId, loadApproveBadge]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const backToOwner = () => {
     sessionStorage.removeItem("ownerPreviewBranch");
     router.push("/owner");
@@ -139,6 +170,14 @@ export default function AdminPage() {
   };
 
   const branchId = resolvedBranchId || (currentUser?.user_metadata?.branch_id as string ?? "");
+
+  const navItems = useMemo(() =>
+    NAV_ITEMS.map(it =>
+      it.id === "approve" && approveBadge > 0
+        ? { ...it, badge: approveBadge }
+        : it
+    ),
+  [approveBadge]);
 
   function renderPage() {
     if (!resolvedBranchId && active !== "settings") return (
@@ -213,7 +252,7 @@ export default function AdminPage() {
       )}
       <div className="flex flex-1 min-h-0">
       <Sidebar
-        items={NAV_ITEMS}
+        items={navItems}
         active={active}
         onSelect={(id) => { setActive(id); setMobileNav(false); }}
         brand={brand}
@@ -237,13 +276,17 @@ export default function AdminPage() {
           <div className="absolute inset-0 bg-ink/40" onClick={() => setMobileNav(false)} />
           <div className="absolute left-0 top-0 bottom-0 w-72 bg-white border-r border-line p-3 overflow-y-auto">
             <div className="px-2 py-2 mb-2">{brand}</div>
-            {NAV_ITEMS.map((it) =>
+            {navItems.map((it) =>
               it.section ? (
                 <div key={it.section} className="px-3 pt-3 pb-1 text-[10px] uppercase tracking-widest font-bold text-ink-faint">{it.section}</div>
               ) : (
                 <button key={it.id} onClick={() => { setActive(it.id!); setMobileNav(false); }}
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold ${active === it.id ? "bg-ocean-50 text-ocean-700" : "text-ink-soft hover:bg-paper-tint"}`}>
-                  <Icon name={it.icon!} className="w-4 h-4" />{it.label}
+                  <Icon name={it.icon!} className="w-4 h-4" />
+                  <span className="flex-1 text-left">{it.label}</span>
+                  {it.badge ? (
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-danger-500 text-white">{it.badge}</span>
+                  ) : null}
                 </button>
               )
             )}

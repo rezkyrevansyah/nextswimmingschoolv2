@@ -48,7 +48,7 @@ export default function Sidebar({ items, active, onSelect, brand, footer }: Side
               )}
               <span className="flex-1 text-left">{it.label}</span>
               {it.badge && (
-                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-wave-500 text-white">
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-danger-500 text-white">
                   {it.badge}
                 </span>
               )}
