@@ -433,7 +433,7 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
               <thead>
                 <tr className="text-[11px] uppercase tracking-widest text-ink-faint font-bold border-b border-line">
                   <th className="text-left py-3 px-5 font-bold">Coach</th>
-                  <th className="text-left py-3 font-bold hidden sm:table-cell">Spesialisasi</th>
+                  <th className="text-left py-3 font-bold hidden sm:table-cell">Email</th>
                   <th className="text-left py-3 font-bold">Status</th>
                   <th className="text-left py-3 font-bold hidden md:table-cell">No HP</th>
                   <th className="text-left py-3 font-bold hidden md:table-cell">Kelas</th>
@@ -456,8 +456,8 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
                           </div>
                         </div>
                       </td>
-                      <td className="text-xs text-ocean-700 font-semibold hidden sm:table-cell">
-                        {c.specialization ?? <span className="text-ink-faint">—</span>}
+                      <td className="text-xs text-ink-soft hidden sm:table-cell">
+                        {c.email ?? <span className="text-ink-faint">—</span>}
                       </td>
                       <td>
                         <Status kind={coachStatus(c) as "active" | "suspended" | "archived"}>
