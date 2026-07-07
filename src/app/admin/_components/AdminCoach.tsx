@@ -34,7 +34,7 @@ interface CoachFull extends CoachProfile {
   suspend_until?: string | null;
   suspend_reason?: string | null;
   is_archived?: boolean | null;
-  class_coaches?: { class_id: string; class?: { id: string; name: string; time_start: string | null; time_end: string | null; schedule_days: string[] | null } | null }[];
+  class_coaches?: { class_id: string; class?: { id: string; name: string; branch_id: string; time_start: string | null; time_end: string | null; schedule_days: string[] | null; branches?: { name: string; city: string | null } | null } | null }[];
   coach_branches?: { branch_id: string; branches?: { name: string; city: string | null } | null; is_primary: boolean; joined_at: string }[] | null;
 }
 
@@ -92,7 +92,7 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
   const [linkSearch, setLinkSearch] = useState("");
   const [linkResult, setLinkResult] = useState<{ id: string; full_name: string } | null>(null);
   const [linkSaving, setLinkSaving] = useState(false);
-  const [linkCandidates, setLinkCandidates] = useState<{ id: string; full_name: string; email: string | null; specialization: string | null }[]>([]);
+  const [linkCandidates, setLinkCandidates] = useState<{ id: string; full_name: string; phone: string | null; avatar_url: string | null; branches: { name: string; city: string | null }[] }[]>([]);
   const [linkLoadingCandidates, setLinkLoadingCandidates] = useState(false);
 
   // assign class
@@ -109,7 +109,7 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
     const coachIds = (cbData ?? []).map((r: { coach_id: string }) => r.coach_id);
     if (coachIds.length === 0) { setCoaches([]); setLoading(false); return; }
     const { data, error } = await createClient().from("profiles")
-      .select("id, full_name, nick_name, email, phone, gender, birth_date, specialization, bio, address, education_level, education_institution, bank_name, bank_account, bank_holder, avatar_url, suspend_until, suspend_reason, is_archived, certifications!certifications_coach_id_fkey(id, name, title, status, valid_from, valid_until), class_coaches(class_id, class:classes(id, name, time_start, time_end, schedule_days)), coach_branches!coach_branches_coach_id_fkey(branch_id, branches(name, city), is_primary, joined_at)")
+      .select("id, full_name, nick_name, email, phone, gender, birth_date, specialization, bio, address, education_level, education_institution, bank_name, bank_account, bank_holder, avatar_url, suspend_until, suspend_reason, is_archived, certifications!certifications_coach_id_fkey(id, name, title, status, valid_from, valid_until), class_coaches(class_id, class:classes(id, name, branch_id, time_start, time_end, schedule_days, branches(name, city))), coach_branches!coach_branches_coach_id_fkey(branch_id, branches(name, city), is_primary, joined_at)")
       .eq("role", "coach").in("id", coachIds).order("full_name");
     if (error) return;
     if (data) setCoaches(data as unknown as CoachFull[]);
@@ -329,14 +329,32 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
   const loadLinkCandidates = async () => {
     setLinkLoadingCandidates(true);
     setLinkCandidates([]);
-    // Get coach IDs already in this branch
-    const { data: cbData } = await createClient().from("coach_branches").select("coach_id").eq("branch_id", branchId);
-    const alreadyLinked = (cbData ?? []).map((r: { coach_id: string }) => r.coach_id);
-    // Query all coaches not in this branch
-    let query = createClient().from("profiles").select("id, full_name, email, specialization").eq("role", "coach").order("full_name");
-    if (alreadyLinked.length > 0) query = query.not("id", "in", `(${alreadyLinked.join(",")})`);
-    const { data } = await query;
-    setLinkCandidates((data ?? []) as { id: string; full_name: string; email: string | null; specialization: string | null }[]);
+    const db = createClient();
+    // Get all coach_branches entries with branch info, grouped by coach
+    // Source of truth: a coach only appears here if they are already registered in at least one branch
+    const { data: allLinks } = await db
+      .from("coach_branches")
+      .select("coach_id, branch_id, branches(name, city), profile:profiles(id, full_name, phone, avatar_url)")
+      .order("coach_id");
+    if (!allLinks) { setLinkLoadingCandidates(false); return; }
+    // IDs already in this branch
+    const alreadyLinked = new Set(
+      allLinks.filter(r => r.branch_id === branchId).map(r => r.coach_id)
+    );
+    // Group by coach, collect all their branches
+    const byCoach = new Map<string, { id: string; full_name: string; phone: string | null; avatar_url: string | null; branches: { name: string; city: string | null }[] }>();
+    for (const row of allLinks) {
+      const p = row.profile as { id: string; full_name: string; phone: string | null; avatar_url: string | null } | null;
+      if (!p) continue;
+      if (alreadyLinked.has(p.id)) continue; // skip coaches already in this branch
+      if (!byCoach.has(p.id)) {
+        byCoach.set(p.id, { id: p.id, full_name: p.full_name, phone: p.phone, avatar_url: p.avatar_url, branches: [] });
+      }
+      const br = row.branches as { name: string; city: string | null } | null;
+      if (br) byCoach.get(p.id)!.branches.push(br);
+    }
+    const candidates = Array.from(byCoach.values()).sort((a, b) => a.full_name.localeCompare(b.full_name));
+    setLinkCandidates(candidates);
     setLinkLoadingCandidates(false);
   };
 
@@ -389,7 +407,7 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
       ...prev,
       class_coaches: assignedClassIds.map(class_id => ({
         class_id,
-        class: allClasses.find(c => c.id === class_id) ?? null,
+        class: (allClasses.find(c => c.id === class_id) ?? null) as CoachFull["class_coaches"] extends (infer T)[] ? T extends { class?: infer C } ? C : never : never,
       })),
     } : prev);
     load();
@@ -624,23 +642,111 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
                   </div>
                 )}
 
-                {/* Branches */}
-                {(detail.coach_branches?.length ?? 0) > 0 && (
+                {/* Assigned classes — grouped by branch */}
+                {(() => {
+                  const allClasses = (detail.class_coaches ?? []).filter(cc => cc.class);
+                  // Build ordered branch list from coach_branches (preserves primary-first order)
+                  const branchOrder = (detail.coach_branches ?? [])
+                    .slice()
+                    .sort((a, b) => (b.is_primary ? 1 : 0) - (a.is_primary ? 1 : 0));
+                  // Group classes by branch_id
+                  const byBranch = new Map<string, typeof allClasses>();
+                  for (const cc of allClasses) {
+                    const bid = cc.class!.branch_id;
+                    if (!byBranch.has(bid)) byBranch.set(bid, []);
+                    byBranch.get(bid)!.push(cc);
+                  }
+                  const isMultiBranch = (detail.coach_branches?.length ?? 0) > 1;
+                  return (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Kelas yang Dihandle</div>
+                        {!archived && <button onClick={() => openAssignModal(detail)} className="text-xs text-ocean-600 font-semibold hover:underline">Edit Assign</button>}
+                      </div>
+                      {allClasses.length === 0 ? (
+                        <div className="p-3 rounded-xl bg-warn-50 border border-warn-100 text-xs text-warn-700 flex items-center gap-2">
+                          <Icon name="warning" className="w-4 h-4 shrink-0" />Belum diassign ke kelas manapun
+                        </div>
+                      ) : isMultiBranch ? (
+                        /* Multi-branch: group by branch */
+                        <div className="space-y-3">
+                          {branchOrder.map(cb => {
+                            const classes = byBranch.get(cb.branch_id) ?? [];
+                            const isCurrentBranch = cb.branch_id === branchId;
+                            return (
+                              <div key={cb.branch_id} className="rounded-xl border border-line overflow-hidden">
+                                <div className={`flex items-center gap-2 px-3 py-2 ${isCurrentBranch ? "bg-ocean-50" : "bg-paper-tint"}`}>
+                                  <Icon name="pin" className="w-3.5 h-3.5 text-ink-mute shrink-0" />
+                                  <span className="text-xs font-bold text-ink">{cb.branches?.name ?? cb.branch_id}</span>
+                                  {cb.branches?.city && <span className="text-xs text-ink-mute">· {cb.branches.city}</span>}
+                                  {cb.is_primary && <span className="text-[10px] font-bold text-ocean-600 bg-ocean-100 px-1.5 py-0.5 rounded ml-auto">Utama</span>}
+                                  {isCurrentBranch && !cb.is_primary && <span className="text-[10px] font-bold text-wave-700 bg-wave-50 px-1.5 py-0.5 rounded ml-auto">Cabang ini</span>}
+                                </div>
+                                {classes.length === 0 ? (
+                                  <div className="px-3 py-2.5 text-xs text-ink-faint italic">Tidak ada kelas di cabang ini</div>
+                                ) : (
+                                  <div className="divide-y divide-line">
+                                    {classes.map(cc => (
+                                      <div key={cc.class_id} className="flex items-center gap-3 px-3 py-2.5">
+                                        <div className="w-1.5 h-1.5 rounded-full bg-ocean-400 shrink-0" />
+                                        <div className="flex-1 min-w-0">
+                                          <div className="font-semibold text-sm text-ink">{cc.class?.name}</div>
+                                          {cc.class?.schedule_days && (
+                                            <div className="text-xs text-ink-mute mt-0.5">
+                                              {cc.class.schedule_days.join(", ")}{cc.class.time_start ? ` · ${cc.class.time_start.slice(0,5)}${cc.class.time_end ? `–${cc.class.time_end.slice(0,5)}` : ""}` : ""}
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        /* Single branch: flat list */
+                        <div className="space-y-2">
+                          {allClasses.map(cc => (
+                            <div key={cc.class_id} className="px-4 py-3 bg-paper-tint rounded-xl">
+                              <div className="font-semibold text-sm text-ink">{cc.class?.name}</div>
+                              {cc.class?.schedule_days && (
+                                <div className="text-xs text-ink-mute mt-0.5">
+                                  {cc.class.schedule_days.join(", ")}{cc.class.time_start ? ` · ${cc.class.time_start.slice(0,5)}${cc.class.time_end ? `–${cc.class.time_end.slice(0,5)}` : ""}` : ""}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* Branches summary */}
+                {(detail.coach_branches?.length ?? 0) > 1 && (
                   <div className="space-y-2">
                     <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Cabang Terdaftar</div>
                     <div className="bg-paper-tint rounded-xl divide-y divide-line">
-                      {detail.coach_branches!.map(cb => (
-                        <div key={cb.branch_id} className="flex items-center justify-between px-4 py-2.5">
-                          <div>
-                            <span className="text-sm text-ink font-semibold">{cb.branches?.name ?? cb.branch_id}</span>
-                            {cb.branches?.city && <span className="text-xs text-ink-mute ml-1.5">{cb.branches.city}</span>}
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {cb.is_primary && <span className="text-[10px] font-bold text-ocean-600 bg-ocean-50 px-1.5 py-0.5 rounded">Utama</span>}
-                            <span className="text-xs text-ink-faint">Sejak {fmtDate(cb.joined_at)}</span>
-                          </div>
-                        </div>
-                      ))}
+                      {detail.coach_branches!
+                        .slice()
+                        .sort((a, b) => (b.is_primary ? 1 : 0) - (a.is_primary ? 1 : 0))
+                        .map(cb => {
+                          const classCount = (detail.class_coaches ?? []).filter(cc => cc.class?.branch_id === cb.branch_id).length;
+                          return (
+                            <div key={cb.branch_id} className="flex items-center justify-between px-4 py-2.5">
+                              <div>
+                                <span className="text-sm text-ink font-semibold">{cb.branches?.name ?? cb.branch_id}</span>
+                                {cb.branches?.city && <span className="text-xs text-ink-mute ml-1.5">{cb.branches.city}</span>}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {cb.is_primary && <span className="text-[10px] font-bold text-ocean-600 bg-ocean-50 px-1.5 py-0.5 rounded">Utama</span>}
+                                <span className="text-xs text-ink-faint">{classCount} kelas · Sejak {fmtDate(cb.joined_at)}</span>
+                              </div>
+                            </div>
+                          );
+                        })}
                     </div>
                   </div>
                 )}
@@ -655,30 +761,6 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
                       <div className="font-mono text-sm font-bold text-ink bg-white px-2 py-1 rounded border border-line">{detail.id.slice(0, 8).toUpperCase()}</div>
                     </div>
                   </div>
-                </div>
-
-                {/* Assigned classes */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Kelas yang Dihandle</div>
-                    {!archived && <button onClick={() => openAssignModal(detail)} className="text-xs text-ocean-600 font-semibold hover:underline">Edit Assign</button>}
-                  </div>
-                  {assignedClasses.length === 0 ? (
-                    <div className="p-3 rounded-xl bg-warn-50 border border-warn-100 text-xs text-warn-700 flex items-center gap-2">
-                      <Icon name="warning" className="w-4 h-4 shrink-0" />Belum diassign ke kelas manapun
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {assignedClasses.map(cc => (
-                        <div key={cc.class_id} className="flex items-center justify-between px-4 py-3 bg-paper-tint rounded-xl">
-                          <div>
-                            <div className="font-semibold text-sm text-ink">{cc.class?.name}</div>
-                            {cc.class?.schedule_days && <div className="text-xs text-ink-mute mt-0.5">{cc.class.schedule_days.join(", ")}{cc.class.time_start ? ` · ${cc.class.time_start.slice(0,5)}${cc.class.time_end ? `–${cc.class.time_end.slice(0,5)}` : ""}` : ""}</div>}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
                 </div>
 
                 {/* Bio */}
@@ -746,7 +828,7 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
             : <Btn variant="ghost" onClick={() => { setOpenLink(false); setLinkSearch(""); setLinkResult(null); setLinkCandidates([]); }}>Tutup</Btn>
         }>
         <div className="space-y-3">
-          <p className="text-sm text-ink-soft">Pilih coach yang sudah terdaftar di cabang lain untuk ditambahkan ke cabang ini.</p>
+          <p className="text-sm text-ink-soft">Pilih coach yang sudah aktif di cabang lain. Coach akan bisa mengelola kelas di cabang ini dalam 1 akun yang sama.</p>
           {linkResult ? (
             <div className="flex items-center gap-3 p-3 rounded-xl bg-ok-50 border border-ok-200">
               <Avatar name={linkResult.full_name} size={40} />
@@ -760,23 +842,36 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
             </div>
           ) : (
             <>
-              <Input placeholder="Cari nama coach…" value={linkSearch} onChange={e => setLinkSearch(e.target.value)} />
+              <Input placeholder="Cari nama atau no HP…" value={linkSearch} onChange={e => setLinkSearch(e.target.value)} autoComplete="off" />
               {linkLoadingCandidates ? (
                 <div className="py-6 text-center text-sm text-ink-mute">Memuat…</div>
               ) : linkCandidates.length === 0 ? (
-                <div className="py-6 text-center text-sm text-ink-mute">Tidak ada coach tersedia di luar cabang ini.</div>
+                <div className="py-6 text-center text-sm text-ink-mute">Semua coach sudah terdaftar di cabang ini, atau belum ada coach lain di sistem.</div>
               ) : (
-                <div className="max-h-64 overflow-y-auto space-y-1.5 pr-0.5">
-                  {linkCandidates.filter(c => !linkSearch.trim() || c.full_name.toLowerCase().includes(linkSearch.trim().toLowerCase()) || (c.email ?? "").toLowerCase().includes(linkSearch.trim().toLowerCase())).map(c => (
-                    <button key={c.id} type="button" onClick={() => setLinkResult({ id: c.id, full_name: c.full_name })}
-                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border border-line bg-paper-tint hover:bg-white hover:border-ocean-300 transition-colors text-left">
-                      <Avatar name={c.full_name} size={36} />
-                      <div className="flex-1 min-w-0">
-                        <div className="font-semibold text-sm text-ink truncate">{c.full_name}</div>
-                        <div className="text-xs text-ink-mute truncate">{c.specialization ?? c.email ?? "—"}</div>
-                      </div>
-                    </button>
-                  ))}
+                <div className="max-h-72 overflow-y-auto space-y-1.5 pr-0.5">
+                  {linkCandidates
+                    .filter(c => {
+                      const q = linkSearch.trim().toLowerCase();
+                      if (!q) return true;
+                      return c.full_name.toLowerCase().includes(q) || (c.phone ?? "").includes(q);
+                    })
+                    .map(c => (
+                      <button key={c.id} type="button" onClick={() => setLinkResult({ id: c.id, full_name: c.full_name })}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border border-line bg-paper-tint hover:bg-white hover:border-ocean-300 transition-colors text-left">
+                        <Avatar name={c.full_name} src={c.avatar_url ?? undefined} size={36} />
+                        <div className="flex-1 min-w-0">
+                          <div className="font-semibold text-sm text-ink">{c.full_name}</div>
+                          <div className="text-xs text-ink-mute">{c.phone ?? "—"}</div>
+                          {c.branches.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {c.branches.map(b => (
+                                <span key={b.name} className="text-[10px] font-semibold bg-ocean-50 text-ocean-700 px-1.5 py-0.5 rounded-full">{b.name}{b.city ? ` · ${b.city}` : ""}</span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </button>
+                    ))}
                 </div>
               )}
             </>

@@ -54,6 +54,7 @@ interface ClassRow {
   class_type?: string;
   spreadsheet_filled?: boolean;
   spreadsheet_url?: string | null;
+  branch_id?: string;
   branch?: { name: string; city: string; address: string | null } | null;
   member_classes?: { member: { id: string; profile: { full_name: string; birth_date: string | null; phone: string | null; gender: string | null; address: string | null; health_notes: string | null } | null } | null }[];
   coach_spreadsheets?: CoachSpreadsheetRow[];
@@ -206,7 +207,16 @@ function ClockInFlow({ back, coachId, branchId, classes, preselectedClassId, onS
   const { upload, uploading } = useUpload();
   const supabase = createClient();
   const [step, setStep] = useState(0);
-  const [classId, setClassId] = useState(preselectedClassId ?? classes[0]?.id ?? "");
+  const isPreselected = !!preselectedClassId;
+  // If preselected, lock to that class. Otherwise default to first today's class.
+  const todayName = new Date().toLocaleDateString("id-ID", { weekday: "long" });
+  const todayClasses = classes.filter(c =>
+    (c.schedule_days ?? []).includes(todayName) &&
+    (!branchId || !c.branch_id || c.branch_id === branchId)
+  );
+  const [classId, setClassId] = useState(
+    preselectedClassId ?? todayClasses[0]?.id ?? classes[0]?.id ?? ""
+  );
   const [gpsStatus, setGpsStatus] = useState<"checking" | "ok" | "error">("checking");
   const [coords, setCoords] = useState<GeolocationCoordinates | null>(null);
   const [branchCoords, setBranchCoords] = useState<{ lat: number; lng: number } | null>(null);
@@ -296,6 +306,8 @@ function ClockInFlow({ back, coachId, branchId, classes, preselectedClassId, onS
     setStep(3);
   };
 
+  const selectedClass = classes.find(c => c.id === classId) ?? null;
+
   const distLabel = distanceMeters != null
     ? distanceMeters < 1000
       ? `${distanceMeters} m dari cabang`
@@ -320,11 +332,25 @@ function ClockInFlow({ back, coachId, branchId, classes, preselectedClassId, onS
             <div className="w-20 h-20 rounded-2xl bg-wave-50 text-wave-600 mx-auto flex items-center justify-center mb-3"><Icon name="camera" className="w-10 h-10" /></div>
             <h2 className="font-display font-bold text-xl text-ink">Clock-In</h2>
           </div>
-          <Field label="Pilih kelas" required>
-            <Select value={classId} onChange={e => setClassId(e.target.value)}>
-              {classes.map(c => <option key={c.id} value={c.id}>{c.name} — {c.time_start?.slice(0,5)}{c.time_end ? `–${c.time_end.slice(0,5)}` : ""}</option>)}
-            </Select>
-          </Field>
+          {isPreselected ? (
+            <div className="rounded-xl bg-paper-tint border border-line px-4 py-3">
+              <div className="text-xs text-ink-mute mb-0.5">Kelas</div>
+              <div className="font-semibold text-ink">{selectedClass?.name ?? "—"}</div>
+              {selectedClass && (
+                <div className="text-xs text-ink-mute mt-0.5">
+                  {selectedClass.time_start?.slice(0, 5)}{selectedClass.time_end ? `–${selectedClass.time_end.slice(0, 5)}` : ""}
+                </div>
+              )}
+            </div>
+          ) : (
+            <Field label="Pilih kelas" required>
+              <Select value={classId} onChange={e => setClassId(e.target.value)}>
+                {(todayClasses.length > 0 ? todayClasses : classes).map(c => (
+                  <option key={c.id} value={c.id}>{c.name} — {c.time_start?.slice(0,5)}{c.time_end ? `–${c.time_end.slice(0,5)}` : ""}</option>
+                ))}
+              </Select>
+            </Field>
+          )}
           <Card className="!p-3 mt-4 bg-paper-tint">
             <div className="grid grid-cols-2 gap-3 text-xs">
               <div>
@@ -809,11 +835,11 @@ function CoachHome({ setOverlay, setActive, coachId, branchId, profile, classes,
     supabase.from("coach_attendances").select("id, status, class_id, session_date").eq("coach_id", coachId).gte("session_date", monthStart).lte("session_date", monthEnd)
       .then(({ data }) => {
         if (data) {
-          setMonthStats({ present: data.filter(a => a.status === "present").length, leave: data.filter(a => a.status === "absent").length, sub: 0 });
+          setMonthStats({ present: data.filter(a => a.status === "present" || a.status === "late").length, leave: data.filter(a => a.status === "absent").length, sub: 0 });
           // Track which classes coach already clocked-in today
           const todayClockedIn = new Set<string>(
             (data as { id: string; status: string; class_id: string; session_date: string }[])
-              .filter(a => a.session_date === today && a.status === "present" && a.class_id)
+              .filter(a => a.session_date === today && (a.status === "present" || a.status === "late") && a.class_id)
               .map(a => a.class_id)
           );
           setClockedInIds(todayClockedIn);
@@ -877,7 +903,11 @@ function CoachHome({ setOverlay, setActive, coachId, branchId, profile, classes,
    
 
   const todayName = new Date().toLocaleDateString("id-ID", { weekday: "long" });
-  const todayClasses = classes.filter(c => (c.schedule_days ?? []).includes(todayName));
+  // For multi-branch coaches, filter today's classes to active branch only
+  const todayClasses = classes.filter(c =>
+    (c.schedule_days ?? []).includes(todayName) &&
+    (!branchId || !c.branch_id || c.branch_id === branchId)
+  );
 
   return (
     <div className="space-y-5">
@@ -1035,7 +1065,7 @@ function CoachHome({ setOverlay, setActive, coachId, branchId, profile, classes,
 
 // ── Absensi ────────────────────────────────────────────────────────────────────
 
-function CoachAbsensi({ setOverlay, coachId, classes, holidayClassIds, clockedInIds }: {
+function CoachAbsensi({ setOverlay, coachId, branchId, classes, holidayClassIds, clockedInIds }: {
   setOverlay: (v: string) => void;
   coachId: string; branchId?: string; classes: ClassRow[]; holidayClassIds: Set<string>; clockedInIds: Set<string>;
 }) {
@@ -1275,7 +1305,10 @@ function CoachAbsensi({ setOverlay, coachId, classes, holidayClassIds, clockedIn
   };
 
   const todayName = new Date().toLocaleDateString("id-ID", { weekday: "long" });
-  const todayClasses = classes.filter(c => (c.schedule_days ?? []).includes(todayName));
+  const todayClasses = classes.filter(c =>
+    (c.schedule_days ?? []).includes(todayName) &&
+    (!branchId || !c.branch_id || c.branch_id === branchId)
+  );
 
   if (showQR) {
     return <QRScanner coachId={coachId} classes={classes} onClose={() => setShowQR(false)} />;
@@ -3215,7 +3248,7 @@ export default function CoachPage() {
   }, [supabase]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadClasses = useCallback(async (profileId: string) => {
-    const { data, error } = await supabase.from("class_coaches").select("class:classes(id, name, schedule_days, time_start, time_end, capacity, enrolled, goals, description, class_type, spreadsheet_filled, spreadsheet_url, branch:branches(name, city, address), member_classes(member:members(id, profile:profiles(full_name, birth_date, phone, gender, address, health_notes))))").eq("coach_id", profileId);
+    const { data, error } = await supabase.from("class_coaches").select("class:classes(id, name, branch_id, schedule_days, time_start, time_end, capacity, enrolled, goals, description, class_type, spreadsheet_filled, spreadsheet_url, branch:branches(name, city, address), member_classes(member:members(id, profile:profiles(full_name, birth_date, phone, gender, address, health_notes))))").eq("coach_id", profileId);
     if (error || !data) return;
     const rows = data.map((d: Record<string, unknown>) => d.class as ClassRow).filter(Boolean);
     setClasses(rows);
