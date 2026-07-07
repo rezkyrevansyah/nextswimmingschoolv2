@@ -816,6 +816,7 @@ export default function AdminMember({ branchId }: { branchId: string }) {
               onChange={e => setSearch(e.target.value)}
               placeholder="Cari nama, email, atau nomor HP…"
               className="flex-1 text-sm outline-none bg-transparent"
+              autoComplete="off"
             />
             {search && (
               <button type="button" onClick={() => setSearch("")} className="text-ink-mute hover:text-ink transition">
@@ -1469,10 +1470,10 @@ export default function AdminMember({ branchId }: { branchId: string }) {
           )}
           <Field label="Alamat" className="sm:col-span-2"><Textarea rows={2} value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} placeholder="Mis. Jl. Anggrek No. 12, Bekasi" /></Field>
           <Field label="Catatan kesehatan" className="sm:col-span-2" hint="Alergi, kondisi khusus, dll."><Textarea rows={2} value={form.health_notes} onChange={e => setForm(f => ({ ...f, health_notes: e.target.value }))} /></Field>
-          <Field label="Email login" required><Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} /></Field>
+          <Field label="Email login" required><Input type="email" autoComplete="off" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} /></Field>
           <Field label="Password" required hint="Min. 6 karakter">
             <div className="relative">
-              <Input type={showCreatePwd ? "text" : "password"} value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder="••••••••" className="pr-10" />
+              <Input type={showCreatePwd ? "text" : "password"} autoComplete="new-password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder="••••••••" className="pr-10" />
               <button type="button" tabIndex={-1} onClick={() => setShowCreatePwd(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-mute hover:text-ink transition-colors">
                 <Icon name={showCreatePwd ? "eye-off" : "eye"} className="w-4 h-4" />
               </button>
