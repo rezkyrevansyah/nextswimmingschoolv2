@@ -42,9 +42,9 @@ export default function AdminClass({ branchId }: { branchId: string }) {
   const [criteriaClass, setCriteriaClass] = useState<ClassRow | null>(null);
   const [criteria, setCriteria] = useState<Criterion[]>([]);
   const [loadingCriteria, setLoadingCriteria] = useState(false);
-  const [criterionForm, setCriterionForm] = useState({ label: "", kind: "score_10", options: "" });
+  const [criterionForm, setCriterionForm] = useState({ label: "", kind: "score_10", options: [] as string[] });
   const [savingCriterion, setSavingCriterion] = useState(false);
-  const [editingCriterion, setEditingCriterion] = useState<{ id: string; label: string; kind: string; options: string } | null>(null);
+  const [editingCriterion, setEditingCriterion] = useState<{ id: string; label: string; kind: string; options: string[] } | null>(null);
   const [bulkKind, setBulkKind] = useState("score_10");
   const [applyingBulk, setApplyingBulk] = useState(false);
 
@@ -206,13 +206,13 @@ export default function AdminClass({ branchId }: { branchId: string }) {
     const { data } = await supabase.from("class_criteria").select("id, label, kind, options, sort_order").eq("class_id", c.id).order("sort_order");
     setCriteria((data ?? []) as Criterion[]);
     setLoadingCriteria(false);
-    setCriterionForm({ label: "", kind: "score_10", options: "" });
+    setCriterionForm({ label: "", kind: "score_10", options: [] });
   };
 
   const addCriterion = async () => {
     if (!criteriaClass || !criterionForm.label) return toast.error("Label wajib diisi");
     setSavingCriterion(true);
-    const opts = criterionForm.kind === "choice" ? criterionForm.options.split("\n").map(s => s.trim()).filter(Boolean) : null;
+    const opts = criterionForm.kind === "choice" ? criterionForm.options.filter(Boolean) : null;
     const { error } = await supabase.from("class_criteria").insert({
       class_id: criteriaClass.id, label: criterionForm.label, kind: criterionForm.kind,
       options: opts, sort_order: criteria.length,
@@ -220,7 +220,7 @@ export default function AdminClass({ branchId }: { branchId: string }) {
     setSavingCriterion(false);
     if (error) return toast.error("Gagal menyimpan", error.message);
     toast.success("Aspek penilaian ditambahkan");
-    setCriterionForm({ label: "", kind: "score_10", options: "" });
+    setCriterionForm({ label: "", kind: "score_10", options: [] });
     const { data } = await supabase.from("class_criteria").select("id, label, kind, options, sort_order").eq("class_id", criteriaClass.id).order("sort_order");
     setCriteria((data ?? []) as Criterion[]);
   };
@@ -235,12 +235,26 @@ export default function AdminClass({ branchId }: { branchId: string }) {
 
   const updateCriterion = async () => {
     if (!editingCriterion || !editingCriterion.label) return toast.error("Label wajib diisi");
-    const opts = editingCriterion.kind === "choice" ? editingCriterion.options.split("\n").map(s => s.trim()).filter(Boolean) : null;
+    const opts = editingCriterion.kind === "choice" ? editingCriterion.options.filter(Boolean) : null;
     const { error } = await supabase.from("class_criteria").update({ label: editingCriterion.label, kind: editingCriterion.kind, options: opts }).eq("id", editingCriterion.id);
     if (error) return toast.error("Gagal menyimpan", error.message);
     setCriteria(prev => prev.map(c => c.id === editingCriterion.id ? { ...c, label: editingCriterion.label, kind: editingCriterion.kind, options: opts } : c));
     setEditingCriterion(null);
     toast.success("Aspek diperbarui");
+  };
+
+  const duplicateCriterion = async (cr: Criterion) => {
+    if (!criteriaClass) return;
+    setSavingCriterion(true);
+    const { error } = await supabase.from("class_criteria").insert({
+      class_id: criteriaClass.id, label: cr.label, kind: cr.kind,
+      options: cr.options ?? [], sort_order: criteria.length,
+    });
+    setSavingCriterion(false);
+    if (error) return toast.error("Gagal menduplikat", error.message);
+    toast.success("Aspek diduplikat");
+    const { data } = await supabase.from("class_criteria").select("id, label, kind, options, sort_order").eq("class_id", criteriaClass.id).order("sort_order");
+    setCriteria((data ?? []) as Criterion[]);
   };
 
   const applyBulkKind = async () => {
@@ -607,8 +621,19 @@ export default function AdminClass({ branchId }: { branchId: string }) {
                             </Field>
                           </div>
                           {editingCriterion.kind === "choice" && (
-                            <Field label="Pilihan jawaban" hint="Satu pilihan per baris">
-                              <Textarea rows={3} value={editingCriterion.options} onChange={e => setEditingCriterion(v => v ? { ...v, options: e.target.value } : v)} />
+                            <Field label="Pilihan jawaban">
+                              <div className="space-y-1.5">
+                                {editingCriterion.options.map((opt, idx) => (
+                                  <div key={idx} className="flex items-center gap-2">
+                                    <span className="text-ink-mute text-sm w-5 text-right shrink-0">{idx + 1}.</span>
+                                    <Input value={opt} onChange={e => setEditingCriterion(v => { if (!v) return v; const opts = [...v.options]; opts[idx] = e.target.value; return { ...v, options: opts }; })} placeholder={`Pilihan ${idx + 1}`} className="flex-1" />
+                                    <button type="button" onClick={() => setEditingCriterion(v => v ? { ...v, options: v.options.filter((_, i) => i !== idx) } : v)} className="p-1 rounded text-ink-mute hover:text-danger-600 hover:bg-danger-50 transition-colors"><Icon name="x" className="w-3.5 h-3.5" /></button>
+                                  </div>
+                                ))}
+                                <button type="button" onClick={() => setEditingCriterion(v => v ? { ...v, options: [...v.options, ""] } : v)} className="flex items-center gap-1.5 text-sm text-ocean-600 hover:text-ocean-700 font-medium mt-1">
+                                  <Icon name="plus" className="w-3.5 h-3.5" />Tambah pilihan
+                                </button>
+                              </div>
                             </Field>
                           )}
                           <div className="flex gap-2">
@@ -624,7 +649,11 @@ export default function AdminClass({ branchId }: { branchId: string }) {
                             <div className="font-semibold text-ink text-sm">{cr.label}</div>
                             <div className="text-xs text-ink-mute">{kindLabel[cr.kind] ?? cr.kind}{cr.options && ` · ${cr.options.join(", ")}`}</div>
                           </div>
-                          <button onClick={() => setEditingCriterion({ id: cr.id, label: cr.label, kind: cr.kind, options: cr.options?.join("\n") ?? "" })}
+                          <button onClick={() => duplicateCriterion(cr)} disabled={savingCriterion}
+                            className="w-7 h-7 rounded-lg hover:bg-ocean-50 text-ink-faint hover:text-ocean-600 flex items-center justify-center shrink-0 disabled:opacity-50" title="Duplikat">
+                            <Icon name="copy" className="w-3.5 h-3.5" />
+                          </button>
+                          <button onClick={() => setEditingCriterion({ id: cr.id, label: cr.label, kind: cr.kind, options: cr.options ?? [] })}
                             className="w-7 h-7 rounded-lg hover:bg-ocean-50 text-ink-faint hover:text-ocean-600 flex items-center justify-center shrink-0" title="Edit">
                             <Icon name="edit" className="w-3.5 h-3.5" />
                           </button>
@@ -654,8 +683,19 @@ export default function AdminClass({ branchId }: { branchId: string }) {
                   </Field>
                 </div>
                 {criterionForm.kind === "choice" && (
-                  <Field label="Pilihan jawaban" hint="Satu pilihan per baris">
-                    <Textarea rows={3} value={criterionForm.options} onChange={e => setCriterionForm(f => ({ ...f, options: e.target.value }))} placeholder={"Sangat Baik\nBaik\nCukup\nPerlu Latihan"} />
+                  <Field label="Pilihan jawaban">
+                    <div className="space-y-1.5">
+                      {criterionForm.options.map((opt, idx) => (
+                        <div key={idx} className="flex items-center gap-2">
+                          <span className="text-ink-mute text-sm w-5 text-right shrink-0">{idx + 1}.</span>
+                          <Input value={opt} onChange={e => setCriterionForm(f => { const opts = [...f.options]; opts[idx] = e.target.value; return { ...f, options: opts }; })} placeholder={`Pilihan ${idx + 1}`} className="flex-1" />
+                          <button type="button" onClick={() => setCriterionForm(f => ({ ...f, options: f.options.filter((_, i) => i !== idx) }))} className="p-1 rounded text-ink-mute hover:text-danger-600 hover:bg-danger-50 transition-colors"><Icon name="x" className="w-3.5 h-3.5" /></button>
+                        </div>
+                      ))}
+                      <button type="button" onClick={() => setCriterionForm(f => ({ ...f, options: [...f.options, ""] }))} className="flex items-center gap-1.5 text-sm text-ocean-600 hover:text-ocean-700 font-medium mt-1">
+                        <Icon name="plus" className="w-3.5 h-3.5" />Tambah pilihan
+                      </button>
+                    </div>
                   </Field>
                 )}
                 <Btn variant="primary" size="sm" icon="plus" onClick={addCriterion} disabled={savingCriterion}>{savingCriterion ? "Menyimpan…" : "Tambah Aspek"}</Btn>

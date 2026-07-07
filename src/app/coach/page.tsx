@@ -13,6 +13,7 @@ import Placeholder from "@/components/ui/Placeholder";
 import Modal from "@/components/ui/Modal";
 import PhotoLightbox from "@/components/ui/PhotoLightbox";
 import MonthYearPicker from "@/components/ui/MonthYearPicker";
+import DatePicker from "@/components/ui/DatePicker";
 import MobileNav from "@/components/layout/MobileNav";
 import type { NavItem as MobileNavItem } from "@/components/layout/Sidebar";
 import Bell from "@/components/layout/Bell";
@@ -2835,7 +2836,7 @@ function CoachProfile({ profile, onRefresh, onLogout, onAvatarChange }: { profil
         <div className="mt-4 space-y-4">
           <div className="text-xs font-bold text-ink-mute uppercase tracking-widest">Data Pribadi</div>
           <div className="grid sm:grid-cols-2 gap-3">
-            <Field label="Nama panggilan" hint="Opsional"><Input value={profileForm.nick_name} onChange={e => setProfileForm(f => ({ ...f, nick_name: e.target.value }))} placeholder="Mis. Kak Reza" /></Field>
+            <Field label="Nama panggilan"><Input value={profileForm.nick_name} onChange={e => setProfileForm(f => ({ ...f, nick_name: e.target.value }))} placeholder="Mis. Kak Reza" /></Field>
             <Field label="Jenis kelamin">
               <Select value={profileForm.gender} onChange={e => setProfileForm(f => ({ ...f, gender: e.target.value }))}>
                 <option value="">Pilih…</option>
@@ -2845,17 +2846,17 @@ function CoachProfile({ profile, onRefresh, onLogout, onAvatarChange }: { profil
             </Field>
           </div>
           <div className="grid sm:grid-cols-2 gap-3">
-            <Field label="Tanggal lahir" hint="Opsional"><Input type="date" value={profileForm.birth_date} onChange={e => setProfileForm(f => ({ ...f, birth_date: e.target.value }))} /></Field>
+            <Field label="Tanggal lahir"><DatePicker value={profileForm.birth_date} onChange={v => setProfileForm(f => ({ ...f, birth_date: v }))} /></Field>
             <Field label="Nomor WhatsApp"><Input type="tel" value={profileForm.phone} onChange={e => setProfileForm(f => ({ ...f, phone: e.target.value }))} placeholder="08xxxxxxxxxx" /></Field>
           </div>
           <div>
             <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-1">Email</div>
             <div className="text-sm font-semibold text-ink">{profile?.email ?? "—"}</div>
           </div>
-          <Field label="Alamat" hint="Opsional"><Textarea rows={2} value={profileForm.address} onChange={e => setProfileForm(f => ({ ...f, address: e.target.value }))} placeholder="Mis. Jl. Anggrek No. 12, Bekasi" /></Field>
+          <Field label="Alamat"><Textarea rows={2} value={profileForm.address} onChange={e => setProfileForm(f => ({ ...f, address: e.target.value }))} placeholder="Mis. Jl. Anggrek No. 12, Bekasi" /></Field>
 
           <div className="pt-3 border-t border-line">
-            <div className="text-xs font-bold text-ink-mute uppercase tracking-widest mb-3">Pendidikan (Opsional)</div>
+            <div className="text-xs font-bold text-ink-mute uppercase tracking-widest mb-3">Pendidikan</div>
             <div className="grid sm:grid-cols-2 gap-3">
               <Field label="Pendidikan terakhir">
                 <Select value={profileForm.education_level} onChange={e => setProfileForm(f => ({ ...f, education_level: e.target.value }))}>
@@ -2870,8 +2871,8 @@ function CoachProfile({ profile, onRefresh, onLogout, onAvatarChange }: { profil
           <div className="pt-3 border-t border-line">
             <div className="text-xs font-bold text-ink-mute uppercase tracking-widest mb-3">Profil Pelatih</div>
             <div className="space-y-3">
-              <Field label="Spesialisasi" hint="Opsional"><Input value={profileForm.specialization} onChange={e => setProfileForm(f => ({ ...f, specialization: e.target.value }))} placeholder="Mis. Renang gaya bebas, anak-anak" /></Field>
-              <Field label="Bio / Deskripsi" hint="Opsional"><Textarea rows={3} value={profileForm.bio} onChange={e => setProfileForm(f => ({ ...f, bio: e.target.value }))} placeholder="Mis. Berpengalaman 5 tahun melatih renang anak usia dini dengan pendekatan bermain." /></Field>
+              <Field label="Spesialisasi"><Input value={profileForm.specialization} onChange={e => setProfileForm(f => ({ ...f, specialization: e.target.value }))} placeholder="Mis. Renang gaya bebas, anak-anak" /></Field>
+              <Field label="Bio / Deskripsi"><Textarea rows={3} value={profileForm.bio} onChange={e => setProfileForm(f => ({ ...f, bio: e.target.value }))} placeholder="Mis. Berpengalaman 5 tahun melatih renang anak usia dini dengan pendekatan bermain." /></Field>
             </div>
           </div>
 

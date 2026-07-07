@@ -56,7 +56,7 @@ export default function MonthYearPicker({
 
   const yearStart = currentYear - yearPage * YEARS_PER_PAGE - YEARS_PER_PAGE + 1;
   const yearEnd = currentYear - yearPage * YEARS_PER_PAGE;
-  const yearsOnPage = Array.from({ length: YEARS_PER_PAGE }, (_, i) => yearEnd - i).filter(y => y >= minYear);
+  const yearsOnPage = Array.from({ length: YEARS_PER_PAGE }, (_, i) => yearEnd - i).filter(y => y >= minYear).reverse();
   const canGoNewer = yearPage > 0;
   const canGoOlder = yearStart - 1 >= minYear;
 
@@ -131,7 +131,7 @@ export default function MonthYearPicker({
           <div className="grid grid-cols-3 gap-1.5">
             {yearsOnPage.map(y => (
               <button key={y} type="button" onClick={() => handleYearSelect(y)}
-                className={cn("py-2 rounded-lg text-sm font-semibold transition-colors",
+                className={cn("py-2 rounded-lg text-sm font-semibold text-center transition-colors",
                   parsed?.year === y ? "bg-ocean-600 text-white" : "text-ink hover:bg-ocean-50 hover:text-ocean-700")}>
                 {y}
               </button>
@@ -156,7 +156,7 @@ export default function MonthYearPicker({
           <div className="grid grid-cols-3 gap-1.5">
             {MONTHS.map((m, i) => (
               <button key={m} type="button" onClick={() => handleMonthSelect(i)}
-                className={cn("py-2 rounded-lg text-sm font-semibold transition-colors",
+                className={cn("py-2 rounded-lg text-sm font-semibold text-center transition-colors",
                   parsed?.year === viewYear && parsed?.month === i ? "bg-ocean-600 text-white" : "text-ink hover:bg-ocean-50 hover:text-ocean-700")}>
                 {m}
               </button>
