@@ -12,6 +12,7 @@ import Modal from "@/components/ui/Modal";
 import MobileNav from "@/components/layout/MobileNav";
 import type { NavItem as MobileNavItem } from "@/components/layout/Sidebar";
 import Bell from "@/components/layout/Bell";
+import BetaFeedback, { BETA_FEEDBACK_ENABLED } from "@/components/layout/BetaFeedback";
 import { fmtIDR, fmtDate, waLink } from "@/lib/utils";
 import { printSingleRapor, type PrintCriterion, type PrintBestTime } from "@/lib/printRapor";
 import { createClient } from "@/utils/supabase/client";
@@ -378,11 +379,13 @@ function MemberHome({
 
 function MemberSchedule({ memberId }: { memberId: string }) {
   const supabase = createClient();
-  const [classes, setClasses] = useState<{ id: string; name: string; schedule_days: string[]; time_start: string | null; time_end: string | null; schedule_times?: { day: string; time_start: string; time_end: string }[] | null; location: string; goals: string | null; description: string | null; coach_name: string | null; coach_phone: string | null }[]>([]);
+  const [classes, setClasses] = useState<{ id: string; name: string; schedule_days: string[]; time_start: string | null; time_end: string | null; schedule_times?: { day: string; time_start: string; time_end: string }[] | null; location: string; goals: string | null; description: string | null; coaches: { name: string; phone: string | null }[] }[]>([]);
   const [sessions, setSessions] = useState<{ date: string; day: string; time: string; class_id: string; onLeave?: boolean }[]>([]);
   const [holidayClassIds, setHolidayClassIds] = useState<Set<string>>(new Set());
   // approved leave intervals: { date_from, date_to, class_ids }
   const [leaveIntervals, setLeaveIntervals] = useState<{ date_from: string; date_to: string; class_ids: Set<string> }[]>([]);
+  const [sessionPage, setSessionPage] = useState(0);
+  const PAGE_SIZE = 8;
 
 
   useEffect(() => {
@@ -410,10 +413,14 @@ function MemberSchedule({ memberId }: { memberId: string }) {
         const cls = data.map((mc) => {
           const c = mc.classes as unknown as { id: string; name: string; schedule_days: string[]; time_start: string | null; time_end: string | null; schedule_times?: { day: string; time_start: string; time_end: string }[] | null; location_name: string | null; goals: string | null; description: string | null; class_coaches: { profile: { full_name: string; phone: string | null } | null }[] } | null;
           if (!c) return null;
-          const firstCoach = c.class_coaches?.[0]?.profile;
-          return { id: c.id, name: c.name, schedule_days: c.schedule_days ?? [], time_start: c.time_start, time_end: c.time_end ?? null, schedule_times: c.schedule_times ?? null, location: c.location_name ?? "—", goals: c.goals ?? null, description: c.description ?? null, coach_name: firstCoach?.full_name ?? null, coach_phone: firstCoach?.phone ?? null };
+          const coaches = (c.class_coaches ?? [])
+            .map((cc) => cc.profile)
+            .filter((p): p is { full_name: string; phone: string | null } => p !== null)
+            .map((p) => ({ name: p.full_name, phone: p.phone ?? null }));
+          return { id: c.id, name: c.name, schedule_days: c.schedule_days ?? [], time_start: c.time_start, time_end: c.time_end ?? null, schedule_times: c.schedule_times ?? null, location: c.location_name ?? "—", goals: c.goals ?? null, description: c.description ?? null, coaches };
         }).filter(Boolean) as typeof classes;
         setClasses(cls);
+        setSessionPage(0);
 
         // Fetch today's holidays for these classes
         const classIds = cls.map(c => c.id);
@@ -444,7 +451,7 @@ function MemberSchedule({ memberId }: { memberId: string }) {
           });
         });
         upcoming.sort((a, b) => a.date.localeCompare(b.date));
-        setSessions(upcoming.slice(0, 8));
+        setSessions(upcoming);
       });
   }, [memberId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -454,6 +461,12 @@ function MemberSchedule({ memberId }: { memberId: string }) {
    
 
   const monthNames = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agt", "Sep", "Okt", "Nov", "Des"];
+
+  const totalSessions = sessions.length;
+  const totalPages = Math.ceil(totalSessions / PAGE_SIZE);
+  const pagedSessions = sessions.slice(sessionPage * PAGE_SIZE, sessionPage * PAGE_SIZE + PAGE_SIZE);
+  const sessionRangeStart = sessionPage * PAGE_SIZE + 1;
+  const sessionRangeEnd = Math.min(sessionPage * PAGE_SIZE + PAGE_SIZE, totalSessions);
 
   return (
     <div className="space-y-5">
@@ -467,19 +480,39 @@ function MemberSchedule({ memberId }: { memberId: string }) {
               <div className="font-display font-bold text-xl flex-1 min-w-0">{c.name}</div>
               {isHoliday && <Status kind="holiday" className="border-white/30">Libur Hari Ini</Status>}
             </div>
-            <div className="mt-2 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2 min-w-0">
-                {c.coach_name
-                  ? <><Avatar name={c.coach_name} size={24} className="shrink-0" /><span className="text-wave-200 text-sm truncate">{c.coach_name}</span></>
-                  : <span className="text-wave-200/60 text-sm">Belum ada coach</span>
-                }
-              </div>
-              {c.coach_phone && (
-                <a href={waLink(`Halo Coach, saya ingin bertanya mengenai kelas ${c.name}.`, c.coach_phone)} target="_blank" rel="noreferrer"
-                  className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition-colors">
-                  <Icon name="whatsapp" className="w-3.5 h-3.5" />
-                  Chat Coach
-                </a>
+            <div className="mt-2 space-y-2">
+              {c.coaches.length === 0 ? (
+                <span className="text-wave-200/60 text-sm">Belum ada coach</span>
+              ) : c.coaches.length === 1 ? (
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Avatar name={c.coaches[0].name} size={24} className="shrink-0" />
+                    <span className="text-wave-200 text-sm truncate">{c.coaches[0].name}</span>
+                  </div>
+                  {c.coaches[0].phone && (
+                    <a href={waLink(`Halo Coach, saya ingin bertanya mengenai kelas ${c.name}.`, c.coaches[0].phone)} target="_blank" rel="noreferrer"
+                      className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition-colors">
+                      <Icon name="whatsapp" className="w-3.5 h-3.5" />
+                      Chat Coach
+                    </a>
+                  )}
+                </div>
+              ) : (
+                c.coaches.map((coach, idx) => (
+                  <div key={idx} className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Avatar name={coach.name} size={24} className="shrink-0" />
+                      <span className="text-wave-200 text-sm truncate">{coach.name}</span>
+                    </div>
+                    {coach.phone && (
+                      <a href={waLink(`Halo Coach, saya ingin bertanya mengenai kelas ${c.name}.`, coach.phone)} target="_blank" rel="noreferrer"
+                        className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition-colors">
+                        <Icon name="whatsapp" className="w-3.5 h-3.5" />
+                        Chat Coach
+                      </a>
+                    )}
+                  </div>
+                ))
               )}
             </div>
           </div>
@@ -521,25 +554,58 @@ function MemberSchedule({ memberId }: { memberId: string }) {
 
       {sessions.length > 0 && (
         <Card padded={false}>
-          <div className="p-5 border-b border-line"><SectionTitle sub="4 minggu ke depan">Sesi yang akan datang</SectionTitle></div>
+          <div className="p-5 border-b border-line">
+            <SectionTitle sub="4 minggu ke depan">Sesi yang akan datang</SectionTitle>
+          </div>
           <div className="divide-y divide-line">
-            {sessions.map((s, i) => {
+            {pagedSessions.map((s, i) => {
               const d = new Date(s.date + "T00:00:00");
-              const dateStr = `${d.getDate()} ${monthNames[d.getMonth()]} ${d.getFullYear()}`;
+              const dateStr = `${d.getDate()} ${monthNames[d.getMonth()]}`;
+              const yearStr = `${d.getFullYear()}`;
               const cls = classes.find((c) => c.id === s.class_id);
               const onLeave = isOnLeave(s.date, s.class_id);
               return (
-                <div key={i} className={`px-4 py-3 flex items-center gap-2 min-w-0 ${onLeave ? "opacity-50" : ""}`}>
-                  <div className="font-mono font-semibold text-xs text-ink shrink-0">{dateStr}</div>
-                  <div className="text-xs text-ink-mute truncate min-w-0">{s.day} · {s.time}</div>
-                  <div className="ml-auto flex items-center gap-1.5 shrink-0">
-                    {onLeave && <span className="text-[10px] font-bold uppercase tracking-wide text-warn-600 bg-warn-50 px-1.5 py-0.5 rounded">Izin</span>}
-                    <span className="text-xs text-ink-soft truncate max-w-20">{cls?.name ?? ""}</span>
+                <div key={i} className={`px-4 py-3 flex items-center gap-3 min-w-0${onLeave ? " opacity-50" : ""}`}>
+                  <div className="shrink-0 w-14 text-center">
+                    <div className="font-bold text-sm text-ink leading-tight">{dateStr}</div>
+                    <div className="text-[11px] text-ink-mute leading-tight">{yearStr}</div>
                   </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-semibold text-ink leading-tight">{cls?.name ?? "—"}</div>
+                    <div className="text-xs text-ink-mute mt-0.5">{s.day} · {s.time}</div>
+                  </div>
+                  {onLeave && (
+                    <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide text-warn-600 bg-warn-50 px-1.5 py-0.5 rounded">
+                      Izin
+                    </span>
+                  )}
                 </div>
               );
             })}
           </div>
+          {totalPages > 1 && (
+            <div className="px-4 py-3 border-t border-line flex items-center justify-between gap-3">
+              <button
+                onClick={() => setSessionPage((p) => Math.max(0, p - 1))}
+                disabled={sessionPage === 0}
+                className="flex items-center gap-1 text-xs font-semibold text-ink-soft hover:text-ink disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                <Icon name="chevron-left" className="w-4 h-4" />
+                Sebelumnya
+              </button>
+              <span className="text-xs text-ink-mute">
+                {sessionRangeStart}–{sessionRangeEnd} dari {totalSessions} sesi
+              </span>
+              <button
+                onClick={() => setSessionPage((p) => Math.min(totalPages - 1, p + 1))}
+                disabled={sessionPage >= totalPages - 1}
+                className="flex items-center gap-1 text-xs font-semibold text-ink-soft hover:text-ink disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                Selanjutnya
+                <Icon name="chevron-right" className="w-4 h-4" />
+              </button>
+            </div>
+          )}
         </Card>
       )}
 
@@ -964,12 +1030,16 @@ interface RaporEntryFull {
   class_id: string;
   scores: Record<string, number | string>; notes: string | null;
   personality: string | null; motivation: string | null; learning_achievements: string | null;
+  level: string | null;
   review_stars: number | null; review_message: string | null; review_id: string | null;
   criteria: PrintCriterion[];
   best_times: PrintBestTime[];
 }
 
-function MemberRapor({ memberId, memberName, branchId }: { memberId: string; memberName: string; branchId: string }) {
+function MemberRapor({ memberId, memberName, branchId, avatarUrl, memberNo, birthDate, location }: {
+  memberId: string; memberName: string; branchId: string;
+  avatarUrl?: string | null; memberNo?: string | null; birthDate?: string | null; location?: string;
+}) {
   const supabase = createClient();
   const toast = useToast();
   const [open, setOpen] = useState(false);
@@ -982,7 +1052,7 @@ function MemberRapor({ memberId, memberName, branchId }: { memberId: string; mem
   const load = useCallback(async () => {
     if (!memberId) return;
     const { data } = await supabase.from("rapor_entries")
-      .select("id, scores, notes, personality, motivation, learning_achievements, coach_id, period_id, class_id, rapor_periods(label, is_open), classes(name), coach:profiles!rapor_entries_coach_id_fkey(full_name)")
+      .select("id, scores, notes, personality, motivation, learning_achievements, level, coach_id, period_id, class_id, rapor_periods(label, is_open), classes(name), coach:profiles!rapor_entries_coach_id_fkey(full_name)")
       .eq("member_id", memberId)
       .order("created_at", { ascending: false });
     if (!data) return;
@@ -1037,6 +1107,7 @@ function MemberRapor({ memberId, memberName, branchId }: { memberId: string; mem
         personality: (e as unknown as { personality: string | null }).personality ?? null,
         motivation: (e as unknown as { motivation: string | null }).motivation ?? null,
         learning_achievements: (e as unknown as { learning_achievements: string | null }).learning_achievements ?? null,
+        level: (e as unknown as { level: string | null }).level ?? null,
         review_stars: review?.stars ?? null,
         review_message: review?.message ?? null,
         review_id: review?.id ?? null,
@@ -1135,6 +1206,11 @@ function MemberRapor({ memberId, memberName, branchId }: { memberId: string; mem
               <Btn variant="outline" size="sm" icon="download"
                 onClick={() => printSingleRapor({
                   full_name: memberName,
+                  member_no: memberNo ?? undefined,
+                  birth_date: birthDate ?? undefined,
+                  avatar_url: avatarUrl ?? undefined,
+                  location: location ?? undefined,
+                  level: selectedEntry.level ?? undefined,
                   class_name: selectedEntry.class_name,
                   coach_name: selectedEntry.coach_name,
                   period_label: selectedEntry.period,
@@ -1521,6 +1597,8 @@ export default function MemberPage() {
   const [lockChecked, setLockChecked] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
   const [memberAvatarUrl, setMemberAvatarUrl] = useState<string | null>(null);
+  const [memberNo, setMemberNo] = useState<string | null>(null);
+  const [memberBirthDate, setMemberBirthDate] = useState<string | null>(null);
   const [suspendUntil, setSuspendUntil] = useState<string | null>(null);
   const [suspendReason, setSuspendReason] = useState<string | null>(null);
   const [suspendCountdown, setSuspendCountdown] = useState("");
@@ -1576,7 +1654,7 @@ export default function MemberPage() {
 
       // Load member record by profile_id (= auth uid)
       supabase.from("members")
-        .select("id, type, suspend_until, suspend_reason, profile:profiles(full_name, is_profile_complete, avatar_url)")
+        .select("id, type, member_no, suspend_until, suspend_reason, profile:profiles(full_name, birth_date, is_profile_complete, avatar_url)")
         .eq("profile_id", u.id)
         .single()
         .then(async ({ data: m }) => {
@@ -1586,13 +1664,15 @@ export default function MemberPage() {
           }
           if (m) {
             setMemberId(m.id);
-            const rec = m as unknown as { id: string; type: "reguler" | "private" | "school_affiliate"; suspend_until: string | null; suspend_reason: string | null; profile: { full_name: string; is_profile_complete: boolean | null; avatar_url: string | null } | null };
+            const rec = m as unknown as { id: string; type: "reguler" | "private" | "school_affiliate"; member_no: string | null; suspend_until: string | null; suspend_reason: string | null; profile: { full_name: string; birth_date: string | null; is_profile_complete: boolean | null; avatar_url: string | null } | null };
             setMemberType(rec.type ?? "reguler");
+            setMemberNo(rec.member_no ?? null);
             setSuspendUntil(rec.suspend_until ?? null);
             setSuspendReason(rec.suspend_reason ?? null);
             const prof = rec.profile;
             setMemberName(prof?.full_name ?? "");
             setMemberAvatarUrl(prof?.avatar_url ?? null);
+            setMemberBirthDate(prof?.birth_date ?? null);
             // Lock if profile incomplete AND no avatar
             const complete = prof?.is_profile_complete === true;
             const hasAvatar = !!(prof?.avatar_url);
@@ -1624,7 +1704,7 @@ export default function MemberPage() {
     absen:    <>{SuspendBanner}<MemberAbsensi memberId={memberId} /></>,
     bills:    <>{SuspendBanner}<MemberBills memberId={memberId} memberName={memberName} branchId={branchId} /></>,
     leave:    <>{SuspendBanner}<MemberLeave memberId={memberId} /></>,
-    rapor:    <>{SuspendBanner}<MemberRapor memberId={memberId} memberName={memberName} branchId={branchId} /></>,
+    rapor:    <>{SuspendBanner}<MemberRapor memberId={memberId} memberName={memberName} branchId={branchId} avatarUrl={memberAvatarUrl} memberNo={memberNo} birthDate={memberBirthDate} location={branchName} /></>,
     profile:  <MemberProfile memberId={memberId} memberName={memberName} onLogout={logout} onProfileComplete={onProfileComplete} onAvatarChange={url => setMemberAvatarUrl(url)} />,
   };
 
@@ -1655,6 +1735,7 @@ export default function MemberPage() {
       <Shell active={active} setActive={setActive} name={memberName} branchName={branchName} userId={userId} avatarUrl={memberAvatarUrl} isSchoolAffiliate={memberType === "school_affiliate"}>
         {lockChecked ? pages[active] : <div className="p-10 text-center text-ink-mute">Memuat…</div>}
       </Shell>
+      {BETA_FEEDBACK_ENABLED && <BetaFeedback role="member" />}
     </>
   );
 }

@@ -25,6 +25,7 @@ import type { Branch } from "./_types";
 import Sidebar, { type NavItem } from "@/components/layout/Sidebar";
 import Topbar from "@/components/layout/Topbar";
 import Bell from "@/components/layout/Bell";
+import BetaFeedback, { BETA_FEEDBACK_ENABLED } from "@/components/layout/BetaFeedback";
 import { createClient } from "@/utils/supabase/client";
 import type { User } from "@supabase/supabase-js";
 
@@ -313,6 +314,7 @@ export default function AdminPage() {
       </div>
       </div>
 
+      {BETA_FEEDBACK_ENABLED && <BetaFeedback role="admin" />}
     </div>
   );
 }

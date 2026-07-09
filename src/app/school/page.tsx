@@ -18,6 +18,7 @@ import Status from "@/components/ui/Status";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import Modal from "@/components/ui/Modal";
 import Bell from "@/components/layout/Bell";
+import BetaFeedback, { BETA_FEEDBACK_ENABLED } from "@/components/layout/BetaFeedback";
 import { fmtDate, waLink } from "@/lib/utils";
 import { printSingleRapor, printSchoolRekap, type PrintCriterion, type PrintBestTime } from "@/lib/printRapor";
 import { createClient } from "@/utils/supabase/client";
@@ -400,6 +401,7 @@ function SchoolAbsensi({ schoolId, schoolName, members }: {
 interface Student {
   id: string;
   full_name: string;
+  avatar_url: string | null;
   class_name: string;
   coach_name: string;
   period_id: string | null;
@@ -410,6 +412,7 @@ interface Student {
   personality: string | null;
   motivation: string | null;
   learning_achievements: string | null;
+  level: string | null;
   criteria: Criterion[];
   best_times: PrintBestTime[];
 }
@@ -457,7 +460,7 @@ export default function SchoolPage() {
       .from("members")
       .select(`
         id,
-        profile:profiles(full_name),
+        profile:profiles(full_name, avatar_url),
         member_classes(
           classes(
             id, name,
@@ -466,7 +469,7 @@ export default function SchoolPage() {
           )
         ),
         rapor_entries(
-          id, scores, notes, personality, motivation, learning_achievements, period_id
+          id, scores, notes, personality, motivation, learning_achievements, level, period_id
         )
       `)
       .eq("school_id", sId)
@@ -487,12 +490,12 @@ export default function SchoolPage() {
     }
 
     const rows: Student[] = data.map((m) => {
-      const profile = (m.profile as unknown as { full_name: string } | null);
+      const profile = (m.profile as unknown as { full_name: string; avatar_url: string | null } | null);
       const mc = (m.member_classes as unknown as { classes: { id: string; name: string; class_coaches: { profile: { full_name: string } | null }[]; class_criteria: { id: string; label: string; kind: string; options: string[] | null; sort_order: number }[] } | null }[])?.[0];
       const cls = mc?.classes;
       const firstCoach = cls?.class_coaches?.[0]?.profile;
       const entry = pid
-        ? (m.rapor_entries as unknown as { id: string; scores: Record<string, number | string>; notes: string | null; personality: string | null; motivation: string | null; learning_achievements: string | null; period_id: string }[])
+        ? (m.rapor_entries as unknown as { id: string; scores: Record<string, number | string>; notes: string | null; personality: string | null; motivation: string | null; learning_achievements: string | null; level: string | null; period_id: string }[])
           ?.find((e) => e.period_id === pid)
         : undefined;
       const criteria: Criterion[] = [...(cls?.class_criteria ?? [])]
@@ -501,6 +504,7 @@ export default function SchoolPage() {
       return {
         id: m.id,
         full_name: profile?.full_name ?? "—",
+        avatar_url: profile?.avatar_url ?? null,
         class_name: cls?.name ?? "—",
         coach_name: firstCoach?.full_name ?? "—",
         period_id: pid,
@@ -511,6 +515,7 @@ export default function SchoolPage() {
         personality: entry?.personality ?? null,
         motivation: entry?.motivation ?? null,
         learning_achievements: entry?.learning_achievements ?? null,
+        level: entry?.level ?? null,
         criteria,
         best_times: btByMember.get(m.id) ?? [],
       };
@@ -616,7 +621,9 @@ export default function SchoolPage() {
 
   // Print helpers
   const toPrintStudent = (s: Student) => ({
-    full_name: s.full_name, class_name: s.class_name, coach_name: s.coach_name,
+    full_name: s.full_name, avatar_url: s.avatar_url ?? undefined,
+    level: s.level ?? undefined,
+    class_name: s.class_name, coach_name: s.coach_name,
     period_label: s.period_label ?? "—", scores: s.scores, notes: s.notes,
     personality: s.personality, motivation: s.motivation, learning_achievements: s.learning_achievements,
     criteria: s.criteria, best_times: s.best_times,
@@ -1173,6 +1180,7 @@ export default function SchoolPage() {
           </div>
         )}
       </Modal>
+      {BETA_FEEDBACK_ENABLED && <BetaFeedback role="school" />}
     </div>
   );
 }

@@ -12,6 +12,7 @@ import Modal from "@/components/ui/Modal";
 import Sidebar, { type NavItem } from "@/components/layout/Sidebar";
 import Topbar from "@/components/layout/Topbar";
 import Bell from "@/components/layout/Bell";
+import BetaFeedback, { BETA_FEEDBACK_ENABLED } from "@/components/layout/BetaFeedback";
 import { fmtIDR } from "@/lib/utils";
 import { logActivity } from "@/lib/activityLog";
 import { createClient } from "@/utils/supabase/client";
@@ -93,8 +94,12 @@ interface Invoice {
   bank_info: string | null;
   submitted_at: string;
   paid_at?: string | null;
+  approved_at?: string | null;
+  rejected_at?: string | null;
+  rejection_reason?: string | null;
+  branch_id?: string | null;
   branch?: { name: string } | null;
-  coach?: { full_name: string } | null;
+  coach?: { id: string; full_name: string } | null;
   coach_invoice_items?: InvoiceItem[];
 }
 
@@ -1366,24 +1371,51 @@ function SettingsTarif({ branches }: { branches: Branch[] }) {
   );
 }
 
+interface OwnerPayslipRow {
+  id: string; coach_id: string; branch_id: string; invoice_id: string | null;
+  period_label: string; gross_amount: number; deductions: number; net_amount: number;
+  notes: string | null; status: string; published_at: string | null;
+  published_by: string | null; created_at: string;
+  coach?: { full_name: string } | null;
+  branch?: { name: string } | null;
+}
+
 function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: string; userName: string }) {
   const supabase = createClient();
   const toast = useToast();
+  const confirm = useConfirm();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [branchFilter, setBranchFilter] = useState("all");
   const [marking, setMarking] = useState<string | null>(null);
+  const [approving, setApproving] = useState<string | null>(null);
+  const [rejecting, setRejecting] = useState<string | null>(null);
+  const [rejectModal, setRejectModal] = useState<Invoice | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
   const [detail, setDetail] = useState<Invoice | null>(null);
 
-  const totPaid   = invoices.filter(i => i.status === "paid");
-  const totUnpaid = invoices.filter(i => i.status !== "paid");
+  // ── Payslip state ───────────────────────────────────────────────────────────
+  const [payslips, setPayslips] = useState<OwnerPayslipRow[]>([]);
+  const [loadingPayslips, setLoadingPayslips] = useState(true);
+  const [showGenModal, setShowGenModal] = useState(false);
+  const [genForm, setGenForm] = useState({ invoice_id: "", period_label: "", gross_amount: 0, deductions: 0, notes: "" });
+  const [savingSlip, setSavingSlip] = useState(false);
+  const [publishingId, setPublishingId] = useState<string | null>(null);
+  const [viewSlip, setViewSlip] = useState<OwnerPayslipRow | null>(null);
+  const [payslipBranchFilter, setPayslipBranchFilter] = useState("all");
+  const [payslipStatusFilter, setPayslipStatusFilter] = useState("all");
+
+  const totPending  = invoices.filter(i => i.status === "pending");
+  const totApproved = invoices.filter(i => i.status === "approved");
+  const totPaid     = invoices.filter(i => i.status === "paid");
 
   /* eslint-disable react-hooks/set-state-in-effect -- async data loader */
   useEffect(() => {
     setLoading(true);
     const q = supabase
       .from("coach_invoices")
-      .select("id, invoice_number, period_label, total_amount, status, bank_info, submitted_at, paid_at, branch:branches(name), coach:profiles!coach_invoices_coach_id_fkey(full_name), coach_invoice_items(id, class_id, session_count, rate, class:classes(name))")
+      .select("id, invoice_number, period_label, total_amount, status, bank_info, branch_id, submitted_at, paid_at, approved_at, rejected_at, rejection_reason, branch:branches(name), coach:profiles!coach_invoices_coach_id_fkey(id, full_name), coach_invoice_items(id, class_id, session_count, rate, class:classes(name))")
+      .not("status", "eq", "cancelled")
       .order("submitted_at", { ascending: false });
     if (branchFilter !== "all") q.eq("branch_id", branchFilter);
     q.then(({ data }) => {
@@ -1392,6 +1424,118 @@ function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: 
     });
   }, [branchFilter]); // eslint-disable-line react-hooks/exhaustive-deps
   /* eslint-enable react-hooks/set-state-in-effect */
+
+  const loadPayslips = useCallback(async () => {
+    setLoadingPayslips(true);
+    const { data } = await supabase.from("payslips")
+      .select("id, coach_id, branch_id, invoice_id, period_label, gross_amount, deductions, net_amount, notes, status, published_at, published_by, created_at, coach:profiles!payslips_coach_id_fkey(full_name), branch:branches(name)")
+      .order("created_at", { ascending: false });
+    if (data) setPayslips(data as unknown as OwnerPayslipRow[]);
+    setLoadingPayslips(false);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { loadPayslips(); }, [loadPayslips]);
+
+  const filteredPayslips = useMemo(() => {
+    let r = payslips;
+    if (payslipBranchFilter !== "all") r = r.filter(p => p.branch_id === payslipBranchFilter);
+    if (payslipStatusFilter !== "all") r = r.filter(p => p.status === payslipStatusFilter);
+    return r;
+  }, [payslips, payslipBranchFilter, payslipStatusFilter]);
+
+  const invoicesWithoutSlip = useMemo(() => {
+    const usedInvoiceIds = new Set(payslips.map(p => p.invoice_id).filter(Boolean));
+    return invoices.filter(i => i.status === "paid" && !usedInvoiceIds.has(i.id));
+  }, [invoices, payslips]);
+
+  const handleGenInvoiceChange = (invoiceId: string) => {
+    const inv = invoices.find(e => e.id === invoiceId);
+    if (inv) {
+      setGenForm(f => ({ ...f, invoice_id: invoiceId, period_label: inv.period_label, gross_amount: inv.total_amount, deductions: 0, notes: "" }));
+    } else {
+      setGenForm(f => ({ ...f, invoice_id: invoiceId }));
+    }
+  };
+
+  const savePayslip = async () => {
+    if (!genForm.invoice_id) return toast.error("Pilih invoice terlebih dahulu");
+    if (!genForm.period_label.trim()) return toast.error("Period label kosong");
+    const inv = invoices.find(e => e.id === genForm.invoice_id);
+    if (!inv) return toast.error("Invoice tidak ditemukan");
+    setSavingSlip(true);
+    const { error } = await supabase.from("payslips").insert({
+      coach_id: inv.coach?.id,
+      branch_id: inv.branch_id,
+      invoice_id: genForm.invoice_id,
+      period_label: genForm.period_label.trim(),
+      gross_amount: genForm.gross_amount,
+      deductions: genForm.deductions,
+      net_amount: genForm.gross_amount - genForm.deductions,
+      notes: genForm.notes.trim() || null,
+      status: "draft",
+    });
+    setSavingSlip(false);
+    if (error) return toast.error("Gagal simpan", error.message);
+    toast.success("Slip gaji berhasil dibuat (draft)");
+    logActivity(supabase, { userId, userRole: "owner", userName, entityType: "payslips", entityId: inv.coach?.id ?? "", entityLabel: inv.coach?.full_name ?? undefined, action: "create", label: `Slip gaji ${inv.coach?.full_name ?? "coach"} periode ${genForm.period_label.trim()} dibuat (draft)`, meta: { gross_amount: genForm.gross_amount, deductions: genForm.deductions, net_amount: genForm.gross_amount - genForm.deductions } });
+    setShowGenModal(false);
+    setGenForm({ invoice_id: "", period_label: "", gross_amount: 0, deductions: 0, notes: "" });
+    loadPayslips();
+  };
+
+  const publishPayslip = async (p: OwnerPayslipRow) => {
+    const ok = await confirm({ title: "Terbitkan Slip Gaji?", body: `Slip gaji ${p.coach?.full_name ?? "coach"} periode ${p.period_label} akan diterbitkan dan dapat dilihat coach.`, confirmLabel: "Terbitkan" });
+    if (!ok) return;
+    setPublishingId(p.id);
+    const { error } = await supabase.from("payslips").update({ status: "published", published_at: new Date().toISOString(), published_by: userId }).eq("id", p.id);
+    setPublishingId(null);
+    if (error) return toast.error("Gagal terbitkan", error.message);
+    toast.success("Slip gaji diterbitkan");
+    logActivity(supabase, { userId, userRole: "owner", userName, branchId: p.branch_id, entityType: "payslips", entityId: p.id, entityLabel: p.coach?.full_name ?? undefined, action: "publish", label: `Slip gaji ${p.coach?.full_name ?? "coach"} periode ${p.period_label} diterbitkan`, meta: { net_amount: p.net_amount } });
+    setPayslips(prev => prev.map(s => s.id === p.id ? { ...s, status: "published", published_at: new Date().toISOString() } : s));
+  };
+
+  const deletePayslip = async (p: OwnerPayslipRow) => {
+    const ok = await confirm({ title: "Hapus Slip Gaji?", body: "Slip gaji draft ini akan dihapus.", confirmLabel: "Hapus", danger: true });
+    if (!ok) return;
+    const { error } = await supabase.from("payslips").delete().eq("id", p.id);
+    if (error) return toast.error("Gagal hapus", error.message);
+    toast.success("Slip gaji dihapus");
+    logActivity(supabase, { userId, userRole: "owner", userName, branchId: p.branch_id, entityType: "payslips", entityId: p.id, entityLabel: p.coach?.full_name ?? undefined, action: "delete", label: `Slip gaji draft ${p.coach?.full_name ?? "coach"} periode ${p.period_label} dihapus` });
+    setPayslips(prev => prev.filter(s => s.id !== p.id));
+  };
+
+  const printPayslip = (p: OwnerPayslipRow) => {
+    const w = window.open("", "_blank", "width=700,height=700");
+    if (!w) return;
+    w.document.write(`<!DOCTYPE html><html><head><title>Slip Gaji ${p.period_label}</title>
+    <style>body{font-family:sans-serif;padding:32px;color:#0f172a;max-width:600px;margin:auto}
+    h1{font-size:20px;font-weight:700;margin-bottom:2px}.sub{font-size:13px;color:#64748b;margin-bottom:24px}
+    .section{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94a3b8;margin:20px 0 6px}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;background:#f8fafc;border-radius:8px;padding:12px 16px;font-size:13px;line-height:2}
+    .row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #e2e8f0;font-size:13px}
+    .total{display:flex;justify-content:space-between;padding:12px 0;font-weight:700;font-size:16px;border-top:2px solid #0f172a;margin-top:4px}
+    .net{color:#166534;font-size:18px}
+    footer{margin-top:40px;border-top:1px solid #e2e8f0;padding-top:12px;font-size:11px;color:#94a3b8;text-align:center}
+    </style></head><body>
+    <h1>Slip Gaji Coach</h1>
+    <div class="sub">${p.period_label} &nbsp;·&nbsp; ${p.branch?.name ?? "—"}</div>
+    <div class="section">Informasi</div>
+    <div class="grid">
+      <div><b>Coach</b></div><div>${p.coach?.full_name ?? "—"}</div>
+      <div><b>Periode</b></div><div>${p.period_label}</div>
+      <div><b>Cabang</b></div><div>${p.branch?.name ?? "—"}</div>
+      <div><b>Diterbitkan</b></div><div>${p.published_at ? new Date(p.published_at).toLocaleDateString("id-ID", { dateStyle: "long" }) : "—"}</div>
+    </div>
+    <div class="section">Rincian</div>
+    <div class="row"><span>Gaji Kotor</span><span>Rp ${p.gross_amount.toLocaleString("id-ID")}</span></div>
+    <div class="row"><span>Potongan</span><span>- Rp ${p.deductions.toLocaleString("id-ID")}</span></div>
+    <div class="total"><span>Gaji Bersih</span><span class="net">Rp ${p.net_amount.toLocaleString("id-ID")}</span></div>
+    ${p.notes ? `<div class="section">Catatan</div><p style="font-size:13px;color:#334155">${p.notes}</p>` : ""}
+    <footer>Next Swimming School &nbsp;·&nbsp; Dicetak ${new Date().toLocaleDateString("id-ID", { dateStyle: "long" })}</footer>
+    </body></html>`);
+    w.document.close(); w.focus(); w.print();
+  };
 
   const markPaid = async (id: string) => {
     setMarking(id);
@@ -1403,6 +1547,39 @@ function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: 
     if (detail?.id === id) setDetail(prev => prev ? { ...prev, status: "paid", paid_at: new Date().toISOString() } : prev);
     toast.success("Invoice ditandai lunas");
     logActivity(supabase, { userId, userRole: "owner", userName, branchId: inv?.branch?.name ? undefined : undefined, entityType: "coach_invoices", entityId: id, entityLabel: inv?.invoice_number ?? id, action: "update", label: `Invoice ${inv?.invoice_number ?? id} — ${inv?.coach?.full_name ?? "coach"} ditandai lunas (${fmtIDR(inv?.total_amount ?? 0)})`, meta: { amount: inv?.total_amount, coach: inv?.coach?.full_name } });
+  };
+
+  const approveInvoice = async (id: string) => {
+    setApproving(id);
+    const { error } = await supabase.from("coach_invoices").update({ status: "approved", approved_at: new Date().toISOString() }).eq("id", id);
+    setApproving(null);
+    if (error) return toast.error("Gagal menyetujui", error.message);
+    const inv = invoices.find(i => i.id === id);
+    setInvoices(prev => prev.map(i => i.id === id ? { ...i, status: "approved", approved_at: new Date().toISOString() } : i));
+    if (detail?.id === id) setDetail(prev => prev ? { ...prev, status: "approved" } : prev);
+    if (inv?.coach?.id) {
+      await supabase.from("notifications").insert({ user_id: inv.coach.id, title: "Invoice disetujui", body: `Invoice ${inv.invoice_number} (${inv.period_label}) telah disetujui. Menunggu pembayaran.`, icon: "check", kind: "success" });
+    }
+    toast.success("Invoice disetujui");
+    logActivity(supabase, { userId, userRole: "owner", userName, entityType: "coach_invoices", entityId: id, entityLabel: inv?.invoice_number ?? id, action: "update", label: `Invoice ${inv?.invoice_number ?? id} disetujui` });
+  };
+
+  const rejectInvoice = async (id: string, reason: string) => {
+    if (!reason.trim()) return toast.error("Isi alasan penolakan");
+    setRejecting(id);
+    const { error } = await supabase.from("coach_invoices").update({ status: "rejected", rejected_at: new Date().toISOString(), rejection_reason: reason.trim() }).eq("id", id);
+    setRejecting(null);
+    if (error) return toast.error("Gagal menolak", error.message);
+    const inv = invoices.find(i => i.id === id);
+    setInvoices(prev => prev.map(i => i.id === id ? { ...i, status: "rejected", rejection_reason: reason } : i));
+    if (detail?.id === id) setDetail(prev => prev ? { ...prev, status: "rejected", rejection_reason: reason } : prev);
+    if (inv?.coach?.id) {
+      await supabase.from("notifications").insert({ user_id: inv.coach.id, title: "Invoice ditolak", body: `Invoice ${inv.invoice_number} (${inv.period_label}) ditolak. Alasan: ${reason}`, icon: "warning", kind: "warn" });
+    }
+    setRejectModal(null);
+    setRejectReason("");
+    toast.success("Invoice ditolak");
+    logActivity(supabase, { userId, userRole: "owner", userName, entityType: "coach_invoices", entityId: id, entityLabel: inv?.invoice_number ?? id, action: "update", label: `Invoice ${inv?.invoice_number ?? id} ditolak: ${reason}` });
   };
 
   const printInvoice = (iv: Invoice) => {
@@ -1443,8 +1620,8 @@ function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: 
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <h2 className="font-display font-bold text-2xl">Invoice Coach</h2>
-          <p className="text-ink-mute text-sm mt-0.5">Semua invoice yang di-generate coach dari coach page.</p>
+          <h2 className="font-display font-bold text-2xl">Slip Gaji</h2>
+          <p className="text-ink-mute text-sm mt-0.5">Review invoice coach, setujui, tandai lunas, lalu terbitkan slip gaji — semua dalam satu tempat.</p>
         </div>
         <Select value={branchFilter} onChange={e => setBranchFilter(e.target.value)} className="!w-44">
           <option value="all">Semua cabang</option>
@@ -1453,9 +1630,9 @@ function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: 
       </div>
 
       <div className="grid sm:grid-cols-3 gap-4">
-        <Stat label="Total invoice"  value={invoices.length}                                              icon="invoice" tone="ocean" />
-        <Stat label="Belum dibayar"  value={fmtIDR(totUnpaid.reduce((a, i) => a + i.total_amount, 0))}   icon="warning" tone="warn"  sub={`${totUnpaid.length} invoice`} />
-        <Stat label="Sudah dibayar"  value={fmtIDR(totPaid.reduce((a, i) => a + i.total_amount, 0))}     icon="check"   tone="ok"    sub={`${totPaid.length} invoice`} />
+        <Stat label="Menunggu review"        value={totPending.length}                                                   icon="invoice" tone="warn"  sub={totPending.length > 0 ? "perlu tindakan" : "tidak ada"} />
+        <Stat label="Disetujui / belum lunas" value={fmtIDR(totApproved.reduce((a, i) => a + i.total_amount, 0))}      icon="check"   tone="ocean" sub={`${totApproved.length} invoice`} />
+        <Stat label="Sudah dibayar"          value={fmtIDR(totPaid.reduce((a, i) => a + i.total_amount, 0))}            icon="wallet"  tone="ok"    sub={`${totPaid.length} invoice`} />
       </div>
 
       <Card padded={false}>
@@ -1473,7 +1650,9 @@ function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: 
                 <div className="flex-1 min-w-0 cursor-pointer" onClick={() => setDetail(iv)}>
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-mono text-xs font-bold text-ocean-700">{iv.invoice_number}</span>
-                    <Status kind={iv.status === "paid" ? "paid" : "pending"}>{iv.status === "paid" ? "Lunas" : "Pending"}</Status>
+                    <Status kind={iv.status === "paid" ? "paid" : iv.status === "approved" ? "approved" : iv.status === "rejected" ? "rejected" : "pending"}>
+                      {iv.status === "paid" ? "Lunas" : iv.status === "approved" ? "Disetujui" : iv.status === "rejected" ? "Ditolak" : "Menunggu Review"}
+                    </Status>
                   </div>
                   <div className="text-xs text-ink-mute mt-0.5">
                     {iv.coach?.full_name ?? "—"} · {iv.branch?.name ?? "—"} · {iv.period_label}
@@ -1484,8 +1663,18 @@ function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: 
                   <button onClick={() => printInvoice(iv)} className="w-8 h-8 rounded-lg border border-line hover:bg-paper-tint flex items-center justify-center text-ink-mute hover:text-ocean-600" title="Cetak PDF">
                     <Icon name="print" className="w-4 h-4" />
                   </button>
-                  {iv.status !== "paid" && (
-                    <Btn variant="soft" size="sm" onClick={() => markPaid(iv.id)} disabled={marking === iv.id}>
+                  {iv.status === "pending" && (
+                    <>
+                      <Btn variant="soft" size="sm" onClick={() => approveInvoice(iv.id)} disabled={approving === iv.id}>
+                        {approving === iv.id ? "…" : "Setujui"}
+                      </Btn>
+                      <Btn variant="ghost" size="sm" onClick={() => { setRejectModal(iv); setRejectReason(""); }}>
+                        Tolak
+                      </Btn>
+                    </>
+                  )}
+                  {iv.status === "approved" && (
+                    <Btn variant="primary" size="sm" onClick={() => markPaid(iv.id)} disabled={marking === iv.id}>
                       {marking === iv.id ? "…" : "Lunas"}
                     </Btn>
                   )}
@@ -1502,7 +1691,15 @@ function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: 
           <div className="flex items-center gap-2 justify-between w-full">
             <Btn variant="ghost" icon="print" onClick={() => detail && printInvoice(detail)}>Cetak PDF</Btn>
             <div className="flex gap-2">
-              {detail?.status !== "paid" && (
+              {detail?.status === "pending" && (
+                <>
+                  <Btn variant="primary" onClick={() => detail && approveInvoice(detail.id)} disabled={approving === detail?.id}>
+                    {approving === detail?.id ? "…" : "Setujui"}
+                  </Btn>
+                  <Btn variant="ghost" onClick={() => { setRejectModal(detail); setDetail(null); }}>Tolak</Btn>
+                </>
+              )}
+              {detail?.status === "approved" && (
                 <Btn variant="primary" onClick={() => detail && markPaid(detail.id)} disabled={marking === detail?.id}>
                   {marking === detail?.id ? "Menyimpan…" : "Tandai Lunas"}
                 </Btn>
@@ -1518,7 +1715,7 @@ function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: 
               <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Coach</div><div className="font-semibold">{detail.coach?.full_name ?? "—"}</div></div>
               <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Cabang</div><div className="font-semibold">{detail.branch?.name ?? "—"}</div></div>
               <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Periode</div><div>{detail.period_label}</div></div>
-              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Status</div><Status kind={detail.status === "paid" ? "paid" : "pending"}>{detail.status === "paid" ? "Lunas" : "Pending"}</Status></div>
+              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Status</div><Status kind={detail.status === "paid" ? "paid" : detail.status === "approved" ? "approved" : detail.status === "rejected" ? "rejected" : "pending"}>{detail.status === "paid" ? "Lunas" : detail.status === "approved" ? "Disetujui" : detail.status === "rejected" ? "Ditolak" : "Menunggu Review"}</Status></div>
               <div className="col-span-2"><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Rekening</div><div className="font-mono text-sm">{detail.bank_info ?? "—"}</div></div>
               {detail.paid_at && <div className="col-span-2"><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Dibayar pada</div><div>{new Date(detail.paid_at).toLocaleDateString("id-ID", { dateStyle: "long" })}</div></div>}
             </div>
@@ -1557,6 +1754,169 @@ function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: 
           </div>
         )}
       </Modal>
+
+      {/* Reject Modal */}
+      <Modal open={!!rejectModal} onClose={() => { setRejectModal(null); setRejectReason(""); }} title="Tolak Invoice" size="sm"
+        footer={
+          <>
+            <Btn variant="ghost" onClick={() => { setRejectModal(null); setRejectReason(""); }}>Batal</Btn>
+            <Btn variant="danger" onClick={() => rejectModal && rejectInvoice(rejectModal.id, rejectReason)} disabled={!!rejecting}>
+              {rejecting ? "Menolak…" : "Tolak Invoice"}
+            </Btn>
+          </>
+        }>
+        {rejectModal && (
+          <div className="space-y-4">
+            <div className="bg-paper-tint border border-line rounded-xl px-4 py-3 text-sm">
+              <div className="text-xs text-ink-mute font-bold uppercase tracking-widest mb-1">Invoice</div>
+              <div className="font-mono font-semibold text-ink">{rejectModal.invoice_number}</div>
+              <div className="text-xs text-ink-mute">{rejectModal.coach?.full_name} · {rejectModal.period_label} · {fmtIDR(rejectModal.total_amount)}</div>
+            </div>
+            <Field label="Alasan penolakan">
+              <Textarea value={rejectReason} onChange={e => setRejectReason(e.target.value)} placeholder="Contoh: Ada sesi yang belum diverifikasi, mohon periksa kembali." rows={3} />
+            </Field>
+          </div>
+        )}
+      </Modal>
+
+      {/* ── SLIP GAJI ───────────────────────────────────────────────────────── */}
+      <div className="mt-8 pt-8 border-t border-line">
+        <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
+          <div>
+            <div className="font-display font-bold text-xl">Slip Gaji</div>
+            <p className="text-sm text-ink-mute">Generate dan terbitkan slip gaji dari invoice yang sudah lunas.</p>
+          </div>
+          <Btn variant="primary" icon="plus" onClick={() => { setGenForm({ invoice_id: "", period_label: "", gross_amount: 0, deductions: 0, notes: "" }); setShowGenModal(true); }}>
+            Generate Slip Gaji
+          </Btn>
+        </div>
+
+        {/* Filters */}
+        <div className="flex gap-2 flex-wrap mb-4">
+          <select value={payslipBranchFilter} onChange={e => setPayslipBranchFilter(e.target.value)} className="text-sm rounded-xl border border-line bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
+            <option value="all">Semua cabang</option>
+            {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+          </select>
+          <select value={payslipStatusFilter} onChange={e => setPayslipStatusFilter(e.target.value)} className="text-sm rounded-xl border border-line bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
+            <option value="all">Semua status</option>
+            <option value="draft">Draft</option>
+            <option value="published">Diterbitkan</option>
+          </select>
+          <span className="text-xs text-ink-mute self-center ml-auto">{filteredPayslips.length} slip</span>
+        </div>
+
+        {/* Payslip list */}
+        <div className="bg-white border border-line rounded-2xl overflow-hidden">
+          {loadingPayslips ? (
+            <div className="p-10 text-center text-ink-mute">Memuat data…</div>
+          ) : filteredPayslips.length === 0 ? (
+            <div className="p-10 text-center text-ink-mute">Belum ada slip gaji. Klik &ldquo;Generate Slip Gaji&rdquo; untuk membuat dari invoice yang sudah lunas.</div>
+          ) : (
+            <div className="divide-y divide-line">
+              {filteredPayslips.map(p => (
+                <div key={p.id} className="flex items-center gap-3 px-5 py-3.5 hover:bg-paper-tint">
+                  <span className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${p.status === "published" ? "bg-ok-50 text-ok-700" : "bg-warn-50 text-warn-700"}`}>
+                    <Icon name="invoice" className="w-5 h-5" />
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-sm">{p.coach?.full_name ?? "—"}</span>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${p.status === "published" ? "bg-ok-50 text-ok-700" : "bg-warn-50 text-warn-700"}`}>
+                        {p.status === "published" ? "Diterbitkan" : "Draft"}
+                      </span>
+                    </div>
+                    <div className="text-xs text-ink-mute mt-0.5">{p.period_label} · {p.branch?.name ?? "—"}</div>
+                    <div className="text-xs text-ink-mute">Gross {fmtIDR(p.gross_amount)} · Potongan {fmtIDR(p.deductions)} · <span className="text-ok-700 font-semibold">Net {fmtIDR(p.net_amount)}</span></div>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button onClick={() => setViewSlip(p)} className="w-8 h-8 rounded-lg border border-line hover:bg-paper-tint flex items-center justify-center text-ink-mute hover:text-ocean-600" title="Lihat / Cetak">
+                      <Icon name="eye" className="w-4 h-4" />
+                    </button>
+                    {p.status === "draft" && (
+                      <>
+                        <Btn variant="soft" size="sm" onClick={() => publishPayslip(p)} disabled={publishingId === p.id}>
+                          {publishingId === p.id ? "…" : "Terbitkan"}
+                        </Btn>
+                        <button onClick={() => deletePayslip(p)} className="w-8 h-8 rounded-lg border border-line hover:bg-danger-50 flex items-center justify-center text-ink-mute hover:text-danger-600" title="Hapus">
+                          <Icon name="trash" className="w-4 h-4" />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Modal: Generate Slip Gaji ──────────────────────────────────────── */}
+      <Modal open={showGenModal} onClose={() => setShowGenModal(false)} title="Generate Slip Gaji" size="md"
+        footer={
+          <div className="flex gap-2 justify-end w-full">
+            <Btn variant="ghost" onClick={() => setShowGenModal(false)}>Batal</Btn>
+            <Btn variant="primary" onClick={savePayslip} disabled={savingSlip || !genForm.invoice_id}>
+              {savingSlip ? "Menyimpan…" : "Simpan sebagai Draft"}
+            </Btn>
+          </div>
+        }>
+        <div className="space-y-4">
+          <Field label="Invoice Coach (sudah lunas)">
+            <Select value={genForm.invoice_id} onChange={e => handleGenInvoiceChange(e.target.value)}>
+              <option value="">— Pilih invoice —</option>
+              {invoicesWithoutSlip.map(inv => (
+                <option key={inv.id} value={inv.id}>{inv.coach?.full_name ?? "—"} · {inv.period_label} · {fmtIDR(inv.total_amount)} ({inv.branch?.name ?? "—"})</option>
+              ))}
+            </Select>
+          </Field>
+          {invoicesWithoutSlip.length === 0 && (
+            <p className="text-xs text-ink-mute">Semua invoice lunas sudah memiliki slip gaji, atau belum ada invoice yang lunas.</p>
+          )}
+          <Field label="Periode"><Input value={genForm.period_label} onChange={e => setGenForm(f => ({ ...f, period_label: e.target.value }))} placeholder="Contoh: Juni 2026" /></Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Gaji Kotor (Rp)"><Input type="number" value={genForm.gross_amount} onChange={e => setGenForm(f => ({ ...f, gross_amount: Number(e.target.value) }))} min={0} /></Field>
+            <Field label="Potongan (Rp)"><Input type="number" value={genForm.deductions} onChange={e => setGenForm(f => ({ ...f, deductions: Number(e.target.value) }))} min={0} /></Field>
+          </div>
+          <div className="bg-ok-50 border border-ok-200 rounded-xl px-4 py-3 flex items-center justify-between">
+            <span className="text-sm font-semibold text-ok-900">Gaji Bersih</span>
+            <span className="font-mono font-bold text-ok-700 text-lg">{fmtIDR(genForm.gross_amount - genForm.deductions)}</span>
+          </div>
+          <Field label="Catatan (opsional)"><Textarea value={genForm.notes} onChange={e => setGenForm(f => ({ ...f, notes: e.target.value }))} rows={2} placeholder="Catatan untuk coach…" /></Field>
+        </div>
+      </Modal>
+
+      {/* ── Modal: View / Print Slip Gaji ─────────────────────────────────── */}
+      <Modal open={!!viewSlip} onClose={() => setViewSlip(null)} title="Detail Slip Gaji" size="md"
+        footer={
+          <div className="flex gap-2 justify-between w-full">
+            <Btn variant="ghost" icon="print" onClick={() => viewSlip && printPayslip(viewSlip)}>Cetak</Btn>
+            <Btn variant="ghost" onClick={() => setViewSlip(null)}>Tutup</Btn>
+          </div>
+        }>
+        {viewSlip && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Coach</div><div className="font-semibold">{viewSlip.coach?.full_name ?? "—"}</div></div>
+              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Cabang</div><div className="font-semibold">{viewSlip.branch?.name ?? "—"}</div></div>
+              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Periode</div><div>{viewSlip.period_label}</div></div>
+              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Status</div>
+                <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${viewSlip.status === "published" ? "bg-ok-50 text-ok-700" : "bg-warn-50 text-warn-700"}`}>
+                  {viewSlip.status === "published" ? "Diterbitkan" : "Draft"}
+                </span>
+              </div>
+              {viewSlip.published_at && <div className="col-span-2"><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Diterbitkan pada</div><div>{new Date(viewSlip.published_at).toLocaleDateString("id-ID", { dateStyle: "long" })}</div></div>}
+            </div>
+            <div className="border-t border-line pt-4 space-y-2">
+              <div className="flex justify-between py-2 border-b border-line text-sm"><span>Gaji Kotor</span><span className="font-mono font-semibold">{fmtIDR(viewSlip.gross_amount)}</span></div>
+              <div className="flex justify-between py-2 border-b border-line text-sm text-danger-700"><span>Potongan</span><span className="font-mono">- {fmtIDR(viewSlip.deductions)}</span></div>
+              <div className="flex justify-between py-2 text-base font-bold"><span>Gaji Bersih</span><span className="font-mono text-ok-700">{fmtIDR(viewSlip.net_amount)}</span></div>
+            </div>
+            {viewSlip.notes && (
+              <div className="bg-paper-tint rounded-xl p-3 text-sm text-ink-mute">{viewSlip.notes}</div>
+            )}
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }
@@ -1580,39 +1940,18 @@ interface OwnerFinancialExpense {
   branch?: { name: string } | null;
 }
 
-interface OwnerPayslipRow {
-  id: string; coach_id: string; branch_id: string; invoice_id: string | null;
-  period_label: string; gross_amount: number; deductions: number; net_amount: number;
-  notes: string | null; status: string; published_at: string | null;
-  published_by: string | null; created_at: string;
-  coach?: { full_name: string } | null;
-  branch?: { name: string } | null;
-}
-
-type FinancialTab = "overview" | "income" | "expenses" | "moneyflow" | "payroll";
+type FinancialTab = "overview" | "income" | "expenses" | "moneyflow";
 
 function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; userId: string; userName: string }) {
   const supabase = createClient();
   const toast = useToast();
-  const confirm = useConfirm();
   const [tab, setTab] = useState<FinancialTab>("overview");
 
   // ── Data ────────────────────────────────────────────────────────────────────
   const [bills, setBills] = useState<OwnerFinancialBill[]>([]);
   const [expenses, setExpenses] = useState<OwnerFinancialExpense[]>([]);
-  const [payslips, setPayslips] = useState<OwnerPayslipRow[]>([]);
   const [loadingBills, setLoadingBills] = useState(true);
   const [loadingExpenses, setLoadingExpenses] = useState(true);
-  const [loadingPayslips, setLoadingPayslips] = useState(true);
-
-  // ── Payroll state ───────────────────────────────────────────────────────────
-  const [showGenModal, setShowGenModal] = useState(false);
-  const [genForm, setGenForm] = useState({ invoice_id: "", period_label: "", gross_amount: 0, deductions: 0, notes: "" });
-  const [savingSlip, setSavingSlip] = useState(false);
-  const [publishingId, setPublishingId] = useState<string | null>(null);
-  const [viewSlip, setViewSlip] = useState<OwnerPayslipRow | null>(null);
-  const [payslipBranchFilter, setPayslipBranchFilter] = useState("all");
-  const [payslipStatusFilter, setPayslipStatusFilter] = useState("all");
 
   // ── Income filters ──────────────────────────────────────────────────────────
   const [incomeSearch, setIncomeSearch] = useState("");
@@ -1653,16 +1992,6 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
       .then(({ data }) => { if (data) setExpenses(data as unknown as OwnerFinancialExpense[]); setLoadingExpenses(false); });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const loadPayslips = useCallback(async () => {
-    setLoadingPayslips(true);
-    const { data } = await supabase.from("payslips")
-      .select("id, coach_id, branch_id, invoice_id, period_label, gross_amount, deductions, net_amount, notes, status, published_at, published_by, created_at, coach:profiles!payslips_coach_id_fkey(full_name), branch:branches(name)")
-      .order("created_at", { ascending: false });
-    if (data) setPayslips(data as unknown as OwnerPayslipRow[]);
-    setLoadingPayslips(false);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => { loadPayslips(); }, [loadPayslips]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   // ── Computed: income summary ────────────────────────────────────────────────
@@ -1670,7 +1999,6 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
   const totalIncome = useMemo(() => paidBills.reduce((s, b) => s + b.total, 0), [paidBills]);
   const totalExpenses = useMemo(() => expenses.filter(e => e.status === "paid").reduce((s, e) => s + e.total_amount, 0), [expenses]);
   const netAmount = totalIncome - totalExpenses;
-  const publishedSlipsCount = useMemo(() => payslips.filter(p => p.status === "published").length, [payslips]);
 
   // ── Chart period selector ────────────────────────────────────────────────────
   const [chartMonths, setChartMonths] = useState<3 | 6 | 12>(6);
@@ -1770,117 +2098,12 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
     return months.filter(m => m.income > 0 || m.expense > 0);
   }, [paidBills, expenses]);
 
-  // ── Payslip filter ──────────────────────────────────────────────────────────
-  const filteredPayslips = useMemo(() => {
-    let r = payslips;
-    if (payslipBranchFilter !== "all") r = r.filter(p => p.branch_id === payslipBranchFilter);
-    if (payslipStatusFilter !== "all") r = r.filter(p => p.status === payslipStatusFilter);
-    return r;
-  }, [payslips, payslipBranchFilter, payslipStatusFilter]);
-
-  // ── Payroll: available invoices (paid, no payslip yet) ──────────────────────
-  const invoicesWithoutSlip = useMemo(() => {
-    const usedInvoiceIds = new Set(payslips.map(p => p.invoice_id).filter(Boolean));
-    return expenses.filter(e => e.status === "paid" && !usedInvoiceIds.has(e.id));
-  }, [expenses, payslips]);
-
-  // ── Actions ─────────────────────────────────────────────────────────────────
-  const handleGenInvoiceChange = (invoiceId: string) => {
-    const inv = expenses.find(e => e.id === invoiceId);
-    if (inv) {
-      setGenForm(f => ({ ...f, invoice_id: invoiceId, period_label: inv.period_label, gross_amount: inv.total_amount, deductions: 0, notes: "" }));
-    } else {
-      setGenForm(f => ({ ...f, invoice_id: invoiceId }));
-    }
-  };
-
-  const savePayslip = async () => {
-    if (!genForm.invoice_id) return toast.error("Pilih invoice terlebih dahulu");
-    if (!genForm.period_label.trim()) return toast.error("Period label kosong");
-    const inv = expenses.find(e => e.id === genForm.invoice_id);
-    if (!inv) return toast.error("Invoice tidak ditemukan");
-    setSavingSlip(true);
-    const { error } = await supabase.from("payslips").insert({
-      coach_id: inv.coach_id,
-      branch_id: inv.branch_id,
-      invoice_id: genForm.invoice_id,
-      period_label: genForm.period_label.trim(),
-      gross_amount: genForm.gross_amount,
-      deductions: genForm.deductions,
-      net_amount: genForm.gross_amount - genForm.deductions,
-      notes: genForm.notes.trim() || null,
-      status: "draft",
-    });
-    setSavingSlip(false);
-    if (error) return toast.error("Gagal simpan", error.message);
-    toast.success("Slip gaji berhasil dibuat (draft)");
-    logActivity(supabase, { userId, userRole: "owner", userName, branchId: inv.branch_id, entityType: "payslips", entityId: inv.coach_id, entityLabel: inv.coach?.full_name ?? undefined, action: "create", label: `Slip gaji ${inv.coach?.full_name ?? "coach"} periode ${genForm.period_label.trim()} dibuat (draft)`, meta: { gross_amount: genForm.gross_amount, deductions: genForm.deductions, net_amount: genForm.gross_amount - genForm.deductions } });
-    setShowGenModal(false);
-    setGenForm({ invoice_id: "", period_label: "", gross_amount: 0, deductions: 0, notes: "" });
-    loadPayslips();
-  };
-
-  const publishPayslip = async (p: OwnerPayslipRow) => {
-    const ok = await confirm({ title: "Terbitkan Slip Gaji?", body: `Slip gaji ${p.coach?.full_name ?? "coach"} periode ${p.period_label} akan diterbitkan dan dapat dilihat coach.`, confirmLabel: "Terbitkan" });
-    if (!ok) return;
-    setPublishingId(p.id);
-    const { error } = await supabase.from("payslips").update({ status: "published", published_at: new Date().toISOString(), published_by: userId }).eq("id", p.id);
-    setPublishingId(null);
-    if (error) return toast.error("Gagal terbitkan", error.message);
-    toast.success("Slip gaji diterbitkan");
-    logActivity(supabase, { userId, userRole: "owner", userName, branchId: p.branch_id, entityType: "payslips", entityId: p.id, entityLabel: p.coach?.full_name ?? undefined, action: "publish", label: `Slip gaji ${p.coach?.full_name ?? "coach"} periode ${p.period_label} diterbitkan`, meta: { net_amount: p.net_amount } });
-    setPayslips(prev => prev.map(s => s.id === p.id ? { ...s, status: "published", published_at: new Date().toISOString() } : s));
-  };
-
-  const deletePayslip = async (p: OwnerPayslipRow) => {
-    const ok = await confirm({ title: "Hapus Slip Gaji?", body: "Slip gaji draft ini akan dihapus.", confirmLabel: "Hapus", danger: true });
-    if (!ok) return;
-    const { error } = await supabase.from("payslips").delete().eq("id", p.id);
-    if (error) return toast.error("Gagal hapus", error.message);
-    toast.success("Slip gaji dihapus");
-    logActivity(supabase, { userId, userRole: "owner", userName, branchId: p.branch_id, entityType: "payslips", entityId: p.id, entityLabel: p.coach?.full_name ?? undefined, action: "delete", label: `Slip gaji draft ${p.coach?.full_name ?? "coach"} periode ${p.period_label} dihapus` });
-    setPayslips(prev => prev.filter(s => s.id !== p.id));
-  };
-
-  const printPayslip = (p: OwnerPayslipRow) => {
-    const w = window.open("", "_blank", "width=700,height=700");
-    if (!w) return;
-    w.document.write(`<!DOCTYPE html><html><head><title>Slip Gaji ${p.period_label}</title>
-    <style>body{font-family:sans-serif;padding:32px;color:#0f172a;max-width:600px;margin:auto}
-    h1{font-size:20px;font-weight:700;margin-bottom:2px}.sub{font-size:13px;color:#64748b;margin-bottom:24px}
-    .section{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94a3b8;margin:20px 0 6px}
-    .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;background:#f8fafc;border-radius:8px;padding:12px 16px;font-size:13px;line-height:2}
-    .row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #e2e8f0;font-size:13px}
-    .total{display:flex;justify-content:space-between;padding:12px 0;font-weight:700;font-size:16px;border-top:2px solid #0f172a;margin-top:4px}
-    .net{color:#166534;font-size:18px}
-    footer{margin-top:40px;border-top:1px solid #e2e8f0;padding-top:12px;font-size:11px;color:#94a3b8;text-align:center}
-    </style></head><body>
-    <h1>Slip Gaji Coach</h1>
-    <div class="sub">${p.period_label} &nbsp;·&nbsp; ${p.branch?.name ?? "—"}</div>
-    <div class="section">Informasi</div>
-    <div class="grid">
-      <div><b>Coach</b></div><div>${p.coach?.full_name ?? "—"}</div>
-      <div><b>Periode</b></div><div>${p.period_label}</div>
-      <div><b>Cabang</b></div><div>${p.branch?.name ?? "—"}</div>
-      <div><b>Diterbitkan</b></div><div>${p.published_at ? new Date(p.published_at).toLocaleDateString("id-ID", { dateStyle: "long" }) : "—"}</div>
-    </div>
-    <div class="section">Rincian</div>
-    <div class="row"><span>Gaji Kotor</span><span>Rp ${p.gross_amount.toLocaleString("id-ID")}</span></div>
-    <div class="row"><span>Potongan</span><span>- Rp ${p.deductions.toLocaleString("id-ID")}</span></div>
-    <div class="total"><span>Gaji Bersih</span><span class="net">Rp ${p.net_amount.toLocaleString("id-ID")}</span></div>
-    ${p.notes ? `<div class="section">Catatan</div><p style="font-size:13px;color:#334155">${p.notes}</p>` : ""}
-    <footer>Next Swimming School &nbsp;·&nbsp; Dicetak ${new Date().toLocaleDateString("id-ID", { dateStyle: "long" })}</footer>
-    </body></html>`);
-    w.document.close(); w.focus(); w.print();
-  };
-
   // ── Sub-tab nav ──────────────────────────────────────────────────────────────
   const FTABS: { id: FinancialTab; label: string; icon: string }[] = [
     { id: "overview",  label: "Overview",    icon: "grid"    },
     { id: "income",    label: "Income",      icon: "wallet"  },
     { id: "expenses",  label: "Expenses",    icon: "invoice" },
     { id: "moneyflow", label: "Money Flow",  icon: "chart"   },
-    { id: "payroll",   label: "Payroll",     icon: "users"   },
   ];
 
   return (
@@ -1909,7 +2132,6 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
             <Stat label="Total Income" value={fmtIDR(totalIncome)} icon="wallet" tone="ok" sub={`${paidBills.length} transaksi lunas`} />
             <Stat label="Total Expenses" value={fmtIDR(totalExpenses)} icon="invoice" tone="danger" sub={`${expenses.filter(e=>e.status==="paid").length} invoice coach`} />
             <Stat label="Net" value={fmtIDR(netAmount)} icon="chart" tone={netAmount >= 0 ? "ocean" : "warn"} />
-            <Stat label="Slip Gaji Terbit" value={publishedSlipsCount} icon="users" tone="ocean" sub={`${payslips.length} total slip`} />
           </div>
 
           {/* Bar chart: Income vs Expenses per month */}
@@ -2296,147 +2518,6 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
         </div>
       )}
 
-      {/* ── PAYROLL ─────────────────────────────────────────────────────────── */}
-      {tab === "payroll" && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <div>
-              <div className="font-display font-bold text-lg">Slip Gaji Coach</div>
-              <p className="text-sm text-ink-mute">Generate, terbitkan, dan kelola slip gaji dari invoice yang sudah lunas.</p>
-            </div>
-            <Btn variant="primary" icon="plus" onClick={() => { setGenForm({ invoice_id: "", period_label: "", gross_amount: 0, deductions: 0, notes: "" }); setShowGenModal(true); }}>
-              Generate Slip Gaji
-            </Btn>
-          </div>
-
-          {/* Filters */}
-          <div className="flex gap-2 flex-wrap">
-            <select value={payslipBranchFilter} onChange={e => setPayslipBranchFilter(e.target.value)} className="text-sm rounded-xl border border-line bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
-              <option value="all">Semua cabang</option>
-              {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-            </select>
-            <select value={payslipStatusFilter} onChange={e => setPayslipStatusFilter(e.target.value)} className="text-sm rounded-xl border border-line bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
-              <option value="all">Semua status</option>
-              <option value="draft">Draft</option>
-              <option value="published">Diterbitkan</option>
-            </select>
-            <span className="text-xs text-ink-mute self-center ml-auto">{filteredPayslips.length} slip</span>
-          </div>
-
-          {/* Payslip list */}
-          <div className="bg-white border border-line rounded-2xl overflow-hidden">
-            {loadingPayslips ? (
-              <div className="p-10 text-center text-ink-mute">Memuat data…</div>
-            ) : filteredPayslips.length === 0 ? (
-              <div className="p-10 text-center text-ink-mute">Belum ada slip gaji. Klik "Generate Slip Gaji" untuk membuat.</div>
-            ) : (
-              <div className="divide-y divide-line">
-                {filteredPayslips.map(p => (
-                  <div key={p.id} className="flex items-center gap-3 px-5 py-3.5 hover:bg-paper-tint">
-                    <span className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${p.status === "published" ? "bg-ok-50 text-ok-700" : "bg-warn-50 text-warn-700"}`}>
-                      <Icon name="invoice" className="w-5 h-5" />
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-semibold text-sm">{p.coach?.full_name ?? "—"}</span>
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${p.status === "published" ? "bg-ok-50 text-ok-700" : "bg-warn-50 text-warn-700"}`}>
-                          {p.status === "published" ? "Diterbitkan" : "Draft"}
-                        </span>
-                      </div>
-                      <div className="text-xs text-ink-mute mt-0.5">{p.period_label} · {p.branch?.name ?? "—"}</div>
-                      <div className="text-xs text-ink-mute">Gross {fmtIDR(p.gross_amount)} · Potongan {fmtIDR(p.deductions)} · <span className="text-ok-700 font-semibold">Net {fmtIDR(p.net_amount)}</span></div>
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <button onClick={() => setViewSlip(p)} className="w-8 h-8 rounded-lg border border-line hover:bg-paper-tint flex items-center justify-center text-ink-mute hover:text-ocean-600" title="Lihat / Cetak">
-                        <Icon name="eye" className="w-4 h-4" />
-                      </button>
-                      {p.status === "draft" && (
-                        <>
-                          <Btn variant="soft" size="sm" onClick={() => publishPayslip(p)} disabled={publishingId === p.id}>
-                            {publishingId === p.id ? "…" : "Terbitkan"}
-                          </Btn>
-                          <button onClick={() => deletePayslip(p)} className="w-8 h-8 rounded-lg border border-line hover:bg-danger-50 flex items-center justify-center text-ink-mute hover:text-danger-600" title="Hapus">
-                            <Icon name="trash" className="w-4 h-4" />
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ── Modal: Generate Slip Gaji ──────────────────────────────────────── */}
-      <Modal open={showGenModal} onClose={() => setShowGenModal(false)} title="Generate Slip Gaji" size="md"
-        footer={
-          <div className="flex gap-2 justify-end w-full">
-            <Btn variant="ghost" onClick={() => setShowGenModal(false)}>Batal</Btn>
-            <Btn variant="primary" onClick={savePayslip} disabled={savingSlip || !genForm.invoice_id}>
-              {savingSlip ? "Menyimpan…" : "Simpan sebagai Draft"}
-            </Btn>
-          </div>
-        }>
-        <div className="space-y-4">
-          <Field label="Invoice Coach (sudah lunas)">
-            <Select value={genForm.invoice_id} onChange={e => handleGenInvoiceChange(e.target.value)}>
-              <option value="">— Pilih invoice —</option>
-              {invoicesWithoutSlip.map(inv => (
-                <option key={inv.id} value={inv.id}>{inv.coach?.full_name ?? "—"} · {inv.period_label} · {fmtIDR(inv.total_amount)} ({inv.branch?.name ?? "—"})</option>
-              ))}
-            </Select>
-          </Field>
-          {invoicesWithoutSlip.length === 0 && (
-            <p className="text-xs text-ink-mute">Semua invoice lunas sudah memiliki slip gaji, atau belum ada invoice yang lunas.</p>
-          )}
-          <Field label="Periode"><Input value={genForm.period_label} onChange={e => setGenForm(f => ({ ...f, period_label: e.target.value }))} placeholder="Contoh: Juni 2026" /></Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Gaji Kotor (Rp)"><Input type="number" value={genForm.gross_amount} onChange={e => setGenForm(f => ({ ...f, gross_amount: Number(e.target.value) }))} min={0} /></Field>
-            <Field label="Potongan (Rp)"><Input type="number" value={genForm.deductions} onChange={e => setGenForm(f => ({ ...f, deductions: Number(e.target.value) }))} min={0} /></Field>
-          </div>
-          {/* Preview net */}
-          <div className="bg-ok-50 border border-ok-200 rounded-xl px-4 py-3 flex items-center justify-between">
-            <span className="text-sm font-semibold text-ok-900">Gaji Bersih</span>
-            <span className="font-mono font-bold text-ok-700 text-lg">{fmtIDR(genForm.gross_amount - genForm.deductions)}</span>
-          </div>
-          <Field label="Catatan (opsional)"><Textarea value={genForm.notes} onChange={e => setGenForm(f => ({ ...f, notes: e.target.value }))} rows={2} placeholder="Catatan untuk coach…" /></Field>
-        </div>
-      </Modal>
-
-      {/* ── Modal: View / Print payslip ────────────────────────────────────── */}
-      <Modal open={!!viewSlip} onClose={() => setViewSlip(null)} title="Detail Slip Gaji" size="md"
-        footer={
-          <div className="flex gap-2 justify-between w-full">
-            <Btn variant="ghost" icon="print" onClick={() => viewSlip && printPayslip(viewSlip)}>Cetak</Btn>
-            <Btn variant="ghost" onClick={() => setViewSlip(null)}>Tutup</Btn>
-          </div>
-        }>
-        {viewSlip && (
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Coach</div><div className="font-semibold">{viewSlip.coach?.full_name ?? "—"}</div></div>
-              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Cabang</div><div className="font-semibold">{viewSlip.branch?.name ?? "—"}</div></div>
-              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Periode</div><div>{viewSlip.period_label}</div></div>
-              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Status</div>
-                <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${viewSlip.status === "published" ? "bg-ok-50 text-ok-700" : "bg-warn-50 text-warn-700"}`}>
-                  {viewSlip.status === "published" ? "Diterbitkan" : "Draft"}
-                </span>
-              </div>
-              {viewSlip.published_at && <div className="col-span-2"><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Diterbitkan pada</div><div>{new Date(viewSlip.published_at).toLocaleDateString("id-ID", { dateStyle: "long" })}</div></div>}
-            </div>
-            <div className="border-t border-line pt-4 space-y-2">
-              <div className="flex justify-between py-2 border-b border-line text-sm"><span>Gaji Kotor</span><span className="font-mono font-semibold">{fmtIDR(viewSlip.gross_amount)}</span></div>
-              <div className="flex justify-between py-2 border-b border-line text-sm text-danger-700"><span>Potongan</span><span className="font-mono">- {fmtIDR(viewSlip.deductions)}</span></div>
-              <div className="flex justify-between py-2 text-base font-bold"><span>Gaji Bersih</span><span className="font-mono text-ok-700">{fmtIDR(viewSlip.net_amount)}</span></div>
-            </div>
-            {viewSlip.notes && (
-              <div className="bg-paper-tint rounded-xl p-3 text-sm text-ink-mute">{viewSlip.notes}</div>
-            )}
-          </div>
-        )}
-      </Modal>
     </div>
   );
 }
@@ -3207,7 +3288,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: "classes",   label: "Kelas",         icon: "swim"    },
   { section: "Keuangan" },
   { id: "rates",     label: "Tarif Coach",   icon: "settings"},
-  { id: "invoices",  label: "Invoice Coach", icon: "invoice" },
+  { id: "invoices",  label: "Slip Gaji",     icon: "invoice" },
   { id: "financial", label: "Financial",    icon: "chart"   },
   { section: "Konten" },
   { id: "landing",   label: "Landing Page",  icon: "star"      },
@@ -3222,7 +3303,7 @@ const TITLES: Record<string, [string, string]> = {
   admins:    ["Admin",          "Akun admin per cabang"],
   classes:   ["Kelas",          "Semua kelas lintas cabang"],
   rates:     ["Settings Tarif", "Tarif coach per kelas"],
-  invoices:  ["Invoice Coach",  "Invoice masuk dari semua coach"],
+  invoices:  ["Slip Gaji",      "Invoice coach & penerbitan slip gaji"],
   financial: ["Financial",      "Income, expenses & payroll semua cabang"],
   landing:   ["Landing Page",   "Kelola konten halaman depan"],
   storage:   ["R2 Storage",     "Monitoring & backup Cloudflare R2 storage"],
@@ -3398,6 +3479,7 @@ export default function OwnerPage() {
         </main>
       </div>
 
+      {BETA_FEEDBACK_ENABLED && <BetaFeedback role="owner" />}
     </div>
   );
 }

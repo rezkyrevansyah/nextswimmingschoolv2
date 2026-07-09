@@ -37,3 +37,24 @@ export const waLink = (text = "", phone?: string | null): string => {
 /** Merge class names (minimal, no extra dep needed) */
 export const cn = (...classes: (string | undefined | false | null)[]): string =>
   classes.filter(Boolean).join(" ");
+
+/**
+ * Count text metrics for rapor notes validation.
+ * - chars: raw character count
+ * - words: whitespace-separated tokens (ignores empty strings)
+ * - sentences: segments ending with . ! ? (trailing punctuation counted)
+ * - hasNewline: true if text contains any line break
+ */
+export function countTextStats(text: string): {
+  chars: number;
+  words: number;
+  sentences: number;
+  hasNewline: boolean;
+} {
+  const trimmed = text.trim();
+  const chars = text.length;
+  const words = trimmed === "" ? 0 : trimmed.split(/\s+/).length;
+  const sentences = trimmed === "" ? 0 : (trimmed.match(/[^.!?]*[.!?]+/g) ?? []).length || 1;
+  const hasNewline = /\n/.test(text);
+  return { chars, words, sentences, hasNewline };
+}

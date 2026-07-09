@@ -420,8 +420,6 @@ function buildRaporHtml(s: PrintStudent, logoSrc: string, schoolBrandName = "NEX
   const criteriaMap = new Map((s.criteria ?? []).map(c => [c.id, c]));
   const scoreEntries = Object.entries(s.scores);
   const bestTimes = s.best_times ?? [];
-  const STROKES = ["FREESTYLE", "BACKSTROKE", "BREASTSTROKE", "BUTTERFLY"];
-  const DISTANCES = [25, 50, 100];
 
   // Info rows
   const infoLeft = [
@@ -452,12 +450,16 @@ function buildRaporHtml(s: PrintStudent, logoSrc: string, schoolBrandName = "NEX
       }).join("")
     : `<tr><td colspan="2" style="text-align:center;color:#888;font-style:italic;padding:12px">Belum ada penilaian</td></tr>`;
 
-  // PBT rows
-  const pbtRows = STROKES.map(stroke => {
-    const strokeKey = stroke.toLowerCase();
-    const cells = DISTANCES.map(d => {
+  // PBT rows — derive strokes and distances from actual data
+  const uniqueStrokes = [...new Set(bestTimes.map(t => t.stroke.toUpperCase()))].sort();
+  const uniqueDists   = [...new Set(bestTimes.map(t => Number(t.distance)))].sort((a, b) => a - b);
+  const STROKES_DISPLAY = uniqueStrokes.length > 0 ? uniqueStrokes : ["FREESTYLE", "BACKSTROKE", "BREASTSTROKE", "BUTTERFLY"];
+  const DISTS_DISPLAY   = uniqueDists.length   > 0 ? uniqueDists   : [25, 50, 100];
+
+  const pbtRows = STROKES_DISPLAY.map(stroke => {
+    const cells = DISTS_DISPLAY.map(d => {
       const hit = bestTimes.find(t =>
-        t.stroke.toLowerCase() === strokeKey && t.distance === d
+        t.stroke.toUpperCase() === stroke && Number(t.distance) === d
       );
       return `<td>${hit ? fmtSwimTime(hit.time_seconds) : "NT"}</td>`;
     }).join("");
@@ -532,7 +534,7 @@ function buildRaporHtml(s: PrintStudent, logoSrc: string, schoolBrandName = "NEX
         <thead>
           <tr>
             <th>STYLE</th>
-            ${DISTANCES.map(d => `<th>${d}M</th>`).join("")}
+            ${DISTS_DISPLAY.map(d => `<th>${d}M</th>`).join("")}
           </tr>
         </thead>
         <tbody>

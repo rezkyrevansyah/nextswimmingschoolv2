@@ -17,9 +17,10 @@ import DatePicker from "@/components/ui/DatePicker";
 import MobileNav from "@/components/layout/MobileNav";
 import type { NavItem as MobileNavItem } from "@/components/layout/Sidebar";
 import Bell from "@/components/layout/Bell";
+import BetaFeedback, { BETA_FEEDBACK_ENABLED } from "@/components/layout/BetaFeedback";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
-import { fmtIDR, fmtDate, fmtDateLong, waLink } from "@/lib/utils";
+import { fmtIDR, fmtDate, fmtDateLong, waLink, countTextStats } from "@/lib/utils";
 import { createClient } from "@/utils/supabase/client";
 import { useUpload } from "@/hooks/useUpload";
 import type { User } from "@supabase/supabase-js";
@@ -81,6 +82,7 @@ interface InvoiceSession {
 interface PastInvoice {
   id: string; invoice_number: string; period_label: string; total_amount: number; status: string;
   bank_info: string | null;
+  rejection_reason?: string | null;
   coach_invoice_items?: { class_id: string; session_count: number; rate: number; class?: { name: string } | null }[];
 }
 
@@ -89,6 +91,7 @@ interface RaporEntry {
   personality?: string | null;
   motivation?: string | null;
   learning_achievements?: string | null;
+  level?: string | null;
   member?: { profile: { full_name: string } | null } | null;
   class?: { name: string } | null;
 }
@@ -97,9 +100,15 @@ interface BestTimeRow {
   id: string; stroke: string; distance: number; time_seconds: number;
 }
 
-const STROKES = ["freestyle", "backstroke", "breaststroke", "butterfly", "IM"] as const;
-const DISTANCES = [25, 50, 100] as const;
-type BtKey = `${typeof STROKES[number]}_${typeof DISTANCES[number]}`;
+interface BtRow {
+  id?: string;       // undefined = belum tersimpan di DB
+  stroke: string;    // gaya renang, free text
+  distance: string;  // jarak dalam meter sebagai string
+  time: string;      // waktu dalam detik sebagai string
+}
+
+const STROKE_SUGGESTIONS = ["Freestyle", "Backstroke", "Breaststroke", "Butterfly", "IM"];
+const DISTANCE_SUGGESTIONS = ["25", "50", "100", "200", "400"];
 
 const MONTHS_LONG_ID = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
 /** Formats "YYYY-MM" or "YYYY-MM-DD" → "Januari 2026" */
@@ -1916,11 +1925,13 @@ function CoachKelas({ classes, coachId, classSpreadsheets, ownSpreadsheets, onRe
 function CoachInvoice({ coachId, branchId, profile }: { coachId: string; branchId: string; profile: ProfileData | null }) {
   const supabase = createClient();
   const toast = useToast();
+  const confirm = useConfirm();
   const [sessions, setSessions] = useState<InvoiceSession[]>([]);
   const [pastInvoices, setPastInvoices] = useState<PastInvoice[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [cancelling, setCancelling] = useState<string | null>(null);
   const [monthFilter, setMonthFilter] = useState(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -1934,7 +1945,7 @@ function CoachInvoice({ coachId, branchId, profile }: { coachId: string; branchI
 
     const { data: att } = await supabase.from("coach_attendances")
       .select("id, session_date, class_id, class:classes(id, name)")
-      .eq("coach_id", coachId).eq("status", "present")
+      .eq("coach_id", coachId).in("status", ["present", "late"])
       .gte("session_date", start).lte("session_date", end)
       .is("invoice_id", null);
 
@@ -1977,8 +1988,10 @@ function CoachInvoice({ coachId, branchId, profile }: { coachId: string; branchI
     }
 
     const { data: inv } = await supabase.from("coach_invoices")
-      .select("id, invoice_number, period_label, total_amount, status, bank_info, coach_invoice_items(class_id, session_count, rate, class:classes(name))")
-      .eq("coach_id", coachId).order("created_at", { ascending: false });
+      .select("id, invoice_number, period_label, total_amount, status, bank_info, rejection_reason, coach_invoice_items(class_id, session_count, rate, class:classes(name))")
+      .eq("coach_id", coachId)
+      .not("status", "eq", "cancelled")
+      .order("created_at", { ascending: false });
     if (inv) setPastInvoices(inv as unknown as PastInvoice[]);
     setLoading(false);
   }, [coachId, monthFilter, supabase]);
@@ -2031,6 +2044,17 @@ function CoachInvoice({ coachId, branchId, profile }: { coachId: string; branchI
 
     setGenerating(false);
     toast.success("Invoice dibuat", "Invoice masuk ke owner panel");
+    load();
+  };
+
+  const cancelInvoice = async (invoiceId: string) => {
+    const ok = await confirm({ title: "Batalkan Invoice?", body: "Sesi yang sudah dipilih akan kembali tersedia untuk diinvoice. Tindakan ini tidak bisa dibatalkan.", confirmLabel: "Ya, batalkan", danger: true });
+    if (!ok) return;
+    setCancelling(invoiceId);
+    const { error } = await supabase.rpc("cancel_coach_invoice", { p_invoice_id: invoiceId, p_coach_id: coachId });
+    setCancelling(null);
+    if (error) return toast.error("Gagal membatalkan invoice", error.message);
+    toast.success("Invoice dibatalkan", "Sesi kembali tersedia untuk diinvoice");
     load();
   };
 
@@ -2087,9 +2111,20 @@ function CoachInvoice({ coachId, branchId, profile }: { coachId: string; branchI
             {pastInvoices.map((iv) => (
               <div key={iv.id} className="px-5 py-3 flex items-center gap-3 hover:bg-paper-tint">
                 <span className="w-10 h-10 rounded-xl bg-ocean-50 text-ocean-700 flex items-center justify-center"><Icon name="invoice" className="w-5 h-5" /></span>
-                <div className="flex-1 min-w-0"><div className="font-semibold text-ink text-sm font-mono">{iv.invoice_number}</div><div className="text-xs text-ink-mute">{iv.period_label}</div></div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-ink text-sm font-mono">{iv.invoice_number}</div>
+                  <div className="text-xs text-ink-mute">{iv.period_label}</div>
+                  {iv.status === "rejected" && iv.rejection_reason && (
+                    <div className="text-xs text-danger-500 mt-0.5 flex items-center gap-1">
+                      <Icon name="warning" className="w-3 h-3" />
+                      {iv.rejection_reason}
+                    </div>
+                  )}
+                </div>
                 <div className="font-mono font-bold text-sm">{fmtIDR(iv.total_amount)}</div>
-                <Status kind={iv.status === "paid" ? "paid" : iv.status === "pending" ? "pending" : "unpaid"}>{iv.status === "paid" ? "Lunas" : "Pending"}</Status>
+                <Status kind={iv.status === "paid" ? "paid" : iv.status === "approved" ? "approved" : iv.status === "rejected" ? "rejected" : "pending"}>
+                  {iv.status === "paid" ? "Lunas" : iv.status === "approved" ? "Disetujui" : iv.status === "rejected" ? "Ditolak" : "Pending"}
+                </Status>
                 <button title="Cetak / Unduh PDF" onClick={() => {
                   const w = window.open("", "_blank", "width=700,height=900");
                   if (!w) return;
@@ -2133,6 +2168,16 @@ function CoachInvoice({ coachId, branchId, profile }: { coachId: string; branchI
                 }} className="w-8 h-8 rounded-lg border border-line hover:bg-paper-tint flex items-center justify-center text-ink-mute hover:text-ocean-600">
                   <Icon name="print" className="w-4 h-4" />
                 </button>
+                {iv.status === "pending" && (
+                  <button
+                    title="Batalkan invoice"
+                    onClick={() => cancelInvoice(iv.id)}
+                    disabled={cancelling === iv.id}
+                    className="w-8 h-8 rounded-lg border border-danger-200 hover:bg-danger-50 flex items-center justify-center text-danger-400 hover:text-danger-600 transition-colors disabled:opacity-40"
+                  >
+                    <Icon name="x" className="w-4 h-4" />
+                  </button>
+                )}
               </div>
             ))}
           </div>
@@ -2163,8 +2208,9 @@ function CoachRapor({ coachId, branchId }: { coachId: string; branchId: string }
   const [personality, setPersonality] = useState("");
   const [motivation, setMotivation] = useState("");
   const [learningAchievements, setLearningAchievements] = useState("");
-  const [bestTimes, setBestTimes] = useState<Partial<Record<BtKey, string>>>({});
-  const [bestTimeIds, setBestTimeIds] = useState<Partial<Record<BtKey, string>>>({});
+  const [level, setLevel] = useState("");
+  const [bestTimes, setBestTimes] = useState<BtRow[]>([]);
+  const [removedBtIds, setRemovedBtIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [page, setPage] = useState(0);
   const PAGE_SIZE = 10;
@@ -2213,7 +2259,7 @@ function CoachRapor({ coachId, branchId }: { coachId: string; branchId: string }
 
       // 4. Now fetch all entries for this coach + period
       const { data: e } = await supabase.from("rapor_entries")
-        .select("id, member_id, class_id, locked, scores, notes, personality, motivation, learning_achievements, member:members(profile:profiles(full_name)), class:classes(name, class_criteria(id, label, kind, options, sort_order))")
+        .select("id, member_id, class_id, locked, scores, notes, personality, motivation, learning_achievements, level, member:members(profile:profiles(full_name)), class:classes(name, class_criteria(id, label, kind, options, sort_order))")
         .eq("period_id", periodData.id).eq("coach_id", coachId);
       if (e) { setEntries(e as unknown as RaporEntry[]); setPage(0); }
       setLoading(false);
@@ -2233,21 +2279,23 @@ function CoachRapor({ coachId, branchId }: { coachId: string; branchId: string }
     setPersonality(e.personality ?? "");
     setMotivation(e.motivation ?? "");
     setLearningAchievements(e.learning_achievements ?? "");
+    setLevel(e.level ?? "");
     // Load best times for this member
     const { data: btRows } = await supabase
       .from("member_best_times")
       .select("id, stroke, distance, time_seconds")
       .eq("member_id", e.member_id)
-      .eq("branch_id", branchId);
-    const btMap: Partial<Record<BtKey, string>> = {};
-    const btIdMap: Partial<Record<BtKey, string>> = {};
-    for (const row of (btRows ?? []) as BestTimeRow[]) {
-      const key = `${row.stroke}_${row.distance}` as BtKey;
-      btMap[key] = String(row.time_seconds);
-      btIdMap[key] = row.id;
-    }
-    setBestTimes(btMap);
-    setBestTimeIds(btIdMap);
+      .eq("branch_id", branchId)
+      .order("stroke").order("distance");
+    setBestTimes(
+      (btRows ?? []).map((row: BestTimeRow) => ({
+        id: row.id,
+        stroke: row.stroke,
+        distance: String(row.distance),
+        time: String(row.time_seconds),
+      }))
+    );
+    setRemovedBtIds([]);
     setOpen(e);
   };
 
@@ -2266,28 +2314,43 @@ function CoachRapor({ coachId, branchId }: { coachId: string; branchId: string }
         personality: personality || null,
         motivation: motivation || null,
         learning_achievements: learningAchievements || null,
+        level: level || null,
         filled_at: new Date().toISOString(),
         locked: true,
       })
       .eq("id", open.id);
     if (error) { setSaving(false); return toast.error("Gagal menyimpan rapor", error.message); }
-    // Upsert best times
-    for (const stroke of STROKES) {
-      for (const dist of DISTANCES) {
-        const key = `${stroke}_${dist}` as BtKey;
-        const val = bestTimes[key];
-        if (!val || val.trim() === "") continue;
-        const timeSec = parseFloat(val);
-        if (isNaN(timeSec) || timeSec <= 0) continue;
-        const existingId = bestTimeIds[key];
-        if (existingId) {
-          await supabase.from("member_best_times").update({ time_seconds: timeSec, coach_id: coachId, recorded_at: new Date().toISOString().split("T")[0] }).eq("id", existingId);
-        } else {
-          const { data: ins } = await supabase.from("member_best_times").insert({ member_id: open.member_id, branch_id: branchId, stroke, distance: dist, time_seconds: timeSec, coach_id: coachId }).select("id").single();
-          if (ins) setBestTimeIds(prev => ({ ...prev, [key]: ins.id }));
+    // Delete removed best time rows
+    const today = new Date().toISOString().split("T")[0];
+    for (const id of removedBtIds) {
+      await supabase.from("member_best_times").delete().eq("id", id);
+    }
+    setRemovedBtIds([]);
+    // Upsert best times (dynamic rows)
+    const savedRows: BtRow[] = [...bestTimes];
+    for (let i = 0; i < savedRows.length; i++) {
+      const row = savedRows[i];
+      const stroke = row.stroke.trim();
+      const distNum = parseInt(row.distance);
+      const timeSec = parseFloat(row.time);
+      if (!stroke || !row.distance || isNaN(distNum) || distNum <= 0 || isNaN(timeSec) || timeSec <= 0) continue;
+      if (row.id) {
+        await supabase.from("member_best_times")
+          .update({ time_seconds: timeSec, coach_id: coachId, recorded_at: today })
+          .eq("id", row.id);
+      } else {
+        const { data: ins } = await supabase.from("member_best_times")
+          .upsert(
+            { member_id: open.member_id, branch_id: branchId, stroke, distance: distNum, time_seconds: timeSec, coach_id: coachId, recorded_at: today },
+            { onConflict: "member_id,branch_id,stroke,distance" }
+          )
+          .select("id").single();
+        if (ins) {
+          savedRows[i] = { ...row, id: ins.id };
         }
       }
     }
+    setBestTimes(savedRows);
     setSaving(false);
     // Notify member when rapor is first filled (not on updates)
     if (isNew) {
@@ -2301,13 +2364,19 @@ function CoachRapor({ coachId, branchId }: { coachId: string; branchId: string }
     }
     toast.success("Rapor disimpan");
     setOpen(null);
+    setRemovedBtIds([]);
     setEntries(prev => prev.map(e => e.id === open.id ? {
       ...e, locked: true, scores, notes,
       personality: personality || null,
       motivation: motivation || null,
       learning_achievements: learningAchievements || null,
+      level: level || null,
     } : e));
   };
+
+  // Notes validation (derived, used for Save button disabled state)
+  const notesStats = countTextStats(notes);
+  const notesInvalid = notesStats.words > 50 || notesStats.sentences > 1 || notesStats.hasNewline;
 
   // Derived values for summary & pagination
   const totalFilled  = entries.filter(e => e.locked).length;
@@ -2435,8 +2504,8 @@ function CoachRapor({ coachId, branchId }: { coachId: string; branchId: string }
           )}
         </div>
       )}
-      <Modal open={!!open} onClose={() => setOpen(null)} title={`Rapor — ${open?.member?.profile?.full_name ?? ""}`} size="lg"
-        footer={<><Btn variant="ghost" onClick={() => setOpen(null)}>Batal</Btn><Btn variant="primary" onClick={saveRapor} disabled={saving}>{saving ? "Menyimpan…" : "Simpan rapor"}</Btn></>}>
+      <Modal open={!!open} onClose={() => { setOpen(null); setBestTimes([]); setRemovedBtIds([]); setLevel(""); }} title={`Rapor — ${open?.member?.profile?.full_name ?? ""}`} size="lg"
+        footer={<><Btn variant="ghost" onClick={() => { setOpen(null); setBestTimes([]); setRemovedBtIds([]); setLevel(""); }}>Batal</Btn><Btn variant="primary" onClick={saveRapor} disabled={saving || notesInvalid}>{saving ? "Menyimpan…" : "Simpan rapor"}</Btn></>}>
         <div className="space-y-5">
           {criteria.length === 0 && (
             <p className="text-xs text-warn-600">Aspek penilaian belum dikonfigurasi admin untuk kelas ini.</p>
@@ -2472,42 +2541,124 @@ function CoachRapor({ coachId, branchId }: { coachId: string; branchId: string }
               )}
             </div>
           ))}
-          <Field label="Catatan umum coach"><Textarea rows={3} value={notes} onChange={e => setNotes(e.target.value)} placeholder="Mis. Member menunjukkan progres yang baik bulan ini, terutama pada teknik pernapasan." /></Field>
+          <Field label="Level Member">
+            <datalist id="rapor-level-list">
+              {["Beginner", "Elementary", "Intermediate", "Advanced", "Elite"].map(l => <option key={l} value={l} />)}
+            </datalist>
+            <input
+              type="text" list="rapor-level-list"
+              value={level}
+              onChange={e => setLevel(e.target.value)}
+              placeholder="Mis. Beginner, Intermediate, Advanced…"
+              className="w-full border border-line rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ocean-500 bg-white"
+            />
+          </Field>
+          <Field
+            label="Catatan umum coach"
+            hint={notesInvalid ? undefined : "Maks. 289 karakter · 50 kata · 1 kalimat · 1 paragraf"}
+            error={
+              notesStats.hasNewline ? "Tidak boleh lebih dari 1 paragraf (hapus baris baru)" :
+              notesStats.sentences > 1 ? `Tidak boleh lebih dari 1 kalimat (${notesStats.sentences} kalimat terdeteksi)` :
+              notesStats.words > 50 ? `Tidak boleh lebih dari 50 kata (${notesStats.words} kata)` :
+              undefined
+            }
+          >
+            <div className="relative">
+              <Textarea
+                rows={3}
+                value={notes}
+                maxLength={289}
+                onChange={e => setNotes(e.target.value)}
+                placeholder="Mis. Member menunjukkan progres yang baik bulan ini, terutama pada teknik pernapasan."
+                className={notesInvalid ? "border-danger-400 focus:border-danger-400 focus:ring-danger-100" : undefined}
+              />
+              <span className={`absolute bottom-2 right-3 text-[10px] font-mono tabular-nums pointer-events-none ${289 - notesStats.chars <= 20 ? "text-danger-500 font-bold" : "text-ink-faint"}`}>
+                {notesStats.chars}/289
+              </span>
+            </div>
+          </Field>
 
           {/* Personal Best Time */}
           <div className="border-t border-line pt-4 space-y-3">
             <div className="text-xs font-bold uppercase tracking-widest text-ink-mute">Personal Best Time</div>
-            <p className="text-xs text-ink-mute -mt-1">Masukkan waktu terbaik (detik, mis. 34.58). Kosongkan jika belum ada catatan.</p>
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="text-ink-mute uppercase tracking-widest">
-                    <th className="text-left pb-2 pr-3 font-bold">Gaya</th>
-                    {DISTANCES.map(d => <th key={d} className="text-center pb-2 px-1.5 font-bold w-20">{d}m</th>)}
-                  </tr>
-                </thead>
-                <tbody className="space-y-1">
-                  {STROKES.map(stroke => (
-                    <tr key={stroke} className="border-t border-line/50">
-                      <td className="py-1.5 pr-3 font-semibold text-ink capitalize whitespace-nowrap">{stroke === "IM" ? "IM" : stroke.charAt(0).toUpperCase() + stroke.slice(1)}</td>
-                      {DISTANCES.map(dist => {
-                        const key = `${stroke}_${dist}` as BtKey;
-                        return (
-                          <td key={dist} className="py-1.5 px-1.5">
-                            <input
-                              type="number" min="0" step="0.01"
-                              value={bestTimes[key] ?? ""}
-                              onChange={ev => setBestTimes(prev => ({ ...prev, [key]: ev.target.value }))}
-                              placeholder="—"
-                              className="w-full border border-line rounded-lg px-2 py-1 text-center font-mono text-xs focus:outline-none focus:ring-2 focus:ring-ocean-500 bg-white placeholder:text-ink-faint"
-                            />
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <p className="text-xs text-ink-mute -mt-1">Masukkan waktu terbaik (detik, mis. 34.58). Tambah atau hapus gaya dan jarak sesuai kebutuhan member.</p>
+
+            {/* datalist untuk autocomplete */}
+            <datalist id="bt-stroke-list">
+              {STROKE_SUGGESTIONS.map(s => <option key={s} value={s} />)}
+            </datalist>
+            <datalist id="bt-distance-list">
+              {DISTANCE_SUGGESTIONS.map(d => <option key={d} value={d} />)}
+            </datalist>
+
+            <div className="space-y-2">
+              {/* Header — hanya tampil jika ada rows */}
+              {bestTimes.length > 0 && (
+                <div className="grid grid-cols-[1fr_72px_96px_32px] gap-2 text-[10px] font-bold text-ink-mute uppercase tracking-widest px-1">
+                  <span>Gaya</span>
+                  <span className="text-center">Jarak (m)</span>
+                  <span className="text-center">Waktu (dtk)</span>
+                  <span />
+                </div>
+              )}
+
+              {/* Dynamic rows */}
+              {bestTimes.map((row, idx) => (
+                <div key={idx} className="grid grid-cols-[1fr_72px_96px_32px] gap-2 items-center">
+                  <input
+                    type="text"
+                    list="bt-stroke-list"
+                    value={row.stroke}
+                    onChange={e => setBestTimes(prev => prev.map((r, i) => i === idx ? { ...r, stroke: e.target.value } : r))}
+                    placeholder="Gaya…"
+                    className="border border-line rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-ocean-500 bg-white min-w-0"
+                  />
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    list="bt-distance-list"
+                    value={row.distance}
+                    onChange={e => setBestTimes(prev => prev.map((r, i) => i === idx ? { ...r, distance: e.target.value } : r))}
+                    placeholder="25"
+                    className="border border-line rounded-lg px-2 py-1.5 text-xs text-center font-mono focus:outline-none focus:ring-2 focus:ring-ocean-500 bg-white"
+                  />
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={row.time}
+                    onChange={e => setBestTimes(prev => prev.map((r, i) => i === idx ? { ...r, time: e.target.value } : r))}
+                    placeholder="—"
+                    className="border border-line rounded-lg px-2 py-1.5 text-xs text-center font-mono focus:outline-none focus:ring-2 focus:ring-ocean-500 bg-white placeholder:text-ink-faint"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (row.id) setRemovedBtIds(prev => [...prev, row.id!]);
+                      setBestTimes(prev => prev.filter((_, i) => i !== idx));
+                    }}
+                    className="w-8 h-8 rounded-lg border border-line hover:bg-danger-50 hover:border-danger-200 flex items-center justify-center text-ink-faint hover:text-danger-500 transition-colors"
+                    title="Hapus baris ini"
+                  >
+                    <Icon name="x" className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+
+              {/* Empty state */}
+              {bestTimes.length === 0 && (
+                <p className="text-xs text-ink-faint italic">Belum ada catatan waktu. Klik tombol di bawah untuk menambahkan.</p>
+              )}
+
+              {/* Tambah baris */}
+              <button
+                type="button"
+                onClick={() => setBestTimes(prev => [...prev, { stroke: "", distance: "", time: "" }])}
+                className="flex items-center gap-1.5 text-xs font-semibold text-ocean-600 hover:text-ocean-700 transition-colors mt-1"
+              >
+                <Icon name="plus" className="w-3.5 h-3.5" />
+                Tambah Gaya
+              </button>
             </div>
           </div>
 
@@ -3438,6 +3589,7 @@ export default function CoachPage() {
         onBranchChange={setActiveBranchId}>
         {content}
       </Shell>
+      {BETA_FEEDBACK_ENABLED && <BetaFeedback role="coach" />}
     </>
   );
 }
