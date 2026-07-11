@@ -103,8 +103,10 @@ async function generatePdf(html: string): Promise<Buffer> {
 
   try {
     const page = await browser.newPage();
-    // All assets are data URIs — no network needed, so "load" is sufficient
-    await page.setContent(html, { waitUntil: "load", timeout: 30000 });
+    // networkidle0 ensures fonts render before the inline scale script measures heights
+    await page.setContent(html, { waitUntil: "networkidle0", timeout: 30000 });
+    // Small pause so the scale script executes before pdf() captures the page
+    await new Promise(r => setTimeout(r, 300));
     const pdf = await page.pdf({
       width: "595px",
       height: "842px",

@@ -121,8 +121,10 @@ const STYLES = `
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:'Montserrat',Arial,sans-serif;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 
-  /* ── Page shell ── */
-  .page{width:595px;height:842px;background:#fff;position:relative;overflow:hidden;margin:0 auto;padding:20px 57px 20px 57px;display:flex;flex-direction:column}
+  /* ── Page shell (fixed A4 viewport) ── */
+  .page-shell{width:595px;height:842px;background:#fff;margin:0 auto;overflow:hidden;position:relative}
+  /* ── Page inner (natural height, scaled to fit shell if needed) ── */
+  .page{width:595px;min-height:842px;background:transparent;position:absolute;top:0;left:0;transform-origin:top left;padding:20px 57px 20px 57px;display:flex;flex-direction:column}
 
   /* ── Decorative assets ── */
   .deco-tr{position:absolute;top:0;right:0;width:200px;height:200px;pointer-events:none;z-index:0}
@@ -262,7 +264,7 @@ function buildRaporHtml(s: PrintStudent, assets: RaporAssets): string {
     : assets.coachSigPh;
 
   return `
-  <div class="page">
+  <div class="page-shell"><div class="page">
     <!-- Decorative assets -->
     <div class="deco-tr"><img src="${assets.assetTR}" alt="" /></div>
     <div class="deco-bl"><img src="${assets.assetBL}" alt="" /></div>
@@ -379,7 +381,7 @@ function buildRaporHtml(s: PrintStudent, assets: RaporAssets): string {
       </div>
 
     </div>
-  </div>`;
+  </div></div>`;
 }
 
 // ── Public server-side export ─────────────────────────────────────────────────
@@ -396,6 +398,19 @@ export function buildRaporHtmlStandalone(s: PrintStudent, assets: RaporAssets): 
     <style>${STYLES}</style>
   </head><body style="margin:0;padding:0">
     ${buildRaporHtml(s, assets)}
+    <script>
+    (function(){
+      var shell = document.querySelector('.page-shell');
+      var page  = document.querySelector('.page');
+      if (!shell || !page) return;
+      var naturalH = page.scrollHeight;
+      var shellH   = shell.offsetHeight;
+      if (naturalH > shellH) {
+        var scale = shellH / naturalH;
+        page.style.transform = 'scale(' + scale + ')';
+      }
+    })();
+    <\/script>
   </body></html>`;
 }
 
