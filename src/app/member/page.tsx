@@ -14,7 +14,7 @@ import type { NavItem as MobileNavItem } from "@/components/layout/Sidebar";
 import Bell from "@/components/layout/Bell";
 import BetaFeedback, { BETA_FEEDBACK_ENABLED } from "@/components/layout/BetaFeedback";
 import { fmtIDR, fmtDate, waLink } from "@/lib/utils";
-import { printSingleRapor, type PrintCriterion, type PrintBestTime } from "@/lib/printRapor";
+import { downloadRaporPdf, printSingleRaporPopup, type PrintCriterion, type PrintBestTime } from "@/lib/printRapor";
 import { createClient } from "@/utils/supabase/client";
 import { useUpload } from "@/hooks/useUpload";
 import PhotoLightbox from "@/components/ui/PhotoLightbox";
@@ -1051,14 +1051,15 @@ function MemberRapor({ memberId, memberName, branchId, avatarUrl, memberNo, birt
 
   const load = useCallback(async () => {
     if (!memberId) return;
-    const { data } = await supabase.from("rapor_entries")
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data } = await (supabase as any).from("rapor_entries")
       .select("id, scores, notes, personality, motivation, learning_achievements, level, coach_id, period_id, class_id, rapor_periods(label, is_open), classes(name), coach:profiles!rapor_entries_coach_id_fkey(full_name)")
       .eq("member_id", memberId)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false }) as { data: any[] | null };
     if (!data) return;
 
     // Load existing reviews
-    const entryIds = data.map((e) => e.id);
+    const entryIds = data.map((e: any) => e.id);
     const { data: reviews } = entryIds.length
       ? await supabase.from("member_reviews").select("id, rapor_id, stars, message").in("rapor_id", entryIds).eq("member_id", memberId)
       : { data: [] };
@@ -1202,29 +1203,36 @@ function MemberRapor({ memberId, memberName, branchId, avatarUrl, memberNo, birt
       <Modal open={open} onClose={() => setOpen(false)} title={`Rapor — ${selectedEntry?.period ?? ""}`} size="lg"
         footer={
           <div className="flex gap-2 justify-end">
-            {selectedEntry && (
-              <Btn variant="outline" size="sm" icon="download"
-                onClick={() => printSingleRapor({
-                  full_name: memberName,
-                  member_no: memberNo ?? undefined,
-                  birth_date: birthDate ?? undefined,
-                  avatar_url: avatarUrl ?? undefined,
-                  location: location ?? undefined,
-                  level: selectedEntry.level ?? undefined,
-                  class_name: selectedEntry.class_name,
-                  coach_name: selectedEntry.coach_name,
-                  period_label: selectedEntry.period,
-                  scores: selectedEntry.scores,
-                  notes: selectedEntry.notes,
-                  personality: selectedEntry.personality,
-                  motivation: selectedEntry.motivation,
-                  learning_achievements: selectedEntry.learning_achievements,
-                  criteria: selectedEntry.criteria,
-                  best_times: selectedEntry.best_times,
-                })}>
-                Cetak / PDF
-              </Btn>
-            )}
+            {selectedEntry && (() => {
+              const raporData = {
+                full_name: memberName,
+                member_no: memberNo ?? undefined,
+                birth_date: birthDate ?? undefined,
+                avatar_url: avatarUrl ?? undefined,
+                location: location ?? undefined,
+                level: selectedEntry.level ?? undefined,
+                class_name: selectedEntry.class_name,
+                coach_name: selectedEntry.coach_name,
+                period_label: selectedEntry.period,
+                scores: selectedEntry.scores,
+                notes: selectedEntry.notes,
+                personality: selectedEntry.personality,
+                motivation: selectedEntry.motivation,
+                learning_achievements: selectedEntry.learning_achievements,
+                criteria: selectedEntry.criteria,
+                best_times: selectedEntry.best_times,
+              };
+              return (<>
+                <Btn variant="outline" size="sm" icon="printer"
+                  onClick={() => printSingleRaporPopup(raporData)}>
+                  Print
+                </Btn>
+                <Btn variant="soft" size="sm" icon="download"
+                  onClick={() => void downloadRaporPdf(raporData)}>
+                  Download PDF
+                </Btn>
+              </>);
+            })()}
             <Btn variant="primary" onClick={() => setOpen(false)}>Tutup</Btn>
           </div>
         }>

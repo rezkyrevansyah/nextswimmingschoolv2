@@ -21,6 +21,7 @@ import BetaFeedback, { BETA_FEEDBACK_ENABLED } from "@/components/layout/BetaFee
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
 import { fmtIDR, fmtDate, fmtDateLong, waLink, countTextStats } from "@/lib/utils";
+import { downloadRaporPdf, printSingleRaporPopup, fmtSwimTime, type PrintCriterion, type PrintBestTime } from "@/lib/printRapor";
 import { createClient } from "@/utils/supabase/client";
 import { useUpload } from "@/hooks/useUpload";
 import type { User } from "@supabase/supabase-js";
@@ -2051,7 +2052,8 @@ function CoachInvoice({ coachId, branchId, profile }: { coachId: string; branchI
     const ok = await confirm({ title: "Batalkan Invoice?", body: "Sesi yang sudah dipilih akan kembali tersedia untuk diinvoice. Tindakan ini tidak bisa dibatalkan.", confirmLabel: "Ya, batalkan", danger: true });
     if (!ok) return;
     setCancelling(invoiceId);
-    const { error } = await supabase.rpc("cancel_coach_invoice", { p_invoice_id: invoiceId, p_coach_id: coachId });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase as any).rpc("cancel_coach_invoice", { p_invoice_id: invoiceId, p_coach_id: coachId });
     setCancelling(null);
     if (error) return toast.error("Gagal membatalkan invoice", error.message);
     toast.success("Invoice dibatalkan", "Sesi kembali tersedia untuk diinvoice");
@@ -2195,7 +2197,7 @@ interface Criterion {
   options: string[] | null;
 }
 
-function CoachRapor({ coachId, branchId }: { coachId: string; branchId: string }) {
+function CoachRapor({ coachId, branchId, coachName }: { coachId: string; branchId: string; coachName: string }) {
   const supabase = createClient();
   const toast = useToast();
   const [period, setPeriod] = useState<{ id: string; label: string; date_to: string } | null>(null);
@@ -2203,6 +2205,8 @@ function CoachRapor({ coachId, branchId }: { coachId: string; branchId: string }
   const [criteria, setCriteria] = useState<Criterion[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState<RaporEntry | null>(null);
+  const [viewing, setViewing] = useState<RaporEntry | null>(null);
+  const [viewBestTimes, setViewBestTimes] = useState<PrintBestTime[]>([]);
   const [scores, setScores] = useState<Record<string, number | string>>({});
   const [notes, setNotes] = useState("");
   const [personality, setPersonality] = useState("");
@@ -2213,12 +2217,21 @@ function CoachRapor({ coachId, branchId }: { coachId: string; branchId: string }
   const [removedBtIds, setRemovedBtIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [page, setPage] = useState(0);
+  const [signatureUrl, setSignatureUrl] = useState<string | null>(null);
+  const [sigUploading, setSigUploading] = useState(false);
+  const { upload, uploading: fileUploading } = useUpload();
   const PAGE_SIZE = 10;
 
-   
+
   useEffect(() => {
     if (!branchId || !coachId) return;
     (async () => {
+      // Load coach signature (for rapor print)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: prof } = await (supabase as any)
+        .from("profiles").select("signature_url").eq("id", coachId).single();
+      if (prof?.signature_url) setSignatureUrl(prof.signature_url as string);
+
       // 1. Find active period
       const { data: periodData } = await supabase
         .from("rapor_periods").select("id, label, date_to").eq("branch_id", branchId).eq("is_open", true).single();
@@ -2299,6 +2312,23 @@ function CoachRapor({ coachId, branchId }: { coachId: string; branchId: string }
     setOpen(e);
   };
 
+  const openView = async (e: RaporEntry) => {
+    const { data: btRows } = await supabase
+      .from("member_best_times")
+      .select("id, stroke, distance, time_seconds")
+      .eq("member_id", e.member_id)
+      .eq("branch_id", branchId)
+      .order("stroke").order("distance");
+    setViewBestTimes(
+      (btRows ?? []).map((r: BestTimeRow) => ({
+        stroke: r.stroke,
+        distance: r.distance,
+        time_seconds: r.time_seconds,
+      }))
+    );
+    setViewing(e);
+  };
+
   const saveRapor = async () => {
     if (!open || !period) return;
     // Check period still open
@@ -2308,6 +2338,7 @@ function CoachRapor({ coachId, branchId }: { coachId: string; branchId: string }
     if (!periodCheck?.is_open) return toast.error("Periode rapor sudah ditutup", "Hubungi admin untuk membuka kembali periode.");
     setSaving(true);
     const isNew = !open.locked;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { error } = await supabase.from("rapor_entries")
       .update({
         scores, notes,
@@ -2317,11 +2348,10 @@ function CoachRapor({ coachId, branchId }: { coachId: string; branchId: string }
         level: level || null,
         filled_at: new Date().toISOString(),
         locked: true,
-      })
+      } as any)
       .eq("id", open.id);
     if (error) { setSaving(false); return toast.error("Gagal menyimpan rapor", error.message); }
     // Delete removed best time rows
-    const today = new Date().toISOString().split("T")[0];
     for (const id of removedBtIds) {
       await supabase.from("member_best_times").delete().eq("id", id);
     }
@@ -2453,6 +2483,53 @@ function CoachRapor({ coachId, branchId }: { coachId: string; branchId: string }
         </div>
       )}
 
+      {/* Signature upload card */}
+      {period && (
+        <div className="bg-white rounded-2xl border border-line shadow-card p-4">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div className="min-w-0">
+              <p className="font-semibold text-sm text-ink">Tanda Tangan Rapor</p>
+              <p className="text-xs text-ink-mute mt-0.5">
+                Upload tanda tangan untuk ditampilkan di rapor siswa yang Anda cetak
+              </p>
+            </div>
+            <div className="flex items-center gap-3 flex-shrink-0">
+              {signatureUrl && (
+                <img
+                  src={signatureUrl}
+                  alt="Tanda tangan"
+                  className="h-12 max-w-[120px] object-contain border border-line rounded-lg bg-paper-tint px-2"
+                />
+              )}
+              <label className={`cursor-pointer inline-flex items-center justify-center font-semibold transition-colors text-xs px-3 py-1.5 rounded-lg gap-1.5 border border-line text-ink-soft hover:bg-paper-tint hover:border-line-strong ${(sigUploading || fileUploading) ? "opacity-50 pointer-events-none" : ""}`}>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  disabled={sigUploading || fileUploading}
+                  onChange={async (ev) => {
+                    const file = ev.target.files?.[0];
+                    if (!file) return;
+                    setSigUploading(true);
+                    try {
+                      const url = await upload.signature(file);
+                      setSignatureUrl(url);
+                      toast.success("Tanda tangan berhasil diupload");
+                    } catch (err) {
+                      toast.error("Gagal upload tanda tangan", (err as Error).message);
+                    } finally {
+                      setSigUploading(false);
+                      ev.target.value = "";
+                    }
+                  }}
+                />
+                {sigUploading ? "Mengupload…" : signatureUrl ? "Ganti TTD" : "Upload TTD"}
+              </label>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Entry list */}
       {loading ? <div className="text-ink-mute text-sm">Memuat…</div> : (
         <div className="space-y-3">
@@ -2464,6 +2541,9 @@ function CoachRapor({ coachId, branchId }: { coachId: string; branchId: string }
                 <div className="text-xs text-ink-mute">{e.class?.name}</div>
               </div>
               {e.locked ? <Status kind="approved">Selesai</Status> : <Status kind="pending">Belum</Status>}
+              {e.locked && (
+                <Btn variant="outline" size="sm" onClick={() => openView(e)}>Lihat</Btn>
+              )}
               <Btn variant={e.locked ? "ghost" : "primary"} size="sm" onClick={() => openEntry(e)}>
                 {e.locked ? "Edit" : "Isi rapor"}
               </Btn>
@@ -2675,6 +2755,160 @@ function CoachRapor({ coachId, branchId }: { coachId: string; branchId: string }
             </Field>
           </div>
         </div>
+      </Modal>
+
+      {/* View-only rapor modal */}
+      <Modal
+        open={!!viewing}
+        onClose={() => { setViewing(null); setViewBestTimes([]); }}
+        title={`Rapor — ${viewing?.member?.profile?.full_name ?? ""}`}
+        size="lg"
+        footer={
+          <>
+            <Btn variant="ghost" onClick={() => { setViewing(null); setViewBestTimes([]); }}>Tutup</Btn>
+            {viewing && period && (() => {
+              const vScores = (viewing as unknown as { scores?: Record<string, number | string> }).scores ?? {};
+              const vNotes  = (viewing as unknown as { notes?: string | null }).notes ?? null;
+              const vCrit   = ((viewing as unknown as { class?: { class_criteria?: PrintCriterion[] } }).class?.class_criteria ?? []) as PrintCriterion[];
+              const raporData = {
+                full_name: viewing.member?.profile?.full_name ?? "",
+                class_name: viewing.class?.name ?? "",
+                coach_name: coachName,
+                period_label: period.label,
+                level: viewing.level ?? undefined,
+                scores: vScores,
+                notes: vNotes,
+                personality: viewing.personality ?? undefined,
+                motivation: viewing.motivation ?? undefined,
+                learning_achievements: viewing.learning_achievements ?? undefined,
+                criteria: vCrit,
+                best_times: viewBestTimes,
+                coach_signature_url: signatureUrl,
+              };
+              return (<>
+                <Btn variant="outline" size="sm" icon="printer"
+                  onClick={() => printSingleRaporPopup(raporData)}>
+                  Print
+                </Btn>
+                <Btn variant="primary" size="sm" icon="download"
+                  onClick={() => void downloadRaporPdf(raporData)}>
+                  Download PDF
+                </Btn>
+              </>);
+            })()}
+          </>
+        }
+      >
+        {viewing && (() => {
+          const vScores   = (viewing as unknown as { scores?: Record<string, number | string> }).scores ?? {};
+          const vNotes    = (viewing as unknown as { notes?: string | null }).notes ?? null;
+          const vCriteria = ((viewing as unknown as { class?: { class_criteria?: PrintCriterion[] } }).class?.class_criteria ?? []) as PrintCriterion[];
+          const critMap   = new Map(vCriteria.map(c => [c.id, c]));
+          return (
+            <div className="space-y-4">
+              {/* Header */}
+              <Card className="!p-3 bg-paper-tint">
+                <div className="flex items-center gap-3">
+                  <Avatar name={viewing.member?.profile?.full_name ?? "?"} size={42} />
+                  <div>
+                    <div className="font-semibold text-ink">{viewing.member?.profile?.full_name}</div>
+                    <div className="text-xs text-ink-mute">{viewing.class?.name} · {period?.label}</div>
+                  </div>
+                </div>
+              </Card>
+
+              {/* Level */}
+              {viewing.level && (
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="font-semibold text-ink-soft">Level:</span>
+                  <span className="font-semibold text-ink">{viewing.level}</span>
+                </div>
+              )}
+
+              {/* Scores */}
+              <div className="space-y-3">
+                {Object.entries(vScores).map(([key, val]) => {
+                  const crit   = critMap.get(key);
+                  const label  = crit?.label ?? key.replace(/_/g, " ");
+                  const numVal = typeof val === "number" ? val : null;
+                  const strVal = typeof val === "string" ? val : null;
+                  const max    = crit?.kind === "score_10" ? 10 : 100;
+                  return (
+                    <div key={key}>
+                      <div className="flex justify-between text-sm">
+                        <span className="font-semibold text-ink capitalize">{label}</span>
+                        {numVal !== null && <span className="font-mono font-bold text-ocean-700">{numVal}/{max}</span>}
+                      </div>
+                      {numVal !== null && (
+                        <div className="h-2 mt-1.5 bg-paper-deep rounded-full overflow-hidden">
+                          <div
+                            className={`h-full ${numVal / max > 0.7 ? "bg-ok-500" : numVal / max > 0.4 ? "bg-wave-500" : "bg-warn-500"}`}
+                            style={{ width: `${(numVal / max) * 100}%` }}
+                          />
+                        </div>
+                      )}
+                      {strVal && <p className="text-sm text-ink-soft bg-paper-tint px-3 py-1.5 rounded-lg mt-1">{strVal}</p>}
+                    </div>
+                  );
+                })}
+                {Object.keys(vScores).length === 0 && (
+                  <p className="text-sm text-ink-mute italic">Belum ada penilaian.</p>
+                )}
+              </div>
+
+              {/* Notes */}
+              {vNotes && (
+                <div>
+                  <div className="font-semibold text-ink text-sm mb-1">Catatan coach</div>
+                  <p className="text-sm text-ink-soft bg-paper-tint p-3 rounded-xl leading-relaxed">{vNotes}</p>
+                </div>
+              )}
+
+              {/* Personal Best Times */}
+              {viewBestTimes.length > 0 && (
+                <div>
+                  <div className="font-semibold text-ink text-sm mb-2">Personal Best Time</div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm border-collapse">
+                      <thead>
+                        <tr className="bg-ocean-600 text-white">
+                          <th className="text-left px-3 py-2 font-semibold rounded-tl-lg">Gaya</th>
+                          <th className="text-center px-3 py-2 font-semibold">Jarak</th>
+                          <th className="text-center px-3 py-2 font-semibold rounded-tr-lg">Waktu</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {viewBestTimes.map((bt, i) => (
+                          <tr key={i} className={i % 2 === 0 ? "bg-paper" : "bg-paper-tint"}>
+                            <td className="px-3 py-2 font-medium text-ink uppercase">{bt.stroke}</td>
+                            <td className="px-3 py-2 text-center text-ink-soft">{bt.distance}m</td>
+                            <td className="px-3 py-2 text-center font-mono text-ink">{fmtSwimTime(bt.time_seconds)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Personality / Motivation / Learning */}
+              {(viewing.personality || viewing.motivation || viewing.learning_achievements) && (
+                <div className="space-y-2 pt-2 border-t border-line">
+                  {[
+                    { label: "Kepribadian", value: viewing.personality },
+                    { label: "Motivasi belajar", value: viewing.motivation },
+                    { label: "Capaian pembelajaran", value: viewing.learning_achievements },
+                  ].filter(x => x.value).map(x => (
+                    <div key={x.label} className="flex items-baseline gap-2 text-sm">
+                      <span className="text-ink-mute min-w-[148px] shrink-0">{x.label}</span>
+                      <span className="text-ink font-medium">{x.value}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </Modal>
 
       <div>
@@ -3559,7 +3793,7 @@ export default function CoachPage() {
         absen:   <>{SuspendBanner}{IncompleteBanner}{locked ? <LockedNotice feature="Absensi" reason={lockReason} /> : <CoachAbsensi setOverlay={setOverlay} coachId={coachId} branchId={branchId} classes={classes} holidayClassIds={holidayClassIds} clockedInIds={clockedInIds} />}</>,
         kelas:   <CoachKelas classes={classes} coachId={coachId} classSpreadsheets={classSpreadsheets} ownSpreadsheets={ownSpreadsheets} onRefreshClasses={refreshClasses} />,
         invoice: <>{SuspendBanner}{IncompleteBanner}{locked ? <LockedNotice feature="Invoice" reason={lockReason} /> : <CoachInvoice coachId={coachId} branchId={branchId} profile={profile} />}</>,
-        rapor:   <>{SuspendBanner}{IncompleteBanner}{locked ? <LockedNotice feature="Rapor" reason={lockReason} /> : <CoachRapor coachId={coachId} branchId={branchId} />}</>,
+        rapor:   <>{SuspendBanner}{IncompleteBanner}{locked ? <LockedNotice feature="Rapor" reason={lockReason} /> : <CoachRapor coachId={coachId} branchId={branchId} coachName={profile?.full_name ?? ""} />}</>,
         payslip: <CoachPayslip coachId={coachId} />,
         profile: <CoachProfile profile={profile} onRefresh={() => user && loadProfile(user.id)} onLogout={logout} onAvatarChange={url => setProfile(prev => prev ? { ...prev, avatar_url: url } : prev)} />,
       }[active];

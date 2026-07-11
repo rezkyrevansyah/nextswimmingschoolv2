@@ -20,7 +20,7 @@ import Modal from "@/components/ui/Modal";
 import Bell from "@/components/layout/Bell";
 import BetaFeedback, { BETA_FEEDBACK_ENABLED } from "@/components/layout/BetaFeedback";
 import { fmtDate, waLink } from "@/lib/utils";
-import { printSingleRapor, printSchoolRekap, type PrintCriterion, type PrintBestTime } from "@/lib/printRapor";
+import { downloadRaporPdf, printSingleRaporPopup, printSchoolRekap, type PrintCriterion, type PrintBestTime } from "@/lib/printRapor";
 import { createClient } from "@/utils/supabase/client";
 
 type Criterion = PrintCriterion;
@@ -630,11 +630,11 @@ export default function SchoolPage() {
   });
 
   const handlePrintAll = () => printSchoolRekap(schoolName, activePeriod?.label ?? "—", students.map(toPrintStudent));
-  const handlePrintOne = (s: Student) => printSingleRapor(toPrintStudent(s));
+  const handlePrintOne = (s: Student) => void downloadRaporPdf(toPrintStudent(s));
   const handlePrintSelected = () => {
     const targets = students.filter(s => selected.has(s.id) && s.entry_id !== null);
     if (targets.length === 0) return;
-    if (targets.length === 1) { printSingleRapor(toPrintStudent(targets[0])); return; }
+    if (targets.length === 1) { void downloadRaporPdf(toPrintStudent(targets[0])); return; }
     printSchoolRekap(schoolName, activePeriod?.label ?? "—", targets.map(toPrintStudent));
   };
   const handlePrintFiltered = () => {
@@ -1108,7 +1108,8 @@ export default function SchoolPage() {
         size="lg"
         footer={
           <div className="flex gap-2">
-            <Btn variant="ghost" icon="print" onClick={() => open && handlePrintOne(open)}>Cetak / PDF</Btn>
+            <Btn variant="outline" size="sm" icon="printer" onClick={() => open && printSingleRaporPopup(toPrintStudent(open))}>Print</Btn>
+            <Btn variant="soft" size="sm" icon="download" onClick={() => open && void downloadRaporPdf(toPrintStudent(open))}>Download PDF</Btn>
             <Btn variant="primary" onClick={() => setOpen(null)}>Tutup</Btn>
           </div>
         }

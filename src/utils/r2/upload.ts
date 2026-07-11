@@ -19,6 +19,7 @@ export const keys = {
   invoice:    (invoiceId: string)                     => `invoices/${invoiceId}.pdf`,
   rapor:      (periodId: string, memberId: string)    => `rapors/${periodId}/${memberId}.pdf`,
   classPhoto: (classId: string)                       => `classes/${classId}/cover.jpg`,
+  signature:  (coachId: string)                        => `signatures/${coachId}/signature.png`,
 } as const;
 
 // ── Upload from a Buffer / Blob ───────────────────────────────────────────────

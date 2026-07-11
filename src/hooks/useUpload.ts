@@ -63,6 +63,10 @@ export function useUpload() {
     /** Class cover photo (admin/owner) */
     classPhoto: (file: File, classId: string) =>
       run(() => postForm("/api/upload/class-photo", { file, classId })),
+
+    /** Coach signature image (coach only — stored in profiles.signature_url) */
+    signature: (file: File) =>
+      run(() => postForm("/api/upload/signature", { file })),
   };
 
   return { upload, uploading };

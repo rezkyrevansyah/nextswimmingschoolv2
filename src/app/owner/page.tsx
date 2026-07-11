@@ -1463,9 +1463,10 @@ function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: 
     const inv = invoices.find(e => e.id === genForm.invoice_id);
     if (!inv) return toast.error("Invoice tidak ditemukan");
     setSavingSlip(true);
-    const { error } = await supabase.from("payslips").insert({
-      coach_id: inv.coach?.id,
-      branch_id: inv.branch_id,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase as any).from("payslips").insert({
+      coach_id: inv.coach?.id ?? "",
+      branch_id: inv.branch_id ?? "",
       invoice_id: genForm.invoice_id,
       period_label: genForm.period_label.trim(),
       gross_amount: genForm.gross_amount,
@@ -1551,7 +1552,8 @@ function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: 
 
   const approveInvoice = async (id: string) => {
     setApproving(id);
-    const { error } = await supabase.from("coach_invoices").update({ status: "approved", approved_at: new Date().toISOString() }).eq("id", id);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase as any).from("coach_invoices").update({ status: "approved", approved_at: new Date().toISOString() }).eq("id", id);
     setApproving(null);
     if (error) return toast.error("Gagal menyetujui", error.message);
     const inv = invoices.find(i => i.id === id);
@@ -1567,7 +1569,8 @@ function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: 
   const rejectInvoice = async (id: string, reason: string) => {
     if (!reason.trim()) return toast.error("Isi alasan penolakan");
     setRejecting(id);
-    const { error } = await supabase.from("coach_invoices").update({ status: "rejected", rejected_at: new Date().toISOString(), rejection_reason: reason.trim() }).eq("id", id);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase as any).from("coach_invoices").update({ status: "rejected", rejected_at: new Date().toISOString(), rejection_reason: reason.trim() }).eq("id", id);
     setRejecting(null);
     if (error) return toast.error("Gagal menolak", error.message);
     const inv = invoices.find(i => i.id === id);
