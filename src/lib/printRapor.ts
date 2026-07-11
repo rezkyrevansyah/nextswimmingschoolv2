@@ -121,14 +121,12 @@ const STYLES = `
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:'Montserrat',Arial,sans-serif;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 
-  /* ── Page: fixed A4 size, no clipping ── */
-  .page{width:595px;height:842px;background:#fff;position:relative;margin:0 auto;padding:20px 57px 20px 57px;display:flex;flex-direction:column;overflow:visible}
+  /* ── Page: natural height (measured by Puppeteer evaluate, then scaled to A4) ── */
+  .page{width:595px;background:#fff;position:relative;margin:0 auto;padding:20px 57px 28px 57px;display:flex;flex-direction:column;overflow:visible}
 
-  /* ── Decorative assets ── */
+  /* ── Top-right decorative wave ── */
   .deco-tr{position:absolute;top:0;right:0;width:200px;height:200px;pointer-events:none;z-index:0}
   .deco-tr img{width:100%;height:100%;object-fit:fill}
-  .deco-bl{position:absolute;left:0;bottom:0;width:273px;height:138px;pointer-events:none;z-index:0}
-  .deco-bl img{width:100%;height:100%;object-fit:fill}
 
   /* ── Watermark ── */
   .wm{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:358px;height:355px;opacity:0.13;z-index:0;pointer-events:none}
@@ -136,6 +134,10 @@ const STYLES = `
 
   /* ── Content layer (above decos) ── */
   .content{position:relative;z-index:1;flex:1;display:flex;flex-direction:column}
+
+  /* ── Bottom-left decorative dots — pinned to bottom of content, not page ── */
+  .deco-bl{position:absolute;left:-57px;bottom:0;width:273px;height:138px;pointer-events:none;z-index:0}
+  .deco-bl img{width:100%;height:100%;object-fit:fill}
 
   /* ── Header ── */
   .hd-title{font-family:'Oswald',sans-serif;font-weight:700;font-size:32px;color:#155689;letter-spacing:0.32px;line-height:1.1}
@@ -175,7 +177,7 @@ const STYLES = `
   .char-val{font-size:10px;font-weight:500;font-style:italic;color:#000}
 
   /* ── Signatures ── */
-  .sign-section{display:grid;grid-template-columns:1fr 1fr;gap:0;margin-top:auto;padding-top:12px}
+  .sign-section{display:grid;grid-template-columns:1fr 1fr;gap:0;margin-top:20px;padding-top:12px}
   .sign-col{text-align:center}
   .sign-img{height:63px;display:flex;align-items:flex-end;justify-content:center}
   .sign-img img{max-height:60px;max-width:126px;object-fit:contain}
@@ -263,14 +265,15 @@ function buildRaporHtml(s: PrintStudent, assets: RaporAssets): string {
 
   return `
   <div class="page">
-    <!-- Decorative assets -->
+    <!-- Top-right wave (absolute to .page) -->
     <div class="deco-tr"><img src="${assets.assetTR}" alt="" /></div>
-    <div class="deco-bl"><img src="${assets.assetBL}" alt="" /></div>
 
-    <!-- Watermark (opacity applied via CSS, SVG itself has no extra opacity) -->
+    <!-- Watermark -->
     <div class="wm"><img src="${assets.watermark}" alt="" /></div>
 
     <div class="content">
+      <!-- Bottom-left dots (absolute to .content so it tracks content height) -->
+      <div class="deco-bl"><img src="${assets.assetBL}" alt="" /></div>
 
       <!-- HEADER -->
       <div style="position:relative;min-height:62px">
