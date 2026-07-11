@@ -121,74 +121,72 @@ const STYLES = `
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:'Montserrat',Arial,sans-serif;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 
-  /* ── Page: natural height (measured by Puppeteer evaluate, then scaled to A4) ── */
-  .page{width:595px;background:#fff;position:relative;margin:0 auto;padding:20px 57px 28px 57px;display:flex;flex-direction:column;overflow:visible}
+  /* ── Page: fixed A4 — flexbox fills the full height ── */
+  .page{width:595px;height:842px;background:#fff;position:relative;margin:0 auto;padding:20px 57px 16px 57px;display:flex;flex-direction:column;overflow:hidden}
 
-  /* ── Top-right decorative wave ── */
+  /* ── Decorative assets (absolute to .page) ── */
   .deco-tr{position:absolute;top:0;right:0;width:200px;height:200px;pointer-events:none;z-index:0}
   .deco-tr img{width:100%;height:100%;object-fit:fill}
+  .deco-bl{position:absolute;left:0;bottom:0;width:273px;height:138px;pointer-events:none;z-index:0}
+  .deco-bl img{width:100%;height:100%;object-fit:fill}
 
   /* ── Watermark ── */
   .wm{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:358px;height:355px;opacity:0.13;z-index:0;pointer-events:none}
   .wm img{width:100%;height:100%;object-fit:contain}
 
-  /* ── Content layer (above decos) ── */
+  /* ── Content layer (above decos, fills page via flex:1) ── */
   .content{position:relative;z-index:1;flex:1;display:flex;flex-direction:column}
 
-  /* ── Bottom-left decorative dots — pinned to bottom of content, not page ── */
-  .deco-bl{position:absolute;left:-57px;bottom:0;width:273px;height:138px;pointer-events:none;z-index:0}
-  .deco-bl img{width:100%;height:100%;object-fit:fill}
-
   /* ── Header ── */
-  .hd-title{font-family:'Oswald',sans-serif;font-weight:700;font-size:32px;color:#155689;letter-spacing:0.32px;line-height:1.1}
-  .hd-periode{font-family:'Montserrat',sans-serif;font-weight:700;font-size:12px;color:#155689;letter-spacing:0.12px;margin-top:2px}
+  .hd-title{font-family:'Oswald',sans-serif;font-weight:700;font-size:28px;color:#155689;letter-spacing:0.28px;line-height:1.1}
+  .hd-periode{font-family:'Montserrat',sans-serif;font-weight:700;font-size:11px;color:#155689;letter-spacing:0.11px;margin-top:2px}
   .hd-logo{position:absolute;top:0;right:0}
-  .hd-logo img{height:58px;width:auto;object-fit:contain}
+  .hd-logo img{height:50px;width:auto;object-fit:contain}
 
   /* ── Info block ── */
-  .info-wrap{display:flex;align-items:flex-start;margin-top:16px;margin-bottom:18px;gap:22px}
-  .avatar-circle{width:121px;height:121px;border-radius:50%;background:#d9d9d9;flex-shrink:0;overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:40px;font-weight:700;color:#155689}
+  .info-wrap{display:flex;align-items:flex-start;margin-top:12px;margin-bottom:12px;gap:18px}
+  .avatar-circle{width:96px;height:96px;border-radius:50%;background:#d9d9d9;flex-shrink:0;overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:32px;font-weight:700;color:#155689}
   .avatar-circle img{width:100%;height:100%;object-fit:cover}
-  .info-rows{display:flex;flex-direction:column;padding-top:7px}
-  .info-row{display:flex;align-items:baseline;font-size:12px;line-height:20px}
-  .info-lbl{font-weight:500;color:#000;min-width:143px;flex-shrink:0}
-  .info-sep{font-weight:500;color:#000;margin:0 5px}
+  .info-rows{display:flex;flex-direction:column;padding-top:4px}
+  .info-row{display:flex;align-items:baseline;font-size:11px;line-height:17px}
+  .info-lbl{font-weight:500;color:#000;min-width:120px;flex-shrink:0}
+  .info-sep{font-weight:500;color:#000;margin:0 4px}
   .info-val{font-weight:500;color:#000}
 
   /* ── Tables ── */
-  .rp-table{width:100%;border-collapse:collapse;font-size:12px;font-family:'Montserrat',sans-serif}
-  .rp-table th{background:#155689;color:#fff;font-weight:700;text-align:center;padding:7px 8px;letter-spacing:0.36px;border:1px solid #155689}
-  .rp-table td{font-weight:500;text-align:center;padding:7px 8px;color:#000;border-top:1px solid #155689;border-left:1px solid #155689;letter-spacing:0.36px}
+  .rp-table{width:100%;border-collapse:collapse;font-size:11px;font-family:'Montserrat',sans-serif}
+  .rp-table th{background:#155689;color:#fff;font-weight:700;text-align:center;padding:5px 8px;letter-spacing:0.33px;border:1px solid #155689}
+  .rp-table td{font-weight:500;text-align:center;padding:5px 8px;color:#000;border-top:1px solid #155689;border-left:1px solid #155689;letter-spacing:0.33px}
   .rp-table tr td:last-child,.rp-table tr th:last-child{border-right:1px solid #155689}
   .rp-table tbody tr:last-child td{border-bottom:1px solid #155689}
 
   /* ── PBT heading ── */
-  .pbt-heading{font-family:'Oswald',sans-serif;font-weight:700;font-size:16px;color:#155689;letter-spacing:0.16px;margin-top:18px;margin-bottom:8px}
+  .pbt-heading{font-family:'Oswald',sans-serif;font-weight:700;font-size:14px;color:#155689;letter-spacing:0.14px;margin-top:12px;margin-bottom:4px}
 
   /* ── Note ── */
-  .note-lbl{font-family:'Montserrat',sans-serif;font-style:italic;font-weight:600;font-size:12px;color:#155689;letter-spacing:0.12px;margin-top:14px;margin-bottom:4px}
-  .note-box{border:1px solid #155689;border-radius:7px;min-height:61px;width:100%;padding:8px 10px;font-size:10px;font-weight:400;color:#000;line-height:1.5}
+  .note-lbl{font-family:'Montserrat',sans-serif;font-style:italic;font-weight:600;font-size:11px;color:#155689;letter-spacing:0.11px;margin-top:10px;margin-bottom:3px}
+  .note-box{border:1px solid #155689;border-radius:7px;min-height:40px;width:100%;padding:6px 10px;font-size:10px;font-weight:400;color:#000;line-height:1.4}
 
   /* ── Char row ── */
-  .char-row{display:grid;grid-template-columns:1fr 1fr;gap:2px 0;margin-top:10px}
+  .char-row{display:grid;grid-template-columns:1fr 1fr;gap:1px 0;margin-top:8px}
   .char-item{display:flex;align-items:center;gap:4px}
-  .char-lbl-l{font-size:10px;font-weight:400;color:#000;min-width:91px;flex-shrink:0}
-  .char-lbl-r{font-size:10px;font-weight:400;color:#000;min-width:150px;flex-shrink:0}
-  .char-val{font-size:10px;font-weight:500;font-style:italic;color:#000}
+  .char-lbl-l{font-size:9px;font-weight:400;color:#000;min-width:80px;flex-shrink:0}
+  .char-lbl-r{font-size:9px;font-weight:400;color:#000;min-width:130px;flex-shrink:0}
+  .char-val{font-size:9px;font-weight:500;font-style:italic;color:#000}
 
-  /* ── Signatures ── */
-  .sign-section{display:grid;grid-template-columns:1fr 1fr;gap:0;margin-top:20px;padding-top:12px}
+  /* ── Signatures — margin-top:auto pushes to bottom of flex container ── */
+  .sign-section{display:grid;grid-template-columns:1fr 1fr;gap:0;margin-top:auto;padding-top:10px}
   .sign-col{text-align:center}
-  .sign-img{height:63px;display:flex;align-items:flex-end;justify-content:center}
-  .sign-img img{max-height:60px;max-width:126px;object-fit:contain}
-  .sign-line{border-top:1px solid #000;padding-top:3px;width:126px;margin:0 auto}
-  .sign-name{font-size:10px;font-style:italic;font-weight:500;color:#000}
-  .sign-title{font-size:10px;font-style:italic;font-weight:600;color:#000;text-transform:uppercase;letter-spacing:0.1px;white-space:nowrap}
+  .sign-img{height:50px;display:flex;align-items:flex-end;justify-content:center}
+  .sign-img img{max-height:48px;max-width:120px;object-fit:contain}
+  .sign-line{border-top:1px solid #000;padding-top:2px;width:120px;margin:0 auto}
+  .sign-name{font-size:9px;font-style:italic;font-weight:500;color:#000}
+  .sign-title{font-size:9px;font-style:italic;font-weight:600;color:#000;text-transform:uppercase;letter-spacing:0.1px;white-space:nowrap}
 
   /* ── Footer ── */
-  .footer{display:flex;align-items:center;gap:12px;margin-top:14px;justify-content:flex-end}
+  .footer{display:flex;align-items:center;gap:12px;margin-top:6px;justify-content:flex-end}
   .footer-item{display:flex;align-items:center;gap:4px;font-size:8px;color:#000}
-  .footer-item img{height:11px;width:auto;vertical-align:middle}
+  .footer-item img{height:10px;width:auto;vertical-align:middle}
 
   @media print{
     body{background:#fff}
@@ -265,15 +263,14 @@ function buildRaporHtml(s: PrintStudent, assets: RaporAssets): string {
 
   return `
   <div class="page">
-    <!-- Top-right wave (absolute to .page) -->
+    <!-- Decorative assets (absolute to .page) -->
     <div class="deco-tr"><img src="${assets.assetTR}" alt="" /></div>
+    <div class="deco-bl"><img src="${assets.assetBL}" alt="" /></div>
 
     <!-- Watermark -->
     <div class="wm"><img src="${assets.watermark}" alt="" /></div>
 
     <div class="content">
-      <!-- Bottom-left dots (absolute to .content so it tracks content height) -->
-      <div class="deco-bl"><img src="${assets.assetBL}" alt="" /></div>
 
       <!-- HEADER -->
       <div style="position:relative;min-height:62px">

@@ -103,26 +103,10 @@ async function generatePdf(html: string): Promise<Buffer> {
 
   try {
     const page = await browser.newPage();
-    // Set viewport to A4 width so layout is calculated correctly
-    await page.setViewport({ width: 595, height: 842, deviceScaleFactor: 1 });
+    await page.setViewport({ width: 595, height: 842 });
     await page.setContent(html, { waitUntil: "networkidle0", timeout: 30000 });
 
-    // Scale page to fill exactly one A4 page (up or down) after fonts load
-    await page.evaluate(() => {
-      const el = document.querySelector<HTMLElement>(".page");
-      if (!el) return;
-      const naturalH = el.scrollHeight;
-      const A4_H = 842;
-      const scale = A4_H / naturalH;
-      el.style.transform = `scale(${scale})`;
-      el.style.transformOrigin = "top left";
-      el.style.width = "595px";
-      // Clamp scaled width so horizontal layout stays correct
-      document.body.style.width = "595px";
-      document.body.style.height = `${A4_H}px`;
-      document.body.style.overflow = "hidden";
-    });
-
+    // HTML is already exactly 595×842 via CSS — no scaling needed
     const pdf = await page.pdf({
       width: "595px",
       height: "842px",
