@@ -1034,6 +1034,7 @@ interface RaporEntryFull {
   review_stars: number | null; review_message: string | null; review_id: string | null;
   criteria: PrintCriterion[];
   best_times: PrintBestTime[];
+  coach_signature_url: string | null;
 }
 
 function MemberRapor({ memberId, memberName, branchId, avatarUrl, memberNo, birthDate, location }: {
@@ -1053,7 +1054,7 @@ function MemberRapor({ memberId, memberName, branchId, avatarUrl, memberNo, birt
     if (!memberId) return;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data } = await (supabase as any).from("rapor_entries")
-      .select("id, scores, notes, personality, motivation, learning_achievements, level, coach_id, period_id, class_id, rapor_periods(label, is_open), classes(name), coach:profiles!rapor_entries_coach_id_fkey(full_name)")
+      .select("id, scores, notes, personality, motivation, learning_achievements, level, coach_id, period_id, class_id, rapor_periods(label, is_open), classes(name), coach:profiles!rapor_entries_coach_id_fkey(full_name, signature_url)")
       .eq("member_id", memberId)
       .order("created_at", { ascending: false }) as { data: any[] | null };
     if (!data) return;
@@ -1092,7 +1093,7 @@ function MemberRapor({ memberId, memberName, branchId, avatarUrl, memberNo, birt
     setEntries(data.map((e) => {
       const p = e.rapor_periods as unknown as { label: string; is_open: boolean } | null;
       const cls = e.classes as unknown as { name: string } | null;
-      const prof = (e as unknown as { coach: { full_name: string } | null }).coach;
+      const prof = (e as unknown as { coach: { full_name: string; signature_url: string | null } | null }).coach;
       const review = reviewMap.get(e.id);
       return {
         id: e.id,
@@ -1114,6 +1115,7 @@ function MemberRapor({ memberId, memberName, branchId, avatarUrl, memberNo, birt
         review_id: review?.id ?? null,
         criteria: criteriaByClass.get(e.class_id) ?? [],
         best_times: bestTimesArr,
+        coach_signature_url: prof?.signature_url ?? null,
       };
     }));
   }, [memberId, branchId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1221,6 +1223,7 @@ function MemberRapor({ memberId, memberName, branchId, avatarUrl, memberNo, birt
                 learning_achievements: selectedEntry.learning_achievements,
                 criteria: selectedEntry.criteria,
                 best_times: selectedEntry.best_times,
+                coach_signature_url: selectedEntry.coach_signature_url,
               };
               return (<>
                 <Btn variant="outline" size="sm" icon="printer"
@@ -1244,7 +1247,10 @@ function MemberRapor({ memberId, memberName, branchId, avatarUrl, memberNo, birt
             <div className="space-y-3">
               {(() => {
                 const criteriaMap = new Map(selectedEntry.criteria.map(c => [c.id, c]));
-                return Object.entries(selectedEntry.scores).map(([key, val]) => {
+                const orderedEntries = selectedEntry.criteria.length > 0
+                  ? selectedEntry.criteria.filter(c => c.id in selectedEntry.scores).map(c => [c.id, selectedEntry.scores[c.id]] as [string, number | string])
+                  : Object.entries(selectedEntry.scores);
+                return orderedEntries.map(([key, val]) => {
                   const crit = criteriaMap.get(key);
                   const label = crit?.label ?? key.replace(/_/g, " ");
                   const numVal = typeof val === "number" ? val : null;

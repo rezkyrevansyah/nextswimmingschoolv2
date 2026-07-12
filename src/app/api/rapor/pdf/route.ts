@@ -103,13 +103,12 @@ async function generatePdf(html: string): Promise<Buffer> {
 
   try {
     const page = await browser.newPage();
-    await page.setViewport({ width: 595, height: 842 });
-    await page.setContent(html, { waitUntil: "networkidle0", timeout: 30000 });
+    await page.setViewport({ width: 794, height: 1123 });
+    await page.setContent(html, { waitUntil: "load", timeout: 30000 });
 
-    // HTML is already exactly 595×842 via CSS — no scaling needed
+    // A4 = 210mm × 297mm. Use mm units so Puppeteer produces exact A4 pages.
     const pdf = await page.pdf({
-      width: "595px",
-      height: "842px",
+      format: "A4",
       printBackground: true,
       margin: { top: "0", right: "0", bottom: "0", left: "0" },
     });

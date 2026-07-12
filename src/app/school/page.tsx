@@ -401,9 +401,12 @@ function SchoolAbsensi({ schoolId, schoolName, members }: {
 interface Student {
   id: string;
   full_name: string;
+  member_no: string | null;
+  birth_date: string | null;
   avatar_url: string | null;
   class_name: string;
   coach_name: string;
+  coach_signature_url: string | null;
   period_id: string | null;
   period_label: string | null;
   entry_id: string | null;
@@ -424,6 +427,7 @@ export default function SchoolPage() {
   const [schoolName, setSchoolName] = useState("School Panel");
   const [schoolId, setSchoolId] = useState("");
   const [branchId, setBranchId] = useState("");
+  const [branchName, setBranchName] = useState("");
   const [userId, setUserId] = useState("");
   const [adminWaPhone, setAdminWaPhone] = useState("");
   const [students, setStudents] = useState<Student[]>([]);
@@ -459,12 +463,12 @@ export default function SchoolPage() {
     const { data } = await supabase
       .from("members")
       .select(`
-        id,
-        profile:profiles(full_name, avatar_url),
+        id, member_no,
+        profile:profiles(full_name, avatar_url, birth_date),
         member_classes(
           classes(
             id, name,
-            class_coaches(profile:profiles(full_name)),
+            class_coaches(profile:profiles(full_name, signature_url)),
             class_criteria(id, label, kind, options, sort_order)
           )
         ),
@@ -490,8 +494,8 @@ export default function SchoolPage() {
     }
 
     const rows: Student[] = data.map((m) => {
-      const profile = (m.profile as unknown as { full_name: string; avatar_url: string | null } | null);
-      const mc = (m.member_classes as unknown as { classes: { id: string; name: string; class_coaches: { profile: { full_name: string } | null }[]; class_criteria: { id: string; label: string; kind: string; options: string[] | null; sort_order: number }[] } | null }[])?.[0];
+      const profile = (m.profile as unknown as { full_name: string; avatar_url: string | null; birth_date: string | null } | null);
+      const mc = (m.member_classes as unknown as { classes: { id: string; name: string; class_coaches: { profile: { full_name: string; signature_url: string | null } | null }[]; class_criteria: { id: string; label: string; kind: string; options: string[] | null; sort_order: number }[] } | null }[])?.[0];
       const cls = mc?.classes;
       const firstCoach = cls?.class_coaches?.[0]?.profile;
       const entry = pid
@@ -504,9 +508,12 @@ export default function SchoolPage() {
       return {
         id: m.id,
         full_name: profile?.full_name ?? "—",
+        member_no: (m as unknown as { member_no: string | null }).member_no ?? null,
+        birth_date: profile?.birth_date ?? null,
         avatar_url: profile?.avatar_url ?? null,
         class_name: cls?.name ?? "—",
         coach_name: firstCoach?.full_name ?? "—",
+        coach_signature_url: firstCoach?.signature_url ?? null,
         period_id: pid,
         period_label: periodLabel,
         entry_id: entry?.id ?? null,
@@ -541,8 +548,10 @@ export default function SchoolPage() {
       setSchoolId(school.id);
       setBranchId(school.branch_id);
 
-      const { data: branch } = await supabase.from("branches").select("wa_numbers").eq("id", school.branch_id).single();
-      const waNumbers = (branch as unknown as { wa_numbers: string[] } | null)?.wa_numbers;
+      const { data: branch } = await supabase.from("branches").select("name, wa_numbers").eq("id", school.branch_id).single();
+      const branchRow = branch as unknown as { name: string; wa_numbers: string[] } | null;
+      if (branchRow?.name) setBranchName(branchRow.name);
+      const waNumbers = branchRow?.wa_numbers;
       if (waNumbers && waNumbers.length > 0) setAdminWaPhone(waNumbers[0]);
 
       const { data: period } = await supabase
@@ -622,8 +631,11 @@ export default function SchoolPage() {
   // Print helpers
   const toPrintStudent = (s: Student) => ({
     full_name: s.full_name, avatar_url: s.avatar_url ?? undefined,
+    member_no: s.member_no ?? undefined, birth_date: s.birth_date ?? undefined,
+    location: branchName || undefined,
     level: s.level ?? undefined,
     class_name: s.class_name, coach_name: s.coach_name,
+    coach_signature_url: s.coach_signature_url,
     period_label: s.period_label ?? "—", scores: s.scores, notes: s.notes,
     personality: s.personality, motivation: s.motivation, learning_achievements: s.learning_achievements,
     criteria: s.criteria, best_times: s.best_times,

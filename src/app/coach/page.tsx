@@ -22,6 +22,7 @@ import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
 import { fmtIDR, fmtDate, fmtDateLong, waLink, countTextStats } from "@/lib/utils";
 import { downloadRaporPdf, printSingleRaporPopup, fmtSwimTime, type PrintCriterion, type PrintBestTime } from "@/lib/printRapor";
+import { printPayslip } from "@/lib/printPayslip";
 import { createClient } from "@/utils/supabase/client";
 import { useUpload } from "@/hooks/useUpload";
 import type { User } from "@supabase/supabase-js";
@@ -93,7 +94,7 @@ interface RaporEntry {
   motivation?: string | null;
   learning_achievements?: string | null;
   level?: string | null;
-  member?: { profile: { full_name: string } | null } | null;
+  member?: { member_no?: string | null; profile: { full_name: string; avatar_url?: string | null; birth_date?: string | null } | null } | null;
   class?: { name: string } | null;
 }
 
@@ -2197,7 +2198,7 @@ interface Criterion {
   options: string[] | null;
 }
 
-function CoachRapor({ coachId, branchId, coachName }: { coachId: string; branchId: string; coachName: string }) {
+function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: string; branchId: string; coachName: string; branchName: string }) {
   const supabase = createClient();
   const toast = useToast();
   const [period, setPeriod] = useState<{ id: string; label: string; date_to: string } | null>(null);
@@ -2272,7 +2273,7 @@ function CoachRapor({ coachId, branchId, coachName }: { coachId: string; branchI
 
       // 4. Now fetch all entries for this coach + period
       const { data: e } = await supabase.from("rapor_entries")
-        .select("id, member_id, class_id, locked, scores, notes, personality, motivation, learning_achievements, level, member:members(profile:profiles(full_name)), class:classes(name, class_criteria(id, label, kind, options, sort_order))")
+        .select("id, member_id, class_id, locked, scores, notes, personality, motivation, learning_achievements, level, member:members(member_no, profile:profiles(full_name, avatar_url, birth_date)), class:classes(name, class_criteria(id, label, kind, options, sort_order))")
         .eq("period_id", periodData.id).eq("coach_id", coachId);
       if (e) { setEntries(e as unknown as RaporEntry[]); setPage(0); }
       setLoading(false);
@@ -2772,6 +2773,10 @@ function CoachRapor({ coachId, branchId, coachName }: { coachId: string; branchI
               const vCrit   = ((viewing as unknown as { class?: { class_criteria?: PrintCriterion[] } }).class?.class_criteria ?? []) as PrintCriterion[];
               const raporData = {
                 full_name: viewing.member?.profile?.full_name ?? "",
+                member_no: viewing.member?.member_no ?? undefined,
+                avatar_url: viewing.member?.profile?.avatar_url ?? undefined,
+                birth_date: viewing.member?.profile?.birth_date ?? undefined,
+                location: branchName || undefined,
                 class_name: viewing.class?.name ?? "",
                 coach_name: coachName,
                 period_label: period.label,
@@ -2827,7 +2832,10 @@ function CoachRapor({ coachId, branchId, coachName }: { coachId: string; branchI
 
               {/* Scores */}
               <div className="space-y-3">
-                {Object.entries(vScores).map(([key, val]) => {
+                {(vCriteria.length > 0
+                  ? vCriteria.filter(c => c.id in vScores).map(c => [c.id, vScores[c.id]] as [string, number | string])
+                  : Object.entries(vScores)
+                ).map(([key, val]) => {
                   const crit   = critMap.get(key);
                   const label  = crit?.label ?? key.replace(/_/g, " ");
                   const numVal = typeof val === "number" ? val : null;
@@ -3448,7 +3456,7 @@ interface CoachPayslipItem {
   branch?: { name: string } | null;
 }
 
-function CoachPayslip({ coachId }: { coachId: string }) {
+function CoachPayslip({ coachId, coachName }: { coachId: string; coachName: string }) {
   const supabase = createClient();
   const [payslips, setPayslips] = useState<CoachPayslipItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -3470,34 +3478,7 @@ function CoachPayslip({ coachId }: { coachId: string }) {
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const printSlip = (p: CoachPayslipItem) => {
-    const w = window.open("", "_blank", "width=700,height=700");
-    if (!w) return;
-    w.document.write(`<!DOCTYPE html><html><head><title>Slip Gaji ${p.period_label}</title>
-    <style>body{font-family:sans-serif;padding:32px;color:#0f172a;max-width:600px;margin:auto}
-    h1{font-size:20px;font-weight:700;margin-bottom:2px}.sub{font-size:13px;color:#64748b;margin-bottom:24px}
-    .section{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94a3b8;margin:20px 0 6px}
-    .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;background:#f8fafc;border-radius:8px;padding:12px 16px;font-size:13px;line-height:2}
-    .row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #e2e8f0;font-size:13px}
-    .total{display:flex;justify-content:space-between;padding:12px 0;font-weight:700;font-size:16px;border-top:2px solid #0f172a;margin-top:4px}
-    .net{color:#166534}
-    footer{margin-top:40px;border-top:1px solid #e2e8f0;padding-top:12px;font-size:11px;color:#94a3b8;text-align:center}
-    </style></head><body>
-    <h1>Slip Gaji Coach</h1>
-    <div class="sub">${p.period_label} &nbsp;·&nbsp; ${p.branch?.name ?? "—"}</div>
-    <div class="section">Informasi</div>
-    <div class="grid">
-      <div><b>Periode</b></div><div>${p.period_label}</div>
-      <div><b>Cabang</b></div><div>${p.branch?.name ?? "—"}</div>
-      <div><b>Diterbitkan</b></div><div>${p.published_at ? new Date(p.published_at).toLocaleDateString("id-ID", { dateStyle: "long" }) : "—"}</div>
-    </div>
-    <div class="section">Rincian</div>
-    <div class="row"><span>Gaji Kotor</span><span>Rp ${p.gross_amount.toLocaleString("id-ID")}</span></div>
-    <div class="row"><span>Potongan</span><span>- Rp ${p.deductions.toLocaleString("id-ID")}</span></div>
-    <div class="total"><span>Gaji Bersih</span><span class="net">Rp ${p.net_amount.toLocaleString("id-ID")}</span></div>
-    ${p.notes ? `<div class="section">Catatan</div><p style="font-size:13px">${p.notes}</p>` : ""}
-    <footer>Next Swimming School &nbsp;·&nbsp; Dicetak ${new Date().toLocaleDateString("id-ID", { dateStyle: "long" })}</footer>
-    </body></html>`);
-    w.document.close(); w.focus(); w.print();
+    void printPayslip(supabase, p.id);
   };
 
   return (
@@ -3793,8 +3774,8 @@ export default function CoachPage() {
         absen:   <>{SuspendBanner}{IncompleteBanner}{locked ? <LockedNotice feature="Absensi" reason={lockReason} /> : <CoachAbsensi setOverlay={setOverlay} coachId={coachId} branchId={branchId} classes={classes} holidayClassIds={holidayClassIds} clockedInIds={clockedInIds} />}</>,
         kelas:   <CoachKelas classes={classes} coachId={coachId} classSpreadsheets={classSpreadsheets} ownSpreadsheets={ownSpreadsheets} onRefreshClasses={refreshClasses} />,
         invoice: <>{SuspendBanner}{IncompleteBanner}{locked ? <LockedNotice feature="Invoice" reason={lockReason} /> : <CoachInvoice coachId={coachId} branchId={branchId} profile={profile} />}</>,
-        rapor:   <>{SuspendBanner}{IncompleteBanner}{locked ? <LockedNotice feature="Rapor" reason={lockReason} /> : <CoachRapor coachId={coachId} branchId={branchId} coachName={profile?.full_name ?? ""} />}</>,
-        payslip: <CoachPayslip coachId={coachId} />,
+        rapor:   <>{SuspendBanner}{IncompleteBanner}{locked ? <LockedNotice feature="Rapor" reason={lockReason} /> : <CoachRapor coachId={coachId} branchId={branchId} coachName={profile?.full_name ?? ""} branchName={coachBranches.find(b => b.branch_id === branchId)?.name ?? ""} />}</>,
+        payslip: <CoachPayslip coachId={coachId} coachName={profile?.full_name ?? ""} />,
         profile: <CoachProfile profile={profile} onRefresh={() => user && loadProfile(user.id)} onLogout={logout} onAvatarChange={url => setProfile(prev => prev ? { ...prev, avatar_url: url } : prev)} />,
       }[active];
 
