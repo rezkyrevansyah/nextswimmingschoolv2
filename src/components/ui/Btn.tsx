@@ -22,11 +22,13 @@ const VARIANT_CLASSES: Record<BtnVariant, string> = {
   wa: "bg-[#25D366] text-white hover:bg-[#1FB855]",
 };
 
-interface BtnProps extends React.ButtonHTMLAttributes<HTMLButtonElement>, React.AnchorHTMLAttributes<HTMLAnchorElement> {
+interface BtnProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: BtnVariant;
   size?: BtnSize;
   icon?: string;
   href?: string;
+  target?: string;
+  rel?: string;
 }
 
 export default function Btn({ variant = "primary", size = "md", icon, children, className, href, target, rel, type, ...rest }: BtnProps) {
@@ -39,7 +41,7 @@ export default function Btn({ variant = "primary", size = "md", icon, children, 
 
   if (href) {
     return (
-      <a href={href} target={target} rel={rel} className={classes} {...rest}>
+      <a href={href} target={target} rel={rel} className={classes} {...(rest as React.AnchorHTMLAttributes<HTMLAnchorElement>)}>
         {icon && <Icon name={icon} className={size === "sm" ? "w-3.5 h-3.5" : "w-4 h-4"} strokeWidth={2.2} />}
         {children}
       </a>
