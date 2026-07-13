@@ -1,6 +1,9 @@
 // ============================================================================
-// Dummy data store — single source of truth for all pages.
-// Replace with Supabase queries when backend is connected.
+// Mock data store for the ROLE PANELS (owner/admin/coach/member/school) only.
+// This is NOT the landing page content source. Landing sections fetch from
+// Supabase and fall back to their own inline _DEFAULTS. Do not wire this file
+// into the public landing page.
+// Replace with Supabase queries when the panels are connected to the backend.
 // ============================================================================
 
 const today = new Date();

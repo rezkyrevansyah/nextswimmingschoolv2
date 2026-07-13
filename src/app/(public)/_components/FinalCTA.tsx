@@ -1,25 +1,20 @@
-import { waLink } from "@/lib/utils";
-import Icon from "@/components/ui/Icon";
-import Btn from "@/components/ui/Btn";
+import { TrialButton } from "./TrialBooking";
 import { createClient } from "@/utils/supabase/server";
 
 interface CtaData {
-  headline: string; body_text: string; cta_wa_text: string; cta_wa_message: string; cta_sec_text: string;
+  headline: string; body_text: string;
 }
 
 const DEFAULTS: CtaData = {
-  headline: "Mulai perjalanan renangmu\nbersama Next Swimming School.",
-  body_text: "Chat admin kami untuk konsultasi program yang paling sesuai dengan anak Anda atau diri sendiri.",
-  cta_wa_text: "Chat admin sekarang",
-  cta_wa_message: "Halo, saya tertarik untuk daftar di Next Swimming School.",
-  cta_sec_text: "Lihat program",
+  headline: "Coba satu sesi gratis.\nLihat sendiri bedanya.",
+  body_text: "Tanpa biaya, tanpa komitmen. Isi data singkat dan admin akan menjadwalkan sesi trial di cabang terdekat.",
 };
 
-export default async function FinalCTA({ waPhone }: { waPhone?: string }) {
+export default async function FinalCTA() {
   const supabase = await createClient();
   const { data } = await supabase
     .from("landing_finalcta")
-    .select("headline, body_text, cta_wa_text, cta_wa_message, cta_sec_text")
+    .select("headline, body_text")
     .single();
 
   const cta = (data as CtaData | null) ?? DEFAULTS;
@@ -35,16 +30,8 @@ export default async function FinalCTA({ waPhone }: { waPhone?: string }) {
         <p className="text-white/85 mt-5 max-w-2xl mx-auto text-lg">
           {cta.body_text}
         </p>
-        <div className="mt-8 flex flex-wrap justify-center gap-3">
-          <a href={waLink(cta.cta_wa_message, waPhone)} target="_blank" rel="noreferrer">
-            <Btn variant="wa" icon="whatsapp" size="lg">{cta.cta_wa_text}</Btn>
-          </a>
-          <a
-            href="#program"
-            className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-white/10 hover:bg-white/15 backdrop-blur ring-1 ring-white/20 text-white font-semibold"
-          >
-            <Icon name="arrow" className="w-4 h-4" /> {cta.cta_sec_text}
-          </a>
+        <div className="mt-8 flex items-center justify-center">
+          <TrialButton size="lg" variant="accent" />
         </div>
       </div>
     </section>

@@ -59,7 +59,7 @@ interface ClassRow {
   spreadsheet_url?: string | null;
   branch_id?: string;
   branch?: { name: string; city: string; address: string | null } | null;
-  member_classes?: { member: { id: string; profile: { full_name: string; birth_date: string | null; phone: string | null; gender: string | null; address: string | null; health_notes: string | null } | null } | null }[];
+  member_classes?: { member: { id: string; profile: { full_name: string; avatar_url?: string | null; birth_date: string | null; phone: string | null; gender: string | null; address: string | null; health_notes: string | null } | null } | null }[];
   coach_spreadsheets?: CoachSpreadsheetRow[];
 }
 
@@ -72,7 +72,7 @@ interface AttendanceRow {
 
 interface MemberAttRow {
   id: string; member_id: string; session_date: string; status: string;
-  member?: { full_name: string; birth_date?: string | null } | null;
+  member?: { full_name: string; avatar_url?: string | null; birth_date?: string | null } | null;
 }
 
 interface InvoiceSession {
@@ -1226,7 +1226,7 @@ function CoachAbsensi({ setOverlay, coachId, branchId, classes, holidayClassIds,
     if (memberIds.length === 0) { setMemberAtt([]); setAttStatus({}); return; }
 
     const { data } = await supabase.from("members")
-      .select("id, status, suspend_until, profile:profiles(full_name, birth_date)")
+      .select("id, status, suspend_until, profile:profiles(full_name, avatar_url, birth_date)")
       .in("id", memberIds);
 
     if (data) {
@@ -1515,7 +1515,7 @@ function CoachAbsensi({ setOverlay, coachId, branchId, classes, holidayClassIds,
             <div className="space-y-2">
               {memberAtt.map((m) => (
                 <div key={m.member_id} className="flex items-center gap-3 p-3 rounded-xl border border-line">
-                  <Avatar name={m.member?.full_name ?? "?"} size={36} />
+                  <Avatar name={m.member?.full_name ?? "?"} src={m.member?.avatar_url ?? undefined} size={36} />
                   <div className="flex-1 min-w-0"><div className="font-semibold text-ink text-sm truncate">{m.member?.full_name}</div></div>
                   <div className="flex flex-wrap gap-1">
                     {([["hadir", "Hadir"], ["telat", "Telat"], ["izin", "Izin"], ["sakit", "Sakit"], ["tidak_hadir", "Absen"]] as const).map(([id, l]) => {
@@ -1711,7 +1711,7 @@ function MemberDetailModal({ member, onClose }: { member: MemberDetail; onClose:
       }>
       <div className="space-y-1">
         <div className="flex items-center gap-3 mb-4">
-          <Avatar name={name} size={48} />
+          <Avatar name={name} src={member.profile?.avatar_url ?? undefined} size={48} />
           <div>
             <div className="font-display font-bold text-ink text-base">{name}</div>
             {age != null && <div className="text-xs text-ink-mute">{age} tahun</div>}
@@ -1846,7 +1846,7 @@ function CoachKelas({ classes, coachId, classSpreadsheets, ownSpreadsheets, onRe
                   return mc.member && (
                   <div key={mc.member.id ?? i} className="flex items-center gap-2 p-2.5 rounded-xl border border-line hover:bg-paper-tint transition">
                     <button onClick={() => setMemberDet(mc.member!)} className="flex items-center gap-3 flex-1 min-w-0 text-left">
-                      <Avatar name={mc.member.profile?.full_name ?? "?"} size={36} />
+                      <Avatar name={mc.member.profile?.full_name ?? "?"} src={mc.member.profile?.avatar_url ?? undefined} size={36} />
                       <div className="flex-1 min-w-0">
                         <div className="font-semibold text-sm text-ink truncate">{mc.member.profile?.full_name ?? "—"}</div>
                         {mc.member.profile?.birth_date && (
@@ -2536,7 +2536,7 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
         <div className="space-y-3">
           {paginated.map((e) => (
             <Card key={e.id || e.member_id} className="flex items-center gap-3">
-              <Avatar name={e.member?.profile?.full_name ?? "?"} size={40} />
+              <Avatar name={e.member?.profile?.full_name ?? "?"} src={e.member?.profile?.avatar_url ?? undefined} size={40} />
               <div className="flex-1 min-w-0">
                 <div className="font-semibold text-ink truncate">{e.member?.profile?.full_name}</div>
                 <div className="text-xs text-ink-mute">{e.class?.name}</div>
@@ -2814,7 +2814,7 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
               {/* Header */}
               <Card className="!p-3 bg-paper-tint">
                 <div className="flex items-center gap-3">
-                  <Avatar name={viewing.member?.profile?.full_name ?? "?"} size={42} />
+                  <Avatar name={viewing.member?.profile?.full_name ?? "?"} src={viewing.member?.profile?.avatar_url ?? undefined} size={42} />
                   <div>
                     <div className="font-semibold text-ink">{viewing.member?.profile?.full_name}</div>
                     <div className="text-xs text-ink-mute">{viewing.class?.name} · {period?.label}</div>
@@ -3614,7 +3614,7 @@ export default function CoachPage() {
   }, [supabase]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadClasses = useCallback(async (profileId: string) => {
-    const { data, error } = await supabase.from("class_coaches").select("class:classes(id, name, branch_id, schedule_days, time_start, time_end, capacity, enrolled, goals, description, class_type, spreadsheet_filled, spreadsheet_url, branch:branches(name, city, address), member_classes(member:members(id, profile:profiles(full_name, birth_date, phone, gender, address, health_notes))))").eq("coach_id", profileId);
+    const { data, error } = await supabase.from("class_coaches").select("class:classes(id, name, branch_id, schedule_days, time_start, time_end, capacity, enrolled, goals, description, class_type, spreadsheet_filled, spreadsheet_url, branch:branches(name, city, address), member_classes(member:members(id, profile:profiles(full_name, avatar_url, birth_date, phone, gender, address, health_notes))))").eq("coach_id", profileId);
     if (error || !data) return;
     const rows = data.map((d: Record<string, unknown>) => d.class as ClassRow).filter(Boolean);
     setClasses(rows);

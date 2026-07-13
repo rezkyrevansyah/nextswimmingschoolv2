@@ -1341,12 +1341,63 @@ export type Database = {
         }
         Relationships: []
       }
+      landing_safety: {
+        Row: { id: number; section_label: string; headline: string; body_text: string; photo_url: string | null; updated_at: string }
+        Insert: { id?: number; section_label?: string; headline?: string; body_text?: string; photo_url?: string | null; updated_at?: string }
+        Update: { id?: number; section_label?: string; headline?: string; body_text?: string; photo_url?: string | null; updated_at?: string }
+        Relationships: []
+      }
+      landing_safety_points: {
+        Row: { id: string; sort_order: number; text: string; updated_at: string }
+        Insert: { id?: string; sort_order?: number; text?: string; updated_at?: string }
+        Update: { id?: string; sort_order?: number; text?: string; updated_at?: string }
+        Relationships: []
+      }
+      landing_facilities: {
+        Row: { id: number; section_label: string; headline: string; updated_at: string }
+        Insert: { id?: number; section_label?: string; headline?: string; updated_at?: string }
+        Update: { id?: number; section_label?: string; headline?: string; updated_at?: string }
+        Relationships: []
+      }
+      landing_facility_items: {
+        Row: { id: string; sort_order: number; title: string; body_text: string; photo_url: string | null; updated_at: string }
+        Insert: { id?: string; sort_order?: number; title?: string; body_text?: string; photo_url?: string | null; updated_at?: string }
+        Update: { id?: string; sort_order?: number; title?: string; body_text?: string; photo_url?: string | null; updated_at?: string }
+        Relationships: []
+      }
+      landing_process_steps: {
+        Row: { id: string; sort_order: number; title: string; description: string; updated_at: string }
+        Insert: { id?: string; sort_order?: number; title?: string; description?: string; updated_at?: string }
+        Update: { id?: string; sort_order?: number; title?: string; description?: string; updated_at?: string }
+        Relationships: []
+      }
+      landing_gallery: {
+        Row: { id: string; sort_order: number; photo_url: string | null; alt_text: string | null; updated_at: string }
+        Insert: { id?: string; sort_order?: number; photo_url?: string | null; alt_text?: string | null; updated_at?: string }
+        Update: { id?: string; sort_order?: number; photo_url?: string | null; alt_text?: string | null; updated_at?: string }
+        Relationships: []
+      }
+      trial_bookings: {
+        Row: { id: string; name: string; phone: string; age_group: string | null; branch_id: string | null; preferred_time: string | null; status: string; created_at: string }
+        Insert: { id?: string; name: string; phone: string; age_group?: string | null; branch_id?: string | null; preferred_time?: string | null; status?: string; created_at?: string }
+        Update: { id?: string; name?: string; phone?: string; age_group?: string | null; branch_id?: string | null; preferred_time?: string | null; status?: string; created_at?: string }
+        Relationships: [
+          {
+            foreignKeyName: "trial_bookings_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       landing_testimonials: {
         Row: {
           avatar_url: string | null
           body_text: string
           id: string
           name: string
+          rating: number | null
           role: string
           sort_order: number
           updated_at: string
@@ -1356,6 +1407,7 @@ export type Database = {
           body_text?: string
           id?: string
           name?: string
+          rating?: number | null
           role?: string
           sort_order?: number
           updated_at?: string
@@ -1365,6 +1417,7 @@ export type Database = {
           body_text?: string
           id?: string
           name?: string
+          rating?: number | null
           role?: string
           sort_order?: number
           updated_at?: string
@@ -1898,6 +1951,7 @@ export type Database = {
           bio: string | null
           birth_date: string | null
           branch_id: string | null
+          certifications: string[] | null
           created_at: string
           education_institution: string | null
           education_level: string | null
@@ -1926,6 +1980,7 @@ export type Database = {
           bio?: string | null
           birth_date?: string | null
           branch_id?: string | null
+          certifications?: string[] | null
           created_at?: string
           education_institution?: string | null
           education_level?: string | null
@@ -1954,6 +2009,7 @@ export type Database = {
           bio?: string | null
           birth_date?: string | null
           branch_id?: string | null
+          certifications?: string[] | null
           created_at?: string
           education_institution?: string | null
           education_level?: string | null

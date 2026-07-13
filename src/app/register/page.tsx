@@ -137,7 +137,7 @@ export default function RegisterPage() {
                 <div>
                   <div className="font-display font-bold text-ink text-sm">Chat dulu, lebih aman.</div>
                   <p className="text-xs text-ink-soft mt-1 leading-relaxed">
-                    Admin akan bantu rekomendasikan kelas yang pas — gratis, tanpa kewajiban apapun.
+                    Admin akan bantu rekomendasikan kelas yang pas. Gratis, tanpa kewajiban apapun.
                   </p>
                   <a href={waLink("Halo, saya ingin konsultasi sebelum daftar.", waPhone)} target="_blank" rel="noreferrer" className="mt-3 inline-flex">
                     <Btn variant="wa" size="sm" icon="whatsapp">Konsultasi via WhatsApp</Btn>
@@ -189,7 +189,7 @@ export default function RegisterPage() {
                   <Select required value={branchId} onChange={e => setBranchId(e.target.value)}>
                     <option value="" disabled>Pilih cabang…</option>
                     {branches.map((b) => (
-                      <option key={b.id} value={b.id}>{b.name}{b.city ? ` — ${b.city}` : ""}</option>
+                      <option key={b.id} value={b.id}>{b.name}{b.city ? ` · ${b.city}` : ""}</option>
                     ))}
                   </Select>
                 </Field>

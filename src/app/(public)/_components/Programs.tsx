@@ -1,9 +1,9 @@
-import { fmtIDR, waLink } from "@/lib/utils";
+import Image from "next/image";
+import { fmtIDR } from "@/lib/utils";
 import { Card } from "@/components/ui/Card";
 import Icon from "@/components/ui/Icon";
-import Btn from "@/components/ui/Btn";
+import { TrialButton } from "./TrialBooking";
 import { createClient } from "@/utils/supabase/server";
-import { getAdminWaPhone } from "@/lib/landing-config";
 
 interface ClassRow {
   id: string;
@@ -21,26 +21,23 @@ interface ClassRow {
 
 export default async function Programs() {
   const supabase = await createClient();
-  const [{ data: classes }, waPhone] = await Promise.all([
-    supabase.from("classes").select("id, name, description, goals, price_monthly, price_per_session, class_type, schedule_days, time_start, time_end, photo_url").eq("status", "active").eq("show_on_landing", true).order("created_at", { ascending: true }),
-    getAdminWaPhone(),
-  ]);
+  const { data: classes } = await supabase
+    .from("classes")
+    .select("id, name, description, goals, price_monthly, price_per_session, class_type, schedule_days, time_start, time_end, photo_url")
+    .eq("status", "active")
+    .eq("show_on_landing", true)
+    .order("created_at", { ascending: true });
 
   const items = (classes ?? []) as ClassRow[];
 
   return (
     <section id="program" className="relative bg-white">
       <div className="max-w-7xl mx-auto px-4 lg:px-8 py-20 lg:py-28">
-        <div className="flex items-end justify-between gap-4 flex-wrap">
-          <div className="max-w-xl">
-            <div className="text-wave-600 font-bold text-xs uppercase tracking-widest mb-2">Swimming Programs</div>
-            <h2 className="font-display font-extrabold text-3xl lg:text-5xl text-ink leading-tight">
-              Program yang dirancang<br />untuk setiap level.
-            </h2>
-          </div>
-          <a href={waLink("Halo, saya ingin tanya program yang sesuai untuk saya / anak saya.", waPhone)} target="_blank" rel="noreferrer" className="hidden sm:inline-flex">
-            <Btn variant="outline" icon="whatsapp">Tanya program ke admin</Btn>
-          </a>
+        <div className="max-w-xl">
+          <div className="text-wave-600 font-bold text-xs uppercase tracking-widest mb-2">Program & Harga</div>
+          <h2 className="font-display font-extrabold text-3xl lg:text-5xl text-ink leading-tight">
+            Program yang dirancang<br />untuk setiap level.
+          </h2>
         </div>
 
         {items.length === 0 ? (
@@ -53,11 +50,12 @@ export default async function Programs() {
               <Card key={c.id} padded={false} className="overflow-hidden group hover:shadow-lift transition-all duration-300">
                 <div className="relative overflow-hidden aspect-[16/10] border-b border-line bg-paper-deep">
                   {c.photo_url ? (
-                    <img
+                    <Image
                       src={c.photo_url}
-                      alt={c.name}
-                      className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
-                      loading="lazy"
+                      alt={`Kelas ${c.name}`}
+                      fill
+                      sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                      className="object-cover transition-transform duration-500 ease-out group-hover:scale-105"
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center bg-ocean-50">
@@ -85,7 +83,7 @@ export default async function Programs() {
                   )}
                   <div className="mt-5 flex items-center justify-between pt-4 border-t border-line">
                     <div>
-                      <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">
+                      <div className="text-[10px] uppercase tracking-widest font-bold text-ink-mute">
                         {c.schedule_days.length > 0 ? `${c.schedule_days.length}x seminggu` : "Jadwal fleksibel"}
                       </div>
                       <div className="font-display font-bold text-ocean-700 text-lg">
@@ -93,9 +91,7 @@ export default async function Programs() {
                         <span className="text-xs text-ink-mute font-semibold">{c.price_monthly > 0 ? "/bln" : ""}</span>
                       </div>
                     </div>
-                    <a href={waLink(`Halo, saya tertarik dengan program ${c.name}.`, waPhone)} target="_blank" rel="noreferrer">
-                      <Btn variant="soft" size="sm" icon="arrow">Tanya</Btn>
-                    </a>
+                    <TrialButton variant="soft" size="sm" />
                   </div>
                 </div>
               </Card>
@@ -106,11 +102,11 @@ export default async function Programs() {
         <div className="mt-12 text-center bg-paper-tint rounded-2xl p-6 border border-line flex flex-col sm:flex-row items-center justify-between gap-4 max-w-4xl mx-auto">
           <div className="text-left">
             <h4 className="font-display font-bold text-ink text-base">Bingung memilih program yang tepat?</h4>
-            <p className="text-xs text-ink-mute mt-1">Konsultasikan kebutuhan renang Anda atau anak Anda secara gratis dengan tim kami.</p>
+            <p className="text-xs text-ink-mute mt-1">Coba dulu satu sesi gratis. Kami bantu tentukan level yang paling cocok.</p>
           </div>
-          <a href={waLink("Halo, saya ingin konsultasi memilih program renang yang tepat.", waPhone)} target="_blank" rel="noreferrer" className="w-full sm:w-auto shrink-0">
-            <Btn variant="primary" icon="whatsapp" className="w-full sm:w-auto cursor-pointer">Konsultasi Program Gratis</Btn>
-          </a>
+          <div className="w-full sm:w-auto shrink-0">
+            <TrialButton fullWidth />
+          </div>
         </div>
       </div>
     </section>

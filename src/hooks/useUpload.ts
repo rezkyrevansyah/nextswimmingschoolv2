@@ -67,6 +67,16 @@ export function useUpload() {
     /** Coach signature image (coach only — stored in profiles.signature_url) */
     signature: (file: File) =>
       run(() => postForm("/api/upload/signature", { file })),
+
+    /** Landing page image (owner only). Row targets require the row id. */
+    landingImage: (
+      file: File,
+      target: "hero" | "safety" | "facility" | "testimonial" | "gallery",
+      id?: string,
+    ) =>
+      run(() =>
+        postForm("/api/upload/landing-image", id ? { file, target, id } : { file, target }),
+      ),
   };
 
   return { upload, uploading };

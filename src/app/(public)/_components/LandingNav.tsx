@@ -3,8 +3,7 @@ import Link from "next/link";
 import { useState } from "react";
 import Logo from "@/components/ui/Logo";
 import Icon from "@/components/ui/Icon";
-import Btn from "@/components/ui/Btn";
-import { waLink } from "@/lib/utils";
+import { TrialButton } from "./TrialBooking";
 
 interface NavLink {
   href: string;
@@ -13,25 +12,18 @@ interface NavLink {
 
 interface LandingNavProps {
   links?: NavLink[];
-  ctaText?: string;
-  ctaMessage?: string;
-  waPhone?: string;
 }
 
 const DEFAULT_LINKS: NavLink[] = [
-  { href: "#home",    label: "Beranda"      },
-  { href: "#why",     label: "Mengapa Kami" },
-  { href: "#program", label: "Program"      },
-  { href: "#coach",   label: "Coach"        },
-  { href: "#faq",     label: "FAQ"          },
+  { href: "#why",        label: "Mengapa Kami" },
+  { href: "#safety",     label: "Keamanan"     },
+  { href: "#program",    label: "Program"      },
+  { href: "#facilities", label: "Fasilitas"    },
+  { href: "#coach",      label: "Coach"        },
+  { href: "#faq",        label: "FAQ"          },
 ];
 
-export default function LandingNav({
-  links = DEFAULT_LINKS,
-  ctaText = "Konsultasi Sekarang",
-  ctaMessage = "Halo Admin Next Swimming School, saya ingin konsultasi program renang.",
-  waPhone,
-}: LandingNavProps) {
+export default function LandingNav({ links = DEFAULT_LINKS }: LandingNavProps) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -64,17 +56,14 @@ export default function LandingNav({
           Login
         </Link>
 
-        <a
-          href={waLink(ctaMessage, waPhone)}
-          target="_blank"
-          rel="noreferrer"
-          className="hidden sm:inline-flex"
-        >
-          <Btn variant="primary" icon="whatsapp">{ctaText}</Btn>
-        </a>
+        <div className="hidden sm:inline-flex">
+          <TrialButton />
+        </div>
 
         <button
           onClick={() => setOpen((o) => !o)}
+          aria-expanded={open}
+          aria-label={open ? "Tutup menu navigasi" : "Buka menu navigasi"}
           className="lg:hidden w-10 h-10 rounded-full hover:bg-paper-tint flex items-center justify-center"
         >
           <Icon name={open ? "close" : "menu"} className="w-5 h-5" />
@@ -101,9 +90,9 @@ export default function LandingNav({
             >
               Login
             </Link>
-            <a href={waLink(ctaMessage, waPhone)} target="_blank" rel="noreferrer" className="mt-2">
-              <Btn variant="primary" icon="whatsapp" className="w-full">{ctaText}</Btn>
-            </a>
+            <div className="mt-2">
+              <TrialButton fullWidth />
+            </div>
           </div>
         </div>
       )}

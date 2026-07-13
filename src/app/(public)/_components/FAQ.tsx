@@ -1,21 +1,20 @@
 import { createClient } from "@/utils/supabase/server";
 import FAQAccordion from "./FAQAccordion";
-import { getAdminWaPhone } from "@/lib/landing-config";
 
 interface FAQItem { id: string; question: string; answer: string; }
 
 const FAQ_DEFAULTS: FAQItem[] = [
-  { id: "1", question: "Mulai usia berapa anak bisa ikut?", answer: "Mulai 4 tahun sudah bisa bergabung kelas Starter kami yang dirancang khusus untuk anak-anak yang baru mengenal air." },
-  { id: "2", question: "Bagaimana sistem pembayarannya?", answer: "Member reguler membayar tagihan bulanan. Kami juga menyediakan kelas private dengan tarif per sesi." },
-  { id: "3", question: "Apakah ada uji coba gratis?", answer: "Kami menyediakan sesi konsultasi & orientasi gratis. Hubungi admin kami via WhatsApp untuk jadwalkan kunjungan kolam." },
+  { id: "1", question: "Mulai usia berapa anak bisa ikut?", answer: "Mulai 4 tahun untuk kelas Tadpole (pengenalan air). Untuk usia di bawahnya tersedia private dengan pendamping orang tua." },
+  { id: "2", question: "Apakah ada sesi trial gratis?", answer: "Ya. Isi form Coba Gratis dan admin akan menjadwalkan satu sesi trial tanpa biaya di cabang terdekat." },
+  { id: "3", question: "Bagaimana sistem pembayarannya?", answer: "Member reguler bayar per bulan, member private bayar per paket sesi. Konfirmasi pembayaran via WhatsApp ke admin cabang." },
+  { id: "4", question: "Bagaimana cara absensinya?", answer: "Setiap member punya QR code unik. Coach scan QR di awal sesi, dan orang tua bisa pantau kehadiran lewat halaman member." },
+  { id: "5", question: "Apakah ada rapor perkembangan?", answer: "Ada, setiap semester. Coach mengisi penilaian berdasarkan aspek yang dikonfigurasi admin. Member juga bisa memberi review ke coach." },
+  { id: "6", question: "Apakah bisa untuk sekolah atau B2B?", answer: "Bisa. Program School Collaboration memungkinkan sekolah membayar langsung dan mendapat akses School Panel untuk memantau rapor." },
 ];
 
 export default async function FAQ() {
   const supabase = await createClient();
-  const [{ data }, waPhone] = await Promise.all([
-    supabase.from("landing_faqs").select("id, question, answer").order("sort_order"),
-    getAdminWaPhone(),
-  ]);
+  const { data } = await supabase.from("landing_faqs").select("id, question, answer").order("sort_order");
 
   const items = (data && data.length > 0) ? data : FAQ_DEFAULTS;
 
@@ -30,7 +29,7 @@ export default async function FAQ() {
           <p className="text-ink-mute mt-4">Tidak menemukan jawaban? Chat admin kami langsung.</p>
         </div>
 
-        <FAQAccordion items={items} waPhone={waPhone} />
+        <FAQAccordion items={items} />
       </div>
     </section>
   );

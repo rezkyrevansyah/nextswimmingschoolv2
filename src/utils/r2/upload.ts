@@ -20,6 +20,11 @@ export const keys = {
   rapor:      (periodId: string, memberId: string)    => `rapors/${periodId}/${memberId}.pdf`,
   classPhoto: (classId: string)                       => `classes/${classId}/cover.jpg`,
   signature:  (coachId: string)                        => `signatures/${coachId}/signature.png`,
+  landingHero:        ()             => `landing/hero/background.jpg`,
+  landingSafety:      ()             => `landing/safety/photo.jpg`,
+  landingFacility:    (id: string)   => `landing/facilities/${id}.jpg`,
+  landingTestimonial: (id: string)   => `landing/testimonials/${id}.jpg`,
+  landingGallery:     (id: string)   => `landing/gallery/${id}.jpg`,
 } as const;
 
 // ── Upload from a Buffer / Blob ───────────────────────────────────────────────

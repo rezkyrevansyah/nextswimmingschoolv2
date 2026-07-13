@@ -45,6 +45,8 @@ CREATE TABLE public.profiles (
   suspend_reason text,
   is_archived boolean NOT NULL DEFAULT false,
   show_on_landing boolean NOT NULL DEFAULT false,
+  signature_url text,
+  certifications ARRAY,
   CONSTRAINT profiles_pkey PRIMARY KEY (id),
   CONSTRAINT profiles_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id),
   CONSTRAINT profiles_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branches(id)
@@ -526,6 +528,7 @@ CREATE TABLE public.landing_testimonials (
   body_text text NOT NULL DEFAULT ''::text,
   avatar_url text,
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  rating smallint,
   CONSTRAINT landing_testimonials_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.landing_faqs (
@@ -645,8 +648,67 @@ CREATE TABLE public.member_best_times (
   notes text,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT member_best_times_pkey PRIMARY KEY (id),
-  CONSTRAINT member_best_times_unique UNIQUE (member_id, branch_id, stroke, distance),
   CONSTRAINT member_best_times_member_id_fkey FOREIGN KEY (member_id) REFERENCES public.members(id),
   CONSTRAINT member_best_times_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branches(id),
   CONSTRAINT member_best_times_coach_id_fkey FOREIGN KEY (coach_id) REFERENCES public.profiles(id)
+);
+CREATE TABLE public.landing_safety (
+  id integer NOT NULL DEFAULT 1 CHECK (id = 1),
+  section_label text NOT NULL DEFAULT 'Keamanan'::text,
+  headline text NOT NULL DEFAULT ''::text,
+  body_text text NOT NULL DEFAULT ''::text,
+  photo_url text,
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT landing_safety_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.landing_safety_points (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  sort_order integer NOT NULL DEFAULT 0,
+  text text NOT NULL DEFAULT ''::text,
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT landing_safety_points_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.landing_facilities (
+  id integer NOT NULL DEFAULT 1 CHECK (id = 1),
+  section_label text NOT NULL DEFAULT 'Fasilitas'::text,
+  headline text NOT NULL DEFAULT 'Fasilitas yang mendukung\nkenyamanan belajar.'::text,
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT landing_facilities_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.landing_facility_items (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  sort_order integer NOT NULL DEFAULT 0,
+  title text NOT NULL DEFAULT ''::text,
+  body_text text NOT NULL DEFAULT ''::text,
+  photo_url text,
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT landing_facility_items_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.landing_process_steps (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  sort_order integer NOT NULL DEFAULT 0,
+  title text NOT NULL DEFAULT ''::text,
+  description text NOT NULL DEFAULT ''::text,
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT landing_process_steps_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.landing_gallery (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  sort_order integer NOT NULL DEFAULT 0,
+  photo_url text,
+  alt_text text,
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT landing_gallery_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.trial_bookings (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  name text NOT NULL,
+  phone text NOT NULL,
+  age_group text,
+  branch_id uuid,
+  preferred_time text,
+  status text NOT NULL DEFAULT 'new'::text,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT trial_bookings_pkey PRIMARY KEY (id),
+  CONSTRAINT trial_bookings_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branches(id)
 );

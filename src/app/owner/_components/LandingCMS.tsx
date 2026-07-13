@@ -35,15 +35,23 @@ interface FaqItem { id: string; question: string; answer: string; sort_order: nu
 interface FinalCtaData { headline: string; body_text: string; cta_wa_text: string; cta_wa_message: string; cta_sec_text: string; }
 interface LandingConfigData { footer_wa_number: string; footer_tagline: string; floating_wa_message: string; nav_cta_text: string; nav_cta_message: string; }
 interface NavLink { id: string; sort_order: number; label: string; href: string; }
+interface SafetyData { section_label: string; headline: string; body_text: string; photo_url: string | null; }
+interface SafetyPointRow { id: string; sort_order: number; text: string; }
+interface FacilitiesData { section_label: string; headline: string; }
+interface FacilityItemRow { id: string; sort_order: number; title: string; body_text: string; photo_url: string | null; }
+interface GalleryItem { id: string; sort_order: number; photo_url: string | null; alt_text: string | null; }
 
-type Tab = "hero" | "whyus" | "programs" | "coaches" | "testimonials" | "faq" | "finalcta" | "config";
+type Tab = "hero" | "whyus" | "safety" | "programs" | "facilities" | "coaches" | "testimonials" | "gallery" | "faq" | "finalcta" | "config";
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: "hero",         label: "Hero",         icon: "star"     },
   { id: "whyus",        label: "Mengapa Kami", icon: "shield"   },
+  { id: "safety",       label: "Keamanan",     icon: "check"    },
   { id: "programs",     label: "Program",      icon: "book"     },
+  { id: "facilities",   label: "Fasilitas",    icon: "map"      },
   { id: "coaches",      label: "Coach",        icon: "swim"     },
   { id: "testimonials", label: "Testimoni",    icon: "users"    },
+  { id: "gallery",      label: "Galeri",       icon: "grid"     },
   { id: "faq",          label: "FAQ",          icon: "calendar" },
   { id: "finalcta",     label: "Final CTA",    icon: "arrow"    },
   { id: "config",       label: "Konfigurasi",  icon: "settings" },
@@ -117,6 +125,75 @@ async function revalidate() {
   if (!res.ok) console.error("[revalidate] failed", res.status, await res.text().catch(() => ""));
 }
 
+function ImageField({
+  label,
+  url,
+  onUrlChange,
+  onFileChange,
+  hint = "Gunakan upload R2. URL manual hanya untuk domain yang sudah diizinkan.",
+}: {
+  label: string;
+  url: string;
+  onUrlChange: (url: string) => void;
+  onFileChange: (file: File | null) => void;
+  hint?: string;
+}) {
+  const [mode, setMode] = useState<"url" | "upload">("upload");
+  const [preview, setPreview] = useState<string | null>(null);
+  const [fileName, setFileName] = useState("");
+
+  return (
+    <Field label={label} hint={hint}>
+      <div className="space-y-3">
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => { setMode("upload"); onFileChange(null); }}
+            className={`flex-1 py-2 rounded-lg text-sm font-semibold border transition-colors ${mode === "upload" ? "bg-ocean-700 text-white border-ocean-700" : "bg-white text-ink-soft border-line hover:bg-paper-tint"}`}
+          >
+            Upload File
+          </button>
+          <button
+            type="button"
+            onClick={() => { setMode("url"); onFileChange(null); setPreview(null); setFileName(""); }}
+            className={`flex-1 py-2 rounded-lg text-sm font-semibold border transition-colors ${mode === "url" ? "bg-ocean-700 text-white border-ocean-700" : "bg-white text-ink-soft border-line hover:bg-paper-tint"}`}
+          >
+            Pakai URL
+          </button>
+        </div>
+
+        {mode === "upload" ? (
+          <>
+            <label className="cursor-pointer flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-line hover:border-ocean-400 bg-paper-tint hover:bg-ocean-50/30 transition-colors py-6 px-3">
+              <Icon name="camera" className="w-6 h-6 text-ink-mute" />
+              <span className="text-xs text-ink-mute font-medium">{fileName || "Klik untuk pilih gambar"}</span>
+              <input
+                type="file"
+                accept="image/*"
+                className="sr-only"
+                onChange={(e) => {
+                  const f = e.target.files?.[0] ?? null;
+                  onFileChange(f);
+                  setFileName(f?.name ?? "");
+                  setPreview(f ? URL.createObjectURL(f) : null);
+                }}
+              />
+            </label>
+            {(preview || url) && (
+              <img src={preview ?? url} alt="preview" className="w-full h-36 object-cover rounded-lg border border-line" />
+            )}
+          </>
+        ) : (
+          <>
+            <Input value={url} onChange={(e) => onUrlChange(e.target.value)} placeholder="https://..." />
+            {url && <img src={url} alt="preview" className="w-full h-36 object-cover rounded-lg border border-line" />}
+          </>
+        )}
+      </div>
+    </Field>
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 export default function LandingCMS() {
   const [tab, setTab] = useState<Tab>("hero");
@@ -143,13 +220,309 @@ export default function LandingCMS() {
 
       {tab === "hero"         && <HeroTab />}
       {tab === "whyus"        && <WhyUsTab />}
+      {tab === "safety"       && <SafetyTab />}
       {tab === "programs"     && <ProgramsTab />}
+      {tab === "facilities"   && <FacilitiesTab />}
       {tab === "coaches"      && <CoachesTab />}
       {tab === "testimonials" && <TestimonialsTab />}
+      {tab === "gallery"      && <GalleryTab />}
       {tab === "faq"          && <FAQTab />}
       {tab === "finalcta"     && <FinalCtaTab />}
       {tab === "config"       && <ConfigTab />}
     </div>
+  );
+}
+
+// ── Safety Tab ───────────────────────────────────────────────────────────────
+function SafetyTab() {
+  const toast = useToast();
+  const confirm = useConfirm();
+  const supabase = createClient();
+  const { upload, uploading } = useUpload();
+  const [data, setData] = useState<SafetyData | null>(null);
+  const [points, setPoints] = useState<SafetyPointRow[]>([]);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [showPointModal, setShowPointModal] = useState(false);
+  const [editPoint, setEditPoint] = useState<SafetyPointRow | null>(null);
+  const [pointForm, setPointForm] = useState({ text: "", sort_order: 0 });
+
+  const load = useCallback(async () => {
+    const [{ data: s }, { data: p }] = await Promise.all([
+      supabase.from("landing_safety").select("section_label, headline, body_text, photo_url").single(),
+      supabase.from("landing_safety_points").select("id, text, sort_order").order("sort_order"),
+    ]);
+    setData((s as SafetyData | null) ?? { section_label: "Standar Keamanan", headline: "Keamanan bukan slogan, tapi SOP.", body_text: "Setiap cabang mengikuti standar pengawasan air yang sama, diaudit berkala oleh admin pusat.", photo_url: null });
+    setPoints((p ?? []) as SafetyPointRow[]);
+  }, [supabase]);
+
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => { load(); }, [load]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  const saveSection = async () => {
+    if (!data) return;
+    setSaving(true);
+    let photoUrl = data.photo_url;
+    if (photoFile) {
+      try { photoUrl = await upload.landingImage(photoFile, "safety"); }
+      catch (e) { toast.error("Gagal upload foto", (e as Error).message); setSaving(false); return; }
+    }
+    const { error } = await supabase.from("landing_safety").upsert({ id: 1, ...data, photo_url: photoUrl });
+    if (error) { toast.error("Gagal menyimpan", error.message); setSaving(false); return; }
+    await revalidate();
+    setData({ ...data, photo_url: photoUrl });
+    setPhotoFile(null);
+    toast.success("Safety disimpan");
+    setSaving(false);
+  };
+
+  const openAddPoint = () => { setEditPoint(null); setPointForm({ text: "", sort_order: points.length + 1 }); setShowPointModal(true); };
+  const openEditPoint = (p: SafetyPointRow) => { setEditPoint(p); setPointForm({ text: p.text, sort_order: p.sort_order }); setShowPointModal(true); };
+
+  const savePoint = async () => {
+    if (!pointForm.text) return toast.error("Teks wajib diisi");
+    setSaving(true);
+    const query = editPoint
+      ? supabase.from("landing_safety_points").update(pointForm).eq("id", editPoint.id)
+      : supabase.from("landing_safety_points").insert(pointForm);
+    const { error } = await query;
+    if (error) { toast.error("Gagal menyimpan", error.message); setSaving(false); return; }
+    await revalidate();
+    toast.success("Poin disimpan");
+    setSaving(false);
+    setShowPointModal(false);
+    load();
+  };
+
+  const delPoint = async (p: SafetyPointRow) => {
+    const yes = await confirm({ title: "Hapus poin keamanan?", body: p.text, danger: true });
+    if (!yes) return;
+    const { error } = await supabase.from("landing_safety_points").delete().eq("id", p.id);
+    if (error) return toast.error("Gagal menghapus", error.message);
+    await revalidate();
+    toast.success("Poin dihapus");
+    load();
+  };
+
+  if (!data) return <div className="py-10 text-center text-ink-mute text-sm">Memuat data safety...</div>;
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <SectionTitle sub="Foto dan copy section keamanan">Safety Standards</SectionTitle>
+        <div className="grid lg:grid-cols-2 gap-4 mt-4">
+          <Field label="Label section"><Input value={data.section_label} onChange={(e) => setData({ ...data, section_label: e.target.value })} /></Field>
+          <Field label="Headline"><Textarea value={data.headline} onChange={(e) => setData({ ...data, headline: e.target.value })} rows={2} /></Field>
+          <Field label="Body text"><Textarea value={data.body_text} onChange={(e) => setData({ ...data, body_text: e.target.value })} rows={3} /></Field>
+          <ImageField label="Foto safety" url={data.photo_url ?? ""} onUrlChange={(url) => setData({ ...data, photo_url: url })} onFileChange={setPhotoFile} />
+        </div>
+        <div className="mt-5 flex justify-end">
+          <Btn variant="primary" onClick={saveSection} disabled={saving || uploading}>{saving || uploading ? "Menyimpan..." : "Simpan Safety"}</Btn>
+        </div>
+      </Card>
+
+      <Card>
+        <div className="flex items-center justify-between">
+          <SectionTitle sub="Checklist keamanan di section Safety">Poin Keamanan</SectionTitle>
+          <Btn variant="soft" size="sm" icon="plus" onClick={openAddPoint}>Tambah</Btn>
+        </div>
+        <div className="mt-4 space-y-2">
+          {points.map((p) => (
+            <div key={p.id} className="flex items-start gap-3 p-3 rounded-xl bg-paper-tint">
+              <div className="flex-1 text-sm text-ink-soft">{p.text}</div>
+              <button onClick={() => openEditPoint(p)} className="w-7 h-7 rounded-lg border border-line bg-white flex items-center justify-center hover:bg-paper-deep"><Icon name="edit" className="w-3.5 h-3.5 text-ink-mute" /></button>
+              <button onClick={() => delPoint(p)} className="w-7 h-7 rounded-lg border border-danger-200 bg-danger-50 flex items-center justify-center hover:bg-danger-100"><Icon name="trash" className="w-3.5 h-3.5 text-danger-500" /></button>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      <Modal open={showPointModal} onClose={() => setShowPointModal(false)} title={editPoint ? "Edit Poin" : "Tambah Poin"} size="sm"
+        footer={<><Btn variant="ghost" onClick={() => setShowPointModal(false)}>Batal</Btn><Btn variant="primary" onClick={savePoint} disabled={saving}>{saving ? "Menyimpan..." : "Simpan"}</Btn></>}>
+        <div className="space-y-3">
+          <Field label="Teks"><Textarea value={pointForm.text} onChange={(e) => setPointForm({ ...pointForm, text: e.target.value })} rows={3} /></Field>
+          <Field label="Urutan"><Input type="number" value={String(pointForm.sort_order)} onChange={(e) => setPointForm({ ...pointForm, sort_order: Number(e.target.value) })} /></Field>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
+// ── Facilities Tab ───────────────────────────────────────────────────────────
+function FacilitiesTab() {
+  const toast = useToast();
+  const supabase = createClient();
+  const { upload, uploading } = useUpload();
+  const [data, setData] = useState<FacilitiesData | null>(null);
+  const [items, setItems] = useState<FacilityItemRow[]>([]);
+  const [files, setFiles] = useState<Record<string, File | null>>({});
+  const [saving, setSaving] = useState(false);
+
+  const load = useCallback(async () => {
+    const [{ data: f }, { data: rows }] = await Promise.all([
+      supabase.from("landing_facilities").select("section_label, headline").single(),
+      supabase.from("landing_facility_items").select("id, sort_order, title, body_text, photo_url").order("sort_order"),
+    ]);
+    setData((f as FacilitiesData | null) ?? { section_label: "Fasilitas", headline: "Fasilitas yang mendukung\nkenyamanan belajar." });
+    setItems(((rows ?? []) as FacilityItemRow[]).slice(0, 2));
+  }, [supabase]);
+
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => { load(); }, [load]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  const save = async () => {
+    if (!data) return;
+    setSaving(true);
+    const { error: sectionError } = await supabase.from("landing_facilities").upsert({ id: 1, ...data });
+    if (sectionError) { toast.error("Gagal menyimpan", sectionError.message); setSaving(false); return; }
+
+    for (const item of items) {
+      let photoUrl = item.photo_url;
+      const file = files[item.id];
+      if (file) {
+        try { photoUrl = await upload.landingImage(file, "facility", item.id); }
+        catch (e) { toast.error("Gagal upload foto", (e as Error).message); setSaving(false); return; }
+      }
+      const { error } = await supabase
+        .from("landing_facility_items")
+        .update({ title: item.title, body_text: item.body_text, photo_url: photoUrl, sort_order: item.sort_order })
+        .eq("id", item.id);
+      if (error) { toast.error("Gagal menyimpan", error.message); setSaving(false); return; }
+    }
+
+    await revalidate();
+    toast.success("Fasilitas disimpan");
+    setFiles({});
+    setSaving(false);
+    load();
+  };
+
+  if (!data) return <div className="py-10 text-center text-ink-mute text-sm">Memuat data fasilitas...</div>;
+
+  return (
+    <Card>
+      <SectionTitle sub="2 slot tetap: kolam dan multi-cabang">Fasilitas</SectionTitle>
+      <div className="grid lg:grid-cols-2 gap-4 mt-4">
+        <Field label="Label section"><Input value={data.section_label} onChange={(e) => setData({ ...data, section_label: e.target.value })} /></Field>
+        <Field label="Headline"><Textarea value={data.headline} onChange={(e) => setData({ ...data, headline: e.target.value })} rows={2} /></Field>
+      </div>
+      <div className="mt-5 grid lg:grid-cols-2 gap-4">
+        {items.map((item, index) => (
+          <div key={item.id} className="rounded-2xl bg-paper-tint p-4 space-y-3">
+            <div className="text-xs font-bold text-ocean-700 uppercase tracking-widest">Slot {index + 1}</div>
+            <Field label="Judul"><Input value={item.title} onChange={(e) => setItems((prev) => prev.map((p) => p.id === item.id ? { ...p, title: e.target.value } : p))} /></Field>
+            <Field label="Body"><Textarea value={item.body_text} onChange={(e) => setItems((prev) => prev.map((p) => p.id === item.id ? { ...p, body_text: e.target.value } : p))} rows={3} /></Field>
+            <ImageField label="Foto" url={item.photo_url ?? ""} onUrlChange={(url) => setItems((prev) => prev.map((p) => p.id === item.id ? { ...p, photo_url: url } : p))} onFileChange={(file) => setFiles((prev) => ({ ...prev, [item.id]: file }))} />
+          </div>
+        ))}
+      </div>
+      <div className="mt-5 flex justify-end">
+        <Btn variant="primary" onClick={save} disabled={saving || uploading}>{saving || uploading ? "Menyimpan..." : "Simpan Fasilitas"}</Btn>
+      </div>
+    </Card>
+  );
+}
+
+// ── Gallery Tab ──────────────────────────────────────────────────────────────
+function GalleryTab() {
+  const toast = useToast();
+  const confirm = useConfirm();
+  const supabase = createClient();
+  const { upload, uploading } = useUpload();
+  const [items, setItems] = useState<GalleryItem[]>([]);
+  const [showModal, setShowModal] = useState(false);
+  const [editItem, setEditItem] = useState<GalleryItem | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [form, setForm] = useState({ photo_url: "", alt_text: "", sort_order: 0 });
+
+  const load = useCallback(async () => {
+    const { data } = await supabase.from("landing_gallery").select("id, sort_order, photo_url, alt_text").order("sort_order");
+    setItems((data ?? []) as GalleryItem[]);
+  }, [supabase]);
+
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => { load(); }, [load]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  const openAdd = () => { setEditItem(null); setPhotoFile(null); setForm({ photo_url: "", alt_text: "", sort_order: items.length + 1 }); setShowModal(true); };
+  const openEdit = (g: GalleryItem) => { setEditItem(g); setPhotoFile(null); setForm({ photo_url: g.photo_url ?? "", alt_text: g.alt_text ?? "", sort_order: g.sort_order }); setShowModal(true); };
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      if (editItem) {
+        let photoUrl = form.photo_url.trim() || null;
+        if (photoFile) photoUrl = await upload.landingImage(photoFile, "gallery", editItem.id);
+        const { error } = await supabase.from("landing_gallery").update({ ...form, photo_url: photoUrl, alt_text: form.alt_text || null }).eq("id", editItem.id);
+        if (error) throw new Error(error.message);
+      } else {
+        const { data: inserted, error } = await supabase
+          .from("landing_gallery")
+          .insert({ sort_order: form.sort_order, alt_text: form.alt_text || null, photo_url: photoFile ? null : (form.photo_url.trim() || null) })
+          .select("id")
+          .single();
+        if (error || !inserted) throw new Error(error?.message ?? "Gagal menyimpan");
+        if (photoFile) await upload.landingImage(photoFile, "gallery", inserted.id);
+      }
+    } catch (e) {
+      toast.error("Gagal menyimpan", (e as Error).message);
+      setSaving(false);
+      return;
+    }
+    await revalidate();
+    toast.success("Foto galeri disimpan");
+    setSaving(false);
+    setShowModal(false);
+    load();
+  };
+
+  const del = async (g: GalleryItem) => {
+    const yes = await confirm({ title: "Hapus foto galeri?", body: g.alt_text ?? "Foto ini akan dihapus dari landing.", danger: true });
+    if (!yes) return;
+    const { error } = await supabase.from("landing_gallery").delete().eq("id", g.id);
+    if (error) return toast.error("Gagal menghapus", error.message);
+    await revalidate();
+    toast.success("Foto galeri dihapus");
+    load();
+  };
+
+  return (
+    <Card>
+      <div className="flex items-center justify-between">
+        <SectionTitle sub="Foto mosaic di landing page">Galeri</SectionTitle>
+        <Btn variant="soft" size="sm" icon="plus" onClick={openAdd}>Tambah</Btn>
+      </div>
+      <div className="mt-4 grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {items.map((g) => (
+          <div key={g.id} className="rounded-xl bg-paper-tint overflow-hidden border border-line">
+            <div className="h-28 bg-ocean-50 flex items-center justify-center">
+              {g.photo_url ? <img src={g.photo_url} alt={g.alt_text ?? "Foto galeri"} className="w-full h-full object-cover" /> : <Icon name="camera" className="w-8 h-8 text-ocean-300" />}
+            </div>
+            <div className="p-3 flex items-start gap-2">
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-bold text-ink">Urutan {g.sort_order}</div>
+                <div className="text-xs text-ink-mute line-clamp-2">{g.alt_text || "Tanpa alt text"}</div>
+              </div>
+              <button onClick={() => openEdit(g)} className="w-7 h-7 rounded-lg border border-line bg-white flex items-center justify-center hover:bg-paper-deep"><Icon name="edit" className="w-3.5 h-3.5 text-ink-mute" /></button>
+              <button onClick={() => del(g)} className="w-7 h-7 rounded-lg border border-danger-200 bg-danger-50 flex items-center justify-center hover:bg-danger-100"><Icon name="trash" className="w-3.5 h-3.5 text-danger-500" /></button>
+            </div>
+          </div>
+        ))}
+        {items.length === 0 && <div className="py-8 text-center text-ink-mute text-sm sm:col-span-2 lg:col-span-3">Belum ada foto galeri.</div>}
+      </div>
+
+      <Modal open={showModal} onClose={() => setShowModal(false)} title={editItem ? "Edit Foto Galeri" : "Tambah Foto Galeri"} size="sm"
+        footer={<><Btn variant="ghost" onClick={() => setShowModal(false)}>Batal</Btn><Btn variant="primary" onClick={save} disabled={saving || uploading}>{saving || uploading ? "Menyimpan..." : "Simpan"}</Btn></>}>
+        <div className="space-y-3">
+          <ImageField label="Foto" url={form.photo_url} onUrlChange={(url) => setForm({ ...form, photo_url: url })} onFileChange={setPhotoFile} />
+          <Field label="Alt text"><Input value={form.alt_text} onChange={(e) => setForm({ ...form, alt_text: e.target.value })} placeholder="Anak melompat ke kolam" /></Field>
+          <Field label="Urutan"><Input type="number" value={String(form.sort_order)} onChange={(e) => setForm({ ...form, sort_order: Number(e.target.value) })} /></Field>
+        </div>
+      </Modal>
+    </Card>
   );
 }
 
@@ -350,8 +723,10 @@ function ProgramsTab() {
 function HeroTab() {
   const toast = useToast();
   const supabase = createClient();
+  const { upload, uploading } = useUpload();
   const [data, setData] = useState<HeroData | null>(null);
   const [stats, setStats] = useState<HeroStat[]>([]);
+  const [heroFile, setHeroFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
   const [editStat, setEditStat] = useState<HeroStat | null>(null);
   const [showStatModal, setShowStatModal] = useState(false);
@@ -373,9 +748,21 @@ function HeroTab() {
   const saveHero = async () => {
     if (!data) return;
     setSaving(true);
-    const { error } = await supabase.from("landing_hero").upsert({ id: 1, ...data });
+    let bgImageUrl = data.bg_image_url || null;
+    if (heroFile) {
+      try {
+        bgImageUrl = await upload.landingImage(heroFile, "hero");
+      } catch (e) {
+        toast.error("Gagal upload gambar", (e as Error).message);
+        setSaving(false);
+        return;
+      }
+    }
+    const { error } = await supabase.from("landing_hero").upsert({ id: 1, ...data, bg_image_url: bgImageUrl ?? "" });
     if (error) { toast.error("Gagal menyimpan", error.message); setSaving(false); return; }
     await revalidate();
+    setData({ ...data, bg_image_url: bgImageUrl ?? "" });
+    setHeroFile(null);
     toast.success("Hero disimpan");
     setSaving(false);
   };
@@ -416,9 +803,12 @@ function HeroTab() {
           <Field label="Badge text (teks kecil di atas headline)">
             <Input value={data.badge_text} onChange={(e) => setData({ ...data, badge_text: e.target.value })} />
           </Field>
-          <Field label="URL background image">
-            <Input value={data.bg_image_url} onChange={(e) => setData({ ...data, bg_image_url: e.target.value })} placeholder="https://..." />
-          </Field>
+          <ImageField
+            label="Background image"
+            url={data.bg_image_url ?? ""}
+            onUrlChange={(url) => setData({ ...data, bg_image_url: url })}
+            onFileChange={setHeroFile}
+          />
           <Field label="Teks tombol CTA utama (WhatsApp)">
             <Input value={data.cta_primary_text} onChange={(e) => setData({ ...data, cta_primary_text: e.target.value })} />
           </Field>
@@ -447,7 +837,7 @@ function HeroTab() {
           })}
         </div>
         <div className="mt-5 flex justify-end">
-          <Btn variant="primary" onClick={saveHero} disabled={saving}>{saving ? "Menyimpan..." : "Simpan Hero"}</Btn>
+          <Btn variant="primary" onClick={saveHero} disabled={saving || uploading}>{saving || uploading ? "Menyimpan..." : "Simpan Hero"}</Btn>
         </div>
       </Card>
 
@@ -620,8 +1010,13 @@ function WhyUsTab() {
 function CoachesTab() {
   const toast = useToast();
   const supabase = createClient();
+  const { upload, uploading } = useUpload();
   const [coaches, setCoaches] = useState<CoachRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [editCoach, setEditCoach] = useState<CoachRow | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState("");
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [savingAvatar, setSavingAvatar] = useState(false);
 
   const load = useCallback(async () => {
     const { data } = await supabase
@@ -647,6 +1042,32 @@ function CoachesTab() {
     toast.success(next ? "Coach ditampilkan di landing" : "Coach disembunyikan dari landing");
   };
 
+  const openAvatar = (c: CoachRow) => {
+    setEditCoach(c);
+    setAvatarUrl(c.avatar_url ?? "");
+    setAvatarFile(null);
+  };
+
+  const saveAvatar = async () => {
+    if (!editCoach) return;
+    setSavingAvatar(true);
+    let finalUrl = avatarUrl.trim() || null;
+    try {
+      if (avatarFile) finalUrl = await upload.avatarForProfile(avatarFile, editCoach.id);
+      const { error } = await supabase.from("profiles").update({ avatar_url: finalUrl }).eq("id", editCoach.id);
+      if (error) throw new Error(error.message);
+    } catch (e) {
+      toast.error("Gagal menyimpan foto", (e as Error).message);
+      setSavingAvatar(false);
+      return;
+    }
+    await revalidate();
+    setCoaches((prev) => prev.map((p) => p.id === editCoach.id ? { ...p, avatar_url: finalUrl } : p));
+    toast.success("Foto coach disimpan");
+    setSavingAvatar(false);
+    setEditCoach(null);
+  };
+
   const shown = coaches.filter(c => c.show_on_landing).length;
 
   return (
@@ -670,6 +1091,12 @@ function CoachesTab() {
                 {c.show_on_landing && (
                   <span className="text-[10px] font-bold bg-ok-50 text-ok-600 px-2 py-0.5 rounded-full">Ditampilkan</span>
                 )}
+                <button
+                  onClick={() => openAvatar(c)}
+                  className="w-7 h-7 rounded-lg border border-line bg-white flex items-center justify-center hover:bg-paper-deep"
+                >
+                  <Icon name="camera" className="w-3.5 h-3.5 text-ink-mute" />
+                </button>
                 <Switch
                   checked={c.show_on_landing}
                   onChange={() => toggle(c)}
@@ -680,6 +1107,21 @@ function CoachesTab() {
           ))}
         </div>
       )}
+
+      <Modal
+        open={!!editCoach}
+        onClose={() => setEditCoach(null)}
+        title={`Foto Coach — ${editCoach?.nick_name ?? editCoach?.full_name ?? ""}`}
+        size="sm"
+        footer={<><Btn variant="ghost" onClick={() => setEditCoach(null)}>Batal</Btn><Btn variant="primary" onClick={saveAvatar} disabled={savingAvatar || uploading}>{savingAvatar || uploading ? "Menyimpan..." : "Simpan Foto"}</Btn></>}
+      >
+        <ImageField
+          label="Foto coach"
+          url={avatarUrl}
+          onUrlChange={setAvatarUrl}
+          onFileChange={setAvatarFile}
+        />
+      </Modal>
     </Card>
   );
 }
@@ -689,10 +1131,12 @@ function TestimonialsTab() {
   const toast = useToast();
   const confirm = useConfirm();
   const supabase = createClient();
+  const { upload, uploading } = useUpload();
   const [items, setItems] = useState<Testimonial[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [editItem, setEditItem] = useState<Testimonial | null>(null);
   const [saving, setSaving] = useState(false);
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [form, setForm] = useState({ name: "", role: "", body_text: "", avatar_url: "", sort_order: 0 });
 
   const load = useCallback(async () => {
@@ -704,20 +1148,34 @@ function TestimonialsTab() {
   useEffect(() => { load(); }, [load]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  const openAdd = () => { setEditItem(null); setForm({ name: "", role: "", body_text: "", avatar_url: "", sort_order: items.length + 1 }); setShowModal(true); };
-  const openEdit = (t: Testimonial) => { setEditItem(t); setForm({ name: t.name, role: t.role, body_text: t.body_text, avatar_url: t.avatar_url ?? "", sort_order: t.sort_order }); setShowModal(true); };
+  const openAdd = () => { setEditItem(null); setAvatarFile(null); setForm({ name: "", role: "", body_text: "", avatar_url: "", sort_order: items.length + 1 }); setShowModal(true); };
+  const openEdit = (t: Testimonial) => { setEditItem(t); setAvatarFile(null); setForm({ name: t.name, role: t.role, body_text: t.body_text, avatar_url: t.avatar_url ?? "", sort_order: t.sort_order }); setShowModal(true); };
 
   const save = async () => {
     if (!form.name || !form.body_text) return toast.error("Nama dan testimoni wajib diisi");
     setSaving(true);
-    const payload = { ...form, avatar_url: form.avatar_url || null };
-    if (editItem) {
-      const { error } = await supabase.from("landing_testimonials").update(payload).eq("id", editItem.id);
-      if (error) { toast.error("Gagal menyimpan", error.message); setSaving(false); return; }
-    } else {
-      const { error } = await supabase.from("landing_testimonials").insert(payload);
-      if (error) { toast.error("Gagal menyimpan", error.message); setSaving(false); return; }
+    let avatarUrl = form.avatar_url.trim() || null;
+
+    try {
+      if (editItem) {
+        if (avatarFile) avatarUrl = await upload.landingImage(avatarFile, "testimonial", editItem.id);
+        const { error } = await supabase.from("landing_testimonials").update({ ...form, avatar_url: avatarUrl }).eq("id", editItem.id);
+        if (error) throw new Error(error.message);
+      } else {
+        const { data: inserted, error } = await supabase
+          .from("landing_testimonials")
+          .insert({ ...form, avatar_url: avatarFile ? null : avatarUrl })
+          .select("id")
+          .single();
+        if (error || !inserted) throw new Error(error?.message ?? "Gagal menyimpan");
+        if (avatarFile) await upload.landingImage(avatarFile, "testimonial", inserted.id);
+      }
+    } catch (e) {
+      toast.error("Gagal menyimpan", (e as Error).message);
+      setSaving(false);
+      return;
     }
+
     await revalidate();
     toast.success("Testimoni disimpan");
     setSaving(false);
@@ -764,12 +1222,17 @@ function TestimonialsTab() {
       </div>
 
       <Modal open={showModal} onClose={() => setShowModal(false)} title={editItem ? "Edit Testimoni" : "Tambah Testimoni"} size="sm"
-        footer={<><Btn variant="ghost" onClick={() => setShowModal(false)}>Batal</Btn><Btn variant="primary" onClick={save} disabled={saving}>{saving ? "Menyimpan..." : "Simpan"}</Btn></>}>
+        footer={<><Btn variant="ghost" onClick={() => setShowModal(false)}>Batal</Btn><Btn variant="primary" onClick={save} disabled={saving || uploading}>{saving || uploading ? "Menyimpan..." : "Simpan"}</Btn></>}>
         <div className="space-y-3">
           <Field label="Nama"><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
           <Field label="Peran / Keterangan (contoh: Ibu dari Calista)"><Input value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} /></Field>
           <Field label="Testimoni"><Textarea value={form.body_text} onChange={(e) => setForm({ ...form, body_text: e.target.value })} rows={4} /></Field>
-          <Field label="URL foto (opsional)"><Input value={form.avatar_url} onChange={(e) => setForm({ ...form, avatar_url: e.target.value })} placeholder="https://..." /></Field>
+          <ImageField
+            label="Foto (opsional)"
+            url={form.avatar_url}
+            onUrlChange={(url) => setForm({ ...form, avatar_url: url })}
+            onFileChange={setAvatarFile}
+          />
           <Field label="Urutan"><Input type="number" value={String(form.sort_order)} onChange={(e) => setForm({ ...form, sort_order: Number(e.target.value) })} /></Field>
         </div>
       </Modal>

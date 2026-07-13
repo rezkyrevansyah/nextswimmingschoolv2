@@ -1399,7 +1399,7 @@ function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: 
   const [payslips, setPayslips] = useState<OwnerPayslipRow[]>([]);
   const [loadingPayslips, setLoadingPayslips] = useState(true);
   const [showGenModal, setShowGenModal] = useState(false);
-  const [genForm, setGenForm] = useState({ invoice_id: "", period_label: "", gross_amount: 0, deductions: 0, notes: "" });
+  const [genForm, setGenForm] = useState({ invoice_id: "", period_label: "", gross_amount: "", deductions: "", notes: "" });
   const [savingSlip, setSavingSlip] = useState(false);
   const [publishingId, setPublishingId] = useState<string | null>(null);
   const [viewSlip, setViewSlip] = useState<OwnerPayslipRow | null>(null);
@@ -1452,11 +1452,13 @@ function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: 
   const handleGenInvoiceChange = (invoiceId: string) => {
     const inv = invoices.find(e => e.id === invoiceId);
     if (inv) {
-      setGenForm(f => ({ ...f, invoice_id: invoiceId, period_label: inv.period_label, gross_amount: inv.total_amount, deductions: 0, notes: "" }));
+      setGenForm(f => ({ ...f, invoice_id: invoiceId, period_label: inv.period_label, gross_amount: "", deductions: "", notes: "" }));
     } else {
       setGenForm(f => ({ ...f, invoice_id: invoiceId }));
     }
   };
+
+  const parseMoneyInput = (value: string) => value.replace(/\D/g, "");
 
   const savePayslip = async () => {
     if (!genForm.invoice_id) return toast.error("Pilih invoice terlebih dahulu");
@@ -1465,23 +1467,25 @@ function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: 
     if (!inv) return toast.error("Invoice tidak ditemukan");
     setSavingSlip(true);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const grossAmount = Number(genForm.gross_amount || 0);
+    const deductions = Number(genForm.deductions || 0);
     const { error } = await (supabase as any).from("payslips").insert({
       coach_id: inv.coach?.id ?? "",
       branch_id: inv.branch_id ?? "",
       invoice_id: genForm.invoice_id,
       period_label: genForm.period_label.trim(),
-      gross_amount: genForm.gross_amount,
-      deductions: genForm.deductions,
-      net_amount: genForm.gross_amount - genForm.deductions,
+      gross_amount: grossAmount,
+      deductions,
+      net_amount: grossAmount - deductions,
       notes: genForm.notes.trim() || null,
       status: "draft",
     });
     setSavingSlip(false);
     if (error) return toast.error("Gagal simpan", error.message);
     toast.success("Slip gaji berhasil dibuat (draft)");
-    logActivity(supabase, { userId, userRole: "owner", userName, entityType: "payslips", entityId: inv.coach?.id ?? "", entityLabel: inv.coach?.full_name ?? undefined, action: "create", label: `Slip gaji ${inv.coach?.full_name ?? "coach"} periode ${genForm.period_label.trim()} dibuat (draft)`, meta: { gross_amount: genForm.gross_amount, deductions: genForm.deductions, net_amount: genForm.gross_amount - genForm.deductions } });
+    logActivity(supabase, { userId, userRole: "owner", userName, entityType: "payslips", entityId: inv.coach?.id ?? "", entityLabel: inv.coach?.full_name ?? undefined, action: "create", label: `Slip gaji ${inv.coach?.full_name ?? "coach"} periode ${genForm.period_label.trim()} dibuat (draft)`, meta: { gross_amount: grossAmount, deductions, net_amount: grossAmount - deductions } });
     setShowGenModal(false);
-    setGenForm({ invoice_id: "", period_label: "", gross_amount: 0, deductions: 0, notes: "" });
+    setGenForm({ invoice_id: "", period_label: "", gross_amount: "", deductions: "", notes: "" });
     loadPayslips();
   };
 
@@ -1762,7 +1766,7 @@ function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: 
             <div className="font-display font-bold text-xl">Slip Gaji</div>
             <p className="text-sm text-ink-mute">Generate dan terbitkan slip gaji dari invoice yang sudah lunas.</p>
           </div>
-          <Btn variant="primary" icon="plus" onClick={() => { setGenForm({ invoice_id: "", period_label: "", gross_amount: 0, deductions: 0, notes: "" }); setShowGenModal(true); }}>
+          <Btn variant="primary" icon="plus" onClick={() => { setGenForm({ invoice_id: "", period_label: "", gross_amount: "", deductions: "", notes: "" }); setShowGenModal(true); }}>
             Generate Slip Gaji
           </Btn>
         </div>
@@ -1850,12 +1854,12 @@ function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: 
           )}
           <Field label="Periode"><Input value={genForm.period_label} onChange={e => setGenForm(f => ({ ...f, period_label: e.target.value }))} placeholder="Contoh: Juni 2026" /></Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Gaji Kotor (Rp)"><Input type="number" value={genForm.gross_amount} onChange={e => setGenForm(f => ({ ...f, gross_amount: Number(e.target.value) }))} min={0} /></Field>
-            <Field label="Potongan (Rp)"><Input type="number" value={genForm.deductions} onChange={e => setGenForm(f => ({ ...f, deductions: Number(e.target.value) }))} min={0} /></Field>
+            <Field label="Gaji Kotor (Rp)"><Input type="number" inputMode="numeric" value={genForm.gross_amount} onChange={e => setGenForm(f => ({ ...f, gross_amount: parseMoneyInput(e.target.value) }))} min={0} /></Field>
+            <Field label="Potongan (Rp)"><Input type="number" inputMode="numeric" value={genForm.deductions} onChange={e => setGenForm(f => ({ ...f, deductions: parseMoneyInput(e.target.value) }))} min={0} /></Field>
           </div>
           <div className="bg-ok-50 border border-ok-200 rounded-xl px-4 py-3 flex items-center justify-between">
             <span className="text-sm font-semibold text-ok-900">Gaji Bersih</span>
-            <span className="font-mono font-bold text-ok-700 text-lg">{fmtIDR(genForm.gross_amount - genForm.deductions)}</span>
+            <span className="font-mono font-bold text-ok-700 text-lg">{fmtIDR(Number(genForm.gross_amount || 0) - Number(genForm.deductions || 0))}</span>
           </div>
           <Field label="Catatan (opsional)"><Textarea value={genForm.notes} onChange={e => setGenForm(f => ({ ...f, notes: e.target.value }))} rows={2} placeholder="Catatan untuk coach…" /></Field>
         </div>
