@@ -39,6 +39,14 @@ export const cn = (...classes: (string | undefined | false | null)[]): string =>
   classes.filter(Boolean).join(" ");
 
 /**
+ * Return a percentage clamped between 0 and 100 for progress bars.
+ */
+export const clampPercent = (value: number, max: number): number => {
+  if (!max || max <= 0) return 0;
+  return Math.min(100, Math.max(0, (value / max) * 100));
+};
+
+/**
  * Count text metrics for rapor notes validation.
  * - chars: raw character count
  * - words: whitespace-separated tokens (ignores empty strings)

@@ -13,7 +13,7 @@ import Sidebar, { type NavItem } from "@/components/layout/Sidebar";
 import Topbar from "@/components/layout/Topbar";
 import Bell from "@/components/layout/Bell";
 import BetaFeedback, { BETA_FEEDBACK_ENABLED } from "@/components/layout/BetaFeedback";
-import { fmtIDR } from "@/lib/utils";
+import { fmtIDR, clampPercent } from "@/lib/utils";
 import { logActivity } from "@/lib/activityLog";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
@@ -2232,16 +2232,25 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
           {branches.length > 0 && (
             <div className="bg-white border border-line rounded-2xl p-5">
               <div className="font-display font-bold text-base mb-4">Income per Cabang</div>
-              <div className="space-y-3">
+              <div className="grid gap-3">
                 {branches.map(b => {
                   const inc = branchIncomeMap[b.id] ?? 0;
+                  const width = clampPercent(inc, maxBranchIncome);
                   return (
-                    <div key={b.id} className="flex items-center gap-3">
-                      <div className="w-28 shrink-0 text-sm font-semibold truncate text-ink">{b.name}</div>
-                      <div className="flex-1 h-3 bg-paper-tint rounded-full overflow-hidden">
-                        <div className="h-full bg-ocean-400 rounded-full" style={{ width: `${(inc / maxBranchIncome) * 100}%` }} />
+                    <div key={b.id} className="rounded-2xl border border-line bg-paper-tint/70 p-3">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="text-sm font-semibold text-ink break-words">{b.name}</div>
+                          <div className="text-[11px] uppercase tracking-widest text-ink-faint mt-0.5">Kontribusi</div>
+                        </div>
+                        <div className="text-sm font-mono font-bold text-ocean-700 whitespace-nowrap">{fmtIDR(inc)}</div>
                       </div>
-                      <div className="text-xs font-mono text-ink-mute w-24 text-right shrink-0">{fmtIDR(inc)}</div>
+                      <div className="mt-3 h-2.5 overflow-hidden rounded-full border border-line bg-white">
+                        <div className="h-full rounded-full bg-gradient-to-r from-ocean-500 to-wave-500 transition-all duration-500" style={{ width: `${width}%` }} />
+                      </div>
+                      <div className="mt-1 text-[11px] text-ink-mute">
+                        {inc > 0 ? `${Math.round(width)}% dari cabang tertinggi` : "Belum ada pemasukan"}
+                      </div>
                     </div>
                   );
                 })}

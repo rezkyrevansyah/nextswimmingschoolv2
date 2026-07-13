@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { fmtIDR, fmtDate, fmtDateLong, fmtTime, waLink, cn } from "./utils";
+import { fmtIDR, fmtDate, fmtDateLong, fmtTime, waLink, cn, clampPercent } from "./utils";
 
 // ---------------------------------------------------------------------------
 // fmtIDR
@@ -177,6 +177,21 @@ describe("waLink", () => {
     const linkNull = waLink("hi", null);
     const linkDefault = waLink("hi");
     expect(linkNull).toBe(linkDefault);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// clampPercent
+// ---------------------------------------------------------------------------
+describe("clampPercent", () => {
+  it("returns 0 when the max is 0 or negative", () => {
+    expect(clampPercent(50, 0)).toBe(0);
+    expect(clampPercent(50, -10)).toBe(0);
+  });
+
+  it("scales a value relative to the maximum without exceeding 100", () => {
+    expect(clampPercent(25, 100)).toBe(25);
+    expect(clampPercent(125, 100)).toBe(100);
   });
 });
 
