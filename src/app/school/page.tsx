@@ -20,7 +20,9 @@ import Modal from "@/components/ui/Modal";
 import Bell from "@/components/layout/Bell";
 import BetaFeedback, { BETA_FEEDBACK_ENABLED } from "@/components/layout/BetaFeedback";
 import { fmtDate, waLink } from "@/lib/utils";
-import { downloadRaporPdf, printSingleRaporPopup, printSchoolRekap, type PrintCriterion, type PrintBestTime } from "@/lib/printRapor";
+import { downloadRaporPdf, printSingleRaporPopup, type PrintCriterion, type PrintBestTime } from "@/lib/printRapor";
+import { downloadRaporZip } from "@/lib/downloadRaporZip";
+import { useToast } from "@/components/providers/ToastProvider";
 import { createClient } from "@/utils/supabase/client";
 
 type Criterion = PrintCriterion;
@@ -410,6 +412,7 @@ interface Student {
   period_id: string | null;
   period_label: string | null;
   entry_id: string | null;
+  is_filled: boolean;
   scores: Record<string, number | string>;
   notes: string | null;
   personality: string | null;
@@ -424,6 +427,7 @@ type SchoolTab = "rapor" | "absensi";
 
 export default function SchoolPage() {
   const supabase = createClient();
+  const toast = useToast();
   const [schoolName, setSchoolName] = useState("School Panel");
   const [schoolId, setSchoolId] = useState("");
   const [branchId, setBranchId] = useState("");
@@ -452,6 +456,8 @@ export default function SchoolPage() {
   // Multi-select for bulk print
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [selectMode, setSelectMode] = useState(false);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [bulkDownloading, setBulkDownloading] = useState(false);
 
   const logout = async () => {
     await supabase.auth.signOut();
@@ -473,7 +479,7 @@ export default function SchoolPage() {
           )
         ),
         rapor_entries(
-          id, scores, notes, personality, motivation, learning_achievements, level, period_id
+          id, scores, notes, personality, motivation, learning_achievements, level, period_id, locked
         )
       `)
       .eq("school_id", sId)
@@ -499,7 +505,7 @@ export default function SchoolPage() {
       const cls = mc?.classes;
       const firstCoach = cls?.class_coaches?.[0]?.profile;
       const entry = pid
-        ? (m.rapor_entries as unknown as { id: string; scores: Record<string, number | string>; notes: string | null; personality: string | null; motivation: string | null; learning_achievements: string | null; level: string | null; period_id: string }[])
+        ? (m.rapor_entries as unknown as { id: string; scores: Record<string, number | string>; notes: string | null; personality: string | null; motivation: string | null; learning_achievements: string | null; level: string | null; period_id: string; locked: boolean }[])
           ?.find((e) => e.period_id === pid)
         : undefined;
       const criteria: Criterion[] = [...(cls?.class_criteria ?? [])]
@@ -517,6 +523,7 @@ export default function SchoolPage() {
         period_id: pid,
         period_label: periodLabel,
         entry_id: entry?.id ?? null,
+        is_filled: entry?.locked === true,
         scores: entry?.scores ?? {},
         notes: entry?.notes ?? null,
         personality: entry?.personality ?? null,
@@ -597,8 +604,8 @@ export default function SchoolPage() {
     // Filters
     if (filterClass)  result = result.filter(s => s.class_name === filterClass);
     if (filterCoach)  result = result.filter(s => s.coach_name === filterCoach);
-    if (filterStatus === "done")    result = result.filter(s => s.entry_id !== null);
-    if (filterStatus === "pending") result = result.filter(s => s.entry_id === null);
+    if (filterStatus === "done")    result = result.filter(s => s.is_filled);
+    if (filterStatus === "pending") result = result.filter(s => !s.is_filled);
 
     // Sort
     result.sort((a, b) => {
@@ -606,7 +613,7 @@ export default function SchoolPage() {
       if (sortBy === "name")   { va = a.full_name; vb = b.full_name; }
       else if (sortBy === "class")  { va = a.class_name; vb = b.class_name; }
       else if (sortBy === "coach")  { va = a.coach_name; vb = b.coach_name; }
-      else if (sortBy === "status") { va = a.entry_id ? "1" : "0"; vb = b.entry_id ? "1" : "0"; }
+      else if (sortBy === "status") { va = a.is_filled ? "1" : "0"; vb = b.is_filled ? "1" : "0"; }
       if (va < vb) return sortDir === "asc" ? -1 : 1;
       if (va > vb) return sortDir === "asc" ? 1 : -1;
       return 0;
@@ -620,8 +627,8 @@ export default function SchoolPage() {
   const safePage = Math.min(page, Math.max(0, totalPages - 1));
   const paginated = filteredSorted.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
 
-  const totalDone = students.filter(s => s.entry_id !== null).length;
-  const totalPending = students.filter(s => s.entry_id === null).length;
+  const totalDone = students.filter(s => s.is_filled).length;
+  const totalPending = students.filter(s => !s.is_filled).length;
 
   const toggleSort = (col: string) => {
     if (sortBy === col) setSortDir(d => d === "asc" ? "desc" : "asc");
@@ -641,19 +648,35 @@ export default function SchoolPage() {
     criteria: s.criteria, best_times: s.best_times,
   });
 
-  const handlePrintAll = () => printSchoolRekap(schoolName, activePeriod?.label ?? "—", students.map(toPrintStudent));
-  const handlePrintOne = (s: Student) => void downloadRaporPdf(toPrintStudent(s));
-  const handlePrintSelected = () => {
-    const targets = students.filter(s => selected.has(s.id) && s.entry_id !== null);
+  const downloadZipFor = async (targets: Student[]) => {
     if (targets.length === 0) return;
-    if (targets.length === 1) { void downloadRaporPdf(toPrintStudent(targets[0])); return; }
-    printSchoolRekap(schoolName, activePeriod?.label ?? "—", targets.map(toPrintStudent));
+    setBulkDownloading(true);
+    try {
+      const zipName = `rapor-${schoolName.replace(/[^a-zA-Z0-9]/g, "_")}-${new Date().toISOString().slice(0, 10)}`;
+      const { success, failed } = await downloadRaporZip(targets.map(toPrintStudent), zipName);
+      if (failed === 0) toast.success(`${success} rapor berhasil diunduh`);
+      else if (success === 0) toast.error("Gagal mengunduh rapor", "Semua rapor gagal diproses, coba lagi.");
+      else toast.error(`${success} berhasil, ${failed} gagal`, "Sebagian rapor gagal diproses, coba lagi untuk yang gagal.");
+    } catch {
+      toast.error("Gagal mengunduh rapor", "Terjadi kesalahan. Coba lagi.");
+    } finally {
+      setBulkDownloading(false);
+    }
   };
-  const handlePrintFiltered = () => {
-    const targets = filteredSorted.filter(s => s.entry_id !== null);
-    if (targets.length === 0) return;
-    printSchoolRekap(schoolName, activePeriod?.label ?? "—", targets.map(toPrintStudent));
+
+  const handlePrintAll = () => void downloadZipFor(students.filter(s => s.is_filled));
+  const handlePrintOne = async (s: Student) => {
+    setDownloadingId(s.id);
+    try {
+      await downloadRaporPdf(toPrintStudent(s));
+    } catch {
+      toast.error("Gagal download PDF", "Terjadi kesalahan. Coba lagi.");
+    } finally {
+      setDownloadingId(null);
+    }
   };
+  const handlePrintSelected = () => void downloadZipFor(students.filter(s => selected.has(s.id) && s.is_filled));
+  const handlePrintFiltered = () => void downloadZipFor(filteredSorted.filter(s => s.is_filled));
 
   return (
     <div className="min-h-screen bg-paper-tint">
@@ -699,18 +722,20 @@ export default function SchoolPage() {
                 <div className="mt-4 flex flex-wrap gap-2">
                   <button
                     onClick={handlePrintAll}
-                    className="inline-flex items-center gap-2 bg-white/15 hover:bg-white/25 backdrop-blur border border-white/20 text-white text-sm font-semibold px-4 py-2 rounded-xl transition"
+                    disabled={bulkDownloading}
+                    className="inline-flex items-center gap-2 bg-white/15 hover:bg-white/25 backdrop-blur border border-white/20 text-white text-sm font-semibold px-4 py-2 rounded-xl transition disabled:opacity-60"
                   >
-                    <Icon name="print" className="w-4 h-4" />
-                    Cetak semua ({totalDone})
+                    <Icon name="download" className="w-4 h-4" />
+                    {bulkDownloading ? "Mengunduh…" : `Download Semua (${totalDone})`}
                   </button>
-                  {(search || activeFilterCount > 0) && filteredSorted.filter(s => s.entry_id).length > 0 && filteredSorted.length < students.length && (
+                  {(search || activeFilterCount > 0) && filteredSorted.filter(s => s.is_filled).length > 0 && filteredSorted.length < students.length && (
                     <button
                       onClick={handlePrintFiltered}
-                      className="inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 backdrop-blur border border-white/15 text-white/90 text-sm font-semibold px-4 py-2 rounded-xl transition"
+                      disabled={bulkDownloading}
+                      className="inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 backdrop-blur border border-white/15 text-white/90 text-sm font-semibold px-4 py-2 rounded-xl transition disabled:opacity-60"
                     >
-                      <Icon name="print" className="w-4 h-4" />
-                      Cetak hasil filter ({filteredSorted.filter(s => s.entry_id).length})
+                      <Icon name="download" className="w-4 h-4" />
+                      {bulkDownloading ? "Mengunduh…" : `Download Hasil Filter (${filteredSorted.filter(s => s.is_filled).length})`}
                     </button>
                   )}
                 </div>
@@ -776,19 +801,19 @@ export default function SchoolPage() {
                       className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border border-line bg-white text-ink-soft hover:border-ocean-400 transition"
                     >
                       <Icon name="check" className="w-3.5 h-3.5" />
-                      Pilih & Cetak
+                      Pilih & Download
                     </button>
                   )}
                 </div>
               ) : (
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-sm font-semibold text-ink-soft">{selected.size} dipilih</span>
-                  <button type="button" onClick={() => setSelected(new Set(filteredSorted.filter(s => s.entry_id).map(s => s.id)))}
-                    className="text-xs font-semibold text-ocean-600 hover:underline">Pilih semua ({filteredSorted.filter(s => s.entry_id).length})</button>
+                  <button type="button" onClick={() => setSelected(new Set(filteredSorted.filter(s => s.is_filled).map(s => s.id)))}
+                    className="text-xs font-semibold text-ocean-600 hover:underline">Pilih semua ({filteredSorted.filter(s => s.is_filled).length})</button>
                   <button type="button" onClick={() => setSelected(new Set())}
                     className="text-xs font-semibold text-ink-mute hover:underline">Batal pilih</button>
-                  <Btn variant="primary" size="sm" icon="print" disabled={selected.size === 0} onClick={handlePrintSelected}>
-                    Cetak ({selected.size})
+                  <Btn variant="primary" size="sm" icon="download" disabled={selected.size === 0 || bulkDownloading} onClick={handlePrintSelected}>
+                    {bulkDownloading ? "Mengunduh…" : `Download PDF (${selected.size})`}
                   </Btn>
                   <Btn variant="ghost" size="sm" onClick={() => { setSelectMode(false); setSelected(new Set()); }}>Selesai</Btn>
                 </div>
@@ -913,8 +938,8 @@ export default function SchoolPage() {
                         <input
                           type="checkbox"
                           className="rounded border-line accent-ocean-600"
-                          checked={filteredSorted.filter(s => s.entry_id).length > 0 && filteredSorted.filter(s => s.entry_id).every(s => selected.has(s.id))}
-                          onChange={e => setSelected(e.target.checked ? new Set(filteredSorted.filter(s => s.entry_id).map(s => s.id)) : new Set())}
+                          checked={filteredSorted.filter(s => s.is_filled).length > 0 && filteredSorted.filter(s => s.is_filled).every(s => selected.has(s.id))}
+                          onChange={e => setSelected(e.target.checked ? new Set(filteredSorted.filter(s => s.is_filled).map(s => s.id)) : new Set())}
                         />
                       </th>}
                       <th className="text-left py-3 px-5 font-bold cursor-pointer select-none group" onClick={() => toggleSort("name")}>
@@ -938,9 +963,9 @@ export default function SchoolPage() {
                       return (
                         <tr
                           key={s.id}
-                          className={`hover:bg-paper-tint transition-colors ${selectMode && s.entry_id ? "cursor-pointer" : ""} ${selectMode && isChecked ? "bg-ocean-50" : ""}`}
+                          className={`hover:bg-paper-tint transition-colors ${selectMode && s.is_filled ? "cursor-pointer" : ""} ${selectMode && isChecked ? "bg-ocean-50" : ""}`}
                           onClick={() => {
-                            if (!selectMode || !s.entry_id) return;
+                            if (!selectMode || !s.is_filled) return;
                             setSelected(prev => { const next = new Set(prev); if (next.has(s.id)) next.delete(s.id); else next.add(s.id); return next; });
                           }}
                         >
@@ -949,7 +974,7 @@ export default function SchoolPage() {
                               <input
                                 type="checkbox"
                                 className="rounded border-line accent-ocean-600"
-                                disabled={!s.entry_id}
+                                disabled={!s.is_filled}
                                 checked={isChecked}
                                 onChange={() => setSelected(prev => { const next = new Set(prev); if (next.has(s.id)) next.delete(s.id); else next.add(s.id); return next; })}
                               />
@@ -963,11 +988,13 @@ export default function SchoolPage() {
                           </td>
                           <td className="text-ink-soft text-sm">{s.class_name}</td>
                           <td className="text-ink-soft text-sm">{s.coach_name}</td>
-                          <td>{s.entry_id ? <Status kind="approved">Tersedia</Status> : <Status kind="pending">Belum diisi</Status>}</td>
+                          <td>{s.is_filled ? <Status kind="approved">Tersedia</Status> : <Status kind="pending">Belum diisi</Status>}</td>
                           <td className="text-right px-5">
                             <div className="inline-flex gap-1.5">
-                              <Btn variant="soft" size="sm" icon="eye" disabled={!s.entry_id} onClick={() => setOpen(s)}>Lihat</Btn>
-                              <Btn variant="ghost" size="sm" icon="print" disabled={!s.entry_id} onClick={() => handlePrintOne(s)}>Cetak</Btn>
+                              <Btn variant="soft" size="sm" icon="eye" disabled={!s.is_filled} onClick={() => setOpen(s)}>Lihat</Btn>
+                              <Btn variant="ghost" size="sm" icon="download" disabled={!s.is_filled || downloadingId === s.id} onClick={() => void handlePrintOne(s)}>
+                                {downloadingId === s.id ? "Mengunduh…" : "Download PDF"}
+                              </Btn>
                             </div>
                           </td>
                         </tr>
@@ -995,9 +1022,9 @@ export default function SchoolPage() {
                   return (
                     <div
                       key={s.id}
-                      className={`px-4 py-3.5 flex items-center gap-3 ${selectMode && s.entry_id ? "cursor-pointer active:bg-paper-tint" : ""} ${selectMode && isChecked ? "bg-ocean-50" : ""}`}
+                      className={`px-4 py-3.5 flex items-center gap-3 ${selectMode && s.is_filled ? "cursor-pointer active:bg-paper-tint" : ""} ${selectMode && isChecked ? "bg-ocean-50" : ""}`}
                       onClick={() => {
-                        if (!selectMode || !s.entry_id) return;
+                        if (!selectMode || !s.is_filled) return;
                         setSelected(prev => { const next = new Set(prev); if (next.has(s.id)) next.delete(s.id); else next.add(s.id); return next; });
                       }}
                     >
@@ -1005,7 +1032,7 @@ export default function SchoolPage() {
                         <input
                           type="checkbox"
                           className="rounded border-line accent-ocean-600 shrink-0"
-                          disabled={!s.entry_id}
+                          disabled={!s.is_filled}
                           checked={isChecked}
                           onChange={() => setSelected(prev => { const next = new Set(prev); if (next.has(s.id)) next.delete(s.id); else next.add(s.id); return next; })}
                           onClick={e => e.stopPropagation()}
@@ -1017,8 +1044,8 @@ export default function SchoolPage() {
                         <div className="text-xs text-ink-mute truncate">{s.class_name} · {s.coach_name}</div>
                       </div>
                       <div className="flex flex-col items-end gap-1.5 shrink-0">
-                        {s.entry_id ? <Status kind="approved">Tersedia</Status> : <Status kind="pending">Belum</Status>}
-                        {s.entry_id && !selectMode && (
+                        {s.is_filled ? <Status kind="approved">Tersedia</Status> : <Status kind="pending">Belum</Status>}
+                        {s.is_filled && !selectMode && (
                           <div className="flex gap-1">
                             <button
                               type="button"
@@ -1029,10 +1056,12 @@ export default function SchoolPage() {
                             </button>
                             <button
                               type="button"
-                              onClick={() => handlePrintOne(s)}
-                              className="p-1.5 rounded-lg bg-paper-tint text-ink-mute hover:bg-paper-deep transition"
+                              onClick={() => void handlePrintOne(s)}
+                              disabled={downloadingId === s.id}
+                              className="p-1.5 rounded-lg bg-paper-tint text-ink-mute hover:bg-paper-deep transition disabled:opacity-60"
+                              title="Download PDF"
                             >
-                              <Icon name="print" className="w-3.5 h-3.5" />
+                              <Icon name="download" className="w-3.5 h-3.5" />
                             </button>
                           </div>
                         )}
@@ -1121,7 +1150,9 @@ export default function SchoolPage() {
         footer={
           <div className="flex gap-2">
             <Btn variant="outline" size="sm" icon="printer" onClick={() => open && printSingleRaporPopup(toPrintStudent(open))}>Print</Btn>
-            <Btn variant="soft" size="sm" icon="download" onClick={() => open && void downloadRaporPdf(toPrintStudent(open))}>Download PDF</Btn>
+            <Btn variant="soft" size="sm" icon="download" disabled={downloadingId === open?.id} onClick={() => open && void handlePrintOne(open)}>
+              {downloadingId === open?.id ? "Mengunduh…" : "Download PDF"}
+            </Btn>
             <Btn variant="primary" onClick={() => setOpen(null)}>Tutup</Btn>
           </div>
         }

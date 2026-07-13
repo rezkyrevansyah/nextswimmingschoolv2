@@ -16,7 +16,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
-import { buildRaporHtmlStandalone } from "@/lib/printRapor";
+import { buildRaporHtmlStandalone, sanitizeFilename } from "@/lib/printRapor";
 import type { PrintStudent, RaporAssets } from "@/lib/printRapor";
 import path from "path";
 import fs from "fs";
@@ -162,11 +162,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const safeName = student.full_name
-    .replace(/[^a-z0-9]/gi, "_")
-    .toLowerCase()
-    .replace(/_+/g, "_")
-    .slice(0, 50);
+  const safeName = sanitizeFilename(student.full_name);
 
   return new NextResponse(pdfBuffer.buffer.slice(pdfBuffer.byteOffset, pdfBuffer.byteOffset + pdfBuffer.byteLength) as ArrayBuffer, {
     status: 200,

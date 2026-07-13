@@ -10,6 +10,7 @@ import { Card, SectionTitle } from "@/components/ui/Card";
 import Status from "@/components/ui/Status";
 import Modal from "@/components/ui/Modal";
 import { fmtDate } from "@/lib/utils";
+import AdminRaporList from "./AdminRaporList";
 
 interface CoachReviewRow {
   id: string;
@@ -48,8 +49,8 @@ function AdminCoachReviews({ branchId }: { branchId: string }) {
     (async () => {
       const { data } = await supabase
         .from("member_reviews")
-        .select("id, stars, message, created_at, coach_id, coach:profiles!member_reviews_coach_id_fkey(full_name), member:members!member_reviews_member_id_fkey(branch_id, profile:profiles(full_name)), rapor:rapor_entries!member_reviews_rapor_id_fkey(rapor_periods(label))")
-        .eq("member.branch_id", branchId)
+        .select("id, stars, message, created_at, coach_id, coach:profiles!member_reviews_coach_id_fkey(full_name), member:members!member_reviews_member_id_fkey(profile:profiles(full_name)), rapor:rapor_entries!inner!member_reviews_rapor_id_fkey(class:classes!inner(branch_id), rapor_periods(label))")
+        .eq("rapor.class.branch_id", branchId)
         .order("created_at", { ascending: false });
       if (!data) { setLoading(false); return; }
 
@@ -238,6 +239,8 @@ export default function AdminRapor({ branchId }: { branchId: string }) {
           </div>
         </Card>
       )}
+      <AdminRaporList branchId={branchId} periods={periods} />
+
       <div>
         <SectionTitle sub="Ulasan member terhadap coach" action={null}>Ulasan Coach</SectionTitle>
         <AdminCoachReviews branchId={branchId} />

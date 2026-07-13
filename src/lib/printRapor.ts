@@ -81,6 +81,15 @@ function scoreLabel(val: number | string, kind: string): string {
   return "BEGINNING";
 }
 
+/** Sanitize a student name into a safe filename fragment (no extension). */
+export function sanitizeFilename(name: string): string {
+  return name
+    .replace(/[^a-z0-9]/gi, "_")
+    .toLowerCase()
+    .replace(/_+/g, "_")
+    .slice(0, 50);
+}
+
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, "&amp;")
@@ -425,7 +434,7 @@ export async function downloadRaporPdf(student: PrintStudent): Promise<void> {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `rapor-${student.full_name.replace(/[^a-z0-9]/gi, "_").toLowerCase()}.pdf`;
+    link.download = `rapor-${sanitizeFilename(student.full_name)}.pdf`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -435,7 +444,7 @@ export async function downloadRaporPdf(student: PrintStudent): Promise<void> {
     const origin = window.location.origin;
     const assets = assetsFromOrigin(origin);
     const w = window.open("", "_blank", "width=860,height=1200");
-    if (!w) return;
+    if (!w) throw new Error("Popup diblokir browser — izinkan pop-up untuk situs ini lalu coba lagi.");
     w.document.write(buildRaporHtmlStandalone(student, assets));
     w.document.close();
     w.focus();
@@ -455,59 +464,3 @@ export function printSingleRaporPopup(student: PrintStudent): void {
   setTimeout(() => w.print(), 800);
 }
 
-/** @deprecated Use downloadRaporPdf() instead. */
-export function printSingleRapor(student: PrintStudent): void {
-  void downloadRaporPdf(student);
-}
-
-/** Print rekap rapor semua siswa sekolah afiliasi (school panel) */
-export function printSchoolRekap(
-  schoolName: string,
-  periodLabel: string,
-  students: PrintStudent[]
-): void {
-  const w = window.open("", "_blank", "width=860,height=1200");
-  if (!w) return;
-  const origin = window.location.origin;
-  const assets = assetsFromOrigin(origin);
-  const logoUrl = assets.watermark;
-  const date = new Date().toLocaleDateString("id-ID", { dateStyle: "long" });
-
-  const coverHtml = `
-  <div style="min-height:100vh;background:#155689;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;color:#fff;page-break-after:always;position:relative">
-    <img src="${logoUrl}" style="width:80px;height:80px;object-fit:contain;margin-bottom:16px;filter:brightness(0) invert(1)" alt="" />
-    <div style="font-size:11px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;opacity:.6;margin-bottom:8px">REKAP RAPOR PERKEMBANGAN SISWA</div>
-    <div style="font-size:28px;font-weight:900;letter-spacing:.02em;margin-bottom:6px">${escapeHtml(schoolName)}</div>
-    <div style="font-size:14px;opacity:.75;margin-bottom:32px">${escapeHtml(periodLabel)}</div>
-    <div style="display:flex;gap:20px">
-      ${[
-        ["Total Siswa", students.length],
-        ["Rapor Tersedia", students.filter(s => Object.keys(s.scores).length > 0 || s.notes).length],
-        ["Belum Diisi",  students.filter(s => Object.keys(s.scores).length === 0 && !s.notes).length],
-      ].map(([lbl, num]) => `
-        <div style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);border-radius:12px;padding:16px 28px">
-          <div style="font-size:32px;font-weight:900">${num}</div>
-          <div style="font-size:10px;font-weight:600;opacity:.6;text-transform:uppercase;letter-spacing:.06em;margin-top:4px">${lbl}</div>
-        </div>
-      `).join("")}
-    </div>
-    <div style="position:absolute;bottom:20px;font-size:10px;opacity:.4">Dicetak pada ${date}</div>
-  </div>`;
-
-  const studentPages = students.map(s => `
-    <div style="page-break-after:always">
-      ${buildRaporHtml(s, assets)}
-    </div>`).join("");
-
-  w.document.write(`<!DOCTYPE html><html lang="id"><head>
-    <meta charset="utf-8">
-    <title>Rekap Rapor — ${escapeHtml(schoolName)}</title>
-    <style>${STYLES}</style>
-  </head><body style="margin:0;padding:0">
-    ${coverHtml}
-    ${studentPages}
-  </body></html>`);
-  w.document.close();
-  w.focus();
-  setTimeout(() => w.print(), 800);
-}

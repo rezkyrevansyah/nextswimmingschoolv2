@@ -130,7 +130,7 @@ function LoginForm() {
               </button>
             </div>
 
-            <Btn variant="primary" size="lg" className="w-full !mt-6">
+            <Btn variant="primary" size="lg" className="w-full !mt-6" type="submit">
               {loading ? "Memproses…" : "Masuk"}
             </Btn>
           </form>
