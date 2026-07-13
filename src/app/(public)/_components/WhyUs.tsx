@@ -1,13 +1,22 @@
 import { Card } from "@/components/ui/Card";
+import Btn from "@/components/ui/Btn";
 import Icon from "@/components/ui/Icon";
-import { TrialButton } from "./TrialBooking";
+import { waLink } from "@/lib/utils";
 import { createClient } from "@/utils/supabase/server";
 
 interface WhyUsData {
-  section_label: string; headline: string; body_text: string;
-  featured_icon: string; featured_title: string; featured_desc: string;
-  featured_stat1_label: string; featured_stat1_value: string;
-  featured_stat2_label: string; featured_stat2_value: string;
+  section_label: string;
+  headline: string;
+  body_text: string;
+  wa_button_text: string | null;
+  wa_message: string | null;
+  featured_icon: string;
+  featured_title: string;
+  featured_desc: string;
+  featured_stat1_label: string;
+  featured_stat1_value: string;
+  featured_stat2_label: string;
+  featured_stat2_value: string;
 }
 interface WhyUsCard { id: string; icon: string; title: string; description: string; }
 
@@ -15,6 +24,8 @@ const SECTION_DEFAULTS: WhyUsData = {
   section_label: "Mengapa Kami",
   headline: "Lima alasan keluarga mempercayakan kami.",
   body_text: "Bukan sekadar belajar renang. Kami menghadirkan ekosistem yang mempermudah orang tua, coach, dan administrasi sekolah dalam satu sistem.",
+  wa_button_text: "Hubungi Admin",
+  wa_message: "Halo Admin Next Swimming School, saya ingin bertanya tentang program les renang. Bisa dibantu?",
   featured_icon: "shield",
   featured_title: "Coach Profesional",
   featured_desc: "Setiap coach memiliki sertifikasi yang diverifikasi admin sebelum mengajar.",
@@ -25,26 +36,29 @@ const SECTION_DEFAULTS: WhyUsData = {
 };
 
 const CARDS_DEFAULTS: WhyUsCard[] = [
-  { id: "1", icon: "chart",    title: "Progress Monitoring",   description: "Rapor digital per semester dengan aspek penilaian yang disesuaikan per kelas." },
-  { id: "2", icon: "qr",       title: "Sistem Digital Modern", description: "QR absensi, notifikasi real-time, dan dashboard untuk orang tua." },
-  { id: "3", icon: "calendar", title: "Jadwal Fleksibel",       description: "Kelas reguler, private, hingga afiliasi sekolah. Pilih yang paling cocok." },
-  { id: "4", icon: "target",   title: "Kelas Nyaman & Aman",    description: "Rasio coach-member kecil, kolam diawasi, dan SOP keamanan yang ketat." },
+  { id: "1", icon: "chart", title: "Progress Monitoring", description: "Rapor digital per semester dengan aspek penilaian yang disesuaikan per kelas." },
+  { id: "2", icon: "qr", title: "Sistem Digital Modern", description: "QR absensi, notifikasi real-time, dan dashboard untuk orang tua." },
+  { id: "3", icon: "calendar", title: "Jadwal Fleksibel", description: "Kelas reguler, private, hingga afiliasi sekolah. Pilih yang paling cocok." },
+  { id: "4", icon: "target", title: "Kelas Nyaman & Aman", description: "Rasio coach-member kecil, kolam diawasi, dan SOP keamanan yang ketat." },
 ];
 
-export default async function WhyUs() {
+export default async function WhyUs({ waPhone }: { waPhone?: string }) {
   const supabase = await createClient();
   const [{ data: sectionData }, { data: cardsData }] = await Promise.all([
     supabase.from("landing_whyus").select("*").single(),
     supabase.from("landing_whyus_cards").select("id, icon, title, description").order("sort_order"),
   ]);
 
-  const s = sectionData ?? SECTION_DEFAULTS;
+  const s = (sectionData as WhyUsData | null) ?? SECTION_DEFAULTS;
   const cards = (cardsData && cardsData.length > 0) ? cardsData : CARDS_DEFAULTS;
+  const waLabel = s.wa_button_text?.trim() || "Hubungi Admin";
+  const waMessage = s.wa_message?.trim() || "Halo Admin Next Swimming School, saya ingin bertanya tentang program les renang. Bisa dibantu?";
 
   return (
     <section id="why" className="bg-paper-tint">
       <div className="max-w-7xl mx-auto px-4 lg:px-8 py-20 lg:py-28">
         <div className="max-w-2xl">
+          <div className="text-wave-600 font-bold text-xs uppercase tracking-widest mb-2">{s.section_label}</div>
           <h2 className="font-display font-extrabold text-3xl lg:text-5xl text-ink leading-tight whitespace-pre-line">
             {s.headline}
           </h2>
@@ -86,7 +100,9 @@ export default async function WhyUs() {
 
         <div className="mt-12 text-center">
           <p className="text-ink-mute text-sm font-medium mb-3">Rasakan sendiri sebelum memutuskan. Sesi trial gratis, tanpa komitmen.</p>
-          <TrialButton />
+          <Btn href={waLink(waMessage, waPhone)} variant="accent" size="lg" icon="whatsapp">
+            {waLabel}
+          </Btn>
         </div>
       </div>
     </section>

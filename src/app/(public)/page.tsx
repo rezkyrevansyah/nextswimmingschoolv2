@@ -34,12 +34,14 @@ export const metadata: Metadata = {
 export default async function LandingPage() {
   const supabase = await createClient();
   const [{ data: config }, { data: navLinks }, { data: branchData }] = await Promise.all([
-    supabase.from("landing_config").select("footer_wa_number, floating_wa_message").single(),
+    supabase.from("landing_config").select("footer_wa_number, floating_wa_message, nav_cta_text, nav_cta_message").single(),
     supabase.from("landing_nav_links").select("href, label").order("sort_order"),
     supabase.from("branches").select("id, name").eq("status", "active").order("name"),
   ]);
 
   const waPhone = config?.footer_wa_number ?? undefined;
+  const navCtaText = config?.nav_cta_text ?? undefined;
+  const navCtaMessage = config?.nav_cta_message ?? undefined;
   const branches = (branchData ?? []).map((b) => ({ id: b.id as string, name: b.name as string }));
 
   const jsonLd = {
@@ -61,10 +63,10 @@ export default async function LandingPage() {
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
-        <LandingNav links={navLinks ?? undefined} />
+        <LandingNav links={navLinks ?? undefined} navCtaText={navCtaText} navCtaMessage={navCtaMessage} waPhone={waPhone} />
         <main>
-          <Hero />
-          <WhyUs />
+          <Hero waPhone={waPhone} />
+          <WhyUs waPhone={waPhone} />
           <SafetyStandards />
           <Programs />
           <Facilities />
@@ -73,7 +75,7 @@ export default async function LandingPage() {
           <Testimonials />
           <Gallery />
           <FAQ />
-          <FinalCTA />
+          <FinalCTA waPhone={waPhone} />
         </main>
         <LandingFooter />
         <WAFloatingButton message={config?.floating_wa_message ?? undefined} waPhone={waPhone} />

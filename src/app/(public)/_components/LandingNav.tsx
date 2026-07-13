@@ -3,7 +3,8 @@ import Link from "next/link";
 import { useState } from "react";
 import Logo from "@/components/ui/Logo";
 import Icon from "@/components/ui/Icon";
-import { TrialButton } from "./TrialBooking";
+import Btn from "@/components/ui/Btn";
+import { waLink } from "@/lib/utils";
 
 interface NavLink {
   href: string;
@@ -12,18 +13,21 @@ interface NavLink {
 
 interface LandingNavProps {
   links?: NavLink[];
+  navCtaText?: string;
+  navCtaMessage?: string;
+  waPhone?: string;
 }
 
 const DEFAULT_LINKS: NavLink[] = [
-  { href: "#why",        label: "Mengapa Kami" },
-  { href: "#safety",     label: "Keamanan"     },
-  { href: "#program",    label: "Program"      },
-  { href: "#facilities", label: "Fasilitas"    },
-  { href: "#coach",      label: "Coach"        },
-  { href: "#faq",        label: "FAQ"          },
+  { href: "#why", label: "Mengapa Kami" },
+  { href: "#safety", label: "Keamanan" },
+  { href: "#program", label: "Program" },
+  { href: "#facilities", label: "Fasilitas" },
+  { href: "#coach", label: "Coach" },
+  { href: "#faq", label: "FAQ" },
 ];
 
-export default function LandingNav({ links = DEFAULT_LINKS }: LandingNavProps) {
+export default function LandingNav({ links = DEFAULT_LINKS, navCtaText = "Coba Gratis", navCtaMessage = "Halo Admin Next Swimming School, saya ingin bertanya tentang program les renang. Bisa dibantu?", waPhone }: LandingNavProps) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -57,7 +61,9 @@ export default function LandingNav({ links = DEFAULT_LINKS }: LandingNavProps) {
         </Link>
 
         <div className="hidden sm:inline-flex">
-          <TrialButton />
+          <Btn href={waLink(navCtaMessage, waPhone)} variant="accent" size="sm" icon="whatsapp">
+            {navCtaText}
+          </Btn>
         </div>
 
         <button
@@ -91,7 +97,9 @@ export default function LandingNav({ links = DEFAULT_LINKS }: LandingNavProps) {
               Login
             </Link>
             <div className="mt-2">
-              <TrialButton fullWidth />
+              <Btn href={waLink(navCtaMessage, waPhone)} variant="accent" size="sm" icon="whatsapp" className="w-full justify-center">
+                {navCtaText}
+              </Btn>
             </div>
           </div>
         </div>
