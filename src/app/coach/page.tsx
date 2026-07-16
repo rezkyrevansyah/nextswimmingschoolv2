@@ -22,6 +22,7 @@ import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
 import { fmtIDR, fmtDate, fmtDateLong, waLink, countTextStats } from "@/lib/utils";
 import { downloadRaporPdf, printSingleRaporPopup, fmtSwimTime, type PrintCriterion, type PrintBestTime } from "@/lib/printRapor";
+import { mergeBestTimeTemplate, type LevelBestTimeTemplateRow, type RecordedBestTime } from "@/lib/raporLevels";
 import { resolveRaporSigner } from "@/lib/rapor";
 import { printPayslip } from "@/lib/printPayslip";
 import { createClient } from "@/utils/supabase/client";
@@ -95,6 +96,7 @@ interface RaporEntry {
   motivation?: string | null;
   learning_achievements?: string | null;
   level?: string | null;
+  level_id?: string | null;
   member?: { member_no?: string | null; profile: { full_name: string; avatar_url?: string | null; birth_date?: string | null } | null } | null;
   class?: { name: string } | null;
 }
@@ -2215,6 +2217,9 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
   const [motivation, setMotivation] = useState("");
   const [learningAchievements, setLearningAchievements] = useState("");
   const [level, setLevel] = useState("");
+  const [levelId, setLevelId] = useState("");
+  const [levelOptions, setLevelOptions] = useState<{ id: string; name: string }[]>([]);
+  const [loadingLevelTemplate, setLoadingLevelTemplate] = useState(false);
   const [bestTimes, setBestTimes] = useState<BtRow[]>([]);
   const [removedBtIds, setRemovedBtIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
@@ -2233,6 +2238,11 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
       const { data: prof } = await (supabase as any)
         .from("profiles").select("signature_url").eq("id", coachId).single();
       if (prof?.signature_url) setSignatureUrl(prof.signature_url as string);
+
+      // Load active rapor levels (owner-managed)
+      const { data: levelRows } = await supabase
+        .from("rapor_levels").select("id, name").eq("active", true).order("sort_order");
+      setLevelOptions((levelRows ?? []) as { id: string; name: string }[]);
 
       // 1. Find active period
       const { data: periodData } = await supabase
@@ -2274,7 +2284,7 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
 
       // 4. Now fetch all entries for this coach + period
       const { data: e } = await supabase.from("rapor_entries")
-        .select("id, member_id, class_id, locked, scores, notes, personality, motivation, learning_achievements, level, member:members(member_no, profile:profiles(full_name, avatar_url, birth_date)), class:classes(name, rapor_signer_coach_id, class_coaches(coach_id, role, profile:profiles(full_name, signature_url)), class_criteria(id, label, kind, options, sort_order))")
+        .select("id, member_id, class_id, locked, scores, notes, personality, motivation, learning_achievements, level, level_id, period_id, member:members(member_no, profile:profiles(full_name, avatar_url, birth_date)), class:classes(name, rapor_signer_coach_id, class_coaches(coach_id, role, profile:profiles(full_name, signature_url)))")
         .eq("period_id", periodData.id).eq("coach_id", coachId);
       if (e) { setEntries(e as unknown as RaporEntry[]); setPage(0); }
       setLoading(false);
@@ -2282,11 +2292,23 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
   }, [coachId, branchId]); // eslint-disable-line react-hooks/exhaustive-deps
    
 
+  const loadLevelTemplate = async (levelIdToLoad: string, existingBestTimes: RecordedBestTime[]) => {
+    if (!levelIdToLoad) {
+      setCriteria([]);
+      setBestTimes(existingBestTimes.map(r => ({ id: r.id, stroke: r.stroke, distance: String(r.distance), time: String(r.time_seconds) })));
+      return;
+    }
+    setLoadingLevelTemplate(true);
+    const [{ data: critRows }, { data: btTemplateRows }] = await Promise.all([
+      supabase.from("rapor_level_criteria").select("id, label, kind, options, sort_order").eq("level_id", levelIdToLoad).order("sort_order"),
+      supabase.from("rapor_level_best_times").select("id, stroke, distance, target_time_seconds, sort_order").eq("level_id", levelIdToLoad).order("sort_order"),
+    ]);
+    setCriteria((critRows ?? []) as Criterion[]);
+    setBestTimes(mergeBestTimeTemplate((btTemplateRows ?? []) as LevelBestTimeTemplateRow[], existingBestTimes));
+    setLoadingLevelTemplate(false);
+  };
+
   const openEntry = async (e: RaporEntry) => {
-    // Load criteria for this class
-    const classCriteria = ((e as unknown as { class?: { class_criteria?: Criterion[] } }).class?.class_criteria ?? [])
-      .sort((a, b) => ((a as unknown as { sort_order: number }).sort_order ?? 0) - ((b as unknown as { sort_order: number }).sort_order ?? 0));
-    setCriteria(classCriteria as Criterion[]);
     // Pre-fill existing scores
     const existing = (e as unknown as { scores?: Record<string, number | string> }).scores ?? {};
     setScores(existing);
@@ -2295,23 +2317,27 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
     setMotivation(e.motivation ?? "");
     setLearningAchievements(e.learning_achievements ?? "");
     setLevel(e.level ?? "");
-    // Load best times for this member
+    setLevelId(e.level_id ?? "");
+    // Load best times for this member, then merge with the level's template (if any)
     const { data: btRows } = await supabase
       .from("member_best_times")
       .select("id, stroke, distance, time_seconds")
       .eq("member_id", e.member_id)
       .eq("branch_id", branchId)
       .order("stroke").order("distance");
-    setBestTimes(
-      (btRows ?? []).map((row: BestTimeRow) => ({
-        id: row.id,
-        stroke: row.stroke,
-        distance: String(row.distance),
-        time: String(row.time_seconds),
-      }))
-    );
+    await loadLevelTemplate(e.level_id ?? "", (btRows ?? []) as RecordedBestTime[]);
     setRemovedBtIds([]);
     setOpen(e);
+  };
+
+  const handleLevelChange = async (newLevelId: string) => {
+    setLevelId(newLevelId);
+    const found = levelOptions.find(l => l.id === newLevelId);
+    setLevel(found?.name ?? "");
+    const existingBestTimes: RecordedBestTime[] = bestTimes
+      .filter(r => r.stroke && r.distance)
+      .map(r => ({ id: r.id ?? "", stroke: r.stroke, distance: parseInt(r.distance) || 0, time_seconds: parseFloat(r.time) || 0 }));
+    await loadLevelTemplate(newLevelId, existingBestTimes);
   };
 
   const openView = async (e: RaporEntry) => {
@@ -2340,7 +2366,6 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
     if (!periodCheck?.is_open) return toast.error("Periode rapor sudah ditutup", "Hubungi admin untuk membuka kembali periode.");
     setSaving(true);
     const isNew = !open.locked;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { error } = await supabase.from("rapor_entries")
       .update({
         scores, notes,
@@ -2348,8 +2373,10 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
         motivation: motivation || null,
         learning_achievements: learningAchievements || null,
         level: level || null,
+        level_id: levelId || null,
         filled_at: new Date().toISOString(),
         locked: true,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any)
       .eq("id", open.id);
     if (error) { setSaving(false); return toast.error("Gagal menyimpan rapor", error.message); }
@@ -2403,6 +2430,7 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
       motivation: motivation || null,
       learning_achievements: learningAchievements || null,
       level: level || null,
+      level_id: levelId || null,
     } : e));
   };
 
@@ -2586,11 +2614,11 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
           )}
         </div>
       )}
-      <Modal open={!!open} onClose={() => { setOpen(null); setBestTimes([]); setRemovedBtIds([]); setLevel(""); }} title={`Rapor — ${open?.member?.profile?.full_name ?? ""}`} size="lg"
-        footer={<><Btn variant="ghost" onClick={() => { setOpen(null); setBestTimes([]); setRemovedBtIds([]); setLevel(""); }}>Batal</Btn><Btn variant="primary" onClick={saveRapor} disabled={saving || notesInvalid}>{saving ? "Menyimpan…" : "Simpan rapor"}</Btn></>}>
+      <Modal open={!!open} onClose={() => { setOpen(null); setBestTimes([]); setRemovedBtIds([]); setLevel(""); setLevelId(""); }} title={`Rapor — ${open?.member?.profile?.full_name ?? ""}`} size="lg"
+        footer={<><Btn variant="ghost" onClick={() => { setOpen(null); setBestTimes([]); setRemovedBtIds([]); setLevel(""); setLevelId(""); }}>Batal</Btn><Btn variant="primary" onClick={saveRapor} disabled={saving || notesInvalid}>{saving ? "Menyimpan…" : "Simpan rapor"}</Btn></>}>
         <div className="space-y-5">
           {criteria.length === 0 && (
-            <p className="text-xs text-warn-600">Aspek penilaian belum dikonfigurasi admin untuk kelas ini.</p>
+            <p className="text-xs text-warn-600">Pilih level member di bawah untuk memuat aspek penilaian.</p>
           )}
           {criteria.map((c) => (
             <div key={c.id}>
@@ -2623,17 +2651,16 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
               )}
             </div>
           ))}
-          <Field label="Level Member">
-            <datalist id="rapor-level-list">
-              {["Beginner", "Elementary", "Intermediate", "Advanced", "Elite"].map(l => <option key={l} value={l} />)}
-            </datalist>
-            <input
-              type="text" list="rapor-level-list"
-              value={level}
-              onChange={e => setLevel(e.target.value)}
-              placeholder="Mis. Beginner, Intermediate, Advanced…"
-              className="w-full border border-line rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ocean-500 bg-white"
-            />
+          <Field label="Level Member" hint="Pilih level untuk memuat kriteria & tabel waktu standar secara otomatis">
+            <select
+              value={levelId}
+              onChange={e => void handleLevelChange(e.target.value)}
+              disabled={loadingLevelTemplate}
+              className="w-full border border-line rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ocean-500 bg-white disabled:opacity-60"
+            >
+              <option value="">— Pilih level —</option>
+              {levelOptions.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+            </select>
           </Field>
           <Field
             label="Catatan umum coach"
