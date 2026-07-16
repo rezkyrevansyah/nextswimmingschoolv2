@@ -22,6 +22,7 @@ import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
 import { fmtIDR, fmtDate, fmtDateLong, waLink, countTextStats } from "@/lib/utils";
 import { downloadRaporPdf, printSingleRaporPopup, fmtSwimTime, type PrintCriterion, type PrintBestTime } from "@/lib/printRapor";
+import { resolveRaporSigner } from "@/lib/rapor";
 import { printPayslip } from "@/lib/printPayslip";
 import { createClient } from "@/utils/supabase/client";
 import { useUpload } from "@/hooks/useUpload";
@@ -2273,7 +2274,7 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
 
       // 4. Now fetch all entries for this coach + period
       const { data: e } = await supabase.from("rapor_entries")
-        .select("id, member_id, class_id, locked, scores, notes, personality, motivation, learning_achievements, level, member:members(member_no, profile:profiles(full_name, avatar_url, birth_date)), class:classes(name, class_criteria(id, label, kind, options, sort_order))")
+        .select("id, member_id, class_id, locked, scores, notes, personality, motivation, learning_achievements, level, member:members(member_no, profile:profiles(full_name, avatar_url, birth_date)), class:classes(name, rapor_signer_coach_id, class_coaches(coach_id, role, profile:profiles(full_name, signature_url)), class_criteria(id, label, kind, options, sort_order))")
         .eq("period_id", periodData.id).eq("coach_id", coachId);
       if (e) { setEntries(e as unknown as RaporEntry[]); setPage(0); }
       setLoading(false);
@@ -2770,7 +2771,9 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
             {viewing && period && (() => {
               const vScores = (viewing as unknown as { scores?: Record<string, number | string> }).scores ?? {};
               const vNotes  = (viewing as unknown as { notes?: string | null }).notes ?? null;
-              const vCrit   = ((viewing as unknown as { class?: { class_criteria?: PrintCriterion[] } }).class?.class_criteria ?? []) as PrintCriterion[];
+              const vClass  = (viewing as unknown as { class?: { class_criteria?: PrintCriterion[]; rapor_signer_coach_id?: string | null; class_coaches?: { coach_id: string; role: string; profile: { full_name: string; signature_url: string | null } | null }[] } }).class;
+              const vCrit   = (vClass?.class_criteria ?? []) as PrintCriterion[];
+              const signer  = resolveRaporSigner(vClass?.class_coaches ?? [], vClass?.rapor_signer_coach_id);
               const raporData = {
                 full_name: viewing.member?.profile?.full_name ?? "",
                 member_no: viewing.member?.member_no ?? undefined,
@@ -2778,7 +2781,7 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
                 birth_date: viewing.member?.profile?.birth_date ?? undefined,
                 location: branchName || undefined,
                 class_name: viewing.class?.name ?? "",
-                coach_name: coachName,
+                coach_name: signer?.full_name ?? coachName,
                 period_label: period.label,
                 level: viewing.level ?? undefined,
                 scores: vScores,
@@ -2788,7 +2791,7 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
                 learning_achievements: viewing.learning_achievements ?? undefined,
                 criteria: vCrit,
                 best_times: viewBestTimes,
-                coach_signature_url: signatureUrl,
+                coach_signature_url: signer?.signature_url ?? signatureUrl,
               };
               return (<>
                 <Btn variant="outline" size="sm" icon="printer"
@@ -3456,11 +3459,19 @@ interface CoachPayslipItem {
   branch?: { name: string } | null;
 }
 
+interface PayslipDeductionRow {
+  id: string;
+  label: string;
+  amount: number;
+}
+
 function CoachPayslip({ coachId, coachName }: { coachId: string; coachName: string }) {
   const supabase = createClient();
   const [payslips, setPayslips] = useState<CoachPayslipItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [deductions, setDeductions] = useState<PayslipDeductionRow[]>([]);
+  const [loadingDeductions, setLoadingDeductions] = useState(false);
 
   /* eslint-disable react-hooks/set-state-in-effect -- async data loader */
   useEffect(() => {
@@ -3476,6 +3487,16 @@ function CoachPayslip({ coachId, coachName }: { coachId: string; coachName: stri
       });
   }, [coachId]); // eslint-disable-line react-hooks/exhaustive-deps
   /* eslint-enable react-hooks/set-state-in-effect */
+
+  const toggleExpand = (p: CoachPayslipItem) => {
+    if (expanded === p.id) { setExpanded(null); return; }
+    setExpanded(p.id);
+    setLoadingDeductions(true);
+    supabase.from("payslip_deductions").select("id, label, amount").eq("payslip_id", p.id).order("type").then(({ data }) => {
+      if (data) setDeductions(data as PayslipDeductionRow[]);
+      setLoadingDeductions(false);
+    });
+  };
 
   const printSlip = (p: CoachPayslipItem) => {
     void printPayslip(supabase, p.id);
@@ -3497,7 +3518,7 @@ function CoachPayslip({ coachId, coachName }: { coachId: string; coachName: stri
         <div className="space-y-3">
           {payslips.map(p => (
             <div key={p.id} className="bg-white border border-line rounded-2xl overflow-hidden shadow-card">
-              <button className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-paper-tint" onClick={() => setExpanded(expanded === p.id ? null : p.id)}>
+              <button className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-paper-tint" onClick={() => toggleExpand(p)}>
                 <span className="w-10 h-10 rounded-xl bg-ok-50 text-ok-700 flex items-center justify-center shrink-0">
                   <Icon name="wallet" className="w-5 h-5" />
                 </span>
@@ -3515,14 +3536,25 @@ function CoachPayslip({ coachId, coachName }: { coachId: string; coachName: stri
               {expanded === p.id && (
                 <div className="border-t border-line px-4 py-4 space-y-3 bg-paper-tint">
                   <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                    <div>
+                    <div className="col-span-2">
                       <div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Gaji Kotor</div>
                       <div className="font-mono font-semibold">{fmtIDR(p.gross_amount)}</div>
                     </div>
-                    <div>
-                      <div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Potongan</div>
-                      <div className="font-mono font-semibold text-danger-700">- {fmtIDR(p.deductions)}</div>
-                    </div>
+                    {loadingDeductions ? (
+                      <div className="col-span-2 text-xs text-ink-mute">Memuat rincian potongan…</div>
+                    ) : deductions.length > 0 ? (
+                      deductions.map(d => (
+                        <div key={d.id} className="col-span-2 flex items-center justify-between">
+                          <span className="text-xs text-ink-faint">{d.label}</span>
+                          <span className="font-mono font-semibold text-danger-700 text-sm">- {fmtIDR(d.amount)}</span>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="col-span-2 flex items-center justify-between">
+                        <span className="text-xs text-ink-faint uppercase tracking-widest font-bold">Potongan</span>
+                        <span className="font-mono font-semibold text-danger-700 text-sm">- {fmtIDR(p.deductions)}</span>
+                      </div>
+                    )}
                     <div className="col-span-2 bg-ok-50 border border-ok-200 rounded-xl px-3 py-2 flex items-center justify-between">
                       <span className="text-sm font-semibold text-ok-900">Gaji Bersih</span>
                       <span className="font-mono font-bold text-ok-700 text-base">{fmtIDR(p.net_amount)}</span>

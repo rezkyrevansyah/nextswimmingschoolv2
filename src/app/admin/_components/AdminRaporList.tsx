@@ -10,6 +10,7 @@ import Status from "@/components/ui/Status";
 import Modal from "@/components/ui/Modal";
 import { downloadRaporPdf, type PrintCriterion, type PrintBestTime } from "@/lib/printRapor";
 import { downloadRaporZip } from "@/lib/downloadRaporZip";
+import { resolveRaporSigner } from "@/lib/rapor";
 
 interface RaporPeriod {
   id: string; label: string; date_from: string; date_to: string;
@@ -71,8 +72,8 @@ export default function AdminRaporList({ branchId, periods }: { branchId: string
         profile:profiles(full_name, avatar_url, birth_date),
         member_classes(
           classes(
-            id, name,
-            class_coaches(profile:profiles(full_name, signature_url)),
+            id, name, rapor_signer_coach_id,
+            class_coaches(coach_id, role, profile:profiles(full_name, signature_url)),
             class_criteria(id, label, kind, options, sort_order)
           )
         ),
@@ -97,9 +98,9 @@ export default function AdminRaporList({ branchId, periods }: { branchId: string
 
     const rows: Student[] = data.map((m) => {
       const profile = (m.profile as unknown as { full_name: string; avatar_url: string | null; birth_date: string | null } | null);
-      const mc = (m.member_classes as unknown as { classes: { id: string; name: string; class_coaches: { profile: { full_name: string; signature_url: string | null } | null }[]; class_criteria: { id: string; label: string; kind: string; options: string[] | null; sort_order: number }[] } | null }[])?.[0];
+      const mc = (m.member_classes as unknown as { classes: { id: string; name: string; rapor_signer_coach_id: string | null; class_coaches: { coach_id: string; role: string; profile: { full_name: string; signature_url: string | null } | null }[]; class_criteria: { id: string; label: string; kind: string; options: string[] | null; sort_order: number }[] } | null }[])?.[0];
       const cls = mc?.classes;
-      const firstCoach = cls?.class_coaches?.[0]?.profile;
+      const signer = resolveRaporSigner(cls?.class_coaches ?? [], cls?.rapor_signer_coach_id);
       const entry = (m.rapor_entries as unknown as { id: string; scores: Record<string, number | string>; notes: string | null; personality: string | null; motivation: string | null; learning_achievements: string | null; level: string | null; period_id: string; locked: boolean }[])
         ?.find((e) => e.period_id === periodId);
       const criteria: PrintCriterion[] = [...(cls?.class_criteria ?? [])]
@@ -112,8 +113,8 @@ export default function AdminRaporList({ branchId, periods }: { branchId: string
         birth_date: profile?.birth_date ?? null,
         avatar_url: profile?.avatar_url ?? null,
         class_name: cls?.name ?? "—",
-        coach_name: firstCoach?.full_name ?? "—",
-        coach_signature_url: firstCoach?.signature_url ?? null,
+        coach_name: signer?.full_name ?? "—",
+        coach_signature_url: signer?.signature_url ?? null,
         is_filled: entry?.locked === true,
         scores: entry?.scores ?? {},
         notes: entry?.notes ?? null,

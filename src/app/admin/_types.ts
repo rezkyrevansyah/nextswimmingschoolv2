@@ -31,7 +31,7 @@ export interface ClassRow {
   spreadsheet_url?: string | null;
   spreadsheet_filled?: boolean;
   branch?: { name: string } | null;
-  class_coaches?: { profile: { full_name: string; id: string } | null }[];
+  class_coaches?: { role: string; profile: { full_name: string; id: string } | null }[];
   coach_spreadsheets?: {
     coach_id: string;
     spreadsheet_url: string;

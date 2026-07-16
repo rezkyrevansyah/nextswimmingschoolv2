@@ -62,7 +62,7 @@ export default function AdminClass({ branchId }: { branchId: string }) {
 
   const load = useCallback(async () => {
     const { data } = await supabase.from("classes")
-      .select("id, name, branch_id, status, capacity, enrolled, price_monthly, price_per_session, class_type, schedule_days, time_start, time_end, schedule_times, goals, description, photo_url, spreadsheet_url, spreadsheet_filled, class_coaches(profile:profiles(full_name, id)), coach_spreadsheets:class_coach_spreadsheets(coach_id, spreadsheet_url, updated_at, coach:profiles(full_name)), packages:class_packages(id, name, sessions, price, sort_order, active)")
+      .select("id, name, branch_id, status, capacity, enrolled, price_monthly, price_per_session, class_type, schedule_days, time_start, time_end, schedule_times, goals, description, photo_url, spreadsheet_url, spreadsheet_filled, class_coaches(role, profile:profiles(full_name, id)), coach_spreadsheets:class_coach_spreadsheets(coach_id, spreadsheet_url, updated_at, coach:profiles(full_name)), packages:class_packages(id, name, sessions, price, sort_order, active)")
       .eq("branch_id", branchId).order("name");
     if (data) setClasses(data as unknown as ClassRow[]);
   }, [branchId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -548,6 +548,7 @@ export default function AdminClass({ branchId }: { branchId: string }) {
                 {editTarget.class_coaches?.map(cc => cc.profile && (
                   <span key={cc.profile.id} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-ocean-50 text-ocean-700 text-xs font-semibold">
                     <Avatar name={cc.profile.full_name ?? ""} size={18} />{cc.profile.full_name}
+                    {cc.role === "head" && <span className="px-1.5 py-0.5 rounded-full bg-ocean-700 text-white text-[10px] font-bold uppercase tracking-wide">Head</span>}
                   </span>
                 ))}
                 {(editTarget.class_coaches?.length ?? 0) === 0 && <span className="text-xs text-warn-600 font-semibold">Belum ada coach assigned</span>}

@@ -15,6 +15,7 @@ import Bell from "@/components/layout/Bell";
 import BetaFeedback, { BETA_FEEDBACK_ENABLED } from "@/components/layout/BetaFeedback";
 import { fmtIDR, fmtDate, waLink } from "@/lib/utils";
 import { downloadRaporPdf, printSingleRaporPopup, type PrintCriterion, type PrintBestTime } from "@/lib/printRapor";
+import { resolveRaporSigner } from "@/lib/rapor";
 import { createClient } from "@/utils/supabase/client";
 import { useUpload } from "@/hooks/useUpload";
 import PhotoLightbox from "@/components/ui/PhotoLightbox";
@@ -1054,7 +1055,7 @@ function MemberRapor({ memberId, memberName, branchId, avatarUrl, memberNo, birt
     if (!memberId) return;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data } = await (supabase as any).from("rapor_entries")
-      .select("id, scores, notes, personality, motivation, learning_achievements, level, coach_id, period_id, class_id, rapor_periods(label, is_open), classes(name), coach:profiles!rapor_entries_coach_id_fkey(full_name, signature_url)")
+      .select("id, scores, notes, personality, motivation, learning_achievements, level, coach_id, period_id, class_id, rapor_periods(label, is_open), classes(name, rapor_signer_coach_id, class_coaches(coach_id, role, profile:profiles(full_name, signature_url))), coach:profiles!rapor_entries_coach_id_fkey(full_name, signature_url)")
       .eq("member_id", memberId)
       .order("created_at", { ascending: false }) as { data: any[] | null };
     if (!data) return;
@@ -1092,8 +1093,8 @@ function MemberRapor({ memberId, memberName, branchId, avatarUrl, memberNo, birt
 
     setEntries(data.map((e) => {
       const p = e.rapor_periods as unknown as { label: string; is_open: boolean } | null;
-      const cls = e.classes as unknown as { name: string } | null;
-      const prof = (e as unknown as { coach: { full_name: string; signature_url: string | null } | null }).coach;
+      const cls = e.classes as unknown as { name: string; rapor_signer_coach_id: string | null; class_coaches: { coach_id: string; role: string; profile: { full_name: string; signature_url: string | null } | null }[] } | null;
+      const signer = resolveRaporSigner(cls?.class_coaches ?? [], cls?.rapor_signer_coach_id);
       const review = reviewMap.get(e.id);
       return {
         id: e.id,
@@ -1103,7 +1104,7 @@ function MemberRapor({ memberId, memberName, branchId, avatarUrl, memberNo, birt
         class_name: cls?.name ?? "—",
         class_id: e.class_id,
         coach_id: e.coach_id,
-        coach_name: prof?.full_name ?? "—",
+        coach_name: signer?.full_name ?? "—",
         scores: (e.scores as unknown as Record<string, number | string>) ?? {},
         notes: e.notes,
         personality: (e as unknown as { personality: string | null }).personality ?? null,
@@ -1115,7 +1116,7 @@ function MemberRapor({ memberId, memberName, branchId, avatarUrl, memberNo, birt
         review_id: review?.id ?? null,
         criteria: criteriaByClass.get(e.class_id) ?? [],
         best_times: bestTimesArr,
-        coach_signature_url: prof?.signature_url ?? null,
+        coach_signature_url: signer?.signature_url ?? null,
       };
     }));
   }, [memberId, branchId]); // eslint-disable-line react-hooks/exhaustive-deps

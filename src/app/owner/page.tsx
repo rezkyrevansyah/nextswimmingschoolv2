@@ -566,16 +566,6 @@ function Classes({ branches }: { branches: Branch[] }) {
   const [editForm, setEditForm] = useState({ goals: "", description: "" });
   const [saving, setSaving] = useState(false);
 
-  // Criteria (aspek penilaian)
-  const [criteriaClass, setCriteriaClass] = useState<ClassRow | null>(null);
-  const [criteria, setCriteria] = useState<Criterion[]>([]);
-  const [loadingCriteria, setLoadingCriteria] = useState(false);
-  const [criterionForm, setCriterionForm] = useState({ label: "", kind: "score_10", options: [] as string[] });
-  const [savingCriterion, setSavingCriterion] = useState(false);
-  const [editingCriterion, setEditingCriterion] = useState<{ id: string; label: string; kind: string; options: string[] } | null>(null);
-  const [bulkKind, setBulkKind] = useState("score_10");
-  const [applyingBulk, setApplyingBulk] = useState(false);
-
   // Detail modal
   const [detailClass, setDetailClass] = useState<ClassRow | null>(null);
   const [detailTab, setDetailTab] = useState<"info" | "coach" | "member" | "att_coach" | "att_member">("info");

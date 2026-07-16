@@ -394,7 +394,7 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
     const toAdd = assignedClassIds.filter(id => !current.includes(id));
     const toRemove = current.filter(id => !assignedClassIds.includes(id));
     if (toAdd.length > 0) {
-      await createClient().from("class_coaches").insert(toAdd.map(class_id => ({ class_id, coach_id: detail.id, is_primary: false })));
+      await createClient().from("class_coaches").insert(toAdd.map(class_id => ({ class_id, coach_id: detail.id, role: "assistant" })));
     }
     if (toRemove.length > 0) {
       await createClient().from("class_coaches").delete().eq("coach_id", detail.id).in("class_id", toRemove);

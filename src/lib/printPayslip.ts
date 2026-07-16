@@ -182,11 +182,37 @@ export async function printPayslip(supabase: SupabaseClient, payslipId: string):
     // Sort branch names alphabetically for clean output
     const sortedBranches = Array.from(branchesMap.keys()).sort();
 
-    // 7. Calculate Tax (2% of gross) and split Loan Deduction
+    // 7. Fetch real deduction breakdown; fall back to the legacy 2%-cap split for payslips predating this feature
     const grossAmount = payslip.gross_amount ?? 0;
     const totalDeductions = payslip.deductions ?? 0;
-    const tax = totalDeductions >= grossAmount * 0.02 ? Math.round(grossAmount * 0.02) : totalDeductions;
-    const loanDeduction = totalDeductions - tax;
+
+    const { data: deductionRows } = await supabase
+      .from("payslip_deductions")
+      .select("label, amount")
+      .eq("payslip_id", payslipId)
+      .order("type");
+
+    const totalsRowsHtml = (deductionRows && deductionRows.length > 0)
+      ? deductionRows.map((d: { label: string; amount: number }) => `
+          <tr>
+            <td class="label-col">${d.label}</td>
+            <td class="val-col">${formatCurrency(d.amount)}</td>
+          </tr>
+        `).join("")
+      : (() => {
+          const tax = totalDeductions >= grossAmount * 0.02 ? Math.round(grossAmount * 0.02) : totalDeductions;
+          const loanDeduction = totalDeductions - tax;
+          return `
+            <tr>
+              <td class="label-col">Tax</td>
+              <td class="val-col">${formatCurrency(tax)}</td>
+            </tr>
+            <tr>
+              <td class="label-col">Loan Deduction</td>
+              <td class="val-col">${formatCurrency(loanDeduction)}</td>
+            </tr>
+          `;
+        })();
 
     // 8. Generate print-ready HTML
     const origin = window.location.origin;
@@ -503,14 +529,7 @@ export async function printPayslip(supabase: SupabaseClient, payslipId: string):
                 <td class="label-col border-top">Total Payment</td>
                 <td class="val-col border-top">${formatCurrency(grossAmount)}</td>
               </tr>
-              <tr>
-                <td class="label-col">Tax</td>
-                <td class="val-col">${formatCurrency(tax)}</td>
-              </tr>
-              <tr>
-                <td class="label-col">Loan Deduction</td>
-                <td class="val-col">${formatCurrency(loanDeduction)}</td>
-              </tr>
+              ${totalsRowsHtml}
               <tr class="take-home-pay-row">
                 <td class="label-col border-top">Take Home Pay</td>
                 <td class="val-col border-top">${formatCurrency(payslip.net_amount)}</td>
