@@ -392,11 +392,44 @@ CREATE TABLE public.rapor_entries (
   motivation text,
   learning_achievements text,
   level text,
+  level_id uuid,
   CONSTRAINT rapor_entries_pkey PRIMARY KEY (id),
   CONSTRAINT rapor_entries_coach_id_fkey FOREIGN KEY (coach_id) REFERENCES public.profiles(id),
   CONSTRAINT rapor_entries_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.classes(id),
   CONSTRAINT rapor_entries_member_id_fkey FOREIGN KEY (member_id) REFERENCES public.members(id),
-  CONSTRAINT rapor_entries_period_id_fkey FOREIGN KEY (period_id) REFERENCES public.rapor_periods(id)
+  CONSTRAINT rapor_entries_period_id_fkey FOREIGN KEY (period_id) REFERENCES public.rapor_periods(id),
+  CONSTRAINT rapor_entries_level_id_fkey FOREIGN KEY (level_id) REFERENCES public.rapor_levels(id)
+);
+CREATE TABLE public.rapor_levels (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  name text NOT NULL,
+  sort_order integer NOT NULL DEFAULT 0,
+  active boolean NOT NULL DEFAULT true,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT rapor_levels_pkey PRIMARY KEY (id),
+  CONSTRAINT rapor_levels_name_key UNIQUE (name)
+);
+CREATE TABLE public.rapor_level_criteria (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  level_id uuid NOT NULL,
+  label text NOT NULL,
+  kind text NOT NULL CHECK (kind = ANY (ARRAY['score_10'::text, 'score_100'::text, 'choice'::text, 'text'::text])),
+  options ARRAY,
+  sort_order integer NOT NULL DEFAULT 0,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT rapor_level_criteria_pkey PRIMARY KEY (id),
+  CONSTRAINT rapor_level_criteria_level_id_fkey FOREIGN KEY (level_id) REFERENCES public.rapor_levels(id)
+);
+CREATE TABLE public.rapor_level_best_times (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  level_id uuid NOT NULL,
+  stroke text NOT NULL,
+  distance integer NOT NULL,
+  target_time_seconds numeric,
+  sort_order integer NOT NULL DEFAULT 0,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT rapor_level_best_times_pkey PRIMARY KEY (id),
+  CONSTRAINT rapor_level_best_times_level_id_fkey FOREIGN KEY (level_id) REFERENCES public.rapor_levels(id)
 );
 CREATE TABLE public.member_reviews (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -711,4 +744,67 @@ CREATE TABLE public.trial_bookings (
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT trial_bookings_pkey PRIMARY KEY (id),
   CONSTRAINT trial_bookings_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branches(id)
+);
+CREATE TABLE public.tax_settings (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  coach_id uuid,
+  mode text NOT NULL CHECK (mode = ANY (ARRAY['percent'::text, 'fixed'::text])),
+  percent_value numeric,
+  fixed_value integer,
+  is_active boolean NOT NULL DEFAULT true,
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_by uuid,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT tax_settings_pkey PRIMARY KEY (id),
+  CONSTRAINT tax_settings_coach_id_fkey FOREIGN KEY (coach_id) REFERENCES public.profiles(id),
+  CONSTRAINT tax_settings_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.profiles(id)
+);
+CREATE TABLE public.coach_loans (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  coach_id uuid NOT NULL,
+  branch_id uuid NOT NULL,
+  principal_amount integer NOT NULL CHECK (principal_amount > 0),
+  tenor_months integer NOT NULL CHECK (tenor_months > 0),
+  installment_amount integer NOT NULL CHECK (installment_amount > 0),
+  reason text,
+  status text NOT NULL DEFAULT 'active'::text CHECK (status = ANY (ARRAY['active'::text, 'paid_off'::text, 'written_off'::text, 'cancelled'::text])),
+  started_period_label text,
+  created_by uuid,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  closed_at timestamp with time zone,
+  notes text,
+  CONSTRAINT coach_loans_pkey PRIMARY KEY (id),
+  CONSTRAINT coach_loans_coach_id_fkey FOREIGN KEY (coach_id) REFERENCES public.profiles(id),
+  CONSTRAINT coach_loans_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branches(id),
+  CONSTRAINT coach_loans_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id)
+);
+CREATE TABLE public.coach_loan_payments (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  loan_id uuid NOT NULL,
+  payslip_id uuid,
+  amount integer NOT NULL CHECK (amount > 0),
+  installment_number integer NOT NULL,
+  period_label text NOT NULL,
+  kind text NOT NULL DEFAULT 'installment'::text CHECK (kind = ANY (ARRAY['installment'::text, 'manual_adjustment'::text, 'write_off'::text])),
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  created_by uuid,
+  CONSTRAINT coach_loan_payments_pkey PRIMARY KEY (id),
+  CONSTRAINT coach_loan_payments_loan_id_fkey FOREIGN KEY (loan_id) REFERENCES public.coach_loans(id),
+  CONSTRAINT coach_loan_payments_payslip_id_fkey FOREIGN KEY (payslip_id) REFERENCES public.payslips(id),
+  CONSTRAINT coach_loan_payments_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id)
+);
+CREATE TABLE public.payslip_deductions (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  payslip_id uuid NOT NULL,
+  type text NOT NULL CHECK (type = ANY (ARRAY['tax'::text, 'loan'::text, 'bpjs'::text, 'absence_penalty'::text, 'other'::text])),
+  label text NOT NULL,
+  amount integer NOT NULL CHECK (amount >= 0),
+  loan_id uuid,
+  loan_payment_id uuid,
+  meta jsonb,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT payslip_deductions_pkey PRIMARY KEY (id),
+  CONSTRAINT payslip_deductions_payslip_id_fkey FOREIGN KEY (payslip_id) REFERENCES public.payslips(id),
+  CONSTRAINT payslip_deductions_loan_id_fkey FOREIGN KEY (loan_id) REFERENCES public.coach_loans(id),
+  CONSTRAINT payslip_deductions_loan_payment_id_fkey FOREIGN KEY (loan_payment_id) REFERENCES public.coach_loan_payments(id)
 );

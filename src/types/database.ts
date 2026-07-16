@@ -421,18 +421,21 @@ export type Database = {
           coach_id: string
           created_at: string
           is_primary: boolean
+          role: string
         }
         Insert: {
           class_id: string
           coach_id: string
           created_at?: string
           is_primary?: boolean
+          role?: string
         }
         Update: {
           class_id?: string
           coach_id?: string
           created_at?: string
           is_primary?: boolean
+          role?: string
         }
         Relationships: [
           {
@@ -690,6 +693,7 @@ export type Database = {
           photo_url: string | null
           price_monthly: number
           price_per_session: number | null
+          rapor_signer_coach_id: string | null
           schedule_days: string[]
           schedule_time: string | null
           schedule_times: Json | null
@@ -719,6 +723,7 @@ export type Database = {
           photo_url?: string | null
           price_monthly?: number
           price_per_session?: number | null
+          rapor_signer_coach_id?: string | null
           schedule_days?: string[]
           schedule_time?: string | null
           schedule_times?: Json | null
@@ -748,6 +753,7 @@ export type Database = {
           photo_url?: string | null
           price_monthly?: number
           price_per_session?: number | null
+          rapor_signer_coach_id?: string | null
           schedule_days?: string[]
           schedule_time?: string | null
           schedule_times?: Json | null
@@ -766,6 +772,13 @@ export type Database = {
             columns: ["branch_id"]
             isOneToOne: false
             referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "classes_rapor_signer_coach_id_fkey"
+            columns: ["rapor_signer_coach_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -2116,6 +2129,243 @@ export type Database = {
           },
         ]
       }
+      tax_settings: {
+        Row: {
+          coach_id: string | null
+          created_at: string
+          fixed_value: number | null
+          id: string
+          is_active: boolean
+          mode: string
+          percent_value: number | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          coach_id?: string | null
+          created_at?: string
+          fixed_value?: number | null
+          id?: string
+          is_active?: boolean
+          mode: string
+          percent_value?: number | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          coach_id?: string | null
+          created_at?: string
+          fixed_value?: number | null
+          id?: string
+          is_active?: boolean
+          mode?: string
+          percent_value?: number | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tax_settings_coach_id_fkey"
+            columns: ["coach_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tax_settings_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      coach_loans: {
+        Row: {
+          branch_id: string
+          closed_at: string | null
+          coach_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          installment_amount: number
+          notes: string | null
+          principal_amount: number
+          reason: string | null
+          started_period_label: string | null
+          status: string
+          tenor_months: number
+        }
+        Insert: {
+          branch_id: string
+          closed_at?: string | null
+          coach_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          installment_amount: number
+          notes?: string | null
+          principal_amount: number
+          reason?: string | null
+          started_period_label?: string | null
+          status?: string
+          tenor_months: number
+        }
+        Update: {
+          branch_id?: string
+          closed_at?: string | null
+          coach_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          installment_amount?: number
+          notes?: string | null
+          principal_amount?: number
+          reason?: string | null
+          started_period_label?: string | null
+          status?: string
+          tenor_months?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coach_loans_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "coach_loans_coach_id_fkey"
+            columns: ["coach_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "coach_loans_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      coach_loan_payments: {
+        Row: {
+          amount: number
+          created_at: string
+          created_by: string | null
+          id: string
+          installment_number: number
+          kind: string
+          loan_id: string
+          payslip_id: string | null
+          period_label: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          installment_number: number
+          kind?: string
+          loan_id: string
+          payslip_id?: string | null
+          period_label: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          installment_number?: number
+          kind?: string
+          loan_id?: string
+          payslip_id?: string | null
+          period_label?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coach_loan_payments_loan_id_fkey"
+            columns: ["loan_id"]
+            isOneToOne: false
+            referencedRelation: "coach_loans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "coach_loan_payments_payslip_id_fkey"
+            columns: ["payslip_id"]
+            isOneToOne: false
+            referencedRelation: "payslips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "coach_loan_payments_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payslip_deductions: {
+        Row: {
+          amount: number
+          created_at: string
+          id: string
+          label: string
+          loan_id: string | null
+          loan_payment_id: string | null
+          meta: Json | null
+          payslip_id: string
+          type: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          id?: string
+          label: string
+          loan_id?: string | null
+          loan_payment_id?: string | null
+          meta?: Json | null
+          payslip_id: string
+          type: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          id?: string
+          label?: string
+          loan_id?: string | null
+          loan_payment_id?: string | null
+          meta?: Json | null
+          payslip_id?: string
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payslip_deductions_payslip_id_fkey"
+            columns: ["payslip_id"]
+            isOneToOne: false
+            referencedRelation: "payslips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payslip_deductions_loan_id_fkey"
+            columns: ["loan_id"]
+            isOneToOne: false
+            referencedRelation: "coach_loans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payslip_deductions_loan_payment_id_fkey"
+            columns: ["loan_payment_id"]
+            isOneToOne: false
+            referencedRelation: "coach_loan_payments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       rapor_entries: {
         Row: {
           class_id: string
@@ -2124,6 +2374,8 @@ export type Database = {
           filled_at: string | null
           id: string
           learning_achievements: string | null
+          level: string | null
+          level_id: string | null
           locked: boolean
           member_id: string
           motivation: string | null
@@ -2139,6 +2391,8 @@ export type Database = {
           filled_at?: string | null
           id?: string
           learning_achievements?: string | null
+          level?: string | null
+          level_id?: string | null
           locked?: boolean
           member_id: string
           motivation?: string | null
@@ -2154,6 +2408,8 @@ export type Database = {
           filled_at?: string | null
           id?: string
           learning_achievements?: string | null
+          level?: string | null
+          level_id?: string | null
           locked?: boolean
           member_id?: string
           motivation?: string | null
@@ -2178,6 +2434,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "rapor_entries_level_id_fkey"
+            columns: ["level_id"]
+            isOneToOne: false
+            referencedRelation: "rapor_levels"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "rapor_entries_member_id_fkey"
             columns: ["member_id"]
             isOneToOne: false
@@ -2199,6 +2462,106 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      rapor_level_best_times: {
+        Row: {
+          created_at: string
+          distance: number
+          id: string
+          level_id: string
+          sort_order: number
+          stroke: string
+          target_time_seconds: number | null
+        }
+        Insert: {
+          created_at?: string
+          distance: number
+          id?: string
+          level_id: string
+          sort_order?: number
+          stroke: string
+          target_time_seconds?: number | null
+        }
+        Update: {
+          created_at?: string
+          distance?: number
+          id?: string
+          level_id?: string
+          sort_order?: number
+          stroke?: string
+          target_time_seconds?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rapor_level_best_times_level_id_fkey"
+            columns: ["level_id"]
+            isOneToOne: false
+            referencedRelation: "rapor_levels"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rapor_level_criteria: {
+        Row: {
+          created_at: string
+          id: string
+          kind: string
+          label: string
+          level_id: string
+          options: string[] | null
+          sort_order: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          kind: string
+          label: string
+          level_id: string
+          options?: string[] | null
+          sort_order?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          kind?: string
+          label?: string
+          level_id?: string
+          options?: string[] | null
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rapor_level_criteria_level_id_fkey"
+            columns: ["level_id"]
+            isOneToOne: false
+            referencedRelation: "rapor_levels"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rapor_levels: {
+        Row: {
+          active: boolean
+          created_at: string
+          id: string
+          name: string
+          sort_order: number
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          name: string
+          sort_order?: number
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          name?: string
+          sort_order?: number
+        }
+        Relationships: []
       }
       rapor_periods: {
         Row: {
