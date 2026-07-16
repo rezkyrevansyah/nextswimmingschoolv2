@@ -14,12 +14,14 @@ import Topbar from "@/components/layout/Topbar";
 import Bell from "@/components/layout/Bell";
 import BetaFeedback, { BETA_FEEDBACK_ENABLED } from "@/components/layout/BetaFeedback";
 import { fmtIDR, clampPercent } from "@/lib/utils";
+import { fmtSwimTime } from "@/lib/printRapor";
 import { logActivity } from "@/lib/activityLog";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
-import { printPayslip as printPayslipUtil } from "@/lib/printPayslip";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
 import LandingCMS from "./_components/LandingCMS";
+import PayslipGenerator from "./payroll/PayslipGenerator";
+import CoachLoans from "./payroll/CoachLoans";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -69,8 +71,9 @@ interface ClassRow {
   description: string | null;
   spreadsheet_url?: string | null;
   spreadsheet_filled?: boolean;
+  rapor_signer_coach_id?: string | null;
   branch?: { name: string } | null;
-  class_coaches?: { profile: { full_name: string } | null }[];
+  class_coaches?: { coach_id: string; role: string; profile: { full_name: string } | null }[];
   coach_spreadsheets?: CoachSpreadsheetEntry[];
 }
 
@@ -544,7 +547,7 @@ interface Criterion {
 }
 const kindLabel: Record<string, string> = { score_10: "Nilai 1–10", score_100: "Nilai 1–100", choice: "Pilihan ganda", text: "Teks bebas" };
 
-interface ClassCoachRow { id: string; full_name: string; phone: string | null; status: string; }
+interface ClassCoachRow { id: string; full_name: string; phone: string | null; status: string; role: string; }
 interface ClassMemberRow { id: string; full_name: string; phone: string | null; status: string; }
 interface CoachAttRow { id: string; date: string; status: string; note: string | null; profile: { full_name: string } | null; }
 interface MemberAttRow { id: string; date: string; status: string; note: string | null; profile: { full_name: string } | null; }
@@ -586,7 +589,7 @@ function Classes({ branches }: { branches: Branch[] }) {
     setLoading(true);
     const { data } = await supabase
       .from("classes")
-      .select("id, name, branch_id, status, capacity, enrolled, price_monthly, schedule_days, time_start, time_end, goals, description, spreadsheet_url, spreadsheet_filled, branch:branches(name), class_coaches(profile:profiles(full_name)), coach_spreadsheets:class_coach_spreadsheets(coach_id, spreadsheet_url, updated_at, coach:profiles(full_name))")
+      .select("id, name, branch_id, status, capacity, enrolled, price_monthly, schedule_days, time_start, time_end, goals, description, spreadsheet_url, spreadsheet_filled, rapor_signer_coach_id, branch:branches(name), class_coaches(coach_id, role, profile:profiles(full_name)), coach_spreadsheets:class_coach_spreadsheets(coach_id, spreadsheet_url, updated_at, coach:profiles(full_name))")
       .eq("status", "active")
       .order("branch_id")
       .order("name");
@@ -696,11 +699,12 @@ function Classes({ branches }: { branches: Branch[] }) {
     if (tab === "coach") {
       const { data } = await supabase
         .from("class_coaches")
-        .select("profile:profiles(id, full_name, phone, status)")
+        .select("role, profile:profiles(id, full_name, phone, status)")
         .eq("class_id", classId);
       setDetailCoaches(
-        ((data ?? []) as unknown as { profile: { id: string; full_name: string; phone: string | null; status: string } | null }[])
-          .map(r => r.profile).filter((p): p is ClassCoachRow => !!p)
+        ((data ?? []) as unknown as { role: string; profile: { id: string; full_name: string; phone: string | null; status: string } | null }[])
+          .filter(r => !!r.profile)
+          .map(r => ({ ...r.profile!, role: r.role }))
       );
     } else if (tab === "member") {
       const { data } = await supabase
@@ -740,6 +744,34 @@ function Classes({ branches }: { branches: Branch[] }) {
     loadDetailTab(tab, detailClass.id);
   };
 
+  const [settingRole, setSettingRole] = useState<string | null>(null);
+  const setCoachRole = async (classId: string, coachId: string, role: "head" | "assistant") => {
+    setSettingRole(coachId);
+    if (role === "head") {
+      await supabase.from("class_coaches").update({ role: "assistant" }).eq("class_id", classId).eq("role", "head");
+    }
+    const { error } = await supabase.from("class_coaches").update({ role }).eq("class_id", classId).eq("coach_id", coachId);
+    setSettingRole(null);
+    if (error) return toast.error("Gagal mengubah role", error.message);
+    toast.success(role === "head" ? "Ditetapkan sebagai Head Coach" : "Ditetapkan sebagai Assistant Coach");
+    setDetailCoaches(prev => prev.map(c => c.id === coachId ? { ...c, role } : role === "head" ? { ...c, role: c.role === "head" ? "assistant" : c.role } : c));
+    setClasses(prev => prev.map(c => c.id !== classId ? c : {
+      ...c,
+      class_coaches: (c.class_coaches ?? []).map(cc => cc.coach_id === coachId ? { ...cc, role } : role === "head" ? { ...cc, role: cc.role === "head" ? "assistant" : cc.role } : cc),
+    }));
+  };
+
+  const [savingSigner, setSavingSigner] = useState(false);
+  const setRaporSigner = async (classId: string, coachId: string | null) => {
+    setSavingSigner(true);
+    const { error } = await supabase.from("classes").update({ rapor_signer_coach_id: coachId }).eq("id", classId);
+    setSavingSigner(false);
+    if (error) return toast.error("Gagal menyimpan", error.message);
+    toast.success("Penanggung jawab TTD rapor disimpan");
+    setDetailClass(prev => prev && prev.id === classId ? { ...prev, rapor_signer_coach_id: coachId } : prev);
+    setClasses(prev => prev.map(c => c.id === classId ? { ...c, rapor_signer_coach_id: coachId } : c));
+  };
+
   // Group by branch
   const grouped = branches.map(b => ({
     branch: b,
@@ -766,7 +798,8 @@ function Classes({ branches }: { branches: Branch[] }) {
             </div>
             <div className="grid sm:grid-cols-2 gap-3">
               {bClasses.map((c) => {
-                const coaches = c.class_coaches?.map(cc => cc.profile?.full_name).filter(Boolean) ?? [];
+                const coachList = c.class_coaches ?? [];
+                const headCoach = coachList.find(cc => cc.role === "head") ?? coachList[0];
                 const pct = c.enrolled / (c.capacity || 1);
                 return (
                   <Card key={c.id} className="space-y-3">
@@ -806,9 +839,13 @@ function Classes({ branches }: { branches: Branch[] }) {
                     )}
 
                     <div className="border-t border-line pt-3 flex items-center justify-between gap-3 flex-wrap">
-                      <div className="flex items-center gap-3 text-xs text-ink-mute">
-                        {coaches.length > 0
-                          ? <><Avatar name={coaches[0]!} size={20} /><span>{coaches[0]}</span></>
+                      <div className="flex items-center gap-2 text-xs text-ink-mute">
+                        {headCoach?.profile?.full_name
+                          ? <>
+                              <Avatar name={headCoach.profile.full_name} size={20} />
+                              <span>{headCoach.profile.full_name}</span>
+                              {headCoach.role === "head" && <span className="px-1.5 py-0.5 rounded-full bg-ocean-50 text-ocean-700 text-[10px] font-bold uppercase tracking-wide">Head</span>}
+                            </>
                           : <span className="text-ink-faint">Belum ada coach</span>
                         }
                       </div>
@@ -911,17 +948,38 @@ function Classes({ branches }: { branches: Branch[] }) {
               detailLoading ? <div className="text-center py-10 text-ink-mute text-sm">Memuat…</div> : (
                 detailCoaches.length === 0
                   ? <div className="text-center py-10 text-ink-mute text-sm">Belum ada coach di kelas ini.</div>
-                  : <div className="divide-y divide-line">
-                    {detailCoaches.map(c => (
-                      <div key={c.id} className="flex items-center gap-3 py-3">
-                        <Avatar name={c.full_name} size={36} />
-                        <div className="flex-1 min-w-0">
-                          <div className="font-semibold text-ink text-sm">{c.full_name}</div>
-                          <div className="text-xs text-ink-mute">{c.phone ?? "—"}</div>
+                  : <div className="space-y-4">
+                    <div className="divide-y divide-line">
+                      {detailCoaches.map(c => (
+                        <div key={c.id} className="flex items-center gap-3 py-3">
+                          <Avatar name={c.full_name} size={36} />
+                          <div className="flex-1 min-w-0">
+                            <div className="font-semibold text-ink text-sm">{c.full_name}</div>
+                            <div className="text-xs text-ink-mute">{c.phone ?? "—"}</div>
+                          </div>
+                          <Status kind={c.status === "active" ? "active" : "inactive"}>{c.status === "active" ? "Aktif" : "Nonaktif"}</Status>
+                          <div className="flex gap-1.5 shrink-0">
+                            <button onClick={() => detailClass && setCoachRole(detailClass.id, c.id, "head")} disabled={settingRole === c.id}
+                              className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-colors ${c.role === "head" ? "bg-ocean-700 text-white" : "bg-paper-tint text-ink-soft hover:bg-paper-deep"}`}>
+                              Head Coach
+                            </button>
+                            <button onClick={() => detailClass && setCoachRole(detailClass.id, c.id, "assistant")} disabled={settingRole === c.id}
+                              className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-colors ${c.role === "assistant" ? "bg-ocean-700 text-white" : "bg-paper-tint text-ink-soft hover:bg-paper-deep"}`}>
+                              Assistant
+                            </button>
+                          </div>
                         </div>
-                        <Status kind={c.status === "active" ? "active" : "inactive"}>{c.status === "active" ? "Aktif" : "Nonaktif"}</Status>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
+                    <div className="border-t border-line pt-4">
+                      <div className="text-xs font-bold uppercase tracking-widest text-ink-faint mb-1.5">Penanggung Jawab TTD Rapor</div>
+                      <Select value={detailClass?.rapor_signer_coach_id ?? ""} disabled={savingSigner}
+                        onChange={e => detailClass && setRaporSigner(detailClass.id, e.target.value || null)}>
+                        <option value="">Otomatis (ikut Head Coach)</option>
+                        {detailCoaches.map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
+                      </Select>
+                      <p className="text-[11px] text-ink-faint mt-1.5">Label cetak di rapor tetap tertulis &ldquo;Head Coach&rdquo; apa pun coach yang dipilih di sini.</p>
+                    </div>
                   </div>
               )
             )}
@@ -1177,6 +1235,474 @@ interface TarifClassRow {
   class_coaches: { profile: { id: string; full_name: string } | null }[];
 }
 
+interface RaporLevel {
+  id: string;
+  name: string;
+  sort_order: number;
+  active: boolean;
+}
+
+interface LevelCriterion {
+  id: string; label: string; kind: string; options: string[] | null; sort_order: number;
+}
+
+interface BestTimeTemplateRow { id: string; stroke: string; distance: number; target_time_seconds: number | null; sort_order: number }
+
+function OwnerRaporLevels() {
+  const supabase = createClient();
+  const toast = useToast();
+  const confirm = useConfirm();
+  const [levels, setLevels] = useState<RaporLevel[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [newName, setNewName] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
+  const [reordering, setReordering] = useState<string | null>(null);
+
+  const [criteriaLevel, setCriteriaLevel] = useState<RaporLevel | null>(null);
+  const [bestTimeLevel, setBestTimeLevel] = useState<RaporLevel | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const { data } = await supabase.from("rapor_levels").select("id, name, sort_order, active").order("sort_order");
+    setLevels((data ?? []) as RaporLevel[]);
+    setLoading(false);
+  }, [supabase]);
+
+  /* eslint-disable react-hooks/set-state-in-effect -- async data loader */
+  useEffect(() => { load(); }, [load]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  const addLevel = async () => {
+    if (!newName.trim()) return toast.error("Nama level wajib diisi");
+    setCreating(true);
+    const { error } = await supabase.from("rapor_levels").insert({
+      name: newName.trim(), sort_order: levels.length, active: true,
+    });
+    setCreating(false);
+    if (error) return toast.error("Gagal menambah level", error.message);
+    toast.success("Level ditambahkan");
+    setNewName("");
+    load();
+  };
+
+  const saveRename = async () => {
+    if (!renaming || !renaming.name.trim()) return toast.error("Nama level wajib diisi");
+    const { error } = await supabase.from("rapor_levels").update({ name: renaming.name.trim() }).eq("id", renaming.id);
+    if (error) return toast.error("Gagal menyimpan", error.message);
+    toast.success("Level diperbarui");
+    setRenaming(null);
+    load();
+  };
+
+  const toggleActive = async (lvl: RaporLevel) => {
+    const { error } = await supabase.from("rapor_levels").update({ active: !lvl.active }).eq("id", lvl.id);
+    if (error) return toast.error("Gagal mengubah status", error.message);
+    setLevels(prev => prev.map(l => l.id === lvl.id ? { ...l, active: !l.active } : l));
+  };
+
+  const deleteLevel = async (lvl: RaporLevel) => {
+    const yes = await confirm({ body: `Hapus level "${lvl.name}"? Kriteria dan tabel waktu untuk level ini akan ikut terhapus. Rapor yang sudah diisi dengan level ini tidak akan terpengaruh.` });
+    if (!yes) return;
+    const { error } = await supabase.from("rapor_levels").delete().eq("id", lvl.id);
+    if (error) return toast.error("Gagal menghapus level", error.message);
+    toast.success("Level dihapus");
+    load();
+  };
+
+  const move = async (lvl: RaporLevel, direction: "up" | "down") => {
+    const idx = levels.findIndex(l => l.id === lvl.id);
+    const swapIdx = direction === "up" ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= levels.length) return;
+    const other = levels[swapIdx];
+    setReordering(lvl.id);
+    await Promise.all([
+      supabase.from("rapor_levels").update({ sort_order: other.sort_order }).eq("id", lvl.id),
+      supabase.from("rapor_levels").update({ sort_order: lvl.sort_order }).eq("id", other.id),
+    ]);
+    setReordering(null);
+    load();
+  };
+
+  // ── Criteria ───────────────────────────────────────────────────────────────
+  const [criteria, setCriteria] = useState<LevelCriterion[]>([]);
+  const [loadingCriteria, setLoadingCriteria] = useState(false);
+  const [criterionForm, setCriterionForm] = useState({ label: "", kind: "score_10", options: [] as string[] });
+  const [savingCriterion, setSavingCriterion] = useState(false);
+  const [editingCriterion, setEditingCriterion] = useState<{ id: string; label: string; kind: string; options: string[] } | null>(null);
+  const [bulkKind, setBulkKind] = useState("score_10");
+  const [applyingBulk, setApplyingBulk] = useState(false);
+  const kindLabel: Record<string, string> = { score_10: "Nilai 1–10", score_100: "Nilai 1–100", choice: "Pilihan ganda", text: "Teks bebas" };
+
+  const loadCriteria = useCallback(async (levelId: string) => {
+    setLoadingCriteria(true);
+    const { data } = await supabase.from("rapor_level_criteria").select("id, label, kind, options, sort_order").eq("level_id", levelId).order("sort_order");
+    setCriteria((data ?? []) as LevelCriterion[]);
+    setLoadingCriteria(false);
+  }, [supabase]);
+
+  const openCriteria = (lvl: RaporLevel) => {
+    setCriteriaLevel(lvl);
+    setCriterionForm({ label: "", kind: "score_10", options: [] });
+    setEditingCriterion(null);
+    loadCriteria(lvl.id);
+  };
+
+  const addCriterion = async () => {
+    if (!criteriaLevel || !criterionForm.label) return toast.error("Label wajib diisi");
+    setSavingCriterion(true);
+    const opts = criterionForm.kind === "choice" ? criterionForm.options.filter(Boolean) : null;
+    const { error } = await supabase.from("rapor_level_criteria").insert({
+      level_id: criteriaLevel.id, label: criterionForm.label, kind: criterionForm.kind,
+      options: opts, sort_order: criteria.length,
+    });
+    setSavingCriterion(false);
+    if (error) return toast.error("Gagal menyimpan", error.message);
+    toast.success("Kriteria ditambahkan");
+    setCriterionForm({ label: "", kind: "score_10", options: [] });
+    loadCriteria(criteriaLevel.id);
+  };
+
+  const deleteCriterion = async (id: string) => {
+    const yes = await confirm({ body: "Hapus kriteria ini? Rapor yang sudah diisi tidak akan terpengaruh." });
+    if (!yes) return;
+    await supabase.from("rapor_level_criteria").delete().eq("id", id);
+    setCriteria(prev => prev.filter(c => c.id !== id));
+    toast.success("Kriteria dihapus");
+  };
+
+  const updateCriterion = async () => {
+    if (!editingCriterion || !editingCriterion.label) return toast.error("Label wajib diisi");
+    const opts = editingCriterion.kind === "choice" ? editingCriterion.options.filter(Boolean) : null;
+    const { error } = await supabase.from("rapor_level_criteria").update({ label: editingCriterion.label, kind: editingCriterion.kind, options: opts }).eq("id", editingCriterion.id);
+    if (error) return toast.error("Gagal menyimpan", error.message);
+    setCriteria(prev => prev.map(c => c.id === editingCriterion.id ? { ...c, label: editingCriterion.label, kind: editingCriterion.kind, options: opts } : c));
+    setEditingCriterion(null);
+    toast.success("Kriteria diperbarui");
+  };
+
+  const duplicateCriterion = async (cr: LevelCriterion) => {
+    if (!criteriaLevel) return;
+    setSavingCriterion(true);
+    const { error } = await supabase.from("rapor_level_criteria").insert({
+      level_id: criteriaLevel.id, label: cr.label, kind: cr.kind,
+      options: cr.options ?? [], sort_order: criteria.length,
+    });
+    setSavingCriterion(false);
+    if (error) return toast.error("Gagal menduplikat", error.message);
+    toast.success("Kriteria diduplikat");
+    loadCriteria(criteriaLevel.id);
+  };
+
+  const applyBulkKind = async () => {
+    if (!criteriaLevel || criteria.length === 0) return;
+    const yes = await confirm({ body: `Ubah semua ${criteria.length} kriteria ke tipe "${kindLabel[bulkKind]}"? Options pilihan ganda akan dihapus kecuali tipe yang dipilih adalah pilihan ganda.` });
+    if (!yes) return;
+    setApplyingBulk(true);
+    const opts = bulkKind === "choice" ? ["Sangat Baik", "Baik", "Cukup", "Perlu Latihan"] : null;
+    await Promise.all(criteria.map(cr => supabase.from("rapor_level_criteria").update({ kind: bulkKind, options: opts }).eq("id", cr.id)));
+    setApplyingBulk(false);
+    loadCriteria(criteriaLevel.id);
+    toast.success("Semua kriteria diperbarui");
+  };
+
+  // ── Personal Best Time template ─────────────────────────────────────────────
+  const [bestTimeRows, setBestTimeRows] = useState<BestTimeTemplateRow[]>([]);
+  const [loadingBestTimes, setLoadingBestTimes] = useState(false);
+  const [btForm, setBtForm] = useState({ stroke: "", distance: "", target: "" });
+  const [savingBt, setSavingBt] = useState(false);
+  const [editingBt, setEditingBt] = useState<{ id: string; stroke: string; distance: string; target: string } | null>(null);
+
+  const loadBestTimes = useCallback(async (levelId: string) => {
+    setLoadingBestTimes(true);
+    const { data } = await supabase.from("rapor_level_best_times").select("id, stroke, distance, target_time_seconds, sort_order").eq("level_id", levelId).order("sort_order");
+    setBestTimeRows((data ?? []) as BestTimeTemplateRow[]);
+    setLoadingBestTimes(false);
+  }, [supabase]);
+
+  const openBestTimes = (lvl: RaporLevel) => {
+    setBestTimeLevel(lvl);
+    setBtForm({ stroke: "", distance: "", target: "" });
+    setEditingBt(null);
+    loadBestTimes(lvl.id);
+  };
+
+  const addBestTimeRow = async () => {
+    if (!bestTimeLevel) return;
+    const stroke = btForm.stroke.trim();
+    const distance = parseInt(btForm.distance);
+    if (!stroke || !btForm.distance || isNaN(distance) || distance <= 0) return toast.error("Gaya dan jarak wajib diisi dengan benar");
+    const target = btForm.target.trim() ? parseFloat(btForm.target) : null;
+    setSavingBt(true);
+    const { error } = await supabase.from("rapor_level_best_times").insert({
+      level_id: bestTimeLevel.id, stroke, distance, target_time_seconds: target, sort_order: bestTimeRows.length,
+    });
+    setSavingBt(false);
+    if (error) return toast.error("Gagal menambah baris", error.message);
+    toast.success("Baris waktu ditambahkan");
+    setBtForm({ stroke: "", distance: "", target: "" });
+    loadBestTimes(bestTimeLevel.id);
+  };
+
+  const deleteBestTimeRow = async (id: string) => {
+    const yes = await confirm({ body: "Hapus baris tabel waktu ini?" });
+    if (!yes) return;
+    await supabase.from("rapor_level_best_times").delete().eq("id", id);
+    setBestTimeRows(prev => prev.filter(r => r.id !== id));
+    toast.success("Baris dihapus");
+  };
+
+  const saveBestTimeEdit = async () => {
+    if (!editingBt) return;
+    const stroke = editingBt.stroke.trim();
+    const distance = parseInt(editingBt.distance);
+    if (!stroke || !editingBt.distance || isNaN(distance) || distance <= 0) return toast.error("Gaya dan jarak wajib diisi dengan benar");
+    const target = editingBt.target.trim() ? parseFloat(editingBt.target) : null;
+    const { error } = await supabase.from("rapor_level_best_times").update({ stroke, distance, target_time_seconds: target }).eq("id", editingBt.id);
+    if (error) return toast.error("Gagal menyimpan", error.message);
+    setBestTimeRows(prev => prev.map(r => r.id === editingBt.id ? { ...r, stroke, distance, target_time_seconds: target } : r));
+    setEditingBt(null);
+    toast.success("Baris diperbarui");
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="font-display font-bold text-2xl">Level Rapor</h2>
+        <p className="text-ink-mute text-sm mt-0.5">Atur level renang (mis. Level A, Level B). Setiap level punya kriteria penilaian dan standar tabel waktu sendiri — coach tinggal memilih level saat mengisi rapor.</p>
+      </div>
+
+      <Card padded={false}>
+        <div className="p-4 sm:p-5 border-b border-line flex items-center gap-2">
+          <Input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Mis. Level A" className="flex-1" />
+          <Btn variant="primary" icon="plus" onClick={addLevel} disabled={creating}>{creating ? "Menambah…" : "Tambah Level"}</Btn>
+        </div>
+
+        {loading ? (
+          <div className="py-10 text-center text-ink-mute text-sm">Memuat…</div>
+        ) : levels.length === 0 ? (
+          <div className="py-10 text-center text-ink-mute text-sm">Belum ada level. Tambahkan level pertama di atas.</div>
+        ) : (
+          <div className="divide-y divide-line">
+            {levels.map((lvl, i) => (
+              <div key={lvl.id} className="flex items-center gap-3 p-4">
+                <div className="flex flex-col shrink-0">
+                  <button type="button" disabled={i === 0 || reordering === lvl.id} onClick={() => move(lvl, "up")}
+                    className="w-6 h-5 text-xs text-ink-faint hover:text-ocean-600 disabled:opacity-30 disabled:hover:text-ink-faint">↑</button>
+                  <button type="button" disabled={i === levels.length - 1 || reordering === lvl.id} onClick={() => move(lvl, "down")}
+                    className="w-6 h-5 text-xs text-ink-faint hover:text-ocean-600 disabled:opacity-30 disabled:hover:text-ink-faint">↓</button>
+                </div>
+
+                {renaming?.id === lvl.id ? (
+                  <div className="flex-1 flex items-center gap-2">
+                    <Input value={renaming.name} onChange={e => setRenaming(v => v ? { ...v, name: e.target.value } : v)} className="flex-1" />
+                    <Btn variant="primary" size="sm" onClick={saveRename}>Simpan</Btn>
+                    <Btn variant="ghost" size="sm" onClick={() => setRenaming(null)}>Batal</Btn>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-ink text-sm">{lvl.name}</div>
+                      {!lvl.active && <div className="text-xs text-ink-faint">Nonaktif</div>}
+                    </div>
+                    <Btn variant="ghost" size="sm" icon="book" onClick={() => openCriteria(lvl)}>Kriteria</Btn>
+                    <Btn variant="ghost" size="sm" icon="target" onClick={() => openBestTimes(lvl)}>Waktu</Btn>
+                    <button onClick={() => setRenaming({ id: lvl.id, name: lvl.name })} title="Ubah nama"
+                      className="w-8 h-8 rounded-lg hover:bg-paper-tint text-ink-mute hover:text-ocean-600 flex items-center justify-center"><Icon name="edit" className="w-4 h-4" /></button>
+                    <button onClick={() => toggleActive(lvl)} title={lvl.active ? "Nonaktifkan" : "Aktifkan"}
+                      className="w-8 h-8 rounded-lg hover:bg-paper-tint text-ink-mute hover:text-ocean-600 flex items-center justify-center"><Icon name={lvl.active ? "archive" : "check"} className="w-4 h-4" /></button>
+                    <button onClick={() => deleteLevel(lvl)} title="Hapus"
+                      className="w-8 h-8 rounded-lg hover:bg-danger-50 text-ink-faint hover:text-danger-500 flex items-center justify-center"><Icon name="x" className="w-4 h-4" /></button>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <Modal open={!!criteriaLevel} onClose={() => { setCriteriaLevel(null); setCriterionForm({ label: "", kind: "score_10", options: [] }); setEditingCriterion(null); }}
+        title={`Kriteria Penilaian — ${criteriaLevel?.name ?? ""}`} size="lg"
+        footer={<Btn variant="ghost" onClick={() => { setCriteriaLevel(null); setCriterionForm({ label: "", kind: "score_10", options: [] }); setEditingCriterion(null); }}>Tutup</Btn>}>
+        <div className="space-y-5">
+          {loadingCriteria ? <div className="text-ink-mute text-sm text-center py-6">Memuat…</div> : (
+            <>
+              {criteria.length > 0 ? (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 p-2.5 bg-paper-tint rounded-xl border border-line">
+                    <span className="text-xs text-ink-mute shrink-0">Ubah semua ke:</span>
+                    <select value={bulkKind} onChange={e => setBulkKind(e.target.value)}
+                      className="flex-1 text-xs border border-line rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-ocean-500">
+                      <option value="score_10">Nilai 1–10</option>
+                      <option value="score_100">Nilai 1–100</option>
+                      <option value="choice">Pilihan ganda</option>
+                      <option value="text">Teks bebas</option>
+                    </select>
+                    <Btn variant="outline" size="sm" onClick={applyBulkKind} disabled={applyingBulk}>{applyingBulk ? "Mengubah…" : "Terapkan"}</Btn>
+                  </div>
+
+                  {criteria.map((cr, i) => (
+                    <div key={cr.id} className="rounded-xl border border-line overflow-hidden">
+                      {editingCriterion?.id === cr.id ? (
+                        <div className="p-3 space-y-2 bg-ocean-50/40">
+                          <div className="grid sm:grid-cols-2 gap-2">
+                            <Field label="Label"><Input value={editingCriterion.label} onChange={e => setEditingCriterion(v => v ? { ...v, label: e.target.value } : v)} /></Field>
+                            <Field label="Tipe">
+                              <Select value={editingCriterion.kind} onChange={e => setEditingCriterion(v => v ? { ...v, kind: e.target.value } : v)}>
+                                <option value="score_10">Nilai 1–10</option>
+                                <option value="score_100">Nilai 1–100</option>
+                                <option value="choice">Pilihan ganda</option>
+                                <option value="text">Teks bebas</option>
+                              </Select>
+                            </Field>
+                          </div>
+                          {editingCriterion.kind === "choice" && (
+                            <Field label="Pilihan jawaban">
+                              <div className="space-y-1.5">
+                                {editingCriterion.options.map((opt, idx) => (
+                                  <div key={idx} className="flex items-center gap-2">
+                                    <span className="text-ink-mute text-sm w-5 text-right shrink-0">{idx + 1}.</span>
+                                    <Input value={opt} onChange={e => setEditingCriterion(v => { if (!v) return v; const opts = [...v.options]; opts[idx] = e.target.value; return { ...v, options: opts }; })} placeholder={`Pilihan ${idx + 1}`} className="flex-1" />
+                                    <button type="button" onClick={() => setEditingCriterion(v => v ? { ...v, options: v.options.filter((_, i) => i !== idx) } : v)} className="p-1 rounded text-ink-mute hover:text-danger-600 hover:bg-danger-50 transition-colors"><Icon name="x" className="w-3.5 h-3.5" /></button>
+                                  </div>
+                                ))}
+                                <button type="button" onClick={() => setEditingCriterion(v => v ? { ...v, options: [...v.options, ""] } : v)} className="flex items-center gap-1.5 text-sm text-ocean-600 hover:text-ocean-700 font-medium mt-1">
+                                  <Icon name="plus" className="w-3.5 h-3.5" />Tambah pilihan
+                                </button>
+                              </div>
+                            </Field>
+                          )}
+                          <div className="flex gap-2">
+                            <Btn variant="primary" size="sm" onClick={updateCriterion}>Simpan</Btn>
+                            <Btn variant="ghost" size="sm" onClick={() => setEditingCriterion(null)}>Batal</Btn>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-3 p-3 hover:bg-paper-tint">
+                          <span className="w-6 h-6 rounded-full bg-ocean-50 text-ocean-700 text-xs font-bold flex items-center justify-center shrink-0">{i + 1}</span>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-semibold text-ink text-sm">{cr.label}</div>
+                            <div className="text-xs text-ink-mute">{kindLabel[cr.kind] ?? cr.kind}{cr.options && ` · ${cr.options.join(", ")}`}</div>
+                          </div>
+                          <button onClick={() => duplicateCriterion(cr)} disabled={savingCriterion}
+                            className="w-7 h-7 rounded-lg hover:bg-ocean-50 text-ink-faint hover:text-ocean-600 flex items-center justify-center shrink-0 disabled:opacity-50" title="Duplikat">
+                            <Icon name="copy" className="w-3.5 h-3.5" />
+                          </button>
+                          <button onClick={() => setEditingCriterion({ id: cr.id, label: cr.label, kind: cr.kind, options: cr.options ?? [] })}
+                            className="w-7 h-7 rounded-lg hover:bg-ocean-50 text-ink-faint hover:text-ocean-600 flex items-center justify-center shrink-0" title="Edit">
+                            <Icon name="edit" className="w-3.5 h-3.5" />
+                          </button>
+                          <button onClick={() => deleteCriterion(cr.id)}
+                            className="w-7 h-7 rounded-lg hover:bg-danger-50 text-ink-faint hover:text-danger-500 flex items-center justify-center shrink-0" title="Hapus">
+                            <Icon name="x" className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-ink-mute">Belum ada kriteria. Tambahkan di bawah.</p>
+              )}
+
+              <div className="border-t border-line pt-4 space-y-3">
+                <div className="text-xs font-bold uppercase tracking-widest text-ink-faint">Tambah Kriteria Baru</div>
+                <div className="grid sm:grid-cols-2 gap-3">
+                  <Field label="Label kriteria" required><Input value={criterionForm.label} onChange={e => setCriterionForm(f => ({ ...f, label: e.target.value }))} placeholder="Mis. Teknik gaya bebas" /></Field>
+                  <Field label="Tipe penilaian">
+                    <Select value={criterionForm.kind} onChange={e => setCriterionForm(f => ({ ...f, kind: e.target.value }))}>
+                      <option value="score_10">Nilai 1–10</option>
+                      <option value="score_100">Nilai 1–100</option>
+                      <option value="choice">Pilihan ganda</option>
+                      <option value="text">Teks bebas</option>
+                    </Select>
+                  </Field>
+                </div>
+                {criterionForm.kind === "choice" && (
+                  <Field label="Pilihan jawaban">
+                    <div className="space-y-1.5">
+                      {criterionForm.options.map((opt, idx) => (
+                        <div key={idx} className="flex items-center gap-2">
+                          <span className="text-ink-mute text-sm w-5 text-right shrink-0">{idx + 1}.</span>
+                          <Input value={opt} onChange={e => setCriterionForm(f => { const opts = [...f.options]; opts[idx] = e.target.value; return { ...f, options: opts }; })} placeholder={`Pilihan ${idx + 1}`} className="flex-1" />
+                          <button type="button" onClick={() => setCriterionForm(f => ({ ...f, options: f.options.filter((_, i) => i !== idx) }))} className="p-1 rounded text-ink-mute hover:text-danger-600 hover:bg-danger-50 transition-colors"><Icon name="x" className="w-3.5 h-3.5" /></button>
+                        </div>
+                      ))}
+                      <button type="button" onClick={() => setCriterionForm(f => ({ ...f, options: [...f.options, ""] }))} className="flex items-center gap-1.5 text-sm text-ocean-600 hover:text-ocean-700 font-medium mt-1">
+                        <Icon name="plus" className="w-3.5 h-3.5" />Tambah pilihan
+                      </button>
+                    </div>
+                  </Field>
+                )}
+                <Btn variant="primary" size="sm" icon="plus" onClick={addCriterion} disabled={savingCriterion}>{savingCriterion ? "Menyimpan…" : "Tambah Kriteria"}</Btn>
+              </div>
+            </>
+          )}
+        </div>
+      </Modal>
+
+      <Modal open={!!bestTimeLevel} onClose={() => { setBestTimeLevel(null); setBtForm({ stroke: "", distance: "", target: "" }); setEditingBt(null); }}
+        title={`Tabel Personal Best Time — ${bestTimeLevel?.name ?? ""}`} size="lg"
+        footer={<Btn variant="ghost" onClick={() => { setBestTimeLevel(null); setBtForm({ stroke: "", distance: "", target: "" }); setEditingBt(null); }}>Tutup</Btn>}>
+        <div className="space-y-5">
+          <p className="text-xs text-ink-mute">Baris di sini menentukan gaya &amp; jarak yang muncul di tabel Personal Best Time saat coach mengisi rapor untuk level ini. Standar waktu (opsional) tampil sebagai acuan — coach tetap menginput waktu aktual member.</p>
+          {loadingBestTimes ? <div className="text-ink-mute text-sm text-center py-6">Memuat…</div> : (
+            <>
+              {bestTimeRows.length > 0 ? (
+                <div className="space-y-2">
+                  {bestTimeRows.map((row, i) => (
+                    <div key={row.id} className="rounded-xl border border-line overflow-hidden">
+                      {editingBt?.id === row.id ? (
+                        <div className="p-3 grid grid-cols-3 gap-2 items-end bg-ocean-50/40">
+                          <Field label="Gaya"><Input value={editingBt.stroke} onChange={e => setEditingBt(v => v ? { ...v, stroke: e.target.value } : v)} /></Field>
+                          <Field label="Jarak (m)"><Input inputMode="numeric" value={editingBt.distance} onChange={e => setEditingBt(v => v ? { ...v, distance: e.target.value } : v)} /></Field>
+                          <Field label="Standar (dtk)"><Input inputMode="decimal" value={editingBt.target} onChange={e => setEditingBt(v => v ? { ...v, target: e.target.value } : v)} placeholder="Opsional" /></Field>
+                          <div className="col-span-3 flex gap-2">
+                            <Btn variant="primary" size="sm" onClick={saveBestTimeEdit}>Simpan</Btn>
+                            <Btn variant="ghost" size="sm" onClick={() => setEditingBt(null)}>Batal</Btn>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-3 p-3 hover:bg-paper-tint">
+                          <span className="w-6 h-6 rounded-full bg-ocean-50 text-ocean-700 text-xs font-bold flex items-center justify-center shrink-0">{i + 1}</span>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-semibold text-ink text-sm">{row.stroke} · {row.distance}m</div>
+                            <div className="text-xs text-ink-mute">{row.target_time_seconds != null ? `Standar: ${fmtSwimTime(row.target_time_seconds)}` : "Tanpa standar waktu"}</div>
+                          </div>
+                          <button onClick={() => setEditingBt({ id: row.id, stroke: row.stroke, distance: String(row.distance), target: row.target_time_seconds != null ? String(row.target_time_seconds) : "" })}
+                            className="w-7 h-7 rounded-lg hover:bg-ocean-50 text-ink-faint hover:text-ocean-600 flex items-center justify-center shrink-0" title="Edit">
+                            <Icon name="edit" className="w-3.5 h-3.5" />
+                          </button>
+                          <button onClick={() => deleteBestTimeRow(row.id)}
+                            className="w-7 h-7 rounded-lg hover:bg-danger-50 text-ink-faint hover:text-danger-500 flex items-center justify-center shrink-0" title="Hapus">
+                            <Icon name="x" className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-ink-mute">Belum ada baris tabel waktu. Tambahkan di bawah.</p>
+              )}
+
+              <div className="border-t border-line pt-4 space-y-3">
+                <div className="text-xs font-bold uppercase tracking-widest text-ink-faint">Tambah Baris Baru</div>
+                <div className="grid grid-cols-3 gap-3">
+                  <Field label="Gaya" required><Input value={btForm.stroke} onChange={e => setBtForm(f => ({ ...f, stroke: e.target.value }))} placeholder="Mis. Freestyle" /></Field>
+                  <Field label="Jarak (m)" required><Input inputMode="numeric" value={btForm.distance} onChange={e => setBtForm(f => ({ ...f, distance: e.target.value }))} placeholder="50" /></Field>
+                  <Field label="Standar (dtk)"><Input inputMode="decimal" value={btForm.target} onChange={e => setBtForm(f => ({ ...f, target: e.target.value }))} placeholder="Opsional" /></Field>
+                </div>
+                <Btn variant="primary" size="sm" icon="plus" onClick={addBestTimeRow} disabled={savingBt}>{savingBt ? "Menyimpan…" : "Tambah Baris"}</Btn>
+              </div>
+            </>
+          )}
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
 function SettingsTarif({ branches }: { branches: Branch[] }) {
   const toast = useToast();
   const supabase = createClient();
@@ -1372,19 +1898,9 @@ function SettingsTarif({ branches }: { branches: Branch[] }) {
   );
 }
 
-interface OwnerPayslipRow {
-  id: string; coach_id: string; branch_id: string; invoice_id: string | null;
-  period_label: string; gross_amount: number; deductions: number; net_amount: number;
-  notes: string | null; status: string; published_at: string | null;
-  published_by: string | null; created_at: string;
-  coach?: { full_name: string } | null;
-  branch?: { name: string } | null;
-}
-
 function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: string; userName: string }) {
   const supabase = createClient();
   const toast = useToast();
-  const confirm = useConfirm();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [branchFilter, setBranchFilter] = useState("all");
@@ -1394,17 +1910,6 @@ function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: 
   const [rejectModal, setRejectModal] = useState<Invoice | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [detail, setDetail] = useState<Invoice | null>(null);
-
-  // ── Payslip state ───────────────────────────────────────────────────────────
-  const [payslips, setPayslips] = useState<OwnerPayslipRow[]>([]);
-  const [loadingPayslips, setLoadingPayslips] = useState(true);
-  const [showGenModal, setShowGenModal] = useState(false);
-  const [genForm, setGenForm] = useState({ invoice_id: "", period_label: "", gross_amount: "", deductions: "", notes: "" });
-  const [savingSlip, setSavingSlip] = useState(false);
-  const [publishingId, setPublishingId] = useState<string | null>(null);
-  const [viewSlip, setViewSlip] = useState<OwnerPayslipRow | null>(null);
-  const [payslipBranchFilter, setPayslipBranchFilter] = useState("all");
-  const [payslipStatusFilter, setPayslipStatusFilter] = useState("all");
 
   const totPending  = invoices.filter(i => i.status === "pending");
   const totApproved = invoices.filter(i => i.status === "approved");
@@ -1426,94 +1931,9 @@ function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: 
   }, [branchFilter]); // eslint-disable-line react-hooks/exhaustive-deps
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  const loadPayslips = useCallback(async () => {
-    setLoadingPayslips(true);
-    const { data } = await supabase.from("payslips")
-      .select("id, coach_id, branch_id, invoice_id, period_label, gross_amount, deductions, net_amount, notes, status, published_at, published_by, created_at, coach:profiles!payslips_coach_id_fkey(full_name), branch:branches(name)")
-      .order("created_at", { ascending: false });
-    if (data) setPayslips(data as unknown as OwnerPayslipRow[]);
-    setLoadingPayslips(false);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => { loadPayslips(); }, [loadPayslips]);
-
-  const filteredPayslips = useMemo(() => {
-    let r = payslips;
-    if (payslipBranchFilter !== "all") r = r.filter(p => p.branch_id === payslipBranchFilter);
-    if (payslipStatusFilter !== "all") r = r.filter(p => p.status === payslipStatusFilter);
-    return r;
-  }, [payslips, payslipBranchFilter, payslipStatusFilter]);
-
   const invoicesWithoutSlip = useMemo(() => {
-    const usedInvoiceIds = new Set(payslips.map(p => p.invoice_id).filter(Boolean));
-    return invoices.filter(i => i.status === "paid" && !usedInvoiceIds.has(i.id));
-  }, [invoices, payslips]);
-
-  const handleGenInvoiceChange = (invoiceId: string) => {
-    const inv = invoices.find(e => e.id === invoiceId);
-    if (inv) {
-      setGenForm(f => ({ ...f, invoice_id: invoiceId, period_label: inv.period_label, gross_amount: "", deductions: "", notes: "" }));
-    } else {
-      setGenForm(f => ({ ...f, invoice_id: invoiceId }));
-    }
-  };
-
-  const parseMoneyInput = (value: string) => value.replace(/\D/g, "");
-
-  const savePayslip = async () => {
-    if (!genForm.invoice_id) return toast.error("Pilih invoice terlebih dahulu");
-    if (!genForm.period_label.trim()) return toast.error("Period label kosong");
-    const inv = invoices.find(e => e.id === genForm.invoice_id);
-    if (!inv) return toast.error("Invoice tidak ditemukan");
-    setSavingSlip(true);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const grossAmount = Number(genForm.gross_amount || 0);
-    const deductions = Number(genForm.deductions || 0);
-    const { error } = await (supabase as any).from("payslips").insert({
-      coach_id: inv.coach?.id ?? "",
-      branch_id: inv.branch_id ?? "",
-      invoice_id: genForm.invoice_id,
-      period_label: genForm.period_label.trim(),
-      gross_amount: grossAmount,
-      deductions,
-      net_amount: grossAmount - deductions,
-      notes: genForm.notes.trim() || null,
-      status: "draft",
-    });
-    setSavingSlip(false);
-    if (error) return toast.error("Gagal simpan", error.message);
-    toast.success("Slip gaji berhasil dibuat (draft)");
-    logActivity(supabase, { userId, userRole: "owner", userName, entityType: "payslips", entityId: inv.coach?.id ?? "", entityLabel: inv.coach?.full_name ?? undefined, action: "create", label: `Slip gaji ${inv.coach?.full_name ?? "coach"} periode ${genForm.period_label.trim()} dibuat (draft)`, meta: { gross_amount: grossAmount, deductions, net_amount: grossAmount - deductions } });
-    setShowGenModal(false);
-    setGenForm({ invoice_id: "", period_label: "", gross_amount: "", deductions: "", notes: "" });
-    loadPayslips();
-  };
-
-  const publishPayslip = async (p: OwnerPayslipRow) => {
-    const ok = await confirm({ title: "Terbitkan Slip Gaji?", body: `Slip gaji ${p.coach?.full_name ?? "coach"} periode ${p.period_label} akan diterbitkan dan dapat dilihat coach.`, confirmLabel: "Terbitkan" });
-    if (!ok) return;
-    setPublishingId(p.id);
-    const { error } = await supabase.from("payslips").update({ status: "published", published_at: new Date().toISOString(), published_by: userId }).eq("id", p.id);
-    setPublishingId(null);
-    if (error) return toast.error("Gagal terbitkan", error.message);
-    toast.success("Slip gaji diterbitkan");
-    logActivity(supabase, { userId, userRole: "owner", userName, branchId: p.branch_id, entityType: "payslips", entityId: p.id, entityLabel: p.coach?.full_name ?? undefined, action: "publish", label: `Slip gaji ${p.coach?.full_name ?? "coach"} periode ${p.period_label} diterbitkan`, meta: { net_amount: p.net_amount } });
-    setPayslips(prev => prev.map(s => s.id === p.id ? { ...s, status: "published", published_at: new Date().toISOString() } : s));
-  };
-
-  const deletePayslip = async (p: OwnerPayslipRow) => {
-    const ok = await confirm({ title: "Hapus Slip Gaji?", body: "Slip gaji draft ini akan dihapus.", confirmLabel: "Hapus", danger: true });
-    if (!ok) return;
-    const { error } = await supabase.from("payslips").delete().eq("id", p.id);
-    if (error) return toast.error("Gagal hapus", error.message);
-    toast.success("Slip gaji dihapus");
-    logActivity(supabase, { userId, userRole: "owner", userName, branchId: p.branch_id, entityType: "payslips", entityId: p.id, entityLabel: p.coach?.full_name ?? undefined, action: "delete", label: `Slip gaji draft ${p.coach?.full_name ?? "coach"} periode ${p.period_label} dihapus` });
-    setPayslips(prev => prev.filter(s => s.id !== p.id));
-  };
-
-  const printPayslip = (p: OwnerPayslipRow) => {
-    void printPayslipUtil(supabase, p.id);
-  };
+    return invoices.filter(i => i.status === "paid");
+  }, [invoices]);
 
   const markPaid = async (id: string) => {
     setMarking(id);
@@ -1761,142 +2181,8 @@ function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: 
 
       {/* ── SLIP GAJI ───────────────────────────────────────────────────────── */}
       <div className="mt-8 pt-8 border-t border-line">
-        <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
-          <div>
-            <div className="font-display font-bold text-xl">Slip Gaji</div>
-            <p className="text-sm text-ink-mute">Generate dan terbitkan slip gaji dari invoice yang sudah lunas.</p>
-          </div>
-          <Btn variant="primary" icon="plus" onClick={() => { setGenForm({ invoice_id: "", period_label: "", gross_amount: "", deductions: "", notes: "" }); setShowGenModal(true); }}>
-            Generate Slip Gaji
-          </Btn>
-        </div>
-
-        {/* Filters */}
-        <div className="flex gap-2 flex-wrap mb-4">
-          <select value={payslipBranchFilter} onChange={e => setPayslipBranchFilter(e.target.value)} className="text-sm rounded-xl border border-line bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
-            <option value="all">Semua cabang</option>
-            {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-          </select>
-          <select value={payslipStatusFilter} onChange={e => setPayslipStatusFilter(e.target.value)} className="text-sm rounded-xl border border-line bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
-            <option value="all">Semua status</option>
-            <option value="draft">Draft</option>
-            <option value="published">Diterbitkan</option>
-          </select>
-          <span className="text-xs text-ink-mute self-center ml-auto">{filteredPayslips.length} slip</span>
-        </div>
-
-        {/* Payslip list */}
-        <div className="bg-white border border-line rounded-2xl overflow-hidden">
-          {loadingPayslips ? (
-            <div className="p-10 text-center text-ink-mute">Memuat data…</div>
-          ) : filteredPayslips.length === 0 ? (
-            <div className="p-10 text-center text-ink-mute">Belum ada slip gaji. Klik &ldquo;Generate Slip Gaji&rdquo; untuk membuat dari invoice yang sudah lunas.</div>
-          ) : (
-            <div className="divide-y divide-line">
-              {filteredPayslips.map(p => (
-                <div key={p.id} className="flex items-center gap-3 px-5 py-3.5 hover:bg-paper-tint">
-                  <span className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${p.status === "published" ? "bg-ok-50 text-ok-700" : "bg-warn-50 text-warn-700"}`}>
-                    <Icon name="invoice" className="w-5 h-5" />
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-sm">{p.coach?.full_name ?? "—"}</span>
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${p.status === "published" ? "bg-ok-50 text-ok-700" : "bg-warn-50 text-warn-700"}`}>
-                        {p.status === "published" ? "Diterbitkan" : "Draft"}
-                      </span>
-                    </div>
-                    <div className="text-xs text-ink-mute mt-0.5">{p.period_label} · {p.branch?.name ?? "—"}</div>
-                    <div className="text-xs text-ink-mute">Gross {fmtIDR(p.gross_amount)} · Potongan {fmtIDR(p.deductions)} · <span className="text-ok-700 font-semibold">Net {fmtIDR(p.net_amount)}</span></div>
-                  </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <button onClick={() => setViewSlip(p)} className="w-8 h-8 rounded-lg border border-line hover:bg-paper-tint flex items-center justify-center text-ink-mute hover:text-ocean-600" title="Lihat / Cetak">
-                      <Icon name="eye" className="w-4 h-4" />
-                    </button>
-                    {p.status === "draft" && (
-                      <>
-                        <Btn variant="soft" size="sm" onClick={() => publishPayslip(p)} disabled={publishingId === p.id}>
-                          {publishingId === p.id ? "…" : "Terbitkan"}
-                        </Btn>
-                        <button onClick={() => deletePayslip(p)} className="w-8 h-8 rounded-lg border border-line hover:bg-danger-50 flex items-center justify-center text-ink-mute hover:text-danger-600" title="Hapus">
-                          <Icon name="trash" className="w-4 h-4" />
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        <PayslipGenerator branches={branches} userId={userId} userName={userName} invoices={invoices} invoicesWithoutSlip={invoicesWithoutSlip} />
       </div>
-
-      {/* ── Modal: Generate Slip Gaji ──────────────────────────────────────── */}
-      <Modal open={showGenModal} onClose={() => setShowGenModal(false)} title="Generate Slip Gaji" size="md"
-        footer={
-          <div className="flex gap-2 justify-end w-full">
-            <Btn variant="ghost" onClick={() => setShowGenModal(false)}>Batal</Btn>
-            <Btn variant="primary" onClick={savePayslip} disabled={savingSlip || !genForm.invoice_id}>
-              {savingSlip ? "Menyimpan…" : "Simpan sebagai Draft"}
-            </Btn>
-          </div>
-        }>
-        <div className="space-y-4">
-          <Field label="Invoice Coach (sudah lunas)">
-            <Select value={genForm.invoice_id} onChange={e => handleGenInvoiceChange(e.target.value)}>
-              <option value="">— Pilih invoice —</option>
-              {invoicesWithoutSlip.map(inv => (
-                <option key={inv.id} value={inv.id}>{inv.coach?.full_name ?? "—"} · {inv.period_label} · {fmtIDR(inv.total_amount)} ({inv.branch?.name ?? "—"})</option>
-              ))}
-            </Select>
-          </Field>
-          {invoicesWithoutSlip.length === 0 && (
-            <p className="text-xs text-ink-mute">Semua invoice lunas sudah memiliki slip gaji, atau belum ada invoice yang lunas.</p>
-          )}
-          <Field label="Periode"><Input value={genForm.period_label} onChange={e => setGenForm(f => ({ ...f, period_label: e.target.value }))} placeholder="Contoh: Juni 2026" /></Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Gaji Kotor (Rp)"><Input type="number" inputMode="numeric" value={genForm.gross_amount} onChange={e => setGenForm(f => ({ ...f, gross_amount: parseMoneyInput(e.target.value) }))} min={0} /></Field>
-            <Field label="Potongan (Rp)"><Input type="number" inputMode="numeric" value={genForm.deductions} onChange={e => setGenForm(f => ({ ...f, deductions: parseMoneyInput(e.target.value) }))} min={0} /></Field>
-          </div>
-          <div className="bg-ok-50 border border-ok-200 rounded-xl px-4 py-3 flex items-center justify-between">
-            <span className="text-sm font-semibold text-ok-900">Gaji Bersih</span>
-            <span className="font-mono font-bold text-ok-700 text-lg">{fmtIDR(Number(genForm.gross_amount || 0) - Number(genForm.deductions || 0))}</span>
-          </div>
-          <Field label="Catatan (opsional)"><Textarea value={genForm.notes} onChange={e => setGenForm(f => ({ ...f, notes: e.target.value }))} rows={2} placeholder="Catatan untuk coach…" /></Field>
-        </div>
-      </Modal>
-
-      {/* ── Modal: View / Print Slip Gaji ─────────────────────────────────── */}
-      <Modal open={!!viewSlip} onClose={() => setViewSlip(null)} title="Detail Slip Gaji" size="md"
-        footer={
-          <div className="flex gap-2 justify-between w-full">
-            <Btn variant="ghost" icon="print" onClick={() => viewSlip && printPayslip(viewSlip)}>Cetak</Btn>
-            <Btn variant="ghost" onClick={() => setViewSlip(null)}>Tutup</Btn>
-          </div>
-        }>
-        {viewSlip && (
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Coach</div><div className="font-semibold">{viewSlip.coach?.full_name ?? "—"}</div></div>
-              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Cabang</div><div className="font-semibold">{viewSlip.branch?.name ?? "—"}</div></div>
-              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Periode</div><div>{viewSlip.period_label}</div></div>
-              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Status</div>
-                <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${viewSlip.status === "published" ? "bg-ok-50 text-ok-700" : "bg-warn-50 text-warn-700"}`}>
-                  {viewSlip.status === "published" ? "Diterbitkan" : "Draft"}
-                </span>
-              </div>
-              {viewSlip.published_at && <div className="col-span-2"><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Diterbitkan pada</div><div>{new Date(viewSlip.published_at).toLocaleDateString("id-ID", { dateStyle: "long" })}</div></div>}
-            </div>
-            <div className="border-t border-line pt-4 space-y-2">
-              <div className="flex justify-between py-2 border-b border-line text-sm"><span>Gaji Kotor</span><span className="font-mono font-semibold">{fmtIDR(viewSlip.gross_amount)}</span></div>
-              <div className="flex justify-between py-2 border-b border-line text-sm text-danger-700"><span>Potongan</span><span className="font-mono">- {fmtIDR(viewSlip.deductions)}</span></div>
-              <div className="flex justify-between py-2 text-base font-bold"><span>Gaji Bersih</span><span className="font-mono text-ok-700">{fmtIDR(viewSlip.net_amount)}</span></div>
-            </div>
-            {viewSlip.notes && (
-              <div className="bg-paper-tint rounded-xl p-3 text-sm text-ink-mute">{viewSlip.notes}</div>
-            )}
-          </div>
-        )}
-      </Modal>
     </div>
   );
 }
@@ -3275,9 +3561,11 @@ const NAV_ITEMS: NavItem[] = [
   { id: "branches",  label: "Cabang",        icon: "pin"     },
   { id: "admins",    label: "Admin",         icon: "users"   },
   { id: "classes",   label: "Kelas",         icon: "swim"    },
+  { id: "levels",    label: "Level Rapor",   icon: "book"    },
   { section: "Keuangan" },
   { id: "rates",     label: "Tarif Coach",   icon: "settings"},
   { id: "invoices",  label: "Slip Gaji",     icon: "invoice" },
+  { id: "loans",     label: "Daftar Pinjaman", icon: "wallet" },
   { id: "financial", label: "Financial",    icon: "chart"   },
   { section: "Konten" },
   { id: "landing",   label: "Landing Page",  icon: "star"      },
@@ -3291,8 +3579,10 @@ const TITLES: Record<string, [string, string]> = {
   branches:  ["Cabang",         "Kelola cabang Next Swimming School"],
   admins:    ["Admin",          "Akun admin per cabang"],
   classes:   ["Kelas",          "Semua kelas lintas cabang"],
+  levels:    ["Level Rapor",    "Template kriteria & standar waktu per level renang"],
   rates:     ["Settings Tarif", "Tarif coach per kelas"],
   invoices:  ["Slip Gaji",      "Invoice coach & penerbitan slip gaji"],
+  loans:     ["Daftar Pinjaman", "Kelola pinjaman & cicilan coach"],
   financial: ["Financial",      "Income, expenses & payroll semua cabang"],
   landing:   ["Landing Page",   "Kelola konten halaman depan"],
   storage:   ["R2 Storage",     "Monitoring & backup Cloudflare R2 storage"],
@@ -3379,8 +3669,10 @@ export default function OwnerPage() {
     branches:  <Branches branches={branches} onRefresh={loadBranches} userId={userId} userName={ownerName} />,
     admins:    <Admins branches={branches} />,
     classes:   <Classes branches={branches} />,
+    levels:    <OwnerRaporLevels />,
     rates:     <SettingsTarif branches={branches} />,
     invoices:  <Invoices branches={branches} userId={userId} userName={ownerName} />,
+    loans:     <CoachLoans branches={branches} userId={userId} userName={ownerName} />,
     financial: <OwnerFinancial branches={branches} userId={userId} userName={ownerName} />,
     landing:   <LandingCMS />,
     storage:   <OwnerStorage userId={userId} userName={ownerName} />,
