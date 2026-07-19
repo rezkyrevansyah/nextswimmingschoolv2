@@ -9,6 +9,7 @@ import { Field, Input, Select, Textarea } from "@/components/ui/FormFields";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import Status from "@/components/ui/Status";
 import Avatar from "@/components/ui/Avatar";
+import StarDisplay from "@/components/ui/StarDisplay";
 import Placeholder from "@/components/ui/Placeholder";
 import Modal from "@/components/ui/Modal";
 import PhotoLightbox from "@/components/ui/PhotoLightbox";
@@ -3119,38 +3120,16 @@ interface MyReviewRow {
   created_at: string; member_name: string; period_label: string;
 }
 
-function StarDisplay({ stars }: { stars: number }) {
-  return (
-    <span className="flex items-center gap-0.5">
-      {Array.from({ length: 5 }).map((_, k) => (
-        <Icon key={k} name="star" className={`w-3.5 h-3.5 ${k < stars ? "text-amber-400" : "text-line"}`} strokeWidth={1.5} fill={k < stars ? "currentColor" : "none"} />
-      ))}
-    </span>
-  );
-}
-
 function CoachMyReviews({ coachId }: { coachId: string }) {
-  const supabase = createClient();
   const [reviews, setReviews] = useState<MyReviewRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
-      const { data } = await supabase
-        .from("member_reviews")
-        .select("id, stars, message, created_at, member:members!member_reviews_member_id_fkey(profile:profiles(full_name)), rapor:rapor_entries!member_reviews_rapor_id_fkey(rapor_periods(label))")
-        .eq("coach_id", coachId)
-        .order("created_at", { ascending: false });
-      if (!data) { setLoading(false); return; }
-      setReviews((data as unknown as {
-        id: string; stars: number; message: string | null; created_at: string;
-        member: { profile: { full_name: string } | null } | null;
-        rapor: { rapor_periods: { label: string } | null } | null;
-      }[]).map(r => ({
-        id: r.id, stars: r.stars, message: r.message, created_at: r.created_at,
-        member_name: r.member?.profile?.full_name ?? "—",
-        period_label: r.rapor?.rapor_periods?.label ?? "—",
-      })));
+      const res = await fetch("/api/rapor/coach-reviews");
+      if (!res.ok) { setLoading(false); return; }
+      const { reviews: rows } = await res.json() as { reviews: MyReviewRow[] };
+      setReviews(rows);
       setLoading(false);
     })();
   }, [coachId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -3165,7 +3144,7 @@ function CoachMyReviews({ coachId }: { coachId: string }) {
         <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4 flex items-center gap-4">
           <div className="text-center shrink-0">
             <div className="text-3xl font-bold text-amber-600">{avg.toFixed(1)}</div>
-            <StarDisplay stars={Math.round(avg)} />
+            <StarDisplay stars={Math.round(avg)} size="sm" />
             <div className="text-xs text-ink-mute mt-1">{reviews.length} ulasan</div>
           </div>
           <div className="flex-1 space-y-1">
@@ -3191,11 +3170,12 @@ function CoachMyReviews({ coachId }: { coachId: string }) {
           <div key={r.id} className="bg-white border border-line rounded-2xl p-4">
             <div className="flex items-start justify-between gap-2 mb-2">
               <div>
+                {/* reviewer identity is masked server-side — do not add Avatar/photo here */}
                 <div className="font-semibold text-ink text-sm">{r.member_name}</div>
                 <div className="text-xs text-ink-mute">{r.period_label}</div>
               </div>
               <div className="flex flex-col items-end gap-1 shrink-0">
-                <StarDisplay stars={r.stars} />
+                <StarDisplay stars={r.stars} size="sm" />
                 <span className="text-xs text-ink-faint">{fmtDate(r.created_at)}</span>
               </div>
             </div>

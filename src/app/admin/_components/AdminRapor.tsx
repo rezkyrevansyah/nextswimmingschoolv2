@@ -9,6 +9,7 @@ import { Field, Input } from "@/components/ui/FormFields";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import Status from "@/components/ui/Status";
 import Modal from "@/components/ui/Modal";
+import StarDisplay from "@/components/ui/StarDisplay";
 import { fmtDate } from "@/lib/utils";
 import AdminRaporList from "./AdminRaporList";
 
@@ -28,18 +29,7 @@ interface RaporPeriod {
   is_open: boolean; branch_id: string;
 }
 
-function StarDisplay({ stars }: { stars: number }) {
-  return (
-    <span className="flex items-center gap-0.5">
-      {Array.from({ length: 5 }).map((_, k) => (
-        <Icon key={k} name="star" className={`w-4 h-4 ${k < stars ? "text-amber-400" : "text-line"}`} strokeWidth={1.5} fill={k < stars ? "currentColor" : "none"} />
-      ))}
-    </span>
-  );
-}
-
 function AdminCoachReviews({ branchId }: { branchId: string }) {
-  const supabase = createClient();
   const [reviews, setReviews] = useState<CoachReviewRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterCoach, setFilterCoach] = useState<string>("all");
@@ -47,28 +37,9 @@ function AdminCoachReviews({ branchId }: { branchId: string }) {
 
   useEffect(() => {
     (async () => {
-      const { data } = await supabase
-        .from("member_reviews")
-        .select("id, stars, message, created_at, coach_id, coach:profiles!member_reviews_coach_id_fkey(full_name), member:members!member_reviews_member_id_fkey(profile:profiles(full_name)), rapor:rapor_entries!inner!member_reviews_rapor_id_fkey(class:classes!inner(branch_id), rapor_periods(label))")
-        .eq("rapor.class.branch_id", branchId)
-        .order("created_at", { ascending: false });
-      if (!data) { setLoading(false); return; }
-
-      const rows: CoachReviewRow[] = (data as unknown as {
-        id: string; stars: number; message: string | null; created_at: string; coach_id: string;
-        coach: { full_name: string } | null;
-        member: { profile: { full_name: string } | null } | null;
-        rapor: { rapor_periods: { label: string } | null } | null;
-      }[]).map(r => ({
-        id: r.id,
-        stars: r.stars,
-        message: r.message,
-        created_at: r.created_at,
-        coach_id: r.coach_id,
-        coach_name: r.coach?.full_name ?? "—",
-        member_name: r.member?.profile?.full_name ?? "—",
-        period_label: r.rapor?.rapor_periods?.label ?? "—",
-      }));
+      const res = await fetch(`/api/rapor/admin-coach-reviews?branchId=${branchId}`);
+      if (!res.ok) { setLoading(false); return; }
+      const { reviews: rows } = await res.json() as { reviews: CoachReviewRow[] };
 
       setReviews(rows);
       const coachMap = new Map<string, string>();
@@ -118,6 +89,7 @@ function AdminCoachReviews({ branchId }: { branchId: string }) {
           <div key={r.id} className="bg-white border border-line rounded-2xl p-4 space-y-2">
             <div className="flex items-start justify-between gap-2">
               <div>
+                {/* reviewer identity is masked server-side — do not add Avatar/photo here */}
                 <div className="font-semibold text-ink text-sm">{r.member_name}</div>
                 <div className="text-xs text-ink-mute">{r.coach_name} · {r.period_label}</div>
               </div>

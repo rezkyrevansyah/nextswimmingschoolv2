@@ -46,6 +46,13 @@ export const clampPercent = (value: number, max: number): number => {
   return Math.min(100, Math.max(0, (value / max) * 100));
 };
 
+/** Mask a reviewer's name to protect anonymity: "Andi Saputra" -> "A***" */
+export function maskMemberName(fullName?: string | null): string {
+  const trimmed = (fullName ?? "").trim();
+  if (!trimmed) return "Member***";
+  return `${trimmed.charAt(0).toUpperCase()}***`;
+}
+
 /**
  * Count text metrics for rapor notes validation.
  * - chars: raw character count

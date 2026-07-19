@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { fmtIDR, fmtDate, fmtDateLong, fmtTime, waLink, cn, clampPercent } from "./utils";
+import { fmtIDR, fmtDate, fmtDateLong, fmtTime, waLink, cn, clampPercent, maskMemberName } from "./utils";
 
 // ---------------------------------------------------------------------------
 // fmtIDR
@@ -366,5 +366,44 @@ describe("fmtDateLong — edge cases", () => {
     const d = new Date(2024, 1, 29); // any date is fine
     const result = fmtDateLong(d);
     expect(result).toMatch(/\w+,/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// maskMemberName
+// ---------------------------------------------------------------------------
+describe("maskMemberName", () => {
+  it("masks a two-word name to first initial + fixed asterisks", () => {
+    expect(maskMemberName("Andi Saputra")).toBe("A***");
+  });
+
+  it("masks a single-word name the same way", () => {
+    expect(maskMemberName("Dimas")).toBe("D***");
+  });
+
+  it("uppercases a lowercase first letter", () => {
+    expect(maskMemberName("dimas pratama")).toBe("D***");
+  });
+
+  it("trims leading whitespace before masking", () => {
+    expect(maskMemberName("  Rina Wulandari")).toBe("R***");
+  });
+
+  it("falls back to a generic mask for an empty string", () => {
+    expect(maskMemberName("")).toBe("Member***");
+  });
+
+  it("falls back to a generic mask for null", () => {
+    expect(maskMemberName(null)).toBe("Member***");
+  });
+
+  it("falls back to a generic mask for undefined", () => {
+    expect(maskMemberName(undefined)).toBe("Member***");
+  });
+
+  it("never returns more of the name than the first character", () => {
+    const result = maskMemberName("Christopherson Wibowo");
+    expect(result).toBe("C***");
+    expect(result).not.toContain("hristopherson");
   });
 });
