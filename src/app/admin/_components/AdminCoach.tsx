@@ -234,10 +234,11 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
   };
 
   const addCert = async () => {
-    if (!detail || !certForm.title) return toast.error("Judul sertifikasi wajib diisi");
+    if (!detail) return toast.error("Data coach belum dimuat, coba refresh");
     setSavingCert(true);
+    const title = certForm.title.trim();
     const { data, error } = await createClient().from("certifications").insert({
-      coach_id: detail.id, name: certForm.title, title: certForm.title,
+      coach_id: detail.id, name: title || "Sertifikasi", title: title || null,
       issuer: certForm.issuer || null,
       valid_from: certForm.issued_at ? toDbDate(certForm.issued_at) : null,
       valid_until: certForm.no_expiry ? null : (certForm.expires_at ? toDbDate(certForm.expires_at) : null),
@@ -1147,7 +1148,7 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
       <Modal open={openAddCert} onClose={() => { setOpenAddCert(false); setCertPhotoFile(null); }} title={`Tambah Sertifikasi — ${detail?.full_name ?? ""}`} size="sm"
         footer={<><Btn variant="ghost" onClick={() => { setOpenAddCert(false); setCertPhotoFile(null); }}>Batal</Btn><Btn variant="primary" onClick={addCert} disabled={savingCert}>{savingCert ? "Menyimpan…" : "Simpan"}</Btn></>}>
         <div className="space-y-4">
-          <Field label="Nama sertifikasi" required><Input value={certForm.title} onChange={e => setCertForm(f => ({ ...f, title: e.target.value }))} placeholder="Mis. Renang Gaya Bebas Tingkat Lanjut" /></Field>
+          <Field label="Nama sertifikasi"><Input value={certForm.title} onChange={e => setCertForm(f => ({ ...f, title: e.target.value }))} placeholder="Mis. Renang Gaya Bebas Tingkat Lanjut" /></Field>
           <Field label="Lembaga penerbit"><Input value={certForm.issuer} onChange={e => setCertForm(f => ({ ...f, issuer: e.target.value }))} placeholder="Mis. PRSI, FINA" /></Field>
           <Field label="Berlaku dari"><MonthYearPicker value={certForm.issued_at} onChange={v => setCertForm(f => ({ ...f, issued_at: v }))} placeholder="Pilih bulan & tahun" /></Field>
           <Field label="Berlaku sampai"><MonthYearPicker value={certForm.expires_at} onChange={v => setCertForm(f => ({ ...f, expires_at: v }))} placeholder="Pilih bulan & tahun" disabled={certForm.no_expiry} /></Field>

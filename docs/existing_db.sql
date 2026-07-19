@@ -562,6 +562,7 @@ CREATE TABLE public.landing_config (
   nav_cta_text text NOT NULL DEFAULT 'Konsultasi Sekarang'::text,
   nav_cta_message text NOT NULL DEFAULT 'Halo Admin Next Swimming School, saya ingin konsultasi program renang.'::text,
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  contact_email text,
   CONSTRAINT landing_config_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.landing_nav_links (

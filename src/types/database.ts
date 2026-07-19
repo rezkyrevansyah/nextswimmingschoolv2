@@ -1206,6 +1206,7 @@ export type Database = {
       }
       landing_config: {
         Row: {
+          contact_email: string | null
           floating_wa_message: string
           footer_tagline: string
           footer_wa_number: string
@@ -1215,6 +1216,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          contact_email?: string | null
           floating_wa_message?: string
           footer_tagline?: string
           footer_wa_number?: string
@@ -1224,6 +1226,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          contact_email?: string | null
           floating_wa_message?: string
           footer_tagline?: string
           footer_wa_number?: string

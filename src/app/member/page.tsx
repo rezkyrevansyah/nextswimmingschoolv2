@@ -380,7 +380,7 @@ function MemberHome({
 
 function MemberSchedule({ memberId }: { memberId: string }) {
   const supabase = createClient();
-  const [classes, setClasses] = useState<{ id: string; name: string; schedule_days: string[]; time_start: string | null; time_end: string | null; schedule_times?: { day: string; time_start: string; time_end: string }[] | null; location: string; goals: string | null; description: string | null; coaches: { name: string; phone: string | null }[] }[]>([]);
+  const [classes, setClasses] = useState<{ id: string; name: string; schedule_days: string[]; time_start: string | null; time_end: string | null; schedule_times?: { day: string; time_start: string; time_end: string }[] | null; location: string; goals: string | null; description: string | null; coaches: { name: string; phone: string | null; role: string }[] }[]>([]);
   const [sessions, setSessions] = useState<{ date: string; day: string; time: string; class_id: string; onLeave?: boolean }[]>([]);
   const [holidayClassIds, setHolidayClassIds] = useState<Set<string>>(new Set());
   // approved leave intervals: { date_from, date_to, class_ids }
@@ -407,17 +407,16 @@ function MemberSchedule({ memberId }: { memberId: string }) {
       });
 
     supabase.from("member_classes")
-      .select("classes(id, name, schedule_days, time_start, time_end, schedule_times, location_name, goals, description, class_coaches(profile:profiles(full_name, phone)))")
+      .select("classes(id, name, schedule_days, time_start, time_end, schedule_times, location_name, goals, description, class_coaches(role, profile:profiles(full_name, phone)))")
       .eq("member_id", memberId)
       .then(async ({ data }) => {
         if (!data) return;
         const cls = data.map((mc) => {
-          const c = mc.classes as unknown as { id: string; name: string; schedule_days: string[]; time_start: string | null; time_end: string | null; schedule_times?: { day: string; time_start: string; time_end: string }[] | null; location_name: string | null; goals: string | null; description: string | null; class_coaches: { profile: { full_name: string; phone: string | null } | null }[] } | null;
+          const c = mc.classes as unknown as { id: string; name: string; schedule_days: string[]; time_start: string | null; time_end: string | null; schedule_times?: { day: string; time_start: string; time_end: string }[] | null; location_name: string | null; goals: string | null; description: string | null; class_coaches: { role: string; profile: { full_name: string; phone: string | null } | null }[] } | null;
           if (!c) return null;
           const coaches = (c.class_coaches ?? [])
-            .map((cc) => cc.profile)
-            .filter((p): p is { full_name: string; phone: string | null } => p !== null)
-            .map((p) => ({ name: p.full_name, phone: p.phone ?? null }));
+            .filter((cc): cc is { role: string; profile: { full_name: string; phone: string | null } } => cc.profile !== null)
+            .map((cc) => ({ name: cc.profile.full_name, phone: cc.profile.phone ?? null, role: cc.role }));
           return { id: c.id, name: c.name, schedule_days: c.schedule_days ?? [], time_start: c.time_start, time_end: c.time_end ?? null, schedule_times: c.schedule_times ?? null, location: c.location_name ?? "—", goals: c.goals ?? null, description: c.description ?? null, coaches };
         }).filter(Boolean) as typeof classes;
         setClasses(cls);
@@ -488,7 +487,10 @@ function MemberSchedule({ memberId }: { memberId: string }) {
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2 min-w-0">
                     <Avatar name={c.coaches[0].name} size={24} className="shrink-0" />
-                    <span className="text-wave-200 text-sm truncate">{c.coaches[0].name}</span>
+                    <span className="flex-1 min-w-0 text-wave-200 text-sm truncate">{c.coaches[0].name}</span>
+                    <span className={`shrink-0 px-1.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide ${c.coaches[0].role === "head" ? "bg-wave-400/20 text-wave-200" : "bg-white/10 text-white/50"}`}>
+                      {c.coaches[0].role === "head" ? "Head Coach" : "Assistant Coach"}
+                    </span>
                   </div>
                   {c.coaches[0].phone && (
                     <a href={waLink(`Halo Coach, saya ingin bertanya mengenai kelas ${c.name}.`, c.coaches[0].phone)} target="_blank" rel="noreferrer"
@@ -503,7 +505,10 @@ function MemberSchedule({ memberId }: { memberId: string }) {
                   <div key={idx} className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2 min-w-0">
                       <Avatar name={coach.name} size={24} className="shrink-0" />
-                      <span className="text-wave-200 text-sm truncate">{coach.name}</span>
+                      <span className="flex-1 min-w-0 text-wave-200 text-sm truncate">{coach.name}</span>
+                      <span className={`shrink-0 px-1.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide ${coach.role === "head" ? "bg-wave-400/20 text-wave-200" : "bg-white/10 text-white/50"}`}>
+                        {coach.role === "head" ? "Head Coach" : "Assistant Coach"}
+                      </span>
                     </div>
                     {coach.phone && (
                       <a href={waLink(`Halo Coach, saya ingin bertanya mengenai kelas ${c.name}.`, coach.phone)} target="_blank" rel="noreferrer"

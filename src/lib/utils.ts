@@ -1,4 +1,4 @@
-import { WA_NUMBER } from "./data";
+import { WA_NUMBER, SCHOOL_EMAIL } from "./data";
 
 /** Format angka ke Rupiah: Rp1.234.567 */
 export const fmtIDR = (n: number): string =>
@@ -32,6 +32,12 @@ export const fmtTime = (d: string | Date): string =>
 export const waLink = (text = "", phone?: string | null): string => {
   const num = phone ? phone.replace(/^0/, "").replace(/\D/g, "") : WA_NUMBER.replace(/^0/, "");
   return `https://wa.me/62${num}?text=${encodeURIComponent(text)}`;
+};
+
+/** Build a mailto: link. If email is provided (and non-empty), addresses that email; otherwise defaults to the school's contact email. */
+export const mailtoLink = (subject: string, body = "", email?: string | null): string => {
+  const to = email || SCHOOL_EMAIL;
+  return `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 };
 
 /** Merge class names (minimal, no extra dep needed) */

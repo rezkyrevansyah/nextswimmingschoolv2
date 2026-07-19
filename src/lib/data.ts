@@ -245,3 +245,4 @@ export const ATTENDANCE_TODAY: AttendanceEntry[] = [
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 export const WA_NUMBER = "082110009667";
+export const SCHOOL_EMAIL = "nextcanswim@gmail.com";

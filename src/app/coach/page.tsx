@@ -21,7 +21,7 @@ import Bell from "@/components/layout/Bell";
 import BetaFeedback, { BETA_FEEDBACK_ENABLED } from "@/components/layout/BetaFeedback";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
-import { fmtIDR, fmtDate, fmtDateLong, waLink, countTextStats } from "@/lib/utils";
+import { fmtIDR, fmtDate, fmtDateLong, waLink, mailtoLink, countTextStats } from "@/lib/utils";
 import { downloadRaporPdf, printSingleRaporPopup, fmtSwimTime, type PrintCriterion, type PrintBestTime } from "@/lib/printRapor";
 import { mergeBestTimeTemplate, type LevelBestTimeTemplateRow, type RecordedBestTime } from "@/lib/raporLevels";
 import { resolveRaporSigner } from "@/lib/rapor";
@@ -3220,6 +3220,15 @@ function CoachProfile({ profile, onRefresh, onLogout, onAvatarChange }: { profil
   const [certFile, setCertFile] = useState<File | null>(null);
   const certFileInputRef = useRef<HTMLInputElement>(null);
   const [savingCert, setSavingCert] = useState(false);
+  // School contact email (for the "Hubungi via Email" button)
+  const [contactEmail, setContactEmail] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from("landing_config").select("contact_email").single();
+      setContactEmail(data?.contact_email ?? null);
+    })();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Populate inline form when profile loads
   /* eslint-disable react-hooks/set-state-in-effect -- sync form state from profile */
@@ -3271,12 +3280,12 @@ function CoachProfile({ profile, onRefresh, onLogout, onAvatarChange }: { profil
 
   const saveCert = async () => {
     if (!profile?.id) return toast.error("Profil belum dimuat, coba refresh");
-    if (!certForm.title || !certForm.issued_at) return toast.error("Judul dan tanggal berlaku wajib diisi");
     setSavingCert(true);
+    const title = certForm.title.trim();
 
     // 1. Insert cert row
     const { data: cert, error } = await supabase.from("certifications").insert({
-      coach_id: profile.id, name: certForm.title, title: certForm.title,
+      coach_id: profile.id, name: title || "Sertifikasi", title: title || null,
       issuer: certForm.issuer || null,
       valid_from: certForm.issued_at ? toDbDate(certForm.issued_at) : null,
       valid_until: certForm.no_expiry ? null : (certForm.expires_at ? toDbDate(certForm.expires_at) : null),
@@ -3325,12 +3334,13 @@ function CoachProfile({ profile, onRefresh, onLogout, onAvatarChange }: { profil
   };
 
   const saveCertEdit = async () => {
-    if (!editCertTarget || !certForm.title || !certForm.issued_at) return toast.error("Judul dan tanggal wajib diisi");
+    if (!editCertTarget) return toast.error("Sertifikasi tidak ditemukan, coba refresh");
     setSavingCert(true);
+    const title = certForm.title.trim();
     // Any edit on an approved or rejected cert resets it to pending for re-approval
     const needsReapproval = editCertTarget.status === "approved" || editCertTarget.status === "rejected";
     const { error } = await supabase.from("certifications").update({
-      name: certForm.title, issuer: certForm.issuer || null,
+      name: title || "Sertifikasi", title: title || null, issuer: certForm.issuer || null,
       valid_from: certForm.issued_at ? toDbDate(certForm.issued_at) : null,
       valid_until: certForm.no_expiry ? null : (certForm.expires_at ? toDbDate(certForm.expires_at) : null),
       no_expiry: certForm.no_expiry,
@@ -3550,9 +3560,9 @@ function CoachProfile({ profile, onRefresh, onLogout, onAvatarChange }: { profil
               Mengedit sertifikasi yang sudah disetujui akan mengembalikan statusnya ke <strong>Menunggu Persetujuan</strong> untuk direview ulang oleh admin.
             </div>
           )}
-          <Field label="Nama sertifikasi" required><Input value={certForm.title} onChange={e => setCertForm(f => ({ ...f, title: e.target.value }))} placeholder="Mis. Lifeguard ARC" /></Field>
+          <Field label="Nama sertifikasi"><Input value={certForm.title} onChange={e => setCertForm(f => ({ ...f, title: e.target.value }))} placeholder="Mis. Lifeguard ARC" /></Field>
           <Field label="Penerbit"><Input value={certForm.issuer} onChange={e => setCertForm(f => ({ ...f, issuer: e.target.value }))} placeholder="Mis. PMI / FINA" /></Field>
-          <Field label="Berlaku dari" required><MonthYearPicker value={certForm.issued_at} onChange={v => setCertForm(f => ({ ...f, issued_at: v }))} placeholder="Pilih bulan & tahun" /></Field>
+          <Field label="Berlaku dari"><MonthYearPicker value={certForm.issued_at} onChange={v => setCertForm(f => ({ ...f, issued_at: v }))} placeholder="Pilih bulan & tahun" /></Field>
           <Field label="Berlaku sampai"><MonthYearPicker value={certForm.expires_at} onChange={v => setCertForm(f => ({ ...f, expires_at: v }))} placeholder="Pilih bulan & tahun" disabled={certForm.no_expiry} /></Field>
           <label className="flex items-center gap-2 text-sm text-ink-soft cursor-pointer">
             <input type="checkbox" checked={certForm.no_expiry} onChange={e => setCertForm(f => ({ ...f, no_expiry: e.target.checked, expires_at: "" }))} className="rounded" />
@@ -3589,6 +3599,22 @@ function CoachProfile({ profile, onRefresh, onLogout, onAvatarChange }: { profil
           <Field label="Atas nama" required><Input value={bankForm.bank_holder} onChange={e => setBankForm(f => ({ ...f, bank_holder: e.target.value }))} placeholder="Mis. Reza Fahlevi" /></Field>
         </div>
       </Modal>
+
+      <Card>
+        <a
+          href={mailtoLink(
+            "Pertanyaan dari Coach - Next Swimming School",
+            `Halo Admin/Owner Next Swimming School,\n\nSaya ${profile?.full_name ?? "Coach"} ingin menanyakan...\n\n`,
+            contactEmail
+          )}
+          className="w-full flex items-center gap-3 py-1 group"
+        >
+          <span className="w-9 h-9 rounded-xl bg-ocean-50 text-ocean-600 flex items-center justify-center group-hover:bg-ocean-100 transition-colors">
+            <Icon name="mail" className="w-4 h-4" />
+          </span>
+          <span className="font-semibold text-ink group-hover:text-ocean-700">Hubungi via Email</span>
+        </a>
+      </Card>
 
       <Card>
         <button onClick={onLogout} className="w-full flex items-center gap-3 py-1 text-left group">

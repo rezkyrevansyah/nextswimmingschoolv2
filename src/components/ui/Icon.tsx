@@ -8,7 +8,7 @@ type IconName =
   | "eye" | "eye-off" | "star" | "whatsapp" | "chat" | "school" | "book" | "flag"
   | "clipboard" | "sparkle" | "shield" | "target" | "sun" | "moon" | "info"
   | "warning" | "filter" | "sort" | "close" | "refresh" | "copy" | "sendWA"
-  | "print" | "lock" | "archive" | "chevron-left" | "chevron-right" | "link";
+  | "print" | "lock" | "archive" | "chevron-left" | "chevron-right" | "link" | "mail";
 
 interface IconProps {
   name: IconName | string;
@@ -73,6 +73,7 @@ const PATHS: Record<string, React.ReactNode> = {
   "chevron-left": <path d="M15 6l-6 6 6 6"/>,
   "chevron-right": <path d="M9 6l6 6-6 6"/>,
   link:          <><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></>,
+  mail:          <><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 6l9 7 9-7"/></>,
 };
 
 export default function Icon({ name, className = "w-5 h-5", strokeWidth = 1.75, fill = "none" }: IconProps) {

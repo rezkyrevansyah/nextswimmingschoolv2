@@ -33,7 +33,7 @@ interface CoachRow { id: string; full_name: string; nick_name: string | null; sp
 interface Testimonial { id: string; sort_order: number; name: string; role: string; body_text: string; avatar_url: string | null; }
 interface FaqItem { id: string; question: string; answer: string; sort_order: number; }
 interface FinalCtaData { headline: string; body_text: string; cta_wa_text: string; cta_wa_message: string; cta_sec_text: string; }
-interface LandingConfigData { footer_wa_number: string; footer_tagline: string; floating_wa_message: string; nav_cta_text: string; nav_cta_message: string; }
+interface LandingConfigData { footer_wa_number: string; footer_tagline: string; floating_wa_message: string; nav_cta_text: string; nav_cta_message: string; contact_email: string | null; }
 interface NavLink { id: string; sort_order: number; label: string; href: string; }
 interface SafetyData { section_label: string; headline: string; body_text: string; photo_url: string | null; }
 interface SafetyPointRow { id: string; sort_order: number; text: string; }
@@ -1420,6 +1420,9 @@ function ConfigTab() {
 
   const saveConfig = async () => {
     if (!config) return;
+    if (config.contact_email && !config.contact_email.includes("@")) {
+      return toast.error("Email kontak tidak valid");
+    }
     setSaving(true);
     const { error } = await supabase.from("landing_config").upsert({ id: 1, ...config });
     if (error) { toast.error("Gagal menyimpan", error.message); setSaving(false); return; }
@@ -1466,6 +1469,9 @@ function ConfigTab() {
         <div className="grid lg:grid-cols-2 gap-4 mt-4">
           <Field label="Nomor WA footer (format: 0821xxxxxxxx)">
             <Input value={config.footer_wa_number} onChange={(e) => setConfig({ ...config, footer_wa_number: e.target.value })} placeholder="082110009667" />
+          </Field>
+          <Field label="Email kontak sekolah">
+            <Input type="email" value={config.contact_email ?? ""} onChange={(e) => setConfig({ ...config, contact_email: e.target.value })} placeholder="admin@nextswim.id" />
           </Field>
           <Field label="Tagline footer">
             <Textarea value={config.footer_tagline} onChange={(e) => setConfig({ ...config, footer_tagline: e.target.value })} rows={2} />

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { fmtIDR, fmtDate, fmtDateLong, fmtTime, waLink, cn, clampPercent, maskMemberName } from "./utils";
+import { fmtIDR, fmtDate, fmtDateLong, fmtTime, waLink, cn, clampPercent, maskMemberName, mailtoLink } from "./utils";
 
 // ---------------------------------------------------------------------------
 // fmtIDR
@@ -405,5 +405,51 @@ describe("maskMemberName", () => {
     const result = maskMemberName("Christopherson Wibowo");
     expect(result).toBe("C***");
     expect(result).not.toContain("hristopherson");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// mailtoLink
+// ---------------------------------------------------------------------------
+describe("mailtoLink", () => {
+  it("falls back to the school's contact email when none is given", () => {
+    const link = mailtoLink("Halo");
+    expect(link).toMatch(/^mailto:nextcanswim@gmail\.com\?/);
+  });
+
+  it("falls back to the school's contact email for an empty string", () => {
+    const link = mailtoLink("Halo", "", "");
+    expect(link).toMatch(/^mailto:nextcanswim@gmail\.com\?/);
+  });
+
+  it("falls back to the school's contact email for null", () => {
+    const link = mailtoLink("Halo", "", null);
+    expect(link).toMatch(/^mailto:nextcanswim@gmail\.com\?/);
+  });
+
+  it("addresses a custom email when provided", () => {
+    const link = mailtoLink("Halo", "", "owner@nextswim.id");
+    expect(link).toMatch(/^mailto:owner@nextswim\.id\?/);
+  });
+
+  it("URI-encodes the subject", () => {
+    const link = mailtoLink("Pertanyaan & Info", "", "owner@nextswim.id");
+    expect(link).toContain(`subject=${encodeURIComponent("Pertanyaan & Info")}`);
+  });
+
+  it("URI-encodes a multi-line body", () => {
+    const link = mailtoLink("Halo", "Baris 1\nBaris 2", "owner@nextswim.id");
+    expect(link).toContain(`body=${encodeURIComponent("Baris 1\nBaris 2")}`);
+  });
+
+  it("includes an empty body param when no body is given", () => {
+    const link = mailtoLink("Halo", undefined, "owner@nextswim.id");
+    expect(link).toMatch(/&body=$/);
+  });
+
+  it("includes both subject and body query params", () => {
+    const link = mailtoLink("Subjek", "Isi pesan", "owner@nextswim.id");
+    expect(link).toContain("subject=");
+    expect(link).toContain("body=");
   });
 });
