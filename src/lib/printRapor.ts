@@ -174,14 +174,14 @@ const STYLES = `
 
   /* ── Note ── */
   .note-lbl{font-family:'Montserrat',sans-serif;font-style:italic;font-weight:600;font-size:14px;color:#155689;letter-spacing:0.14px;margin-top:14px;margin-bottom:4px}
-  .note-box{border:1px solid #155689;border-radius:9px;min-height:54px;width:100%;padding:8px 14px;font-size:13px;font-weight:400;color:#000;line-height:1.4}
+  .note-box{border:1px solid #155689;border-radius:9px;min-height:54px;width:100%;box-sizing:border-box;padding:8px 14px;font-size:13px;font-weight:400;color:#000;line-height:1.4;white-space:pre-wrap;word-wrap:break-word;overflow-wrap:break-word}
 
   /* ── Char row ── */
   .char-row{display:grid;grid-template-columns:1fr 1fr;gap:2px 0;margin-top:10px}
   .char-item{display:flex;align-items:center;gap:5px}
   .char-lbl-l{font-size:12px;font-weight:400;color:#000;min-width:107px;flex-shrink:0}
   .char-lbl-r{font-size:12px;font-weight:400;color:#000;min-width:173px;flex-shrink:0}
-  .char-val{font-size:12px;font-weight:500;font-style:italic;color:#000}
+  .char-val{font-size:12px;font-weight:500;font-style:italic;color:#000;word-wrap:break-word;overflow-wrap:break-word}
 
   /* ── Signatures — margin-top:auto pushes to bottom of flex container ── */
   .sign-section{display:grid;grid-template-columns:1fr 1fr;gap:0;margin-top:auto;padding-top:14px;padding-bottom:6px}
