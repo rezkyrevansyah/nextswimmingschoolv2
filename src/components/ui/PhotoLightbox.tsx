@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import Icon from "./Icon";
 import Avatar from "./Avatar";
+import { useLocale } from "@/components/providers/LocaleProvider";
 
 interface PhotoLightboxProps {
   src: string | null;
@@ -14,6 +15,7 @@ interface PhotoLightboxProps {
 }
 
 export default function PhotoLightbox({ src, name, onClose, onChangePick, uploading }: PhotoLightboxProps) {
+  const { t } = useLocale();
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", onKey);
@@ -53,7 +55,7 @@ export default function PhotoLightbox({ src, name, onClose, onChangePick, upload
         <label className="cursor-pointer" onClick={e => e.stopPropagation()}>
           <div className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white text-ink font-semibold text-sm hover:bg-paper-tint transition-colors shadow-card">
             <Icon name="camera" className="w-4 h-4" />
-            {uploading ? "Mengupload…" : "Ganti Foto"}
+            {uploading ? t("common.photoLightbox.uploading") : t("common.photoLightbox.changePhoto")}
           </div>
           <input
             type="file"

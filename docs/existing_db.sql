@@ -47,6 +47,7 @@ CREATE TABLE public.profiles (
   show_on_landing boolean NOT NULL DEFAULT false,
   signature_url text,
   certifications ARRAY,
+  locale text NOT NULL DEFAULT 'en'::text CHECK (locale = ANY (ARRAY['en'::text, 'id'::text])),
   CONSTRAINT profiles_pkey PRIMARY KEY (id),
   CONSTRAINT profiles_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id),
   CONSTRAINT profiles_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branches(id)

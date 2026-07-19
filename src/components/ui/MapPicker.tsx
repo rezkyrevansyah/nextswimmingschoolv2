@@ -4,6 +4,7 @@
  * Uses OpenStreetMap tiles (free, no API key needed).
  */
 import { useEffect, useRef } from "react";
+import { useLocale } from "@/components/providers/LocaleProvider";
 
 interface Props {
   lat: string;
@@ -16,6 +17,7 @@ const DEFAULT_LAT = -6.2615;
 const DEFAULT_LNG = 106.8106;
 
 export default function MapPicker({ lat, lng, onChange, readOnly }: Props) {
+  const { t } = useLocale();
   const containerRef = useRef<HTMLDivElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const mapRef = useRef<any>(null);
@@ -153,7 +155,7 @@ export default function MapPicker({ lat, lng, onChange, readOnly }: Props) {
           <svg className="w-3.5 h-3.5 shrink-0 text-ocean-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          Klik peta untuk pin lokasi, atau seret marker. Koordinat otomatis terisi di bawah.
+          {t("common.mapPicker.hint")}
         </div>
       )}
     </div>

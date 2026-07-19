@@ -7,6 +7,7 @@ import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
 import { Card } from "@/components/ui/Card";
 import Avatar from "@/components/ui/Avatar";
+import LanguageSwitcher from "@/components/ui/LanguageSwitcher";
 import AdminSettings from "./_components/AdminSettings";
 import AdminDashboard from "./_components/AdminDashboard";
 import AdminClass from "./_components/AdminClass";
@@ -303,6 +304,7 @@ export default function AdminPage() {
           onMenu={() => setMobileNav(true)}
           right={
             <>
+              <LanguageSwitcher />
               <Bell userId={currentUser?.id ?? ""} />
               <Avatar name={currentUser?.user_metadata?.full_name ?? "A"} size={36} />
             </>

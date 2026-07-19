@@ -2,9 +2,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
-
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agt", "Sep", "Okt", "Nov", "Des"];
-const MONTHS_LONG = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+import { useLocale } from "@/components/providers/LocaleProvider";
 
 const YEARS_PER_PAGE = 12;
 
@@ -35,12 +33,15 @@ interface MonthYearPickerProps {
 export default function MonthYearPicker({
   value,
   onChange,
-  placeholder = "Pilih bulan & tahun",
+  placeholder,
   className,
   disabled,
   minYear = 1990,
   maxYear,
 }: MonthYearPickerProps) {
+  const { t, tArray } = useLocale();
+  const MONTHS = tArray("common.months.short");
+  const MONTHS_LONG = tArray("common.months.long");
   const now = new Date();
   const currentYear = maxYear ?? now.getFullYear();
   const parsed = useMemo(() => parseValue(value), [value]);
@@ -122,7 +123,7 @@ export default function MonthYearPicker({
               className="p-1.5 rounded-lg hover:bg-paper-tint text-ink-mute hover:text-ink disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
               <ChevronLeft />
             </button>
-            <span className="text-xs font-bold text-ink-mute uppercase tracking-widest">Pilih Tahun</span>
+            <span className="text-xs font-bold text-ink-mute uppercase tracking-widest">{t("common.monthYearPicker.chooseYear")}</span>
             <button type="button" disabled={!canGoNewer} onClick={() => setYearPage(p => p - 1)}
               className="p-1.5 rounded-lg hover:bg-paper-tint text-ink-mute hover:text-ink disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
               <ChevronRight />
@@ -176,7 +177,7 @@ export default function MonthYearPicker({
           open && "border-ocean-500 ring-2 ring-ocean-500/20",
           displayValue ? "text-ink" : "text-ink-faint",
         )}>
-        <span>{displayValue || placeholder}</span>
+        <span>{displayValue || placeholder || t("common.monthYearPicker.placeholder")}</span>
         <svg viewBox="0 0 24 24" className={cn("w-4 h-4 text-ink-mute shrink-0 transition-transform", open && "rotate-180")} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
           <path d="M6 9l6 6 6-6" />
         </svg>

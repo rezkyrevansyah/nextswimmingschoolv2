@@ -14,6 +14,7 @@ import Logo from "@/components/ui/Logo";
 import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
 import Avatar from "@/components/ui/Avatar";
+import LanguageSwitcher from "@/components/ui/LanguageSwitcher";
 import Status from "@/components/ui/Status";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import Modal from "@/components/ui/Modal";
@@ -688,6 +689,7 @@ export default function SchoolPage() {
             <h1 className="font-display font-bold text-base text-ink leading-tight truncate">School Panel</h1>
             <p className="text-xs text-ink-mute truncate">{schoolName}</p>
           </div>
+          <LanguageSwitcher />
           <Bell userId={userId} />
           <Avatar name={schoolName} size={36} />
           <button

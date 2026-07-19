@@ -7,6 +7,7 @@ import { Field, Input, Textarea } from "@/components/ui/FormFields";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import Status from "@/components/ui/Status";
 import Avatar from "@/components/ui/Avatar";
+import LanguageSwitcher from "@/components/ui/LanguageSwitcher";
 import QRBox from "@/components/ui/QRBox";
 import Modal from "@/components/ui/Modal";
 import MobileNav from "@/components/layout/MobileNav";
@@ -20,25 +21,31 @@ import { createClient } from "@/utils/supabase/client";
 import { useUpload } from "@/hooks/useUpload";
 import PhotoLightbox from "@/components/ui/PhotoLightbox";
 import { useToast } from "@/components/providers/ToastProvider";
+import { useLocale } from "@/components/providers/LocaleProvider";
 
 type TabId = "home" | "schedule" | "absen" | "bills" | "leave" | "rapor" | "profile";
+type TFn = (key: string, vars?: Record<string, string | number>) => string;
 
-const NAV_ITEMS: MobileNavItem[] = [
-  { id: "home",     label: "Home",   short: "Home",   icon: "home"     },
-  { id: "schedule", label: "Jadwal", short: "Jadwal", icon: "calendar" },
-  { id: "bills",    label: "Tagihan",short: "Bayar",  icon: "wallet"   },
-  { id: "rapor",    label: "Rapor",  short: "Rapor",  icon: "book"     },
-  { id: "profile",  label: "Profile",short: "Saya",   icon: "user"     },
-];
+function getNavItems(t: TFn): MobileNavItem[] {
+  return [
+    { id: "home",     label: t("member.nav.home"),   short: t("member.nav.shortHome"),     icon: "home"     },
+    { id: "schedule", label: t("member.nav.schedule"), short: t("member.nav.shortSchedule"), icon: "calendar" },
+    { id: "bills",    label: t("member.nav.bills"),  short: t("member.nav.shortBills"),    icon: "wallet"   },
+    { id: "rapor",    label: t("member.nav.rapor"),  short: t("member.nav.shortRapor"),    icon: "book"     },
+    { id: "profile",  label: t("member.nav.profile"),short: t("member.nav.shortProfile"),  icon: "user"     },
+  ];
+}
 
-const ALL_ITEMS: MobileNavItem[] = [
-  ...NAV_ITEMS.slice(0, 2),
-  { id: "absen",   label: "Absensi", short: "Absen", icon: "check"     },
-  { id: "bills",   label: "Tagihan", short: "Bayar", icon: "wallet"    },
-  { id: "leave",   label: "Izin",    short: "Izin",  icon: "clipboard" },
-  { id: "rapor",   label: "Rapor",   short: "Rapor", icon: "book"      },
-  { id: "profile", label: "Profile", short: "Saya",  icon: "user"      },
-];
+function getAllItems(t: TFn): MobileNavItem[] {
+  return [
+    ...getNavItems(t).slice(0, 2),
+    { id: "absen",   label: t("member.nav.attendance"), short: t("member.nav.shortAttendance"), icon: "check"     },
+    { id: "bills",   label: t("member.nav.bills"),      short: t("member.nav.shortBills"),      icon: "wallet"    },
+    { id: "leave",   label: t("member.nav.leave"),      short: t("member.nav.shortLeave"),      icon: "clipboard" },
+    { id: "rapor",   label: t("member.nav.rapor"),      short: t("member.nav.shortRapor"),      icon: "book"      },
+    { id: "profile", label: t("member.nav.profile"),    short: t("member.nav.shortProfile"),    icon: "user"      },
+  ];
+}
 
 function calcAge(birthDate: string): number {
   const birth = new Date(birthDate);
@@ -61,16 +68,20 @@ function Shell({ children, active, setActive, name, branchName, userId, avatarUr
   avatarUrl?: string | null;
   isSchoolAffiliate?: boolean;
 }) {
-  const title = active === "home" ? `Hai, ${name || "…"}` : {
-    schedule: "Jadwal", absen: "Absensi", bills: "Tagihan",
-    leave: "Izin", rapor: "Rapor", profile: "Profile",
+  const { t } = useLocale();
+  const navItems = getNavItems(t);
+  const allItems = getAllItems(t);
+
+  const title = active === "home" ? t("member.shell.greeting", { name: name || "…" }) : {
+    schedule: t("member.nav.schedule"), absen: t("member.nav.attendance"), bills: t("member.nav.bills"),
+    leave: t("member.nav.leave"), rapor: t("member.nav.rapor"), profile: t("member.nav.profile"),
   }[active] ?? "";
 
   const sub = active === "home"
-    ? `Member · ${branchName || "…"}`
-    : { schedule: "Kelas yang Anda ikuti", absen: "History kehadiran",
-        bills: "Pembayaran kelas", leave: "Pengajuan ketidakhadiran",
-        rapor: "Hasil penilaian coach", profile: "Data pribadi & QR" }[active] ?? "";
+    ? t("member.shell.subMember", { branch: branchName || "…" })
+    : { schedule: t("member.shell.subSchedule"), absen: t("member.shell.subAttendance"),
+        bills: t("member.shell.subBills"), leave: t("member.shell.subLeave"),
+        rapor: t("member.shell.subRapor"), profile: t("member.shell.subProfile") }[active] ?? "";
 
   return (
     <div className="min-h-screen bg-paper-tint pb-24 lg:pb-0">
@@ -82,13 +93,14 @@ function Shell({ children, active, setActive, name, branchName, userId, avatarUr
             <p className="text-xs text-ink-mute truncate">{sub}</p>
           </div>
           <div className="hidden lg:flex items-center gap-1">
-            {ALL_ITEMS.filter(it => !(isSchoolAffiliate && it.id === "bills")).map((it) => (
+            {allItems.filter(it => !(isSchoolAffiliate && it.id === "bills")).map((it) => (
               <button key={it.id} onClick={() => setActive(it.id as TabId)}
                 className={`px-3 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 ${active === it.id ? "bg-ocean-50 text-ocean-700" : "text-ink-soft hover:bg-paper-tint"}`}>
                 <Icon name={it.icon ?? ""} className="w-4 h-4" /> {it.label}
               </button>
             ))}
           </div>
+          <LanguageSwitcher />
           <Bell userId={userId} />
           <button onClick={() => setActive("profile")} title="Profile">
             <Avatar name={name} src={avatarUrl ?? undefined} size={36} />
@@ -96,7 +108,7 @@ function Shell({ children, active, setActive, name, branchName, userId, avatarUr
         </div>
       </header>
       <main className="max-w-3xl mx-auto p-4 lg:p-7 anim-in">{children}</main>
-      <MobileNav items={NAV_ITEMS.filter(it => !(isSchoolAffiliate && it.id === "bills"))} active={active} onSelect={(id) => setActive(id as TabId)} />
+      <MobileNav items={navItems.filter(it => !(isSchoolAffiliate && it.id === "bills"))} active={active} onSelect={(id) => setActive(id as TabId)} />
     </div>
   );
 }
@@ -111,6 +123,7 @@ function MemberHome({
   memberName: string;
   branchId: string;
 }) {
+  const { t, tArray } = useLocale();
   const supabase = createClient();
   const [monthAttend, setMonthAttend] = useState({ present: 0, total: 0 });
   const [activeClasses, setActiveClasses] = useState(0);
@@ -264,23 +277,23 @@ function MemberHome({
       <div className="bg-ocean-700 text-white rounded-2xl border border-ocean-700 shadow-card p-5 relative overflow-hidden">
         <div className="caustics absolute inset-0 opacity-30" />
         <div className="relative">
-          <div className="text-wave-200 text-[11px] uppercase tracking-widest font-bold">Selamat datang</div>
-          <h2 className="font-display font-bold text-2xl mt-0.5">Hai, {memberName || "…"} 👋</h2>
-          <p className="text-white/80 text-sm mt-1">Semangat latihan hari ini!</p>
+          <div className="text-wave-200 text-[11px] uppercase tracking-widest font-bold">{t("member.home.welcome")}</div>
+          <h2 className="font-display font-bold text-2xl mt-0.5">{t("member.home.greeting", { name: memberName || "…" })}</h2>
+          <p className="text-white/80 text-sm mt-1">{t("member.home.encouragement")}</p>
           <div className="mt-4 grid grid-cols-2 gap-2">
             <div className="bg-white/10 backdrop-blur ring-1 ring-white/15 rounded-xl p-3">
-              <div className="text-[10px] uppercase tracking-widest font-bold text-wave-200">Hadir bln ini</div>
+              <div className="text-[10px] uppercase tracking-widest font-bold text-wave-200">{t("member.home.presentThisMonth")}</div>
               <div className="font-display font-bold text-2xl mt-0.5">{monthAttend.present}</div>
             </div>
             <div className="bg-white/10 backdrop-blur ring-1 ring-white/15 rounded-xl p-3">
               {memberInfo?.type === "private" ? (
                 <>
-                  <div className="text-[10px] uppercase tracking-widest font-bold text-wave-200">Sisa sesi</div>
+                  <div className="text-[10px] uppercase tracking-widest font-bold text-wave-200">{t("member.home.remainingSessions")}</div>
                   <div className="font-display font-bold text-2xl mt-0.5">{memberInfo.remaining_sessions ?? "—"}</div>
                 </>
               ) : (
                 <>
-                  <div className="text-[10px] uppercase tracking-widest font-bold text-wave-200">Kelas aktif</div>
+                  <div className="text-[10px] uppercase tracking-widest font-bold text-wave-200">{t("member.home.activeClasses")}</div>
                   <div className="font-display font-bold text-2xl mt-0.5">{activeClasses}</div>
                 </>
               )}
@@ -294,14 +307,14 @@ function MemberHome({
           <div className="flex items-start gap-3">
             <span className="w-11 h-11 rounded-xl bg-white text-warn-600 flex items-center justify-center shrink-0"><Icon name="wallet" className="w-5 h-5" /></span>
             <div className="flex-1 min-w-0">
-              <div className="font-display font-bold text-ink">Tagihan {pendingBill.period}</div>
+              <div className="font-display font-bold text-ink">{t("member.home.billTitle", { period: pendingBill.period })}</div>
               <p className="text-sm text-ink-soft mt-0.5">{fmtIDR(pendingBill.amount)} · {pendingBill.class_name}</p>
             </div>
           </div>
           <div className="mt-3 grid grid-cols-2 gap-2">
-            <Btn variant="outline" size="sm" onClick={() => setActive("bills")}>Lihat Tagihan</Btn>
+            <Btn variant="outline" size="sm" onClick={() => setActive("bills")}>{t("member.home.viewBill")}</Btn>
             <a href={waLink(`Halo Admin, saya ingin konfirmasi pembayaran ${pendingBill.period} untuk ${memberName}. Berikut bukti transfer:`)} target="_blank" rel="noreferrer">
-              <Btn variant="wa" size="sm" icon="whatsapp" className="w-full">Hubungi Admin</Btn>
+              <Btn variant="wa" size="sm" icon="whatsapp" className="w-full">{t("member.home.contactAdmin")}</Btn>
             </a>
           </div>
         </Card>
@@ -312,16 +325,16 @@ function MemberHome({
           <div className="flex items-start gap-3">
             <span className="w-11 h-11 rounded-xl bg-white text-wave-600 flex items-center justify-center shrink-0 animate-pulse"><Icon name="sparkle" className="w-5 h-5" /></span>
             <div className="flex-1 min-w-0">
-              <div className="font-display font-bold text-ink">Paket sesi hampir habis</div>
+              <div className="font-display font-bold text-ink">{t("member.home.packageRunningLow")}</div>
               <p className="text-sm text-ink-soft mt-0.5">
                 {privateReminder.remaining === 0
-                  ? "Paket sesi Anda sudah habis. Hubungi admin untuk perpanjangan."
-                  : `Sisa ${privateReminder.remaining} sesi terakhir dalam paket. Segera perpanjang agar latihan tidak terputus.`}
+                  ? t("member.home.packageEmpty")
+                  : t("member.home.packageLow", { remaining: privateReminder.remaining })}
               </p>
             </div>
           </div>
           <a href={waLink(`Halo Admin, saya ingin memperpanjang paket sesi private untuk ${memberName}. Sisa sesi saat ini: ${privateReminder.remaining}.`)} target="_blank" rel="noreferrer" className="mt-3 inline-flex w-full">
-            <Btn variant="wa" size="sm" icon="whatsapp" className="w-full">Hubungi Admin — Perpanjang Paket</Btn>
+            <Btn variant="wa" size="sm" icon="whatsapp" className="w-full">{t("member.home.renewPackage")}</Btn>
           </a>
         </Card>
       )}
@@ -331,7 +344,7 @@ function MemberHome({
           <div className="flex items-start gap-3">
             <span className="w-11 h-11 rounded-xl bg-ocean-50 text-ocean-700 flex items-center justify-center shrink-0"><Icon name="bell" className="w-5 h-5" /></span>
             <div className="flex-1 min-w-0">
-              <Status kind="active" className="!text-[10px] mb-1">PENGUMUMAN</Status>
+              <Status kind="active" className="!text-[10px] mb-1">{t("member.home.announcement")}</Status>
               <div className="font-display font-bold text-ink">{latestAnnouncement.title}</div>
               <p className="text-sm text-ink-soft mt-1.5 leading-relaxed">{latestAnnouncement.body}</p>
             </div>
@@ -341,13 +354,13 @@ function MemberHome({
 
       {upcomingSessions.length > 0 && (
         <div>
-          <SectionTitle sub="Sesi mendatang">Jadwal terdekat</SectionTitle>
+          <SectionTitle sub={t("member.home.upcomingSub")}>{t("member.home.upcomingTitle")}</SectionTitle>
           <div className="space-y-2.5">
             {upcomingSessions.map((s, i) => {
               const d = new Date(s.date + "T00:00:00");
-              const dayShort = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"][d.getDay()];
+              const dayShort = tArray("common.days.short")[d.getDay()];
               const dateNum = d.getDate();
-              const monthNames = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agt", "Sep", "Okt", "Nov", "Des"];
+              const monthNames = tArray("common.months.short");
               const monthShort = monthNames[d.getMonth()];
               const onLeave = isSessionOnLeave(s.date, s.class_id);
               return (
@@ -361,7 +374,7 @@ function MemberHome({
                     <div className="flex-1 min-w-0 pl-3 border-l border-line">
                       <div className="flex items-center gap-2 flex-wrap">
                         <div className="font-semibold text-ink text-sm truncate">{s.class_name}</div>
-                        {onLeave && <span className="text-[10px] font-bold uppercase tracking-wide text-warn-600 bg-warn-50 px-1.5 py-0.5 rounded shrink-0">Izin</span>}
+                        {onLeave && <span className="text-[10px] font-bold uppercase tracking-wide text-warn-600 bg-warn-50 px-1.5 py-0.5 rounded shrink-0">{t("member.home.onLeaveBadge")}</span>}
                       </div>
                       <div className="text-xs text-ink-mute font-mono mt-0.5">{s.time} · {s.coach}</div>
                     </div>

@@ -8,6 +8,7 @@ import { Field, Input, Select, Textarea, Switch } from "@/components/ui/FormFiel
 import { Card, SectionTitle, Stat } from "@/components/ui/Card";
 import Status from "@/components/ui/Status";
 import Avatar from "@/components/ui/Avatar";
+import LanguageSwitcher from "@/components/ui/LanguageSwitcher";
 import Modal from "@/components/ui/Modal";
 import Sidebar, { type NavItem } from "@/components/layout/Sidebar";
 import Topbar from "@/components/layout/Topbar";
@@ -3911,6 +3912,7 @@ export default function OwnerPage() {
           onMenu={() => setMobileNav(true)}
           right={
             <>
+              <LanguageSwitcher />
               <Bell userId={userId} />
               <Avatar name={profile?.full_name ?? "O"} size={36} />
             </>

@@ -2095,6 +2095,7 @@ export type Database = {
           id: string
           is_archived: boolean
           is_profile_complete: boolean
+          locale: string
           nick_name: string | null
           phone: string | null
           role: Database["public"]["Enums"]["user_role"]
@@ -2124,6 +2125,7 @@ export type Database = {
           id: string
           is_archived?: boolean
           is_profile_complete?: boolean
+          locale?: string
           nick_name?: string | null
           phone?: string | null
           role?: Database["public"]["Enums"]["user_role"]
@@ -2153,6 +2155,7 @@ export type Database = {
           id?: string
           is_archived?: boolean
           is_profile_complete?: boolean
+          locale?: string
           nick_name?: string | null
           phone?: string | null
           role?: Database["public"]["Enums"]["user_role"]

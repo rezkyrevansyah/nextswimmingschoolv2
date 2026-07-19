@@ -9,6 +9,7 @@ import { Field, Input, Select, Textarea } from "@/components/ui/FormFields";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import Status from "@/components/ui/Status";
 import Avatar from "@/components/ui/Avatar";
+import LanguageSwitcher from "@/components/ui/LanguageSwitcher";
 import StarDisplay from "@/components/ui/StarDisplay";
 import Placeholder from "@/components/ui/Placeholder";
 import Modal from "@/components/ui/Modal";
@@ -196,6 +197,7 @@ function Shell({ children, active, onNav, title, sub, user, avatarUrl, branches,
               </button>
             ))}
           </div>
+          <LanguageSwitcher />
           <Bell userId={user?.id ?? ""} />
           <button onClick={() => onNav("profile")} title="Profile">
             <Avatar name={user?.user_metadata?.full_name ?? "C"} src={avatarUrl ?? undefined} size={36} />

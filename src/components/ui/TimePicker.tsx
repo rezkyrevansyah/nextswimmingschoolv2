@@ -2,6 +2,7 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
+import { useLocale } from "@/components/providers/LocaleProvider";
 
 // Generate time options: 04:00 – 22:45, step 15 min
 const TIME_OPTIONS: string[] = [];
@@ -20,7 +21,8 @@ interface TimePickerProps {
   disabled?: boolean;
 }
 
-export default function TimePicker({ value, onChange, placeholder = "Pilih jam", className, disabled }: TimePickerProps) {
+export default function TimePicker({ value, onChange, placeholder, className, disabled }: TimePickerProps) {
+  const { t } = useLocale();
   const [open, setOpen] = useState(false);
   const [dropStyle, setDropStyle] = useState<React.CSSProperties>({});
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -131,7 +133,7 @@ export default function TimePicker({ value, onChange, placeholder = "Pilih jam",
         )}
       >
         <span className="font-mono font-semibold tracking-wider">
-          {value || placeholder}
+          {value || placeholder || t("common.timePicker.placeholder")}
         </span>
         <svg viewBox="0 0 24 24" className={cn("w-4 h-4 text-ink-mute transition-transform shrink-0", open && "rotate-180")} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
           <path d="M6 9l6 6 6-6" />
