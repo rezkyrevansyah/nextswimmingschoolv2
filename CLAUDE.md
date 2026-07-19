@@ -8,10 +8,10 @@ A Next.js (App Router) web app for **Next Swimming School** — a multi-branch s
 
 ## Key docs
 
-- [docs/integration-roadmap.md](docs/integration-roadmap.md) — phase-by-phase Supabase integration plan
-- [docs/supabase-schema.sql](docs/supabase-schema.sql) — full SQL schema to run in Supabase SQL Editor
-- [docs/r2-setup-guide.md](docs/r2-setup-guide.md) — Cloudflare R2 bucket setup + credential guide
-- [docs/next-swimming-school-project.md](docs/next-swimming-school-project.md) — full PRD
+- [docs/existing_db.sql](docs/existing_db.sql) — current full SQL schema reference
+- [docs/feedback-priorities.md](docs/feedback-priorities.md) — prioritized feedback/backlog
+- [docs/test-scenarios.md](docs/test-scenarios.md) — test scenario notes
+- `supabase/*.sql` — standalone migration scripts, one per feature, run manually in the Supabase SQL Editor
 
 ## Tech stack
 
@@ -59,7 +59,7 @@ Custom animations: `waveShift`, `fadeUp`, `pulseFade`
 ## Supabase setup
 
 - Client files: `src/utils/supabase/client.ts`, `server.ts`, `middleware.ts`
-- Auth middleware: `src/middleware.ts` — handles role-based redirects automatically
+- Auth middleware: `src/proxy.ts` (Next's renamed `middleware.ts` entry point) delegates to `src/utils/supabase/middleware.ts::updateSession()` — handles role-based redirects automatically
 - DB types: `src/types/database.ts` — stub; regenerate with `npx supabase gen types typescript --project-id <id> > src/types/database.ts`
 - Env: `.env.local` → `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
 - `supabase.auth.admin.*` calls must go through Route Handlers (`src/app/api/`) — never expose service key to client
@@ -71,24 +71,29 @@ src/
   app/
     globals.css          ← design system (Tailwind v4 @theme inline)
     layout.tsx           ← root layout (fonts, providers)
-    (public)/            ← public pages with RoleSwitcher demo overlay
+    (public)/            ← public landing pages
       layout.tsx
       page.tsx           ← landing page
       _components/       ← landing sections (Hero, Programs, Ecosystem, etc.)
     login/page.tsx
     register/page.tsx
-    owner/page.tsx       ← Owner panel (6 sub-pages via internal useState)
-    admin/page.tsx       ← Admin panel (13 sub-pages via internal useState)
-    coach/page.tsx       ← Coach panel mobile-first (6 tabs)
+    owner/page.tsx       ← Owner panel (12 sub-pages via internal useState)
+    admin/page.tsx       ← Admin panel (14 sub-pages via internal useState)
+    coach/page.tsx       ← Coach panel mobile-first (7 tabs)
     member/page.tsx      ← Member panel mobile-first (7 tabs)
-    school/page.tsx      ← School panel (rapor view only)
+    school/page.tsx      ← School panel (rapor + attendance/export tabs)
+  i18n/                  ← dictionaries.ts + locales/{en,id}/ — see Locale section
+  hooks/
+    useUpload.ts          ← R2 upload hook
   lib/
-    data.ts              ← all typed mock data (BRANCHES, PROGRAMS, COACHES, etc.)
-    utils.ts             ← fmtIDR, fmtDate, fmtDateLong, fmtTime, waLink, cn
+    data.ts              ← Notification type + WA_NUMBER/SCHOOL_EMAIL fallback constants
+    utils.ts             ← fmtIDR, fmtDate, fmtDateLong, fmtTime, waLink, mailtoLink, cn
   components/
-    ui/                  ← Icon, Btn, Card, Modal, Status, Avatar, FormFields, Logo, QRBox, Placeholder
-    layout/              ← Sidebar, Topbar, MobileNav, Bell, RoleSwitcher
-    providers/           ← ToastProvider, ConfirmProvider
+    ui/                  ← Icon, Btn, Card, Modal, Status, Avatar, FormFields, Logo, QRBox, Placeholder,
+                            DatePicker, MonthYearPicker, TimePicker, MapPicker, PhotoLightbox, StarDisplay, LanguageSwitcher
+    layout/              ← Sidebar, Topbar, MobileNav, Bell, BetaFeedback
+    providers/           ← ToastProvider, ConfirmProvider, LocaleProvider
+supabase/                ← standalone SQL migration scripts, one per feature
 ```
 
 ## Panel navigation pattern
@@ -107,7 +112,8 @@ fmtDate(dateString)    // "Senin, 12 Mei 2026"
 fmtDateLong(dateString)
 fmtTime(timeString)    // "08:00"
 waLink(message)        // WhatsApp deep link with encoded message
-cn(...classes)         // clsx/tailwind-merge utility
+mailtoLink(subject, body, email?) // mailto: deep link, falls back to SCHOOL_EMAIL
+cn(...classes)         // hand-rolled class-merge utility (classes.filter(Boolean).join(" "))
 ```
 
 ## UI components quick reference
@@ -124,24 +130,29 @@ cn(...classes)         // clsx/tailwind-merge utility
 | `<Logo size={N} withWord? />` | `components/ui/Logo.tsx` | wraps `next/image` |
 | `<Placeholder />` | `components/ui/Placeholder.tsx` | diagonal stripe placeholder |
 | `<QRBox />` | `components/ui/QRBox.tsx` | SVG QR placeholder |
+| `<DatePicker />` / `<MonthYearPicker />` / `<TimePicker />` | `components/ui/*.tsx` | custom dropdown pickers, locale-aware month/day names via `useLocale()` |
+| `<MapPicker />` | `components/ui/MapPicker.tsx` | Leaflet map for picking a lat/lng (dynamic-imported) |
+| `<PhotoLightbox />` | `components/ui/PhotoLightbox.tsx` | fullscreen photo viewer with optional "change photo" |
+| `<StarDisplay stars={} />` | `components/ui/StarDisplay.tsx` | shared star-rating display |
+| `<LanguageSwitcher />` | `components/ui/LanguageSwitcher.tsx` | EN/ID toggle, mounted in every panel header |
 
 ## Providers
 
 - `useToast()` from `ToastProvider` — replaces `alert()`
 - `useConfirm()` from `ConfirmProvider` — async Promise-based `confirm()`
+- `useLocale()` from `LocaleProvider` — `{ locale, setLocale, t, tArray }`, see Locale section
 
-## RoleSwitcher
+## Locale / i18n
 
-A floating demo overlay (bottom-right) that uses `useRouter` to navigate between role pages. Present on all panel pages and the public layout.
-
-## Locale
-
-Indonesian (`id-ID`). All user-facing text is in Bahasa Indonesia. Dates and currency use Indonesian formatting via the `fmt*` utilities.
+Default language is **English**, with Bahasa Indonesia as a user-selectable option via the `<LanguageSwitcher />` in every panel header. Custom Context-based i18n (not a routing-based library, since panels use internal tab state, not sub-routes):
+- `src/i18n/dictionaries.ts` — `translate()`/`translateArray()`, `Locale` type, `dictionaries` map
+- `src/i18n/locales/{en,id}/*.ts` — one file per panel; `id` files are type-annotated against their `en` counterpart so a missing/mismatched key fails `tsc`
+- `src/components/providers/LocaleProvider.tsx` — persists to `localStorage` + `profiles.locale` (synced in the background)
+- Migration status: shared `ui`/`layout` components and Member panel's Shell+Home are fully migrated to `t()`; Owner/Admin/Coach/School panel bodies and the rest of Member's tabs are still hardcoded Indonesian pending further migration passes.
 
 ## Data
 
-All data is mock/static in `src/lib/data.ts`. Key exports:
-`BRANCHES`, `PROGRAMS`, `COACHES`, `CLASSES`, `MEMBERS`, `SCHOOL_INFO`, `NOTIFICATIONS`, `ANNOUNCEMENTS`, `TESTIMONIALS`, `FAQS`, `ATTENDANCE`
+`src/lib/data.ts` now only holds the `Notification` type and the `WA_NUMBER`/`SCHOOL_EMAIL` fallback constants (used when `landing_config` in Supabase has no override set) — all other panel data comes from live Supabase queries.
 
 ## WhatsApp integration
 
