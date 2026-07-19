@@ -2104,6 +2104,7 @@ export type Database = {
           suspend_reason: string | null
           suspend_until: string | null
           updated_at: string
+          user_no: string | null
         }
         Insert: {
           address?: string | null
@@ -2134,6 +2135,7 @@ export type Database = {
           suspend_reason?: string | null
           suspend_until?: string | null
           updated_at?: string
+          user_no?: string | null
         }
         Update: {
           address?: string | null
@@ -2164,6 +2166,7 @@ export type Database = {
           suspend_reason?: string | null
           suspend_until?: string | null
           updated_at?: string
+          user_no?: string | null
         }
         Relationships: [
           {
@@ -2936,6 +2939,7 @@ export type Database = {
         Args: never
         Returns: Database["public"]["Enums"]["user_role"]
       }
+      generate_user_no: { Args: { p_role: string }; Returns: string }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
     }

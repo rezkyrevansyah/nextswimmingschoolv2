@@ -78,6 +78,9 @@ export async function POST(req: NextRequest) {
 
     const userId = authData.user.id;
 
+    // Structured account ID (NEXT.xxx.SW.yy) — atomic sequence, generated once per row.
+    const { data: userNo } = await db.rpc("generate_user_no", { p_role: "member" });
+
     // 2. Insert profile (with fallback update on 23505)
     const profileData = {
       id: userId,
@@ -124,6 +127,7 @@ export async function POST(req: NextRequest) {
         date_start: new Date().toISOString().split("T")[0],
         total_sessions: isPrivate ? (row.total_sessions ?? null) : null,
         remaining_sessions: isPrivate ? (row.total_sessions ?? null) : null,
+        member_no: userNo,
       })
       .select("id")
       .single();

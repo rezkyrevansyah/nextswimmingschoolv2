@@ -1421,7 +1421,7 @@ function MemberProfile({ memberId, memberName, onLogout, onProfileComplete, onAv
     full_name: string; birth_date: string | null; gender: string | null;
     phone: string | null; address: string | null; health_notes: string | null;
     date_start: string | null; qr_code: string | null;
-    avatar_url: string | null;
+    avatar_url: string | null; member_no: string | null;
   } | null>(null);
   const [regInfo, setRegInfo] = useState<{ parent_name: string | null; parent_phone: string | null } | null>(null);
   const [editPhone, setEditPhone] = useState("");
@@ -1443,7 +1443,7 @@ function MemberProfile({ memberId, memberName, onLogout, onProfileComplete, onAv
     if (!memberId) return;
     // member row for date_start + qr_code
     supabase.from("members")
-      .select("date_start, qr_code, profile_id")
+      .select("date_start, qr_code, profile_id, member_no")
       .eq("id", memberId)
       .single()
       .then(({ data: m }) => {
@@ -1455,7 +1455,7 @@ function MemberProfile({ memberId, memberName, onLogout, onProfileComplete, onAv
           .single()
           .then(({ data: p }) => {
             if (p) {
-              setProfile({ ...p, date_start: m.date_start ?? null, qr_code: m.qr_code ?? null });
+              setProfile({ ...p, date_start: m.date_start ?? null, qr_code: m.qr_code ?? null, member_no: m.member_no ?? null });
               setEditPhone(p.phone ?? "");
               setEditAddress(p.address ?? "");
               setEditHealth(p.health_notes ?? "");
@@ -1516,6 +1516,7 @@ function MemberProfile({ memberId, memberName, onLogout, onProfileComplete, onAv
             <div className="font-display font-bold text-xl text-ink">{profile?.full_name ?? memberName}</div>
             <div className="text-sm text-ocean-700 font-semibold">{age != null ? `${age} thn · ` : ""}Member</div>
             {profile?.date_start && <div className="text-xs text-ink-mute mt-1">Member sejak {fmtDate(profile.date_start)}</div>}
+            {profile?.member_no && <div className="text-xs text-ink-mute font-mono mt-0.5">{profile.member_no}</div>}
             {avatarSaving && (
               <div className="mt-2 text-xs text-ink-mute font-semibold animate-pulse">Mengupload foto…</div>
             )}

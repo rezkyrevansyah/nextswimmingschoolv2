@@ -253,11 +253,10 @@ export default function AdminMember({ branchId }: { branchId: string }) {
     }).eq("id", detail.profile_id);
     if (profileErr) { setSavingEdit(false); return toast.error("Gagal update profil", profileErr.message); }
 
-    // Update members row (type, school_id, member_no)
+    // Update members row (type, school_id) — member_no is auto-generated at creation, not editable
     await createClient().from("members").update({
       type: editMemberForm.type as "reguler" | "private" | "school_affiliate",
       school_id: editMemberForm.type === "school_affiliate" ? (editMemberForm.school_id || null) : null,
-      member_no: editMemberForm.member_no || null,
     }).eq("id", detail.id);
 
     // Sync kelas — add new, remove removed
@@ -1314,7 +1313,11 @@ export default function AdminMember({ branchId }: { branchId: string }) {
           {/* Identitas */}
           <Field label="Nama lengkap" required><Input value={editMemberForm.full_name} onChange={e => setEditMemberForm(f => ({ ...f, full_name: e.target.value }))} /></Field>
           <Field label="Email" hint="Ubah email login akun member"><Input type="email" placeholder="nama@email.com" value={editMemberForm.email} onChange={e => setEditMemberForm(f => ({ ...f, email: e.target.value }))} /></Field>
-          <Field label="Nomor Induk Member" hint="Muncul di rapor sebagai ID member — opsional"><Input value={editMemberForm.member_no} onChange={e => setEditMemberForm(f => ({ ...f, member_no: e.target.value }))} placeholder="Mis. 2024-001" className="font-mono" /></Field>
+          <Field label="Nomor Induk Member" hint="Dibuat otomatis saat akun dibuat, muncul di rapor sebagai ID member">
+            <div className="w-full px-3.5 py-2.5 min-h-[44px] rounded-xl border border-line bg-paper-tint text-sm font-mono text-ink-soft flex items-center">
+              {editMemberForm.member_no || "—"}
+            </div>
+          </Field>
           <Field label="Tanggal lahir"><DatePicker value={editMemberForm.birth_date} onChange={v => setEditMemberForm(f => ({ ...f, birth_date: v }))} /></Field>
           <Field label="Jenis kelamin">
             <Select value={editMemberForm.gender} onChange={e => setEditMemberForm(f => ({ ...f, gender: e.target.value }))}>

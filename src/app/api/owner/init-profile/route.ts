@@ -21,6 +21,9 @@ export async function POST() {
   const { data: existing } = await db.from("profiles").select("id").eq("id", user.id).maybeSingle();
   if (existing) return NextResponse.json({ ok: true, created: false });
 
+  // Structured account ID (NEXT.xxx.OW.yy) — atomic sequence, generated once.
+  const { data: userNo } = await db.rpc("generate_user_no", { p_role: "owner" });
+
   // Create profile row
   const { error } = await db.from("profiles").insert({
     id: user.id,
@@ -28,6 +31,7 @@ export async function POST() {
     full_name: user.user_metadata?.full_name ?? "Owner",
     email: user.email ?? null,
     phone: user.user_metadata?.phone ?? null,
+    user_no: userNo,
   });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

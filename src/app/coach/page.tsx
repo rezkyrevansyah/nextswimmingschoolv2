@@ -155,6 +155,7 @@ interface ProfileData {
   is_profile_complete: boolean;
   suspend_until: string | null;
   suspend_reason: string | null;
+  user_no: string | null;
   certifications?: { id: string; title: string; issuer: string | null; valid_from: string | null; valid_until: string | null; photo_url: string | null; status: string; reject_reason: string | null }[];
 }
 
@@ -3452,9 +3453,15 @@ function CoachProfile({ profile, onRefresh, onLogout, onAvatarChange }: { profil
             <Field label="Tanggal lahir"><DatePicker value={profileForm.birth_date} onChange={v => setProfileForm(f => ({ ...f, birth_date: v }))} /></Field>
             <Field label="Nomor WhatsApp"><Input type="tel" value={profileForm.phone} onChange={e => setProfileForm(f => ({ ...f, phone: e.target.value }))} placeholder="08xxxxxxxxxx" /></Field>
           </div>
-          <div>
-            <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-1">Email</div>
-            <div className="text-sm font-semibold text-ink">{profile?.email ?? "—"}</div>
+          <div className="grid sm:grid-cols-2 gap-3">
+            <div>
+              <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-1">Email</div>
+              <div className="text-sm font-semibold text-ink">{profile?.email ?? "—"}</div>
+            </div>
+            <div>
+              <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-1">ID Number</div>
+              <div className="text-sm font-semibold text-ink font-mono">{profile?.user_no ?? "—"}</div>
+            </div>
           </div>
           <Field label="Alamat"><Textarea rows={2} value={profileForm.address} onChange={e => setProfileForm(f => ({ ...f, address: e.target.value }))} placeholder="Mis. Jl. Anggrek No. 12, Bekasi" /></Field>
 
@@ -3796,7 +3803,7 @@ export default function CoachPage() {
 
   const loadProfile = useCallback(async (userId: string) => {
     const { data, error } = await supabase.from("profiles")
-      .select("id, full_name, nick_name, email, phone, gender, birth_date, specialization, bio, address, education_level, education_institution, bank_name, bank_account, bank_holder, avatar_url, is_profile_complete, suspend_until, suspend_reason")
+      .select("id, full_name, nick_name, email, phone, gender, birth_date, specialization, bio, address, education_level, education_institution, bank_name, bank_account, bank_holder, avatar_url, is_profile_complete, suspend_until, suspend_reason, user_no")
       .eq("id", userId).single();
     if (error) return null;
     // Load certifications separately to avoid FK join ambiguity errors

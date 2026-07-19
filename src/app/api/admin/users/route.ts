@@ -78,6 +78,9 @@ export async function POST(req: NextRequest) {
 
   const userId = authData.user.id;
 
+  // Structured account ID (NEXT.xxx.ROLE.yy) — atomic per-role sequence, generated once.
+  const { data: userNo } = await db.rpc("generate_user_no", { p_role: role });
+
   // Profile row: try insert first. If trigger already created a minimal row,
   // fall back to an explicit update so all fields (branch_id, role, etc.) are set.
   const profileData = {
@@ -92,6 +95,7 @@ export async function POST(req: NextRequest) {
     address: body.address || null,
     health_notes: body.health_notes || null,
     is_profile_complete: false,
+    ...(role !== "member" ? { user_no: userNo } : {}),
   };
 
   const { error: insertError } = await db.from("profiles").insert(profileData);
@@ -145,6 +149,7 @@ export async function POST(req: NextRequest) {
         date_start: new Date().toISOString().split("T")[0],
         total_sessions: isPrivateMember ? (body.total_sessions ?? null) : null,
         remaining_sessions: isPrivateMember ? (body.total_sessions ?? null) : null,
+        member_no: userNo,
       })
       .select("id")
       .single();
