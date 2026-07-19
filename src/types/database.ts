@@ -879,27 +879,36 @@ export type Database = {
       coach_invoice_items: {
         Row: {
           attendance_id: string | null
-          class_id: string
+          class_id: string | null
+          description: string | null
           id: string
           invoice_id: string
+          item_type: string
+          proof_url: string | null
           rate: number
           session_count: number
           subtotal: number | null
         }
         Insert: {
           attendance_id?: string | null
-          class_id: string
+          class_id?: string | null
+          description?: string | null
           id?: string
           invoice_id: string
+          item_type?: string
+          proof_url?: string | null
           rate: number
           session_count: number
           subtotal?: number | null
         }
         Update: {
           attendance_id?: string | null
-          class_id?: string
+          class_id?: string | null
+          description?: string | null
           id?: string
           invoice_id?: string
+          item_type?: string
+          proof_url?: string | null
           rate?: number
           session_count?: number
           subtotal?: number | null
@@ -1146,6 +1155,48 @@ export type Database = {
           },
           {
             foreignKeyName: "coach_rates_set_by_fkey"
+            columns: ["set_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      coach_extra_rates: {
+        Row: {
+          coach_id: string
+          created_at: string
+          id: string
+          rate_per_session: number
+          set_by: string | null
+          updated_at: string
+        }
+        Insert: {
+          coach_id: string
+          created_at?: string
+          id?: string
+          rate_per_session: number
+          set_by?: string | null
+          updated_at?: string
+        }
+        Update: {
+          coach_id?: string
+          created_at?: string
+          id?: string
+          rate_per_session?: number
+          set_by?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coach_extra_rates_coach_id_fkey"
+            columns: ["coach_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "coach_extra_rates_set_by_fkey"
             columns: ["set_by"]
             isOneToOne: false
             referencedRelation: "profiles"
@@ -1514,6 +1565,72 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      manual_transactions: {
+        Row: {
+          amount: number
+          branch_id: string
+          category: string | null
+          created_at: string
+          created_by: string | null
+          created_by_role: string | null
+          description: string
+          id: string
+          is_reimburse: boolean
+          kind: string
+          notes: string | null
+          occurred_at: string
+          proof_url: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          amount: number
+          branch_id: string
+          category?: string | null
+          created_at?: string
+          created_by?: string | null
+          created_by_role?: string | null
+          description: string
+          id?: string
+          is_reimburse?: boolean
+          kind: string
+          notes?: string | null
+          occurred_at?: string
+          proof_url?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          amount?: number
+          branch_id?: string
+          category?: string | null
+          created_at?: string
+          created_by?: string | null
+          created_by_role?: string | null
+          description?: string
+          id?: string
+          is_reimburse?: boolean
+          kind?: string
+          notes?: string | null
+          occurred_at?: string
+          proof_url?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "manual_transactions_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "manual_transactions_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       member_attendances: {
         Row: {

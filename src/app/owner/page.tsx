@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import Logo from "@/components/ui/Logo";
 import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
-import { Field, Input, Select, Textarea } from "@/components/ui/FormFields";
+import { Field, Input, Select, Textarea, Switch } from "@/components/ui/FormFields";
 import { Card, SectionTitle, Stat } from "@/components/ui/Card";
 import Status from "@/components/ui/Status";
 import Avatar from "@/components/ui/Avatar";
@@ -85,7 +85,8 @@ interface CoachRate {
 }
 
 interface InvoiceItem {
-  id: string; class_id: string; session_count: number; rate: number;
+  id: string; item_type: string; class_id: string | null; session_count: number; rate: number;
+  description: string | null; proof_url: string | null;
   class?: { name: string } | null;
 }
 
@@ -1021,9 +1022,18 @@ function Classes({ branches }: { branches: Branch[] }) {
 }
 
 interface TarifClassRow {
-  id: string; name: string;
+  id: string; name: string; branch_id: string;
   schedule_days: string[]; time_start: string | null; time_end: string | null;
-  class_coaches: { profile: { id: string; full_name: string } | null }[];
+  branch?: { name: string } | null;
+}
+
+interface TarifCoachRow {
+  id: string;
+  full_name: string;
+  branchIds: string[];
+  classCount: number;
+  extraRate: number | null;
+  hasIncompleteRate: boolean;
 }
 
 interface RaporLevel {
@@ -1497,83 +1507,146 @@ function OwnerRaporLevels() {
 function SettingsTarif({ branches }: { branches: Branch[] }) {
   const toast = useToast();
   const supabase = createClient();
-  const [branchId, setBranchId] = useState(branches[0]?.id ?? "");
-  const [classes, setClasses] = useState<TarifClassRow[]>([]);
-  const [loading, setLoading] = useState(false);
-  // tarif umum: classId → rate string
+
+  const [coaches, setCoaches] = useState<TarifCoachRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [filterBranch, setFilterBranch] = useState("all");
+  const [filterStatus, setFilterStatus] = useState("all");
+  const [expandedCoachId, setExpandedCoachId] = useState<string | null>(null);
+
+  // Per-expanded-coach data
+  const [expandedClasses, setExpandedClasses] = useState<TarifClassRow[]>([]);
+  const [loadingExpanded, setLoadingExpanded] = useState(false);
   const [generalRates, setGeneralRates] = useState<Record<string, string>>({});
-  // tarif khusus: `${classId}:${coachId}` → rate string
   const [coachRates, setCoachRates] = useState<Record<string, string>>({});
-  // saving key: classId for general, `${classId}:${coachId}` for coach-specific
+  const [extraRateInput, setExtraRateInput] = useState("");
   const [saving, setSaving] = useState<string | null>(null);
 
-  const loadData = useCallback(async (bid: string) => {
+  const loadCoaches = useCallback(async () => {
     setLoading(true);
-    // Load classes with their coaches
-    const { data: clsData } = await supabase
-      .from("classes")
-      .select("id, name, schedule_days, time_start, time_end, class_coaches(profile:profiles(id, full_name))")
-      .eq("branch_id", bid)
-      .eq("status", "active")
-      .order("name");
-    if (clsData) setClasses(clsData as unknown as TarifClassRow[]);
+    const [{ data: profileData }, { data: ccData }, { data: rateData }, { data: extraData }] = await Promise.all([
+      supabase.from("profiles").select("id, full_name").eq("role", "coach").order("full_name"),
+      supabase.from("class_coaches").select("coach_id, class_id, classes(branch_id)"),
+      supabase.from("coach_rates").select("class_id, coach_id"),
+      supabase.from("coach_extra_rates").select("coach_id, rate_per_session"),
+    ]);
 
-    // Load all rates for classes in this branch at once
-    const classIds = (clsData ?? []).map((c: { id: string }) => c.id);
+    const ccRows = (ccData ?? []) as unknown as { coach_id: string; class_id: string; classes: { branch_id: string } | null }[];
+    const rateRows = (rateData ?? []) as { class_id: string; coach_id: string | null }[];
+    const extraMap = new Map((extraData ?? []).map((e: { coach_id: string; rate_per_session: number }) => [e.coach_id, e.rate_per_session]));
+
+    const classesByCoach = new Map<string, Set<string>>();
+    const branchesByCoach = new Map<string, Set<string>>();
+    ccRows.forEach(r => {
+      if (!classesByCoach.has(r.coach_id)) classesByCoach.set(r.coach_id, new Set());
+      classesByCoach.get(r.coach_id)!.add(r.class_id);
+      if (r.classes?.branch_id) {
+        if (!branchesByCoach.has(r.coach_id)) branchesByCoach.set(r.coach_id, new Set());
+        branchesByCoach.get(r.coach_id)!.add(r.classes.branch_id);
+      }
+    });
+
+    // classes that have at least a general rate
+    const classesWithGeneralRate = new Set(rateRows.filter(r => !r.coach_id).map(r => r.class_id));
+    // (classId, coachId) pairs with a specific override
+    const specificRateKeys = new Set(rateRows.filter(r => r.coach_id).map(r => `${r.class_id}:${r.coach_id}`));
+
+    const rows: TarifCoachRow[] = (profileData ?? []).map(p => {
+      const myClassIds = Array.from(classesByCoach.get(p.id) ?? []);
+      return {
+        id: p.id,
+        full_name: p.full_name,
+        branchIds: Array.from(branchesByCoach.get(p.id) ?? []),
+        classCount: myClassIds.length,
+        extraRate: extraMap.get(p.id) ?? null,
+        hasIncompleteRate: myClassIds.some(cid => !classesWithGeneralRate.has(cid) && !specificRateKeys.has(`${cid}:${p.id}`)),
+      };
+    });
+
+    setCoaches(rows);
+    setLoading(false);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* eslint-disable-next-line react-hooks/set-state-in-effect -- async data loader */
+  useEffect(() => { loadCoaches(); }, [loadCoaches]);
+
+  const filteredCoaches = useMemo(() => {
+    let r = coaches;
+    if (search) {
+      const q = search.toLowerCase();
+      r = r.filter(c => c.full_name.toLowerCase().includes(q));
+    }
+    if (filterBranch !== "all") r = r.filter(c => c.branchIds.includes(filterBranch));
+    if (filterStatus === "complete") r = r.filter(c => !c.hasIncompleteRate && c.classCount > 0);
+    if (filterStatus === "incomplete") r = r.filter(c => c.hasIncompleteRate);
+    if (filterStatus === "no_extra") r = r.filter(c => c.extraRate == null);
+    return r;
+  }, [coaches, search, filterBranch, filterStatus]);
+
+  const toggleExpand = async (coachId: string) => {
+    if (expandedCoachId === coachId) { setExpandedCoachId(null); return; }
+    setExpandedCoachId(coachId);
+    setLoadingExpanded(true);
+
+    const { data: ccData } = await supabase
+      .from("class_coaches")
+      .select("class:classes(id, name, branch_id, schedule_days, time_start, time_end, branch:branches(name))")
+      .eq("coach_id", coachId);
+    const myClasses = ((ccData ?? []) as unknown as { class: TarifClassRow | null }[])
+      .map(r => r.class).filter((c): c is TarifClassRow => !!c);
+    setExpandedClasses(myClasses);
+
+    const classIds = myClasses.map(c => c.id);
     if (classIds.length > 0) {
       const { data: rateData } = await supabase
         .from("coach_rates")
         .select("class_id, coach_id, rate_per_session")
         .in("class_id", classIds);
-      if (rateData) {
-        const gen: Record<string, string> = {};
-        const cch: Record<string, string> = {};
-        (rateData as CoachRate[]).forEach(r => {
-          if (!r.coach_id) {
-            gen[r.class_id] = String(r.rate_per_session ?? "");
-          } else {
-            cch[`${r.class_id}:${r.coach_id}`] = String(r.rate_per_session ?? "");
-          }
-        });
-        setGeneralRates(gen);
-        setCoachRates(cch);
-      }
+      const gen: Record<string, string> = {};
+      const cch: Record<string, string> = {};
+      (rateData as CoachRate[] ?? []).forEach(r => {
+        if (!r.coach_id) gen[r.class_id] = String(r.rate_per_session ?? "");
+        else if (r.coach_id === coachId) cch[`${r.class_id}:${coachId}`] = String(r.rate_per_session ?? "");
+      });
+      setGeneralRates(gen);
+      setCoachRates(cch);
     } else {
       setGeneralRates({});
       setCoachRates({});
     }
-    setLoading(false);
-  }, [supabase]);
 
-  /* eslint-disable react-hooks/set-state-in-effect -- async data loader */
-  useEffect(() => { if (branchId) loadData(branchId); }, [branchId, loadData]);
-  /* eslint-enable react-hooks/set-state-in-effect */
+    const { data: extraRow } = await supabase.from("coach_extra_rates").select("rate_per_session").eq("coach_id", coachId).maybeSingle();
+    setExtraRateInput(extraRow ? String(extraRow.rate_per_session) : "");
+    setLoadingExpanded(false);
+  };
 
   const saveGeneral = async (classId: string) => {
     const val = Number(generalRates[classId]);
     if (!val || val <= 0) return toast.error("Masukkan nominal tarif yang valid");
-    const key = classId;
+    const key = `gen:${classId}`;
     setSaving(key);
     const { data: existing } = await supabase.from("coach_rates").select("id").eq("class_id", classId).is("coach_id", null).maybeSingle();
     const op = existing
-      ? supabase.from("coach_rates").update({ rate_per_session: val }).eq("id", existing.id)
-      : supabase.from("coach_rates").insert({ class_id: classId, coach_id: null, rate: val });
+      ? supabase.from("coach_rates").update({ rate: val, rate_per_session: val }).eq("id", existing.id)
+      : supabase.from("coach_rates").insert({ class_id: classId, coach_id: null, rate: val, rate_per_session: val });
     const { error } = await op;
     setSaving(null);
     if (error) return toast.error("Gagal menyimpan", error.message);
     toast.success("Tarif umum disimpan");
+    loadCoaches();
   };
 
   const saveCoachRate = async (classId: string, coachId: string) => {
-    const key = `${classId}:${coachId}`;
-    const rawVal = coachRates[key];
-    // empty = clear the override
+    const key = `spec:${classId}:${coachId}`;
+    const rawVal = coachRates[`${classId}:${coachId}`];
     if (!rawVal || rawVal === "") {
       setSaving(key);
       await supabase.from("coach_rates").delete().eq("class_id", classId).eq("coach_id", coachId);
       setSaving(null);
-      setCoachRates(prev => { const n = { ...prev }; delete n[key]; return n; });
+      setCoachRates(prev => { const n = { ...prev }; delete n[`${classId}:${coachId}`]; return n; });
       toast.success("Tarif khusus dihapus — akan pakai tarif umum");
+      loadCoaches();
       return;
     }
     const val = Number(rawVal);
@@ -1581,110 +1654,177 @@ function SettingsTarif({ branches }: { branches: Branch[] }) {
     setSaving(key);
     const { data: existing } = await supabase.from("coach_rates").select("id").eq("class_id", classId).eq("coach_id", coachId).maybeSingle();
     const op = existing
-      ? supabase.from("coach_rates").update({ rate_per_session: val }).eq("id", existing.id)
-      : supabase.from("coach_rates").insert({ class_id: classId, coach_id: coachId, rate: val });
+      ? supabase.from("coach_rates").update({ rate: val, rate_per_session: val }).eq("id", existing.id)
+      : supabase.from("coach_rates").insert({ class_id: classId, coach_id: coachId, rate: val, rate_per_session: val });
     const { error } = await op;
     setSaving(null);
     if (error) return toast.error("Gagal menyimpan", error.message);
     toast.success("Tarif khusus disimpan");
+    loadCoaches();
+  };
+
+  const saveExtraRate = async (coachId: string) => {
+    const val = Number(extraRateInput);
+    if (!val || val <= 0) return toast.error("Masukkan nominal tarif extra yang valid");
+    setSaving("extra");
+    const { data: existing } = await supabase.from("coach_extra_rates").select("id").eq("coach_id", coachId).maybeSingle();
+    const op = existing
+      ? supabase.from("coach_extra_rates").update({ rate_per_session: val, updated_at: new Date().toISOString() }).eq("id", existing.id)
+      : supabase.from("coach_extra_rates").insert({ coach_id: coachId, rate_per_session: val });
+    const { error } = await op;
+    setSaving(null);
+    if (error) return toast.error("Gagal menyimpan", error.message);
+    toast.success("Tarif extra disimpan");
+    loadCoaches();
   };
 
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="font-display font-bold text-2xl">Settings Tarif Coach</h2>
-        <p className="text-ink-mute text-sm mt-0.5">Set tarif umum per sesi per kelas, dan opsional tarif khusus per coach yang override tarif umum.</p>
+        <h2 className="font-display font-bold text-2xl">Tarif Coach</h2>
+        <p className="text-ink-mute text-sm mt-0.5">Kelola tarif per sesi tiap coach — klik baris untuk lihat &amp; atur tarif per kelas, plus tarif extra sesi di luar kelas reguler.</p>
       </div>
 
-      {/* Branch selector */}
-      {branches.length > 1 && (
-        <div className="flex flex-wrap items-center gap-2">
-          {branches.map((b) => (
-            <button key={b.id} onClick={() => setBranchId(b.id)}
-              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors ${branchId === b.id ? "bg-ocean-700 text-white" : "bg-paper-tint text-ink-soft hover:bg-paper-deep"}`}>
-              {b.name}
-            </button>
-          ))}
+      {/* Toolbar filter */}
+      <div className="flex gap-2 flex-wrap">
+        <div className="flex-1 min-w-48 relative">
+          <Icon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-faint pointer-events-none" />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Cari nama coach…" className="w-full pl-9 pr-3 py-2 text-sm rounded-xl border border-line bg-white focus:outline-none focus:ring-1 focus:ring-ocean-400" />
         </div>
-      )}
+        {branches.length > 1 && (
+          <select value={filterBranch} onChange={e => setFilterBranch(e.target.value)} className="text-sm rounded-xl border border-line bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
+            <option value="all">Semua Cabang</option>
+            {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+          </select>
+        )}
+        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="text-sm rounded-xl border border-line bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
+          <option value="all">Semua Status</option>
+          <option value="complete">Tarif Lengkap</option>
+          <option value="incomplete">Tarif Belum Lengkap</option>
+          <option value="no_extra">Belum Ada Tarif Extra</option>
+        </select>
+        <span className="text-xs text-ink-mute self-center ml-auto">{filteredCoaches.length} coach</span>
+      </div>
 
-      {loading ? (
-        <Card><div className="py-10 text-center text-ink-mute text-sm">Memuat data…</div></Card>
-      ) : classes.length === 0 ? (
-        <Card><div className="py-10 text-center text-ink-mute text-sm">Tidak ada kelas aktif untuk cabang ini.</div></Card>
-      ) : (
-        <div className="space-y-4">
-          {classes.map((c) => {
-            const coaches = (c.class_coaches ?? []).map(cc => cc.profile).filter(Boolean) as { id: string; full_name: string }[];
-            return (
-              <Card key={c.id} className="space-y-4">
-                {/* Class header */}
-                <div>
-                  <div className="font-display font-bold text-ink">{c.name}</div>
-                  <div className="text-xs text-ink-mute mt-0.5">
-                    {(c.schedule_days ?? []).join(", ")}
-                    {c.time_start && <span className="font-mono"> · {c.time_start.slice(0,5)}{c.time_end ? `–${c.time_end.slice(0,5)}` : ""}</span>}
-                  </div>
+      <Card padded={false}>
+        {loading ? (
+          <div className="p-10 text-center text-ink-mute text-sm">Memuat data…</div>
+        ) : filteredCoaches.length === 0 ? (
+          <div className="p-10 text-center text-ink-mute text-sm">Tidak ada coach yang cocok dengan filter.</div>
+        ) : (
+          <div className="divide-y divide-line">
+            {filteredCoaches.map(c => {
+              const incomplete = c.hasIncompleteRate;
+              const isExpanded = expandedCoachId === c.id;
+              return (
+                <div key={c.id}>
+                  <button onClick={() => toggleExpand(c.id)} className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-paper-tint text-left">
+                    <Avatar name={c.full_name} size={36} />
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-sm text-ink">{c.full_name}</div>
+                      <div className="text-xs text-ink-mute mt-0.5 flex items-center gap-1.5 flex-wrap">
+                        {c.branchIds.length === 0 ? (
+                          <span className="text-ink-faint">Belum ada kelas</span>
+                        ) : (
+                          c.branchIds.map(bid => (
+                            <span key={bid} className="px-1.5 py-0.5 rounded-full bg-paper-deep text-ink-mute text-[10px] font-semibold">{branches.find(b => b.id === bid)?.name ?? "—"}</span>
+                          ))
+                        )}
+                        <span>· {c.classCount} kelas</span>
+                      </div>
+                    </div>
+                    <div className="hidden sm:block text-right shrink-0">
+                      <div className="text-xs text-ink-faint">Tarif Extra</div>
+                      <div className="font-mono text-sm font-semibold">{c.extraRate != null ? fmtIDR(c.extraRate) : <span className="text-ink-faint">Belum diisi</span>}</div>
+                    </div>
+                    {c.classCount > 0 && (
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-semibold shrink-0 ${incomplete ? "bg-warn-50 text-warn-700" : "bg-ok-50 text-ok-700"}`}>
+                        {incomplete ? "Belum Lengkap" : "Lengkap"}
+                      </span>
+                    )}
+                    <Icon name={isExpanded ? "chevronD" : "chevron"} className="w-4 h-4 text-ink-faint shrink-0" />
+                  </button>
+
+                  {isExpanded && (
+                    <div className="px-4 pb-4 bg-paper-tint/60 space-y-4">
+                      {loadingExpanded ? (
+                        <div className="py-6 text-center text-ink-mute text-sm">Memuat…</div>
+                      ) : (
+                        <>
+                          {expandedClasses.length === 0 ? (
+                            <p className="text-xs text-ink-faint italic py-2">Coach ini belum ditugaskan ke kelas manapun.</p>
+                          ) : (
+                            <div className="space-y-3">
+                              {expandedClasses.map(cls => {
+                                const genKey = `gen:${cls.id}`;
+                                const specKey = `spec:${cls.id}:${c.id}`;
+                                return (
+                                  <div key={cls.id} className="bg-white border border-line rounded-xl p-3.5 space-y-3">
+                                    <div>
+                                      <div className="font-semibold text-sm text-ink">{cls.name}</div>
+                                      <div className="text-xs text-ink-mute mt-0.5">
+                                        {cls.branch?.name ?? "—"}
+                                        {cls.time_start && <span className="font-mono"> · {cls.time_start.slice(0,5)}{cls.time_end ? `–${cls.time_end.slice(0,5)}` : ""}</span>}
+                                      </div>
+                                    </div>
+                                    <div className="grid sm:grid-cols-2 gap-3">
+                                      <div className="flex items-end gap-2">
+                                        <div className="flex-1">
+                                          <Field label="Tarif Umum" hint="Berlaku semua coach di kelas ini">
+                                            <Input type="text" inputMode="numeric"
+                                              value={generalRates[cls.id] ? Number(generalRates[cls.id]).toLocaleString("id-ID") : ""}
+                                              onChange={e => setGeneralRates(r => ({ ...r, [cls.id]: e.target.value.replace(/\D/g, "") }))}
+                                              className="font-mono text-sm" placeholder="150.000" />
+                                          </Field>
+                                        </div>
+                                        <Btn variant="soft" size="sm" onClick={() => saveGeneral(cls.id)} disabled={saving === genKey}>{saving === genKey ? "…" : "Simpan"}</Btn>
+                                      </div>
+                                      <div className="flex items-end gap-2">
+                                        <div className="flex-1">
+                                          <Field label="Tarif Khusus" hint="Override milik coach ini saja">
+                                            <Input type="text" inputMode="numeric"
+                                              value={coachRates[`${cls.id}:${c.id}`] ? Number(coachRates[`${cls.id}:${c.id}`]).toLocaleString("id-ID") : ""}
+                                              onChange={e => setCoachRates(r => ({ ...r, [`${cls.id}:${c.id}`]: e.target.value.replace(/\D/g, "") }))}
+                                              className="font-mono text-sm"
+                                              placeholder={generalRates[cls.id] ? `Pakai umum (${Number(generalRates[cls.id]).toLocaleString("id-ID")})` : "Belum ada tarif umum"} />
+                                          </Field>
+                                        </div>
+                                        <Btn variant="soft" size="sm" onClick={() => saveCoachRate(cls.id, c.id)} disabled={saving === specKey}>
+                                          {saving === specKey ? "…" : coachRates[`${cls.id}:${c.id}`] ? "Simpan" : "Hapus"}
+                                        </Btn>
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          <Card className="!bg-white space-y-2">
+                            <div>
+                              <div className="text-sm font-bold text-ink">Tarif Extra</div>
+                              <p className="text-xs text-ink-mute mt-0.5">Tarif tambahan per 1x sesi extra di luar kelas reguler, berlaku global untuk coach ini.</p>
+                            </div>
+                            <div className="flex items-end gap-2">
+                              <div className="flex-1 max-w-56">
+                                <Input type="text" inputMode="numeric"
+                                  value={extraRateInput ? Number(extraRateInput).toLocaleString("id-ID") : ""}
+                                  onChange={e => setExtraRateInput(e.target.value.replace(/\D/g, ""))}
+                                  className="font-mono text-sm" placeholder="100.000" />
+                              </div>
+                              <Btn variant="soft" size="sm" onClick={() => saveExtraRate(c.id)} disabled={saving === "extra"}>{saving === "extra" ? "…" : "Simpan"}</Btn>
+                            </div>
+                          </Card>
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
-
-                {/* Tarif umum */}
-                <div className="flex items-end gap-2">
-                  <div className="flex-1">
-                    <Field label="Tarif umum (per sesi)" hint="Berlaku untuk semua coach di kelas ini, kecuali yang punya tarif khusus">
-                      <Input
-                        type="text" inputMode="numeric"
-                        value={generalRates[c.id] ? Number(generalRates[c.id]).toLocaleString("id-ID") : ""}
-                        onChange={e => setGeneralRates(r => ({ ...r, [c.id]: e.target.value.replace(/\D/g, "") }))}
-                        className="font-mono"
-                        placeholder="150.000"
-                      />
-                    </Field>
-                  </div>
-                  <Btn variant="soft" size="sm" onClick={() => saveGeneral(c.id)} disabled={saving === c.id}>
-                    {saving === c.id ? "…" : "Simpan"}
-                  </Btn>
-                </div>
-
-                {/* Tarif khusus per coach */}
-                {coaches.length > 0 && (
-                  <div className="border-t border-line pt-3 space-y-2">
-                    <div className="text-xs font-bold uppercase tracking-widest text-ink-faint">Tarif Khusus per Coach <span className="normal-case font-normal text-ink-faint">(opsional — override tarif umum)</span></div>
-                    {coaches.map(coach => {
-                      const key = `${c.id}:${coach.id}`;
-                      const isSaving = saving === key;
-                      return (
-                        <div key={coach.id} className="flex items-center gap-2">
-                          <div className="flex items-center gap-2 w-36 shrink-0">
-                            <Avatar name={coach.full_name} size={24} />
-                            <span className="text-xs text-ink-soft truncate">{coach.full_name}</span>
-                          </div>
-                          <div className="flex-1">
-                            <Input
-                              type="text" inputMode="numeric"
-                              value={coachRates[key] ? Number(coachRates[key]).toLocaleString("id-ID") : ""}
-                              onChange={e => setCoachRates(r => ({ ...r, [key]: e.target.value.replace(/\D/g, "") }))}
-                              className="font-mono text-sm"
-                              placeholder={generalRates[c.id] ? `Pakai umum (${Number(generalRates[c.id]).toLocaleString("id-ID")})` : "Belum ada tarif umum"}
-                            />
-                          </div>
-                          <Btn variant="soft" size="sm" onClick={() => saveCoachRate(c.id, coach.id)} disabled={isSaving}>
-                            {isSaving ? "…" : coachRates[key] ? "Simpan" : "Hapus"}
-                          </Btn>
-                        </div>
-                      );
-                    })}
-                    <p className="text-[11px] text-ink-faint">Kosongkan input untuk menghapus tarif khusus dan kembali ke tarif umum.</p>
-                  </div>
-                )}
-
-                {coaches.length === 0 && (
-                  <p className="text-xs text-ink-faint italic">Belum ada coach di kelas ini.</p>
-                )}
-              </Card>
-            );
-          })}
-        </div>
-      )}
+              );
+            })}
+          </div>
+        )}
+      </Card>
     </div>
   );
 }
@@ -1711,7 +1851,7 @@ function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: 
     setLoading(true);
     const q = supabase
       .from("coach_invoices")
-      .select("id, invoice_number, period_label, total_amount, status, bank_info, branch_id, submitted_at, paid_at, approved_at, rejected_at, rejection_reason, branch:branches(name), coach:profiles!coach_invoices_coach_id_fkey(id, full_name), coach_invoice_items(id, class_id, session_count, rate, class:classes(name))")
+      .select("id, invoice_number, period_label, total_amount, status, bank_info, branch_id, submitted_at, paid_at, approved_at, rejected_at, rejection_reason, branch:branches(name), coach:profiles!coach_invoices_coach_id_fkey(id, full_name), coach_invoice_items(id, item_type, class_id, session_count, rate, description, proof_url, class:classes(name))")
       .not("status", "eq", "cancelled")
       .order("submitted_at", { ascending: false });
     if (branchFilter !== "all") q.eq("branch_id", branchFilter);
@@ -1776,11 +1916,15 @@ function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: 
   const printInvoice = (iv: Invoice) => {
     const w = window.open("", "_blank", "width=700,height=900");
     if (!w) return;
-    // Group items by class
+    // Group items by class (or unique per extra/reimburse row)
     const itemMap: Record<string, { name: string; sessions: number; rate: number }> = {};
     (iv.coach_invoice_items ?? []).forEach(item => {
-      if (!itemMap[item.class_id]) itemMap[item.class_id] = { name: item.class?.name ?? item.class_id, sessions: 0, rate: item.rate };
-      itemMap[item.class_id].sessions += item.session_count;
+      const key = item.item_type === "class" ? (item.class_id ?? item.id) : item.id;
+      const label = item.item_type === "extra" ? "Sesi Extra"
+        : item.item_type === "reimburse" ? `Reimburse — ${item.description ?? ""}`
+        : (item.class?.name ?? item.class_id ?? "—");
+      if (!itemMap[key]) itemMap[key] = { name: label, sessions: 0, rate: item.rate };
+      itemMap[key].sessions += item.session_count;
     });
     const itemRows = Object.values(itemMap).map(item =>
       `<div class="row"><span>${item.name}</span><span>${item.sessions} sesi × Rp ${item.rate.toLocaleString("id-ID")} = <b>Rp ${(item.sessions * item.rate).toLocaleString("id-ID")}</b></span></div>`
@@ -1918,18 +2062,27 @@ function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: 
                 <p className="text-sm text-ink-mute">Tidak ada rincian.</p>
               ) : (
                 <div className="space-y-1.5">
-                  {/* Group by class */}
+                  {/* Group by class (or unique per extra/reimburse row) */}
                   {(() => {
-                    const map: Record<string, { name: string; sessions: number; rate: number }> = {};
+                    const map: Record<string, { name: string; sessions: number; rate: number; proofUrl: string | null }> = {};
                     (detail.coach_invoice_items ?? []).forEach(item => {
-                      if (!map[item.class_id]) map[item.class_id] = { name: item.class?.name ?? item.class_id, sessions: 0, rate: item.rate };
-                      map[item.class_id].sessions += item.session_count;
+                      const key = item.item_type === "class" ? (item.class_id ?? item.id) : item.id;
+                      const label = item.item_type === "extra" ? "Sesi Extra"
+                        : item.item_type === "reimburse" ? `Reimburse — ${item.description ?? ""}`
+                        : (item.class?.name ?? item.class_id ?? "—");
+                      if (!map[key]) map[key] = { name: label, sessions: 0, rate: item.rate, proofUrl: item.proof_url };
+                      map[key].sessions += item.session_count;
                     });
                     return Object.values(map).map((item, i) => (
                       <div key={i} className="flex items-center justify-between py-2 border-b border-line text-sm">
                         <div>
                           <div className="font-semibold text-ink">{item.name}</div>
                           <div className="text-xs text-ink-mute">{item.sessions} sesi × {fmtIDR(item.rate)}</div>
+                          {item.proofUrl && (
+                            <a href={item.proofUrl} target="_blank" rel="noreferrer" className="text-xs text-ocean-600 hover:underline inline-flex items-center gap-1 mt-0.5">
+                              <Icon name="link" className="w-3 h-3" />Lihat bukti
+                            </a>
+                          )}
                         </div>
                         <div className="font-mono font-bold">{fmtIDR(item.sessions * item.rate)}</div>
                       </div>
@@ -1997,16 +2150,30 @@ interface OwnerFinancialExpense {
   branch?: { name: string } | null;
 }
 
+interface ManualTxnRow {
+  id: string; branch_id: string; kind: "income" | "expense"; category: string | null;
+  description: string; amount: number; occurred_at: string; notes: string | null;
+  is_reimburse: boolean; proof_url: string | null;
+  branch?: { name: string } | null;
+}
+
+type IncomeRow = (OwnerFinancialBill & { source: "bill" }) | (ManualTxnRow & { source: "manual" });
+type ExpenseRow = (OwnerFinancialExpense & { source: "invoice" }) | (ManualTxnRow & { source: "manual" });
+
+const MANUAL_CATEGORY_OPTIONS = ["Sponsorship", "Sewa", "Listrik", "Perlengkapan", "Lainnya"];
+
 type FinancialTab = "overview" | "income" | "expenses" | "moneyflow";
 
 function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; userId: string; userName: string }) {
   const supabase = createClient();
   const toast = useToast();
+  const confirm = useConfirm();
   const [tab, setTab] = useState<FinancialTab>("overview");
 
   // ── Data ────────────────────────────────────────────────────────────────────
   const [bills, setBills] = useState<OwnerFinancialBill[]>([]);
   const [expenses, setExpenses] = useState<OwnerFinancialExpense[]>([]);
+  const [manualTxns, setManualTxns] = useState<ManualTxnRow[]>([]);
   const [loadingBills, setLoadingBills] = useState(true);
   const [loadingExpenses, setLoadingExpenses] = useState(true);
 
@@ -2026,6 +2193,7 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
   const [expenseSearch, setExpenseSearch] = useState("");
   const [expenseStatus, setExpenseStatus] = useState("");
   const [expenseBranch, setExpenseBranch] = useState("all");
+  const [expenseReimburseFilter, setExpenseReimburseFilter] = useState("all");
   const [expensePage, setExpensePage] = useState(0);
 
   const PAGE_SIZE = 25;
@@ -2051,10 +2219,87 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
 
   /* eslint-enable react-hooks/set-state-in-effect */
 
+  const loadManualTxns = useCallback(async () => {
+    const { data } = await supabase.from("manual_transactions")
+      .select("id, branch_id, kind, category, description, amount, occurred_at, notes, is_reimburse, proof_url, branch:branches(name)")
+      .order("occurred_at", { ascending: false });
+    if (data) setManualTxns(data as unknown as ManualTxnRow[]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* eslint-disable-next-line react-hooks/set-state-in-effect -- async data loader */
+  useEffect(() => { loadManualTxns(); }, [loadManualTxns]);
+
+  // ── Manual transaction CRUD ──────────────────────────────────────────────────
+  const [showTxnModal, setShowTxnModal] = useState<{ kind: "income" | "expense"; edit: ManualTxnRow | null } | null>(null);
+  const [txnForm, setTxnForm] = useState({ branch_id: "", category: MANUAL_CATEGORY_OPTIONS[0], categoryOther: "", description: "", amount: "", occurred_at: new Date().toISOString().slice(0, 10), notes: "", isReimburse: false, proofUrl: "" });
+  const [savingTxn, setSavingTxn] = useState(false);
+
+  const openAddTxn = (kind: "income" | "expense") => {
+    setTxnForm({ branch_id: branches[0]?.id ?? "", category: MANUAL_CATEGORY_OPTIONS[0], categoryOther: "", description: "", amount: "", occurred_at: new Date().toISOString().slice(0, 10), notes: "", isReimburse: false, proofUrl: "" });
+    setShowTxnModal({ kind, edit: null });
+  };
+
+  const openEditTxn = (row: ManualTxnRow) => {
+    const knownCategory = MANUAL_CATEGORY_OPTIONS.includes(row.category ?? "") ? (row.category ?? MANUAL_CATEGORY_OPTIONS[0]) : "Lainnya";
+    setTxnForm({
+      branch_id: row.branch_id, category: knownCategory, categoryOther: knownCategory === "Lainnya" ? (row.category ?? "") : "",
+      description: row.description, amount: String(row.amount), occurred_at: row.occurred_at, notes: row.notes ?? "",
+      isReimburse: row.is_reimburse, proofUrl: row.proof_url ?? "",
+    });
+    setShowTxnModal({ kind: row.kind, edit: row });
+  };
+
+  const saveTxn = async () => {
+    if (!showTxnModal) return;
+    if (!txnForm.branch_id) return toast.error("Pilih cabang terlebih dahulu");
+    if (!txnForm.description.trim()) return toast.error("Deskripsi wajib diisi");
+    const amount = Number(txnForm.amount || 0);
+    if (!amount || amount <= 0) return toast.error("Masukkan nominal yang valid");
+    if (txnForm.isReimburse && !txnForm.proofUrl.trim()) return toast.error("Masukkan link bukti untuk pengeluaran reimburse");
+    const category = txnForm.category === "Lainnya" ? (txnForm.categoryOther.trim() || "Lainnya") : txnForm.category;
+
+    setSavingTxn(true);
+    const payload = {
+      branch_id: txnForm.branch_id, kind: showTxnModal.kind, category, description: txnForm.description.trim(),
+      amount, occurred_at: txnForm.occurred_at, notes: txnForm.notes.trim() || null,
+      is_reimburse: txnForm.isReimburse, proof_url: txnForm.isReimburse ? txnForm.proofUrl.trim() : null,
+    };
+    const isEdit = !!showTxnModal.edit;
+    const { error } = isEdit
+      ? await supabase.from("manual_transactions").update({ ...payload, updated_at: new Date().toISOString() }).eq("id", showTxnModal.edit!.id)
+      : await supabase.from("manual_transactions").insert({ ...payload, created_by: userId, created_by_role: "owner" });
+    setSavingTxn(false);
+    if (error) return toast.error(isEdit ? "Gagal menyimpan" : "Gagal menambah", error.message);
+    toast.success(isEdit ? "Transaksi diperbarui" : "Transaksi ditambahkan");
+    logActivity(supabase, {
+      userId, userRole: "owner", userName, branchId: txnForm.branch_id, entityType: "manual_transactions",
+      entityId: showTxnModal.edit?.id ?? "new", action: isEdit ? "update" : "create",
+      label: `${showTxnModal.kind === "income" ? "Income" : "Expense"} manual "${txnForm.description.trim()}" (${fmtIDR(amount)}) ${isEdit ? "diperbarui" : "ditambahkan"}`,
+      meta: { amount, category },
+    });
+    setShowTxnModal(null);
+    loadManualTxns();
+  };
+
+  const deleteTxn = async (row: ManualTxnRow) => {
+    const ok = await confirm({ title: "Hapus transaksi manual?", body: `"${row.description}" (${fmtIDR(row.amount)}) akan dihapus permanen.`, confirmLabel: "Hapus", danger: true });
+    if (!ok) return;
+    const { error } = await supabase.from("manual_transactions").delete().eq("id", row.id);
+    if (error) return toast.error("Gagal menghapus", error.message);
+    toast.success("Transaksi dihapus");
+    logActivity(supabase, {
+      userId, userRole: "owner", userName, branchId: row.branch_id, entityType: "manual_transactions",
+      entityId: row.id, action: "delete", label: `${row.kind === "income" ? "Income" : "Expense"} manual "${row.description}" (${fmtIDR(row.amount)}) dihapus`,
+    });
+    setManualTxns(prev => prev.filter(t => t.id !== row.id));
+  };
+
   // ── Computed: income summary ────────────────────────────────────────────────
+  const manualIncome = useMemo(() => manualTxns.filter(t => t.kind === "income"), [manualTxns]);
+  const manualExpense = useMemo(() => manualTxns.filter(t => t.kind === "expense"), [manualTxns]);
   const paidBills = useMemo(() => bills.filter(b => b.status === "paid"), [bills]);
-  const totalIncome = useMemo(() => paidBills.reduce((s, b) => s + b.total, 0), [paidBills]);
-  const totalExpenses = useMemo(() => expenses.filter(e => e.status === "paid").reduce((s, e) => s + e.total_amount, 0), [expenses]);
+  const totalIncome = useMemo(() => paidBills.reduce((s, b) => s + b.total, 0) + manualIncome.reduce((s, t) => s + t.amount, 0), [paidBills, manualIncome]);
+  const totalExpenses = useMemo(() => expenses.filter(e => e.status === "paid").reduce((s, e) => s + e.total_amount, 0) + manualExpense.reduce((s, t) => s + t.amount, 0), [expenses, manualExpense]);
   const netAmount = totalIncome - totalExpenses;
 
   // ── Chart period selector ────────────────────────────────────────────────────
@@ -2068,12 +2313,14 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
       const label = d.toLocaleDateString("id-ID", { month: "short", year: "2-digit" });
-      const income = paidBills.filter(b => (b.paid_at ?? b.created_at).startsWith(key)).reduce((s, b) => s + b.total, 0);
-      const expense = expenses.filter(e => e.status === "paid" && (e.paid_at ?? e.created_at).startsWith(key)).reduce((s, e) => s + e.total_amount, 0);
+      const income = paidBills.filter(b => (b.paid_at ?? b.created_at).startsWith(key)).reduce((s, b) => s + b.total, 0)
+        + manualIncome.filter(t => t.occurred_at.startsWith(key)).reduce((s, t) => s + t.amount, 0);
+      const expense = expenses.filter(e => e.status === "paid" && (e.paid_at ?? e.created_at).startsWith(key)).reduce((s, e) => s + e.total_amount, 0)
+        + manualExpense.filter(t => t.occurred_at.startsWith(key)).reduce((s, t) => s + t.amount, 0);
       months.push({ label, key, income, expense, net: income - expense });
     }
     return months;
-  }, [paidBills, expenses, chartMonths]);
+  }, [paidBills, expenses, manualIncome, manualExpense, chartMonths]);
 
   const barMax = useMemo(() => Math.max(1, ...barChartData.map(m => Math.max(m.income, m.expense))), [barChartData]);
 
@@ -2081,35 +2328,40 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
   const branchIncomeMap = useMemo(() => {
     const map: Record<string, number> = {};
     paidBills.forEach(b => { map[b.branch_id] = (map[b.branch_id] ?? 0) + b.total; });
+    manualIncome.forEach(t => { map[t.branch_id] = (map[t.branch_id] ?? 0) + t.amount; });
     return map;
-  }, [paidBills]);
+  }, [paidBills, manualIncome]);
   const maxBranchIncome = useMemo(() => Math.max(1, ...Object.values(branchIncomeMap)), [branchIncomeMap]);
 
-  // ── Income table filtered ───────────────────────────────────────────────────
+  // ── Income table filtered (merges bills + manual income) ───────────────────
+  const incomeSortDate = (r: IncomeRow) => r.source === "manual" ? r.occurred_at : (r.paid_at ?? r.created_at);
+  const incomeSortAmount = (r: IncomeRow) => r.source === "manual" ? r.amount : r.total;
+
   const filteredIncome = useMemo(() => {
-    let r = bills;
-    if (incomeStatus) r = r.filter(b => b.status === incomeStatus);
-    if (incomeBranch !== "all") r = r.filter(b => b.branch_id === incomeBranch);
-    if (incomeType) r = r.filter(b => b.type === incomeType);
-    if (incomeMethod) r = r.filter(b => b.paid_method === incomeMethod);
-    if (incomeDateFrom) r = r.filter(b => (b.paid_at ?? b.created_at) >= incomeDateFrom);
-    if (incomeDateTo) r = r.filter(b => (b.paid_at ?? b.created_at) <= incomeDateTo + "T23:59:59");
+    let r: IncomeRow[] = [
+      ...bills.map(b => ({ ...b, source: "bill" as const })),
+      ...manualIncome.map(t => ({ ...t, source: "manual" as const })),
+    ];
+    if (incomeStatus) r = r.filter(row => row.source === "manual" || row.status === incomeStatus);
+    if (incomeBranch !== "all") r = r.filter(row => row.branch_id === incomeBranch);
+    if (incomeType) r = r.filter(row => row.source === "manual" || row.type === incomeType);
+    if (incomeMethod) r = r.filter(row => row.source === "manual" || row.paid_method === incomeMethod);
+    if (incomeDateFrom) r = r.filter(row => incomeSortDate(row) >= incomeDateFrom);
+    if (incomeDateTo) r = r.filter(row => incomeSortDate(row) <= incomeDateTo + "T23:59:59");
     if (incomeSearch) {
       const q = incomeSearch.toLowerCase();
-      r = r.filter(b =>
-        b.member?.profile?.full_name?.toLowerCase().includes(q) ||
-        b.period_label.toLowerCase().includes(q) ||
-        b.class?.name?.toLowerCase().includes(q) ||
-        b.branch?.name?.toLowerCase().includes(q)
+      r = r.filter(row => row.source === "manual"
+        ? row.description.toLowerCase().includes(q) || (row.category ?? "").toLowerCase().includes(q) || row.branch?.name?.toLowerCase().includes(q)
+        : row.member?.profile?.full_name?.toLowerCase().includes(q) || row.period_label.toLowerCase().includes(q) || row.class?.name?.toLowerCase().includes(q) || row.branch?.name?.toLowerCase().includes(q)
       );
     }
     r = [...r].sort((a, b) => {
-      const va = incomeSortBy === "total" ? (a.total ?? 0) : (a[incomeSortBy] ?? "");
-      const vb = incomeSortBy === "total" ? (b.total ?? 0) : (b[incomeSortBy] ?? "");
+      const va = incomeSortBy === "total" ? incomeSortAmount(a) : incomeSortDate(a);
+      const vb = incomeSortBy === "total" ? incomeSortAmount(b) : incomeSortDate(b);
       return incomeSortDir === "asc" ? (va > vb ? 1 : -1) : (va < vb ? 1 : -1);
     });
     return r;
-  }, [bills, incomeStatus, incomeBranch, incomeType, incomeMethod, incomeDateFrom, incomeDateTo, incomeSearch, incomeSortBy, incomeSortDir]);
+  }, [bills, manualIncome, incomeStatus, incomeBranch, incomeType, incomeMethod, incomeDateFrom, incomeDateTo, incomeSearch, incomeSortBy, incomeSortDir]);
 
   useEffect(() => { setIncomePage(0); }, [incomeStatus, incomeBranch, incomeType, incomeMethod, incomeDateFrom, incomeDateTo, incomeSearch]);
 
@@ -2117,22 +2369,25 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
   const incomeSafePage = Math.min(incomePage, Math.max(0, incomeTotalPages - 1));
   const incomePagedRows = filteredIncome.slice(incomeSafePage * PAGE_SIZE, (incomeSafePage + 1) * PAGE_SIZE);
 
-  // ── Expenses table filtered ─────────────────────────────────────────────────
+  // ── Expenses table filtered (merges coach_invoices + manual expense) ───────
   const filteredExpenses = useMemo(() => {
-    let r = expenses;
-    if (expenseStatus) r = r.filter(e => e.status === expenseStatus);
-    if (expenseBranch !== "all") r = r.filter(e => e.branch_id === expenseBranch);
+    let r: ExpenseRow[] = [
+      ...expenses.map(e => ({ ...e, source: "invoice" as const })),
+      ...manualExpense.map(t => ({ ...t, source: "manual" as const })),
+    ];
+    if (expenseStatus) r = r.filter(row => row.source === "manual" || row.status === expenseStatus);
+    if (expenseBranch !== "all") r = r.filter(row => row.branch_id === expenseBranch);
+    if (expenseReimburseFilter === "reimburse") r = r.filter(row => row.source === "manual" && row.is_reimburse);
+    if (expenseReimburseFilter === "non_reimburse") r = r.filter(row => !(row.source === "manual" && row.is_reimburse));
     if (expenseSearch) {
       const q = expenseSearch.toLowerCase();
-      r = r.filter(e =>
-        e.coach?.full_name?.toLowerCase().includes(q) ||
-        e.period_label.toLowerCase().includes(q) ||
-        e.branch?.name?.toLowerCase().includes(q) ||
-        (e.invoice_number ?? "").toLowerCase().includes(q)
+      r = r.filter(row => row.source === "manual"
+        ? row.description.toLowerCase().includes(q) || (row.category ?? "").toLowerCase().includes(q) || row.branch?.name?.toLowerCase().includes(q)
+        : row.coach?.full_name?.toLowerCase().includes(q) || row.period_label.toLowerCase().includes(q) || row.branch?.name?.toLowerCase().includes(q) || (row.invoice_number ?? "").toLowerCase().includes(q)
       );
     }
     return r;
-  }, [expenses, expenseStatus, expenseBranch, expenseSearch]);
+  }, [expenses, manualExpense, expenseStatus, expenseBranch, expenseReimburseFilter, expenseSearch]);
 
   useEffect(() => { setExpensePage(0); }, [expenseStatus, expenseBranch, expenseSearch]);
 
@@ -2148,12 +2403,14 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
       const label = d.toLocaleDateString("id-ID", { month: "long", year: "numeric" });
-      const income = paidBills.filter(b => (b.paid_at ?? b.created_at).startsWith(key)).reduce((s, b) => s + b.total, 0);
-      const expense = expenses.filter(e => e.status === "paid" && (e.paid_at ?? e.created_at).startsWith(key)).reduce((s, e) => s + e.total_amount, 0);
+      const income = paidBills.filter(b => (b.paid_at ?? b.created_at).startsWith(key)).reduce((s, b) => s + b.total, 0)
+        + manualIncome.filter(t => t.occurred_at.startsWith(key)).reduce((s, t) => s + t.amount, 0);
+      const expense = expenses.filter(e => e.status === "paid" && (e.paid_at ?? e.created_at).startsWith(key)).reduce((s, e) => s + e.total_amount, 0)
+        + manualExpense.filter(t => t.occurred_at.startsWith(key)).reduce((s, t) => s + t.amount, 0);
       months.push({ label, key, income, expense, net: income - expense });
     }
     return months.filter(m => m.income > 0 || m.expense > 0);
-  }, [paidBills, expenses]);
+  }, [paidBills, expenses, manualIncome, manualExpense]);
 
   // ── Sub-tab nav ──────────────────────────────────────────────────────────────
   const FTABS: { id: FinancialTab; label: string; icon: string }[] = [
@@ -2340,12 +2597,15 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
       {/* ── INCOME ──────────────────────────────────────────────────────────── */}
       {tab === "income" && (
         <div className="space-y-4">
+          <div className="flex justify-end">
+            <Btn variant="primary" icon="plus" size="sm" onClick={() => openAddTxn("income")}>Tambah Income</Btn>
+          </div>
           {/* Filters */}
           <div className="bg-white border border-line rounded-2xl p-4 space-y-3">
             <div className="flex gap-2 flex-wrap">
               <div className="flex-1 min-w-48 relative">
                 <Icon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-faint pointer-events-none" />
-                <input value={incomeSearch} onChange={e => setIncomeSearch(e.target.value)} placeholder="Cari member, kelas, periode…" className="w-full pl-9 pr-3 py-2 text-sm rounded-xl border border-line bg-paper-tint focus:outline-none focus:ring-1 focus:ring-ocean-400" />
+                <input value={incomeSearch} onChange={e => setIncomeSearch(e.target.value)} placeholder="Cari member, kelas, periode, deskripsi…" className="w-full pl-9 pr-3 py-2 text-sm rounded-xl border border-line bg-paper-tint focus:outline-none focus:ring-1 focus:ring-ocean-400" />
               </div>
               <select value={incomeBranch} onChange={e => setIncomeBranch(e.target.value)} className="text-sm rounded-xl border border-line bg-paper-tint px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
                 <option value="all">Semua cabang</option>
@@ -2408,26 +2668,51 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
                           Total {incomeSortBy === "total" ? (incomeSortDir === "asc" ? "↑" : "↓") : ""}
                         </th>
                         <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs">Status</th>
+                        <th className="px-4 py-2.5 w-20"></th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-line">
-                      {incomePagedRows.map(b => (
-                        <tr key={b.id} className="hover:bg-paper-tint">
-                          <td className="px-4 py-2.5 text-xs text-ink-mute">{b.branch?.name ?? "—"}</td>
-                          <td className="px-4 py-2.5 font-medium">{b.member?.profile?.full_name ?? "—"}</td>
-                          <td className="px-4 py-2.5 text-xs text-ink-mute">{b.class?.name ?? "—"}</td>
-                          <td className="px-4 py-2.5 text-xs">{b.period_label}</td>
-                          <td className="px-4 py-2.5 text-xs">
-                            <span className="px-2 py-0.5 rounded-full bg-ocean-50 text-ocean-700 font-semibold">{b.type === "monthly" ? "Bulanan" : b.type === "session_pack" ? "Paket" : b.type === "custom" ? "Custom" : b.type}</span>
+                      {incomePagedRows.map(row => row.source === "manual" ? (
+                        <tr key={row.id} className="hover:bg-paper-tint">
+                          <td className="px-4 py-2.5 text-xs text-ink-mute">{row.branch?.name ?? "—"}</td>
+                          <td className="px-4 py-2.5 font-medium">
+                            {row.description}
+                            <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-paper-deep text-ink-mute text-[10px] font-semibold align-middle">Manual</span>
                           </td>
-                          <td className="px-4 py-2.5 text-xs text-ink-mute capitalize">{b.paid_method ?? "—"}</td>
-                          <td className="px-4 py-2.5 text-xs text-ink-mute">{b.paid_at ? new Date(b.paid_at).toLocaleDateString("id-ID", { dateStyle: "short" }) : "—"}</td>
-                          <td className="px-4 py-2.5 text-right font-mono font-bold text-sm">{fmtIDR(b.total)}</td>
+                          <td className="px-4 py-2.5 text-xs text-ink-mute">—</td>
+                          <td className="px-4 py-2.5 text-xs text-ink-mute">{row.category ?? "—"}</td>
+                          <td className="px-4 py-2.5 text-xs text-ink-mute">—</td>
+                          <td className="px-4 py-2.5 text-xs text-ink-mute">—</td>
+                          <td className="px-4 py-2.5 text-xs text-ink-mute">{new Date(row.occurred_at).toLocaleDateString("id-ID", { dateStyle: "short" })}</td>
+                          <td className="px-4 py-2.5 text-right font-mono font-bold text-sm">{fmtIDR(row.amount)}</td>
                           <td className="px-4 py-2.5">
-                            <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${b.status === "paid" ? "bg-ok-50 text-ok-700" : b.status === "unpaid" ? "bg-warn-50 text-warn-700" : b.status === "partial" ? "bg-ocean-50 text-ocean-700" : "bg-paper-deep text-ink-mute"}`}>
-                              {b.status === "paid" ? "Lunas" : b.status === "unpaid" ? "Belum" : b.status === "partial" ? "Sebagian" : b.status === "school_covered" ? "Sekolah" : "Gratis"}
+                            <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-ok-50 text-ok-700">Tercatat</span>
+                          </td>
+                          <td className="px-4 py-2.5">
+                            <div className="flex items-center gap-1 justify-end">
+                              <button onClick={() => openEditTxn(row)} className="w-7 h-7 rounded-lg hover:bg-paper-deep flex items-center justify-center text-ink-mute hover:text-ocean-600" title="Edit"><Icon name="edit" className="w-3.5 h-3.5" /></button>
+                              <button onClick={() => deleteTxn(row)} className="w-7 h-7 rounded-lg hover:bg-danger-50 flex items-center justify-center text-ink-mute hover:text-danger-600" title="Hapus"><Icon name="trash" className="w-3.5 h-3.5" /></button>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : (
+                        <tr key={row.id} className="hover:bg-paper-tint">
+                          <td className="px-4 py-2.5 text-xs text-ink-mute">{row.branch?.name ?? "—"}</td>
+                          <td className="px-4 py-2.5 font-medium">{row.member?.profile?.full_name ?? "—"}</td>
+                          <td className="px-4 py-2.5 text-xs text-ink-mute">{row.class?.name ?? "—"}</td>
+                          <td className="px-4 py-2.5 text-xs">{row.period_label}</td>
+                          <td className="px-4 py-2.5 text-xs">
+                            <span className="px-2 py-0.5 rounded-full bg-ocean-50 text-ocean-700 font-semibold">{row.type === "monthly" ? "Bulanan" : row.type === "session_pack" ? "Paket" : row.type === "custom" ? "Custom" : row.type}</span>
+                          </td>
+                          <td className="px-4 py-2.5 text-xs text-ink-mute capitalize">{row.paid_method ?? "—"}</td>
+                          <td className="px-4 py-2.5 text-xs text-ink-mute">{row.paid_at ? new Date(row.paid_at).toLocaleDateString("id-ID", { dateStyle: "short" }) : "—"}</td>
+                          <td className="px-4 py-2.5 text-right font-mono font-bold text-sm">{fmtIDR(row.total)}</td>
+                          <td className="px-4 py-2.5">
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${row.status === "paid" ? "bg-ok-50 text-ok-700" : row.status === "unpaid" ? "bg-warn-50 text-warn-700" : row.status === "partial" ? "bg-ocean-50 text-ocean-700" : "bg-paper-deep text-ink-mute"}`}>
+                              {row.status === "paid" ? "Lunas" : row.status === "unpaid" ? "Belum" : row.status === "partial" ? "Sebagian" : row.status === "school_covered" ? "Sekolah" : "Gratis"}
                             </span>
                           </td>
+                          <td className="px-4 py-2.5"></td>
                         </tr>
                       ))}
                     </tbody>
@@ -2451,11 +2736,18 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
       {/* ── EXPENSES ────────────────────────────────────────────────────────── */}
       {tab === "expenses" && (
         <div className="space-y-4">
+          <div className="flex justify-end">
+            <Btn variant="primary" icon="plus" size="sm" onClick={() => openAddTxn("expense")}>Tambah Expense</Btn>
+          </div>
+          <div className="grid sm:grid-cols-2 gap-4">
+            <Stat label="Reimburse Admin" value={manualExpense.filter(t => t.is_reimburse).length} icon="invoice" tone="warn"
+              sub={fmtIDR(manualExpense.filter(t => t.is_reimburse).reduce((s, t) => s + t.amount, 0))} />
+          </div>
           <div className="bg-white border border-line rounded-2xl p-4 space-y-3">
             <div className="flex gap-2 flex-wrap">
               <div className="flex-1 min-w-48 relative">
                 <Icon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-faint pointer-events-none" />
-                <input value={expenseSearch} onChange={e => setExpenseSearch(e.target.value)} placeholder="Cari coach, periode, nomor invoice…" className="w-full pl-9 pr-3 py-2 text-sm rounded-xl border border-line bg-paper-tint focus:outline-none focus:ring-1 focus:ring-ocean-400" />
+                <input value={expenseSearch} onChange={e => setExpenseSearch(e.target.value)} placeholder="Cari coach, periode, nomor invoice, deskripsi…" className="w-full pl-9 pr-3 py-2 text-sm rounded-xl border border-line bg-paper-tint focus:outline-none focus:ring-1 focus:ring-ocean-400" />
               </div>
               <select value={expenseBranch} onChange={e => setExpenseBranch(e.target.value)} className="text-sm rounded-xl border border-line bg-paper-tint px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
                 <option value="all">Semua cabang</option>
@@ -2466,8 +2758,13 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
                 <option value="pending">Pending</option>
                 <option value="paid">Lunas</option>
               </select>
-              {(expenseSearch || expenseStatus || expenseBranch !== "all") && (
-                <button onClick={() => { setExpenseSearch(""); setExpenseStatus(""); setExpenseBranch("all"); }} className="text-xs text-ocean-600 hover:underline">Reset</button>
+              <select value={expenseReimburseFilter} onChange={e => setExpenseReimburseFilter(e.target.value)} className="text-sm rounded-xl border border-line bg-paper-tint px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
+                <option value="all">Semua tipe</option>
+                <option value="reimburse">Reimburse saja</option>
+                <option value="non_reimburse">Non-Reimburse</option>
+              </select>
+              {(expenseSearch || expenseStatus || expenseBranch !== "all" || expenseReimburseFilter !== "all") && (
+                <button onClick={() => { setExpenseSearch(""); setExpenseStatus(""); setExpenseBranch("all"); setExpenseReimburseFilter("all"); }} className="text-xs text-ocean-600 hover:underline">Reset</button>
               )}
               <span className="text-xs text-ink-mute ml-auto">{filteredExpenses.length} invoice</span>
             </div>
@@ -2491,22 +2788,51 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
                         <th className="text-right px-4 py-2.5 font-semibold text-ink-mute text-xs">Total</th>
                         <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs">Status</th>
                         <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs">Dibayar</th>
+                        <th className="px-4 py-2.5 w-20"></th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-line">
-                      {expensePagedRows.map(e => (
-                        <tr key={e.id} className="hover:bg-paper-tint">
-                          <td className="px-4 py-2.5 text-xs text-ink-mute">{e.branch?.name ?? "—"}</td>
-                          <td className="px-4 py-2.5 font-medium">{e.coach?.full_name ?? "—"}</td>
-                          <td className="px-4 py-2.5 font-mono text-xs text-ocean-700">{e.invoice_number ?? "—"}</td>
-                          <td className="px-4 py-2.5 text-xs">{e.period_label}</td>
-                          <td className="px-4 py-2.5 text-right font-mono font-bold">{fmtIDR(e.total_amount)}</td>
+                      {expensePagedRows.map(row => row.source === "manual" ? (
+                        <tr key={row.id} className="hover:bg-paper-tint">
+                          <td className="px-4 py-2.5 text-xs text-ink-mute">{row.branch?.name ?? "—"}</td>
+                          <td className="px-4 py-2.5 font-medium">
+                            {row.description}
+                            <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-paper-deep text-ink-mute text-[10px] font-semibold align-middle">Manual</span>
+                            {row.is_reimburse && <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-warn-50 text-warn-700 text-[10px] font-semibold align-middle">Reimburse</span>}
+                            {row.proof_url && (
+                              <a href={row.proof_url} target="_blank" rel="noreferrer" className="block text-xs text-ocean-600 hover:underline mt-0.5 w-fit">
+                                <Icon name="link" className="w-3 h-3 inline mr-1" />Lihat bukti
+                              </a>
+                            )}
+                          </td>
+                          <td className="px-4 py-2.5 text-xs text-ink-mute">—</td>
+                          <td className="px-4 py-2.5 text-xs">{row.category ?? "—"}</td>
+                          <td className="px-4 py-2.5 text-right font-mono font-bold">{fmtIDR(row.amount)}</td>
                           <td className="px-4 py-2.5">
-                            <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${e.status === "paid" ? "bg-ok-50 text-ok-700" : "bg-warn-50 text-warn-700"}`}>
-                              {e.status === "paid" ? "Lunas" : "Pending"}
+                            <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-ok-50 text-ok-700">Tercatat</span>
+                          </td>
+                          <td className="px-4 py-2.5 text-xs text-ink-mute">{new Date(row.occurred_at).toLocaleDateString("id-ID", { dateStyle: "short" })}</td>
+                          <td className="px-4 py-2.5">
+                            <div className="flex items-center gap-1 justify-end">
+                              <button onClick={() => openEditTxn(row)} className="w-7 h-7 rounded-lg hover:bg-paper-deep flex items-center justify-center text-ink-mute hover:text-ocean-600" title="Edit"><Icon name="edit" className="w-3.5 h-3.5" /></button>
+                              <button onClick={() => deleteTxn(row)} className="w-7 h-7 rounded-lg hover:bg-danger-50 flex items-center justify-center text-ink-mute hover:text-danger-600" title="Hapus"><Icon name="trash" className="w-3.5 h-3.5" /></button>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : (
+                        <tr key={row.id} className="hover:bg-paper-tint">
+                          <td className="px-4 py-2.5 text-xs text-ink-mute">{row.branch?.name ?? "—"}</td>
+                          <td className="px-4 py-2.5 font-medium">{row.coach?.full_name ?? "—"}</td>
+                          <td className="px-4 py-2.5 font-mono text-xs text-ocean-700">{row.invoice_number ?? "—"}</td>
+                          <td className="px-4 py-2.5 text-xs">{row.period_label}</td>
+                          <td className="px-4 py-2.5 text-right font-mono font-bold">{fmtIDR(row.total_amount)}</td>
+                          <td className="px-4 py-2.5">
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${row.status === "paid" ? "bg-ok-50 text-ok-700" : "bg-warn-50 text-warn-700"}`}>
+                              {row.status === "paid" ? "Lunas" : "Pending"}
                             </span>
                           </td>
-                          <td className="px-4 py-2.5 text-xs text-ink-mute">{e.paid_at ? new Date(e.paid_at).toLocaleDateString("id-ID", { dateStyle: "short" }) : "—"}</td>
+                          <td className="px-4 py-2.5 text-xs text-ink-mute">{row.paid_at ? new Date(row.paid_at).toLocaleDateString("id-ID", { dateStyle: "short" }) : "—"}</td>
+                          <td className="px-4 py-2.5"></td>
                         </tr>
                       ))}
                     </tbody>
@@ -2583,6 +2909,50 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
           )}
         </div>
       )}
+
+      {/* ── Modal: Tambah/Edit Transaksi Manual ─────────────────────────────── */}
+      <Modal open={!!showTxnModal} onClose={() => setShowTxnModal(null)}
+        title={showTxnModal?.edit ? `Edit ${showTxnModal.kind === "income" ? "Income" : "Expense"} Manual` : `Tambah ${showTxnModal?.kind === "income" ? "Income" : "Expense"} Manual`}
+        size="md"
+        footer={
+          <div className="flex gap-2 justify-end w-full">
+            <Btn variant="ghost" onClick={() => setShowTxnModal(null)}>Batal</Btn>
+            <Btn variant="primary" onClick={saveTxn} disabled={savingTxn}>{savingTxn ? "Menyimpan…" : "Simpan"}</Btn>
+          </div>
+        }>
+        <div className="space-y-4">
+          <Field label="Cabang">
+            <Select value={txnForm.branch_id} onChange={e => setTxnForm(f => ({ ...f, branch_id: e.target.value }))}>
+              <option value="">— Pilih cabang —</option>
+              {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </Select>
+          </Field>
+          <Field label="Kategori">
+            <Select value={txnForm.category} onChange={e => setTxnForm(f => ({ ...f, category: e.target.value }))}>
+              {MANUAL_CATEGORY_OPTIONS.map(c => <option key={c} value={c}>{c}</option>)}
+            </Select>
+          </Field>
+          {txnForm.category === "Lainnya" && (
+            <Field label="Kategori Custom"><Input value={txnForm.categoryOther} onChange={e => setTxnForm(f => ({ ...f, categoryOther: e.target.value }))} placeholder="Contoh: Donasi alumni" /></Field>
+          )}
+          <Field label="Deskripsi"><Input value={txnForm.description} onChange={e => setTxnForm(f => ({ ...f, description: e.target.value }))} placeholder="Contoh: Sponsorship acara renang tahunan" /></Field>
+          {showTxnModal?.kind === "expense" && (
+            <>
+              <Switch checked={txnForm.isReimburse} onChange={v => setTxnForm(f => ({ ...f, isReimburse: v }))} label="Ini pengeluaran reimburse (perlu bukti)" />
+              {txnForm.isReimburse && (
+                <Field label="Link Bukti (Google Drive)">
+                  <Input value={txnForm.proofUrl} onChange={e => setTxnForm(f => ({ ...f, proofUrl: e.target.value }))} placeholder="https://drive.google.com/..." type="url" />
+                </Field>
+              )}
+            </>
+          )}
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Nominal (Rp)"><Input type="number" inputMode="numeric" min={0} value={txnForm.amount} onChange={e => setTxnForm(f => ({ ...f, amount: e.target.value.replace(/\D/g, "") }))} /></Field>
+            <Field label="Tanggal"><Input type="date" value={txnForm.occurred_at} onChange={e => setTxnForm(f => ({ ...f, occurred_at: e.target.value }))} className="font-mono" /></Field>
+          </div>
+          <Field label="Catatan (opsional)"><Textarea value={txnForm.notes} onChange={e => setTxnForm(f => ({ ...f, notes: e.target.value }))} rows={2} /></Field>
+        </div>
+      </Modal>
 
     </div>
   );

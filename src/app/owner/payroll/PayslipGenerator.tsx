@@ -29,7 +29,7 @@ interface Branch {
 
 interface InvoiceItem {
   id: string;
-  class_id: string;
+  class_id: string | null;
   session_count: number;
   rate: number;
 }

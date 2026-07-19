@@ -195,7 +195,7 @@ export default function AdminPage() {
       case "izin":      return <AdminIzin branchId={branchId} />;
       case "approve":   return <AdminApprovement branchId={branchId} />;
       case "pay":       return <AdminPembayaran branchId={branchId} />;
-      case "financial": return <AdminFinancial branchId={branchId} />;
+      case "financial": return <AdminFinancial branchId={branchId} userId={currentUser?.id ?? ""} userName={currentUser?.user_metadata?.full_name ?? "Admin"} />;
       case "rapor":     return <AdminRapor branchId={branchId} />;
       case "school":    return <AdminSchoolPanel branchId={branchId} />;
       case "settings":  return <AdminSettings branch={branch} onRefresh={() => branchId && loadBranch(branchId)} userId={currentUser?.id ?? ""} />;

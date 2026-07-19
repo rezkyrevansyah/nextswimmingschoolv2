@@ -96,10 +96,12 @@ export async function printPayslip(supabase: SupabaseClient, payslipId: string):
         .from("coach_invoice_items")
         .select(`
           id,
+          item_type,
           class_id,
           session_count,
           rate,
           subtotal,
+          description,
           class:classes(id, name, branch_id, branch:branches(name))
         `)
         .eq("invoice_id", payslip.invoice_id);
@@ -156,6 +158,18 @@ export async function printPayslip(supabase: SupabaseClient, payslipId: string):
 
     // Overlay or add classes from actual invoice items
     invoiceItems.forEach((item: any) => {
+      if (item.item_type && item.item_type !== "class") {
+        // Extra/Reimburse: keyed by item.id, never collides, never overwrites classMap entries seeded from class_coaches
+        classMap.set(`item-${item.id}`, {
+          id: item.id,
+          name: item.item_type === "extra" ? "Sesi Extra" : `Reimburse — ${item.description ?? ""}`,
+          branchName: (payslip.branch as any)?.name ?? "OTHER BRANCH",
+          qty: item.session_count,
+          rate: item.rate,
+          payment: item.subtotal,
+        });
+        return;
+      }
       const c = item.class;
       const classId = item.class_id;
       const branchName = c?.branch?.name ?? (payslip.branch as any)?.name ?? "OTHER BRANCH";

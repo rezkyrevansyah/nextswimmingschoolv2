@@ -1026,13 +1026,18 @@ function MemberLeave({ memberId }: { memberId: string }) {
 
 // ── Rapor ──────────────────────────────────────────────────────────────────────
 
+interface CoachReviewSlot {
+  coach_id: string; coach_name: string; role: string;
+  review_id: string | null; review_stars: number | null; review_message: string | null;
+}
+
 interface RaporEntryFull {
-  id: string; period: string; period_id: string; period_is_open: boolean; class_name: string; coach_id: string; coach_name: string;
+  id: string; period: string; period_id: string; period_is_open: boolean; class_name: string; coach_name: string;
   class_id: string;
   scores: Record<string, number | string>; notes: string | null;
   personality: string | null; motivation: string | null; learning_achievements: string | null;
   level: string | null;
-  review_stars: number | null; review_message: string | null; review_id: string | null;
+  coachReviews: CoachReviewSlot[];
   criteria: PrintCriterion[];
   best_times: PrintBestTime[];
   coach_signature_url: string | null;
@@ -1044,12 +1049,12 @@ function MemberRapor({ memberId, memberName, branchId, avatarUrl, memberNo, birt
 }) {
   const supabase = createClient();
   const toast = useToast();
+  const [raporTab, setRaporTab] = useState<"rapor" | "review">("rapor");
   const [open, setOpen] = useState(false);
   const [selectedEntry, setSelectedEntry] = useState<RaporEntryFull | null>(null);
   const [entries, setEntries] = useState<RaporEntryFull[]>([]);
-  const [reviewRating, setReviewRating] = useState(5);
-  const [reviewText, setReviewText] = useState("");
-  const [saving, setSaving] = useState(false);
+  const [reviewDrafts, setReviewDrafts] = useState<Record<string, { stars: number; text: string }>>({});
+  const [savingSlot, setSavingSlot] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!memberId) return;
@@ -1060,12 +1065,12 @@ function MemberRapor({ memberId, memberName, branchId, avatarUrl, memberNo, birt
       .order("created_at", { ascending: false }) as { data: any[] | null };
     if (!data) return;
 
-    // Load existing reviews
+    // Load existing reviews (keyed by rapor_id + coach_id, since a class can have multiple coaches)
     const entryIds = data.map((e: any) => e.id);
     const { data: reviews } = entryIds.length
-      ? await supabase.from("member_reviews").select("id, rapor_id, stars, message").in("rapor_id", entryIds).eq("member_id", memberId)
+      ? await supabase.from("member_reviews").select("id, rapor_id, coach_id, stars, message").in("rapor_id", entryIds).eq("member_id", memberId)
       : { data: [] };
-    const reviewMap = new Map((reviews ?? []).map((r) => [r.rapor_id, r]));
+    const reviewMap = new Map((reviews ?? []).map((r) => [`${r.rapor_id}:${r.coach_id}`, r]));
 
     // Load class_criteria for all unique class_ids
     const classIds = [...new Set(data.map((e) => e.class_id).filter(Boolean))];
@@ -1095,7 +1100,17 @@ function MemberRapor({ memberId, memberName, branchId, avatarUrl, memberNo, birt
       const p = e.rapor_periods as unknown as { label: string; is_open: boolean } | null;
       const cls = e.classes as unknown as { name: string; rapor_signer_coach_id: string | null; class_coaches: { coach_id: string; role: string; profile: { full_name: string; signature_url: string | null } | null }[] } | null;
       const signer = resolveRaporSigner(cls?.class_coaches ?? [], cls?.rapor_signer_coach_id);
-      const review = reviewMap.get(e.id);
+      const coachReviews: CoachReviewSlot[] = (cls?.class_coaches ?? []).map(cc => {
+        const review = reviewMap.get(`${e.id}:${cc.coach_id}`);
+        return {
+          coach_id: cc.coach_id,
+          coach_name: cc.profile?.full_name ?? "—",
+          role: cc.role,
+          review_id: review?.id ?? null,
+          review_stars: review?.stars ?? null,
+          review_message: review?.message ?? null,
+        };
+      });
       return {
         id: e.id,
         period: p?.label ?? "—",
@@ -1103,7 +1118,6 @@ function MemberRapor({ memberId, memberName, branchId, avatarUrl, memberNo, birt
         period_is_open: p?.is_open ?? false,
         class_name: cls?.name ?? "—",
         class_id: e.class_id,
-        coach_id: e.coach_id,
         coach_name: signer?.full_name ?? "—",
         scores: (e.scores as unknown as Record<string, number | string>) ?? {},
         notes: e.notes,
@@ -1111,9 +1125,7 @@ function MemberRapor({ memberId, memberName, branchId, avatarUrl, memberNo, birt
         motivation: (e as unknown as { motivation: string | null }).motivation ?? null,
         learning_achievements: (e as unknown as { learning_achievements: string | null }).learning_achievements ?? null,
         level: (e as unknown as { level: string | null }).level ?? null,
-        review_stars: review?.stars ?? null,
-        review_message: review?.message ?? null,
-        review_id: review?.id ?? null,
+        coachReviews,
         criteria: criteriaByClass.get(e.class_id) ?? [],
         best_times: bestTimesArr,
         coach_signature_url: signer?.signature_url ?? null,
@@ -1127,25 +1139,34 @@ function MemberRapor({ memberId, memberName, branchId, avatarUrl, memberNo, birt
 
   const openRapor = (e: RaporEntryFull) => {
     setSelectedEntry(e);
-    setReviewRating(e.review_stars ?? 5);
-    setReviewText(e.review_message ?? "");
     setOpen(true);
   };
 
-  const saveReview = async () => {
-    if (!selectedEntry) return;
-    // Check period still open before allowing review submit/edit
-    const { data: periodCheck } = await supabase.from("rapor_periods").select("is_open").eq("id", selectedEntry.period_id).single();
+  const draftKey = (entryId: string, coachId: string) => `${entryId}:${coachId}`;
+
+  const getDraft = (entry: RaporEntryFull, slot: CoachReviewSlot) => {
+    const key = draftKey(entry.id, slot.coach_id);
+    return reviewDrafts[key] ?? { stars: slot.review_stars ?? 5, text: slot.review_message ?? "" };
+  };
+
+  const setDraft = (entry: RaporEntryFull, slot: CoachReviewSlot, patch: Partial<{ stars: number; text: string }>) => {
+    const key = draftKey(entry.id, slot.coach_id);
+    setReviewDrafts(prev => ({ ...prev, [key]: { ...getDraft(entry, slot), ...patch } }));
+  };
+
+  const saveReview = async (entry: RaporEntryFull, slot: CoachReviewSlot) => {
+    const { data: periodCheck } = await supabase.from("rapor_periods").select("is_open").eq("id", entry.period_id).single();
     if (!periodCheck?.is_open) return toast.error("Periode rapor sudah ditutup", "Review tidak bisa diedit setelah periode berakhir.");
-    setSaving(true);
-    if (selectedEntry.review_id) {
-      await supabase.from("member_reviews").update({ stars: reviewRating, message: reviewText }).eq("id", selectedEntry.review_id);
+    const draft = getDraft(entry, slot);
+    const key = draftKey(entry.id, slot.coach_id);
+    setSavingSlot(key);
+    if (slot.review_id) {
+      await supabase.from("member_reviews").update({ stars: draft.stars, message: draft.text }).eq("id", slot.review_id);
     } else {
-      await supabase.from("member_reviews").insert({ rapor_id: selectedEntry.id, member_id: memberId, coach_id: selectedEntry.coach_id, stars: reviewRating, message: reviewText });
+      await supabase.from("member_reviews").insert({ rapor_id: entry.id, member_id: memberId, coach_id: slot.coach_id, stars: draft.stars, message: draft.text });
     }
-    setSaving(false);
+    setSavingSlot(null);
     await load();
-    setOpen(false);
   };
 
   // Separate open-period entries from closed-period (history)
@@ -1154,6 +1175,18 @@ function MemberRapor({ memberId, memberName, branchId, avatarUrl, memberNo, birt
 
   return (
     <div className="space-y-5">
+      {/* Sub-tab toggle */}
+      <div className="flex gap-1 bg-paper-tint border border-line rounded-xl p-1 w-fit">
+        {([{ id: "rapor", label: "Rapor" }, { id: "review", label: "Review Coach" }] as const).map(t => (
+          <button key={t.id} onClick={() => setRaporTab(t.id)}
+            className={`px-3.5 py-2 rounded-lg text-sm font-semibold transition-colors ${raporTab === t.id ? "bg-white text-ocean-700 shadow-card" : "text-ink-soft hover:bg-white/60"}`}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {raporTab === "rapor" && (
+      <>
       {/* Active / open period rapor */}
       {openEntries.length > 0 && (
         <>
@@ -1200,6 +1233,79 @@ function MemberRapor({ memberId, memberName, branchId, avatarUrl, memberNo, birt
               </Card>
             ))}
           </div>
+        </>
+      )}
+      </>
+      )}
+
+      {raporTab === "review" && (
+        <>
+          {entries.length === 0 ? (
+            <div className="text-center py-12 text-ink-mute text-sm">Belum ada rapor yang tersedia untuk direview.</div>
+          ) : (
+            <div className="space-y-4">
+              {entries.map(entry => (
+                <Card key={entry.id} className="space-y-4">
+                  <div>
+                    <div className="font-display font-bold text-ink">{entry.class_name}</div>
+                    <div className="text-xs text-ink-mute mt-0.5">{entry.period}{!entry.period_is_open && " · periode berakhir"}</div>
+                  </div>
+                  {entry.coachReviews.length === 0 ? (
+                    <p className="text-xs text-ink-faint italic">Belum ada coach terdaftar di kelas ini.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {entry.coachReviews.map(slot => {
+                        const key = draftKey(entry.id, slot.coach_id);
+                        const draft = getDraft(entry, slot);
+                        const isSaving = savingSlot === key;
+                        return (
+                          <div key={slot.coach_id} className="border-t border-line pt-3 first:border-t-0 first:pt-0">
+                            <div className="flex items-center gap-2 mb-2">
+                              <Avatar name={slot.coach_name} size={28} />
+                              <span className="font-semibold text-sm text-ink">{slot.coach_name}</span>
+                              {slot.role === "head" && <span className="px-1.5 py-0.5 rounded-full bg-ocean-700 text-white text-[10px] font-bold uppercase tracking-wide">Head</span>}
+                            </div>
+                            {entry.period_is_open ? (
+                              <div className="bg-wave-50 border border-wave-100 rounded-2xl p-4">
+                                <div className="flex items-center gap-0.5 mb-3">
+                                  {Array.from({ length: 5 }).map((_, k) => (
+                                    <button key={k} onClick={() => setDraft(entry, slot, { stars: k + 1 })} className="p-1 rounded-lg hover:bg-wave-100 transition-colors">
+                                      <Icon name="star" className={`w-7 h-7 transition-colors ${k < draft.stars ? "text-amber-400" : "text-line"}`} strokeWidth={1.5} fill={k < draft.stars ? "currentColor" : "none"} />
+                                    </button>
+                                  ))}
+                                  <span className="ml-2 text-sm font-semibold text-ink-soft">{["", "Kurang", "Cukup", "Baik", "Sangat Baik", "Luar Biasa"][draft.stars]}</span>
+                                </div>
+                                <Textarea rows={2} placeholder="Mis. Coach sangat sabar dan metodenya menyenangkan untuk anak-anak." value={draft.text} onChange={(e) => setDraft(entry, slot, { text: e.target.value })} />
+                                <Btn variant="primary" size="sm" className="mt-3" disabled={isSaving} onClick={() => saveReview(entry, slot)}>
+                                  {isSaving ? "Menyimpan…" : slot.review_id ? "Perbarui review" : "Simpan review"}
+                                </Btn>
+                              </div>
+                            ) : (
+                              <div className="bg-paper-tint border border-line rounded-2xl p-4">
+                                {slot.review_stars ? (
+                                  <>
+                                    <div className="flex items-center gap-0.5 mb-2">
+                                      {Array.from({ length: 5 }).map((_, k) => (
+                                        <Icon key={k} name="star" className={`w-5 h-5 ${k < (slot.review_stars ?? 0) ? "text-amber-400" : "text-line"}`} strokeWidth={1.5} fill={k < (slot.review_stars ?? 0) ? "currentColor" : "none"} />
+                                      ))}
+                                      <span className="ml-2 text-xs font-semibold text-ink-soft">{["", "Kurang", "Cukup", "Baik", "Sangat Baik", "Luar Biasa"][slot.review_stars]}</span>
+                                    </div>
+                                    {slot.review_message && <p className="text-sm text-ink-soft">{slot.review_message}</p>}
+                                  </>
+                                ) : (
+                                  <p className="text-sm text-ink-mute">Periode sudah berakhir — review tidak diberikan.</p>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </Card>
+              ))}
+            </div>
+          )}
         </>
       )}
 
@@ -1281,39 +1387,6 @@ function MemberRapor({ memberId, memberName, branchId, avatarUrl, memberNo, birt
                 </div>
               )}
             </div>
-            {selectedEntry.period_is_open ? (
-              <div className="bg-wave-50 border border-wave-100 rounded-2xl p-5">
-                <div className="font-display font-bold text-ink mb-1">Review untuk {selectedEntry.coach_name}</div>
-                <p className="text-xs text-ink-mute mb-3">Berikan penilaian jujur untuk membantu perkembangan pelatih.</p>
-                <div className="flex items-center gap-0.5 mb-3">
-                  {Array.from({ length: 5 }).map((_, k) => (
-                    <button key={k} onClick={() => setReviewRating(k + 1)} className="p-1 rounded-lg hover:bg-wave-100 transition-colors">
-                      <Icon name="star" className={`w-8 h-8 transition-colors ${k < reviewRating ? "text-amber-400" : "text-line"}`} strokeWidth={1.5} fill={k < reviewRating ? "currentColor" : "none"} />
-                    </button>
-                  ))}
-                  <span className="ml-2 text-sm font-semibold text-ink-soft">{["", "Kurang", "Cukup", "Baik", "Sangat Baik", "Luar Biasa"][reviewRating]}</span>
-                </div>
-                <Textarea rows={2} placeholder="Mis. Coach sangat sabar dan metodenya menyenangkan untuk anak-anak." value={reviewText} onChange={(e) => setReviewText(e.target.value)} />
-                <Btn variant="primary" size="sm" className="mt-3" disabled={saving} onClick={saveReview}>{saving ? "Menyimpan…" : selectedEntry.review_id ? "Perbarui review" : "Simpan review"}</Btn>
-              </div>
-            ) : (
-              <div className="bg-paper-tint border border-line rounded-2xl p-5">
-                <div className="font-display font-bold text-ink mb-1">Review</div>
-                {selectedEntry.review_stars ? (
-                  <>
-                    <div className="flex items-center gap-0.5 mb-2">
-                      {Array.from({ length: 5 }).map((_, k) => (
-                        <Icon key={k} name="star" className={`w-6 h-6 ${k < (selectedEntry.review_stars ?? 0) ? "text-amber-400" : "text-line"}`} strokeWidth={1.5} fill={k < (selectedEntry.review_stars ?? 0) ? "currentColor" : "none"} />
-                      ))}
-                      <span className="ml-2 text-sm font-semibold text-ink-soft">{["", "Kurang", "Cukup", "Baik", "Sangat Baik", "Luar Biasa"][selectedEntry.review_stars]}</span>
-                    </div>
-                    {selectedEntry.review_message && <p className="text-sm text-ink-soft">{selectedEntry.review_message}</p>}
-                  </>
-                ) : (
-                  <p className="text-sm text-ink-mute">Periode sudah berakhir — review tidak diberikan.</p>
-                )}
-              </div>
-            )}
           </div>
         )}
       </Modal>

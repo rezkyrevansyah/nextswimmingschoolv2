@@ -92,14 +92,17 @@ CREATE TABLE public.classes (
   schedule_times jsonb,
   spreadsheet_url text,
   show_on_landing boolean NOT NULL DEFAULT false,
+  rapor_signer_coach_id uuid,
   CONSTRAINT classes_pkey PRIMARY KEY (id),
-  CONSTRAINT classes_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branches(id)
+  CONSTRAINT classes_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branches(id),
+  CONSTRAINT classes_rapor_signer_coach_id_fkey FOREIGN KEY (rapor_signer_coach_id) REFERENCES public.profiles(id)
 );
 CREATE TABLE public.class_coaches (
   class_id uuid NOT NULL,
   coach_id uuid NOT NULL,
   is_primary boolean NOT NULL DEFAULT false,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
+  role text NOT NULL DEFAULT 'assistant'::text CHECK (role = ANY (ARRAY['head'::text, 'assistant'::text])),
   CONSTRAINT class_coaches_pkey PRIMARY KEY (class_id, coach_id),
   CONSTRAINT class_coaches_coach_id_fkey FOREIGN KEY (coach_id) REFERENCES public.profiles(id),
   CONSTRAINT class_coaches_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.classes(id)
@@ -399,37 +402,6 @@ CREATE TABLE public.rapor_entries (
   CONSTRAINT rapor_entries_member_id_fkey FOREIGN KEY (member_id) REFERENCES public.members(id),
   CONSTRAINT rapor_entries_period_id_fkey FOREIGN KEY (period_id) REFERENCES public.rapor_periods(id),
   CONSTRAINT rapor_entries_level_id_fkey FOREIGN KEY (level_id) REFERENCES public.rapor_levels(id)
-);
-CREATE TABLE public.rapor_levels (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  name text NOT NULL,
-  sort_order integer NOT NULL DEFAULT 0,
-  active boolean NOT NULL DEFAULT true,
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT rapor_levels_pkey PRIMARY KEY (id),
-  CONSTRAINT rapor_levels_name_key UNIQUE (name)
-);
-CREATE TABLE public.rapor_level_criteria (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  level_id uuid NOT NULL,
-  label text NOT NULL,
-  kind text NOT NULL CHECK (kind = ANY (ARRAY['score_10'::text, 'score_100'::text, 'choice'::text, 'text'::text])),
-  options ARRAY,
-  sort_order integer NOT NULL DEFAULT 0,
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT rapor_level_criteria_pkey PRIMARY KEY (id),
-  CONSTRAINT rapor_level_criteria_level_id_fkey FOREIGN KEY (level_id) REFERENCES public.rapor_levels(id)
-);
-CREATE TABLE public.rapor_level_best_times (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  level_id uuid NOT NULL,
-  stroke text NOT NULL,
-  distance integer NOT NULL,
-  target_time_seconds numeric,
-  sort_order integer NOT NULL DEFAULT 0,
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT rapor_level_best_times_pkey PRIMARY KEY (id),
-  CONSTRAINT rapor_level_best_times_level_id_fkey FOREIGN KEY (level_id) REFERENCES public.rapor_levels(id)
 );
 CREATE TABLE public.member_reviews (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -807,4 +779,62 @@ CREATE TABLE public.payslip_deductions (
   CONSTRAINT payslip_deductions_payslip_id_fkey FOREIGN KEY (payslip_id) REFERENCES public.payslips(id),
   CONSTRAINT payslip_deductions_loan_id_fkey FOREIGN KEY (loan_id) REFERENCES public.coach_loans(id),
   CONSTRAINT payslip_deductions_loan_payment_id_fkey FOREIGN KEY (loan_payment_id) REFERENCES public.coach_loan_payments(id)
+);
+CREATE TABLE public.rapor_levels (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  name text NOT NULL UNIQUE,
+  sort_order integer NOT NULL DEFAULT 0,
+  active boolean NOT NULL DEFAULT true,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT rapor_levels_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.rapor_level_criteria (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  level_id uuid NOT NULL,
+  label text NOT NULL,
+  kind text NOT NULL CHECK (kind = ANY (ARRAY['score_10'::text, 'score_100'::text, 'choice'::text, 'text'::text])),
+  options ARRAY,
+  sort_order integer NOT NULL DEFAULT 0,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT rapor_level_criteria_pkey PRIMARY KEY (id),
+  CONSTRAINT rapor_level_criteria_level_id_fkey FOREIGN KEY (level_id) REFERENCES public.rapor_levels(id)
+);
+CREATE TABLE public.rapor_level_best_times (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  level_id uuid NOT NULL,
+  stroke text NOT NULL,
+  distance integer NOT NULL CHECK (distance > 0),
+  target_time_seconds numeric CHECK (target_time_seconds IS NULL OR target_time_seconds > 0::numeric),
+  sort_order integer NOT NULL DEFAULT 0,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT rapor_level_best_times_pkey PRIMARY KEY (id),
+  CONSTRAINT rapor_level_best_times_level_id_fkey FOREIGN KEY (level_id) REFERENCES public.rapor_levels(id)
+);
+CREATE TABLE public.manual_transactions (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  branch_id uuid NOT NULL,
+  kind text NOT NULL CHECK (kind = ANY (ARRAY['income'::text, 'expense'::text])),
+  category text,
+  description text NOT NULL,
+  amount integer NOT NULL CHECK (amount > 0),
+  occurred_at date NOT NULL DEFAULT CURRENT_DATE,
+  notes text,
+  created_by uuid,
+  created_by_role text,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone,
+  CONSTRAINT manual_transactions_pkey PRIMARY KEY (id),
+  CONSTRAINT manual_transactions_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branches(id),
+  CONSTRAINT manual_transactions_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id)
+);
+CREATE TABLE public.coach_extra_rates (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  coach_id uuid NOT NULL UNIQUE,
+  rate_per_session integer NOT NULL CHECK (rate_per_session > 0),
+  set_by uuid,
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT coach_extra_rates_pkey PRIMARY KEY (id),
+  CONSTRAINT coach_extra_rates_set_by_fkey FOREIGN KEY (set_by) REFERENCES public.profiles(id),
+  CONSTRAINT coach_extra_rates_coach_id_fkey FOREIGN KEY (coach_id) REFERENCES public.profiles(id)
 );

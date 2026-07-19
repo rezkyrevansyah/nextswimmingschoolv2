@@ -83,11 +83,20 @@ interface InvoiceSession {
   class?: { name: string } | null;
 }
 
+interface DraftExtraItem { id: string; sessionCount: number; rate: number; }
+interface DraftReimburseItem { id: string; description: string; amount: number; proofUrl: string; }
+
+interface PastInvoiceItem {
+  id: string; item_type: string; class_id: string | null; session_count: number; rate: number;
+  description: string | null; proof_url: string | null;
+  class?: { name: string } | null;
+}
+
 interface PastInvoice {
   id: string; invoice_number: string; period_label: string; total_amount: number; status: string;
   bank_info: string | null;
   rejection_reason?: string | null;
-  coach_invoice_items?: { class_id: string; session_count: number; rate: number; class?: { name: string } | null }[];
+  coach_invoice_items?: PastInvoiceItem[];
 }
 
 interface RaporEntry {
@@ -1677,6 +1686,43 @@ function SpreadsheetModal({ classId, className, coachId, currentUrl, onClose, on
   );
 }
 
+function ReimburseModal({ onClose, onAdd }: { onClose: () => void; onAdd: (item: Omit<DraftReimburseItem, "id">) => void }) {
+  const toast = useToast();
+  const [description, setDescription] = useState("");
+  const [amount, setAmount] = useState("");
+  const [proofUrl, setProofUrl] = useState("");
+
+  const submit = () => {
+    const desc = description.trim();
+    const url = proofUrl.trim();
+    const val = Number(amount);
+    if (!desc) return toast.error("Masukkan deskripsi terlebih dahulu");
+    if (!val || val <= 0) return toast.error("Masukkan nominal yang valid");
+    if (!url) return toast.error("Masukkan link bukti terlebih dahulu");
+    onAdd({ description: desc, amount: val, proofUrl: url });
+  };
+
+  return (
+    <Modal open onClose={onClose} title="Tambah Expenses / Reimburse" size="md"
+      footer={<><Btn variant="ghost" onClick={onClose}>Batal</Btn><Btn variant="primary" onClick={submit}>Tambah ke Invoice</Btn></>}>
+      <div className="space-y-4">
+        <div className="p-3 rounded-xl bg-ocean-50 border border-ocean-100 text-sm text-ocean-800 leading-relaxed">
+          Ajukan reimburse pengeluaran (misal beli perlengkapan). Sertakan link Google Drive sebagai bukti. Item ini akan masuk ke invoice saat Anda klik Generate Invoice.
+        </div>
+        <Field label="Deskripsi">
+          <Input value={description} onChange={e => setDescription(e.target.value)} placeholder="Mis. Beli kickboard baru" />
+        </Field>
+        <Field label="Nominal (Rp)">
+          <Input type="number" inputMode="numeric" min={0} value={amount} onChange={e => setAmount(e.target.value)} placeholder="150000" />
+        </Field>
+        <Field label="Link Bukti (Google Drive)">
+          <Input value={proofUrl} onChange={e => setProofUrl(e.target.value)} placeholder="https://drive.google.com/..." type="url" />
+        </Field>
+      </div>
+    </Modal>
+  );
+}
+
 // ── Kelas ──────────────────────────────────────────────────────────────────────
 
 // Captured once at module load to avoid impure Date.now() calls during render
@@ -1942,6 +1988,12 @@ function CoachInvoice({ coachId, branchId, profile }: { coachId: string; branchI
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
   });
 
+  const [extraRatePerSession, setExtraRatePerSession] = useState<number | null>(null);
+  const [extraSessionCount, setExtraSessionCount] = useState("");
+  const [extraItems, setExtraItems] = useState<DraftExtraItem[]>([]);
+  const [reimburseItems, setReimburseItems] = useState<DraftReimburseItem[]>([]);
+  const [showReimburseModal, setShowReimburseModal] = useState(false);
+
   const load = useCallback(async () => {
     setLoading(true);
     const [y, m] = monthFilter.split("-");
@@ -1993,11 +2045,15 @@ function CoachInvoice({ coachId, branchId, profile }: { coachId: string; branchI
     }
 
     const { data: inv } = await supabase.from("coach_invoices")
-      .select("id, invoice_number, period_label, total_amount, status, bank_info, rejection_reason, coach_invoice_items(class_id, session_count, rate, class:classes(name))")
+      .select("id, invoice_number, period_label, total_amount, status, bank_info, rejection_reason, coach_invoice_items(id, item_type, class_id, session_count, rate, description, proof_url, class:classes(name))")
       .eq("coach_id", coachId)
       .not("status", "eq", "cancelled")
       .order("created_at", { ascending: false });
     if (inv) setPastInvoices(inv as unknown as PastInvoice[]);
+
+    const { data: extraRate } = await supabase.from("coach_extra_rates").select("rate_per_session").eq("coach_id", coachId).maybeSingle();
+    setExtraRatePerSession(extraRate?.rate_per_session ?? null);
+
     setLoading(false);
   }, [coachId, monthFilter, supabase]);
 
@@ -2006,10 +2062,28 @@ function CoachInvoice({ coachId, branchId, profile }: { coachId: string; branchI
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const toggle = (id: string) => { const s = new Set(selected); if (s.has(id)) { s.delete(id); } else { s.add(id); } setSelected(s); };
-  const total = sessions.filter(s => selected.has(s.id)).reduce((a, s) => a + s.rate_per_session, 0);
+  const sessionsTotal = sessions.filter(s => selected.has(s.id)).reduce((a, s) => a + s.rate_per_session, 0);
+  const extraTotal = extraItems.reduce((a, e) => a + e.sessionCount * e.rate, 0);
+  const reimburseTotal = reimburseItems.reduce((a, r) => a + r.amount, 0);
+  const total = sessionsTotal + extraTotal + reimburseTotal;
+
+  const addExtraItem = () => {
+    if (extraRatePerSession == null) return;
+    const count = Number(extraSessionCount);
+    if (!count || count <= 0) return toast.error("Masukkan jumlah sesi yang valid");
+    setExtraItems(prev => [...prev, { id: crypto.randomUUID(), sessionCount: count, rate: extraRatePerSession }]);
+    setExtraSessionCount("");
+  };
+  const removeExtraItem = (id: string) => setExtraItems(prev => prev.filter(e => e.id !== id));
+
+  const addReimburseItem = (item: Omit<DraftReimburseItem, "id">) => {
+    setReimburseItems(prev => [...prev, { ...item, id: crypto.randomUUID() }]);
+    setShowReimburseModal(false);
+  };
+  const removeReimburseItem = (id: string) => setReimburseItems(prev => prev.filter(r => r.id !== id));
 
   const generate = async () => {
-    if (selected.size === 0) return toast.error("Pilih minimal 1 sesi");
+    if (selected.size === 0 && extraItems.length === 0 && reimburseItems.length === 0) return toast.error("Pilih minimal 1 sesi atau tambahkan extra/reimburse");
     const noRate = sessions.filter(s => selected.has(s.id) && !s.rate_set);
     if (noRate.length > 0) return toast.error("Tarif belum diset", `Kelas belum ada tarif: ${noRate.map(s => s.class?.name ?? s.class_id).join(", ")}`);
     setGenerating(true);
@@ -2028,11 +2102,25 @@ function CoachInvoice({ coachId, branchId, profile }: { coachId: string; branchI
 
     // Link sessions to invoice
     const selectedSessions = sessions.filter(s => selected.has(s.id));
-    await supabase.from("coach_invoice_items").insert(selectedSessions.map(s => ({
-      invoice_id: inv.id, attendance_id: s.id, class_id: s.class_id, rate: s.rate_per_session, session_count: 1,
-    })));
+    if (selectedSessions.length > 0) {
+      await supabase.from("coach_invoice_items").insert(selectedSessions.map(s => ({
+        invoice_id: inv.id, item_type: "class", attendance_id: s.id, class_id: s.class_id, rate: s.rate_per_session, session_count: 1,
+      })));
+    }
     // Mark attendances as invoiced
-    await supabase.from("coach_attendances").update({ invoice_id: inv.id }).in("id", [...selected]);
+    if (selected.size > 0) await supabase.from("coach_attendances").update({ invoice_id: inv.id }).in("id", [...selected]);
+
+    if (extraItems.length > 0) {
+      await supabase.from("coach_invoice_items").insert(extraItems.map(e => ({
+        invoice_id: inv.id, item_type: "extra", class_id: null, session_count: e.sessionCount, rate: e.rate,
+      })));
+    }
+    if (reimburseItems.length > 0) {
+      await supabase.from("coach_invoice_items").insert(reimburseItems.map(r => ({
+        invoice_id: inv.id, item_type: "reimburse", class_id: null, session_count: 1, rate: r.amount,
+        description: r.description, proof_url: r.proofUrl,
+      })));
+    }
 
     // Notify owner — fetch all owner profiles for this branch
     const { data: ownerProfiles } = await supabase.from("profiles")
@@ -2048,6 +2136,8 @@ function CoachInvoice({ coachId, branchId, profile }: { coachId: string; branchI
     }
 
     setGenerating(false);
+    setExtraItems([]);
+    setReimburseItems([]);
     toast.success("Invoice dibuat", "Invoice masuk ke owner panel");
     load();
   };
@@ -2074,9 +2164,12 @@ function CoachInvoice({ coachId, branchId, profile }: { coachId: string; branchI
           <p className="text-white/80 text-sm mt-1">Pilih sesi yang ingin dimasukkan ke invoice.</p>
         </div>
       </div>
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <Input type="month" value={monthFilter} onChange={e => setMonthFilter(e.target.value)} className="!w-36 sm:!w-44 font-mono" />
-        <button onClick={() => setSelected(new Set(sessions.map(s => s.id)))} className="text-sm font-bold text-ocean-600 hover:text-ocean-700">Pilih semua</button>
+        <div className="flex items-center gap-3">
+          <Btn variant="outline" size="sm" icon="plus" onClick={() => setShowReimburseModal(true)}>Expenses</Btn>
+          <button onClick={() => setSelected(new Set(sessions.map(s => s.id)))} className="text-sm font-bold text-ocean-600 hover:text-ocean-700">Pilih semua</button>
+        </div>
       </div>
       {loading ? <div className="text-center text-ink-mute p-6">Memuat sesi…</div> : (
         <>
@@ -2099,12 +2192,67 @@ function CoachInvoice({ coachId, branchId, profile }: { coachId: string; branchI
               </div>
             )}
           </Card>
+
+          {/* Sesi Extra */}
+          <Card className="space-y-3">
+            <div>
+              <div className="font-display font-bold text-ink">Sesi Extra</div>
+              <p className="text-xs text-ink-mute mt-0.5">Sesi tambahan di luar kelas reguler, dihitung dari tarif extra yang ditetapkan owner.</p>
+            </div>
+            {extraRatePerSession == null ? (
+              <div className="text-xs text-warn-700 bg-warn-50 border border-warn-100 rounded-xl p-3">Owner belum menetapkan tarif extra untuk Anda — hubungi owner untuk mengatur tarif extra terlebih dahulu.</div>
+            ) : (
+              <>
+                <div className="flex items-end gap-2">
+                  <div className="flex-1">
+                    <Field label="Jumlah sesi extra" hint={`Tarif extra: ${fmtIDR(extraRatePerSession)}/sesi`}>
+                      <Input type="number" inputMode="numeric" min={1} value={extraSessionCount} onChange={e => setExtraSessionCount(e.target.value)} placeholder="1" />
+                    </Field>
+                  </div>
+                  <Btn variant="soft" onClick={addExtraItem} disabled={!extraSessionCount}>Tambah</Btn>
+                </div>
+                {extraItems.length > 0 && (
+                  <div className="divide-y divide-line border-t border-line pt-2">
+                    {extraItems.map(e => (
+                      <div key={e.id} className="flex items-center justify-between py-2 text-sm">
+                        <span className="text-ink-soft">{e.sessionCount} sesi extra × {fmtIDR(e.rate)}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-bold">{fmtIDR(e.sessionCount * e.rate)}</span>
+                          <button onClick={() => removeExtraItem(e.id)} className="text-ink-faint hover:text-danger-600"><Icon name="x" className="w-3.5 h-3.5" /></button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </Card>
+
+          {/* Expenses / Reimburse draft */}
+          {reimburseItems.length > 0 && (
+            <Card className="space-y-2">
+              <div className="font-display font-bold text-ink">Expenses / Reimburse</div>
+              <div className="divide-y divide-line">
+                {reimburseItems.map(r => (
+                  <div key={r.id} className="flex items-center justify-between py-2 text-sm gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-ink-soft truncate">{r.description}</div>
+                      <a href={r.proofUrl} target="_blank" rel="noreferrer" className="text-xs text-ocean-600 hover:underline inline-flex items-center gap-1"><Icon name="link" className="w-3 h-3" />Lihat bukti</a>
+                    </div>
+                    <span className="font-mono font-bold shrink-0">{fmtIDR(r.amount)}</span>
+                    <button onClick={() => removeReimburseItem(r.id)} className="text-ink-faint hover:text-danger-600 shrink-0"><Icon name="x" className="w-3.5 h-3.5" /></button>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+
           <Card className="bg-paper-tint">
             <div className="flex items-baseline justify-between">
-              <div className="text-[11px] uppercase tracking-widest font-bold text-ink-faint">Total ({selected.size} sesi)</div>
+              <div className="text-[11px] uppercase tracking-widest font-bold text-ink-faint">Total ({selected.size} sesi{extraItems.length > 0 ? ` + ${extraItems.length} extra` : ""}{reimburseItems.length > 0 ? ` + ${reimburseItems.length} reimburse` : ""})</div>
               <div className="font-display font-extrabold text-2xl text-ocean-700">{fmtIDR(total)}</div>
             </div>
-            <Btn variant="primary" size="lg" className="w-full mt-4" icon="invoice" onClick={generate} disabled={generating || selected.size === 0}>
+            <Btn variant="primary" size="lg" className="w-full mt-4" icon="invoice" onClick={generate} disabled={generating || (selected.size === 0 && extraItems.length === 0 && reimburseItems.length === 0)}>
               {generating ? "Membuat invoice…" : "Generate Invoice"}
             </Btn>
           </Card>
@@ -2134,11 +2282,14 @@ function CoachInvoice({ coachId, branchId, profile }: { coachId: string; branchI
                 <button title="Cetak / Unduh PDF" onClick={() => {
                   const w = window.open("", "_blank", "width=700,height=900");
                   if (!w) return;
-                  // Group items by class name, sum session counts
+                  // Group items by class (or unique per extra/reimburse row), sum session counts
                   const itemMap: Record<string, { name: string; sessions: number; rate: number }> = {};
                   (iv.coach_invoice_items ?? []).forEach(item => {
-                    const key = item.class_id;
-                    if (!itemMap[key]) itemMap[key] = { name: item.class?.name ?? item.class_id, sessions: 0, rate: item.rate };
+                    const key = item.item_type === "class" ? (item.class_id ?? item.id) : item.id;
+                    const label = item.item_type === "extra" ? "Sesi Extra"
+                      : item.item_type === "reimburse" ? `Reimburse — ${item.description ?? ""}`
+                      : (item.class?.name ?? item.class_id ?? "—");
+                    if (!itemMap[key]) itemMap[key] = { name: label, sessions: 0, rate: item.rate };
                     itemMap[key].sessions += item.session_count;
                   });
                   const itemRows = Object.values(itemMap).map(item =>
@@ -2188,6 +2339,10 @@ function CoachInvoice({ coachId, branchId, profile }: { coachId: string; branchI
             ))}
           </div>
         </Card>
+      )}
+
+      {showReimburseModal && (
+        <ReimburseModal onClose={() => setShowReimburseModal(false)} onAdd={addReimburseItem} />
       )}
     </div>
   );
