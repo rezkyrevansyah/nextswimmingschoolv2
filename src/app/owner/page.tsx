@@ -3292,11 +3292,12 @@ function OwnerActivityLog({ branches }: { branches: Branch[] }) {
   );
 }
 
-// ── R2 Storage ─────────────────────────────────────────────────────────────────
+// ── System Storage ───────────────────────────────────────────────────────────
 
 interface StorageCategory { prefix: string; label: string; icon: string; count: number; size: number }
 interface StorageStats { categories: StorageCategory[]; totalSize: number; totalCount: number; fetchedAt: string }
-interface BackupFile { key: string; label: string; category: string; url: string }
+interface BackupFileDbRef { table: string; column: string; id: string }
+interface BackupFile { key: string; label: string; category: string; url: string; bucket: "next-storage" | "next-storage-private"; dbRef?: BackupFileDbRef }
 
 function fmtBytes(n: number): string {
   if (n >= 1e9) return (n / 1e9).toFixed(2) + " GB";
@@ -3313,10 +3314,23 @@ function fmtRelTime(iso: string): string {
   return `${Math.floor(diff / 86400)} hari lalu`;
 }
 
-const CATEGORY_COLORS = [
-  "bg-ocean-500", "bg-wave-500", "bg-ok-500", "bg-warn-500",
-  "bg-suspend-500", "bg-manual-500", "bg-danger-500", "bg-archive-500", "bg-ink-soft",
-];
+// Stable color per category (keyed by prefix, not array position) so the
+// stacked bar and the legend below it always agree on which color means
+// which category, regardless of sort order or which categories are empty.
+const CATEGORY_COLOR_MAP: Record<string, string> = {
+  avatars:     "bg-ocean-500",
+  logos:       "bg-wave-500",
+  classes:     "bg-ok-500",
+  signatures:  "bg-manual-500",
+  landing:     "bg-sub-500",
+  attendances: "bg-warn-500",
+  payments:    "bg-suspend-500",
+  certs:       "bg-danger-500",
+};
+const EMPTY_COLOR = "bg-archive-500/30";
+function categoryColor(prefix: string): string {
+  return CATEGORY_COLOR_MAP[prefix] ?? EMPTY_COLOR;
+}
 
 const BACKUP_CATEGORIES = [
   { key: "avatars",     label: "Avatar Profil"   },
@@ -3345,6 +3359,11 @@ function OwnerStorage({ userId, userName }: { userId: string; userName: string }
   const [selectedCats, setSelectedCats] = useState<Set<string>>(new Set(["all"]));
   const [downloading, setDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState<{ done: number; total: number } | null>(null);
+
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
+  const [deleting, setDeleting] = useState(false);
+  const confirm = useConfirm();
 
   const loadStats = useCallback(async () => {
     setStatsLoading(true);
@@ -3407,6 +3426,59 @@ function OwnerStorage({ userId, userName }: { userId: string; userName: string }
     });
     setBackupLoaded(false);
     setBackupList([]);
+    setSelectMode(false);
+    setSelectedFiles(new Set());
+  };
+
+  const toggleFile = (key: string) => {
+    setSelectedFiles(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const deleteSelected = async () => {
+    const targets = backupList.filter(f => selectedFiles.has(f.key));
+    if (targets.length === 0) return;
+    const yes = await confirm({
+      title: `Hapus ${targets.length} file terpilih?`,
+      body: "File akan dihapus permanen dari storage dan tidak bisa dikembalikan. Jika file terhubung ke data (avatar, logo, dsb), referensinya juga akan dikosongkan.",
+      danger: true,
+    });
+    if (!yes) return;
+
+    setDeleting(true);
+    try {
+      const res = await fetch("/api/storage/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          items: targets.map(f => ({ bucket: f.bucket, key: f.key, dbRef: f.dbRef })),
+        }),
+      });
+      const data = await res.json() as { deleted: number; failed: { key: string; error: string }[] };
+      if (!res.ok) throw new Error();
+
+      toast.success(`${data.deleted} file berhasil dihapus`, data.failed.length > 0 ? `${data.failed.length} file gagal dihapus.` : undefined);
+      logActivity(supabase, {
+        userId, userRole: "owner", userName,
+        entityType: "system_storage", entityId: "delete",
+        action: "delete",
+        label: `${data.deleted} file storage dihapus oleh owner`,
+        meta: { count: data.deleted, keys: targets.map(f => f.key) },
+      });
+
+      const deletedKeys = new Set(targets.map(f => f.key).filter(k => !data.failed.some(f => f.key === k)));
+      setBackupList(prev => prev.filter(f => !deletedKeys.has(f.key)));
+      setSelectedFiles(new Set());
+      setSelectMode(false);
+      loadStats();
+    } catch {
+      toast.error("Gagal menghapus file", "Terjadi kesalahan saat menghapus file terpilih.");
+    }
+    setDeleting(false);
   };
 
   const downloadBackup = async () => {
@@ -3441,9 +3513,9 @@ function OwnerStorage({ userId, userName }: { userId: string; userName: string }
       toast.success(`Backup selesai (${successCount} file berhasil diunduh)`);
       logActivity(supabase, {
         userId, userRole: "owner", userName,
-        entityType: "r2_storage", entityId: "backup",
+        entityType: "system_storage", entityId: "backup",
         action: "create",
-        label: `Backup R2 storage diunduh (${successCount}/${backupList.length} file)`,
+        label: `Backup system storage diunduh (${successCount}/${backupList.length} file)`,
         meta: { success_count: successCount, total_count: backupList.length },
       });
     } catch {
@@ -3482,8 +3554,8 @@ function OwnerStorage({ userId, userName }: { userId: string; userName: string }
           <div className="flex items-center gap-3 text-danger-600">
             <Icon name="warning" className="w-5 h-5 shrink-0" />
             <div className="flex-1">
-              <div className="font-semibold text-sm">Gagal memuat data R2</div>
-              <div className="text-xs text-ink-mute mt-0.5">Pastikan env vars R2 sudah dikonfigurasi.</div>
+              <div className="font-semibold text-sm">Gagal memuat data storage</div>
+              <div className="text-xs text-ink-mute mt-0.5">Pastikan koneksi Supabase Storage berfungsi normal.</div>
             </div>
             <Btn variant="ghost" size="sm" icon="refresh" onClick={loadStats}>Retry</Btn>
           </div>
@@ -3495,7 +3567,7 @@ function OwnerStorage({ userId, userName }: { userId: string; userName: string }
             <div className="relative">
               <div className="text-wave-200 text-[10px] uppercase tracking-widest font-bold">Total Ukuran</div>
               <div className="font-display font-bold text-2xl mt-1">{fmtBytes(stats.totalSize)}</div>
-              <div className="text-white/60 text-xs mt-1">R2 Free: 10 GB</div>
+              <div className="text-white/60 text-xs mt-1">Terpakai di Supabase Storage</div>
             </div>
           </div>
           <div className="bg-white rounded-2xl border border-line shadow-card p-5">
@@ -3519,44 +3591,54 @@ function OwnerStorage({ userId, userName }: { userId: string; userName: string }
       ) : null}
 
       {/* ── Distribusi Storage ── */}
-      {stats && stats.totalCount > 0 && (
+      {stats && (
         <Card>
           <SectionTitle sub="Penggunaan storage per kategori file">Distribusi Storage</SectionTitle>
-          {/* Stacked bar */}
-          <div className="h-4 rounded-full overflow-hidden flex mt-4 mb-5">
-            {stats.categories.filter(c => c.size > 0).map((cat, i) => (
-              <div
-                key={cat.prefix}
-                style={{ width: `${(cat.size / stats.totalSize) * 100}%` }}
-                className={`h-full ${CATEGORY_COLORS[i % CATEGORY_COLORS.length]} transition-all`}
-                title={`${cat.label}: ${fmtBytes(cat.size)}`}
-              />
-            ))}
+          {/* Stacked bar — every category renders (even size=0, in gray), so the bar always reads as a complete whole */}
+          <div className="h-4 rounded-full overflow-hidden flex mt-4 mb-5 bg-archive-500/30">
+            {stats.totalSize === 0 ? (
+              <div className="h-full w-full flex items-center justify-center">
+                <span className="text-[10px] font-semibold text-ink-faint">Belum ada file</span>
+              </div>
+            ) : (
+              stats.categories.map((cat) => {
+                const pct = (cat.size / stats.totalSize) * 100;
+                return (
+                  <div
+                    key={cat.prefix}
+                    style={{ width: `${Math.max(pct, cat.size > 0 ? 1 : 0)}%` }}
+                    className={`h-full ${categoryColor(cat.prefix)} transition-all`}
+                    title={`${cat.label}: ${fmtBytes(cat.size)}`}
+                  />
+                );
+              })
+            )}
           </div>
-          {/* Legend + table */}
+          {/* Legend + table — same categoryColor() function as the bar, so colors always match */}
           <div className="space-y-0">
             <div className="grid grid-cols-4 gap-2 text-[10px] uppercase tracking-widest font-bold text-ink-faint pb-2 border-b border-line">
               <div className="col-span-2">Kategori</div>
               <div className="text-right">File</div>
               <div className="text-right">Ukuran</div>
             </div>
-            {stats.categories.map((cat, i) => {
+            {stats.categories.map((cat) => {
               const pct = stats.totalSize > 0 ? (cat.size / stats.totalSize) * 100 : 0;
+              const empty = cat.size === 0;
               return (
-                <div key={cat.prefix} className="grid grid-cols-4 gap-2 py-2.5 border-b border-line last:border-0 items-center">
+                <div key={cat.prefix} className={`grid grid-cols-4 gap-2 py-2.5 border-b border-line last:border-0 items-center ${empty ? "opacity-50" : ""}`}>
                   <div className="col-span-2 flex items-center gap-2.5">
-                    <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${CATEGORY_COLORS[i % CATEGORY_COLORS.length]}`} />
+                    <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${categoryColor(cat.prefix)}`} />
                     <div className="min-w-0">
                       <div className="text-sm font-medium text-ink truncate">{cat.label}</div>
                       <div className="h-1 bg-paper-deep rounded-full overflow-hidden mt-0.5 w-24">
-                        <div className={`h-full ${CATEGORY_COLORS[i % CATEGORY_COLORS.length]}`} style={{ width: `${pct}%` }} />
+                        <div className={`h-full ${categoryColor(cat.prefix)}`} style={{ width: `${Math.max(pct, empty ? 0 : 1)}%` }} />
                       </div>
                     </div>
                   </div>
                   <div className="text-right text-sm text-ink-soft tabular-nums">{cat.count.toLocaleString("id-ID")}</div>
                   <div className="text-right">
                     <div className="text-sm font-semibold text-ink tabular-nums">{fmtBytes(cat.size)}</div>
-                    <div className="text-[10px] text-ink-faint">{pct.toFixed(1)}%</div>
+                    <div className="text-[10px] text-ink-faint">{empty ? "kosong" : `${pct.toFixed(1)}%`}</div>
                   </div>
                 </div>
               );
@@ -3575,7 +3657,7 @@ function OwnerStorage({ userId, userName }: { userId: string; userName: string }
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={() => { setSelectedCats(new Set(["all"])); setBackupLoaded(false); setBackupList([]); }}
+              onClick={() => { setSelectedCats(new Set(["all"])); setBackupLoaded(false); setBackupList([]); setSelectMode(false); setSelectedFiles(new Set()); }}
               className={`px-3 py-1.5 rounded-lg text-sm font-semibold border transition ${selectedCats.has("all") ? "bg-ocean-700 text-white border-ocean-700" : "bg-white border-line text-ink-soft hover:border-ocean-300"}`}
             >
               Semua Kategori
@@ -3598,6 +3680,9 @@ function OwnerStorage({ userId, userName }: { userId: string; userName: string }
           <Btn variant="soft" size="sm" icon="eye" disabled={backupLoading} onClick={loadBackupList}>
             {backupLoading ? "Memuat…" : "Lihat Daftar File"}
           </Btn>
+          {backupLoaded && backupList.length > 0 && !selectMode && (
+            <Btn variant="ghost" size="sm" icon="check" onClick={() => setSelectMode(true)}>Pilih File</Btn>
+          )}
           {backupLoaded && (
             <span className="text-sm text-ink-mute">
               {backupList.length} file ditemukan
@@ -3608,12 +3693,44 @@ function OwnerStorage({ userId, userName }: { userId: string; userName: string }
           )}
         </div>
 
+        {/* Select-mode toolbar */}
+        {selectMode && (
+          <div className="mt-3 flex items-center gap-3 flex-wrap px-3.5 py-2.5 rounded-xl bg-ocean-50 border border-ocean-100">
+            <span className="text-sm font-semibold text-ocean-700">{selectedFiles.size} file dipilih</span>
+            <Btn variant="ghost" size="sm" onClick={() => setSelectedFiles(new Set(backupList.map(f => f.key)))}>Pilih Semua</Btn>
+            <Btn variant="ghost" size="sm" onClick={() => { setSelectMode(false); setSelectedFiles(new Set()); }}>Batal</Btn>
+            <Btn
+              variant="danger"
+              size="sm"
+              icon="trash"
+              className="ml-auto"
+              disabled={selectedFiles.size === 0 || deleting}
+              onClick={deleteSelected}
+            >
+              {deleting ? "Menghapus…" : "Hapus Terpilih"}
+            </Btn>
+          </div>
+        )}
+
         {/* File list preview */}
         {backupLoaded && backupList.length > 0 && (
           <div className="mt-4 border border-line rounded-xl overflow-hidden">
             <div className="divide-y divide-line max-h-72 overflow-y-auto no-scrollbar">
               {paginatedBackup.map((f, i) => (
-                <div key={`${f.key}-${i}`} className="flex items-center gap-3 px-4 py-2.5 hover:bg-paper-tint transition-colors">
+                <div
+                  key={`${f.key}-${i}`}
+                  className={`flex items-center gap-3 px-4 py-2.5 transition-colors ${selectMode ? "cursor-pointer" : ""} ${selectMode && selectedFiles.has(f.key) ? "bg-ocean-50" : "hover:bg-paper-tint"}`}
+                  onClick={() => selectMode && toggleFile(f.key)}
+                >
+                  {selectMode && (
+                    <input
+                      type="checkbox"
+                      checked={selectedFiles.has(f.key)}
+                      onChange={() => toggleFile(f.key)}
+                      onClick={(e) => e.stopPropagation()}
+                      className="w-4 h-4 rounded shrink-0"
+                    />
+                  )}
                   <Icon name="archive" className="w-4 h-4 text-ink-faint shrink-0" />
                   <div className="flex-1 min-w-0">
                     <div className="text-sm text-ink truncate font-medium">{f.label}</div>
@@ -3683,32 +3800,6 @@ function OwnerStorage({ userId, userName }: { userId: string; userName: string }
           </div>
         </div>
       </Card>
-
-      {/* ── Info card ── */}
-      <Card className="bg-wave-50 border-wave-100">
-        <div className="flex items-start gap-3">
-          <span className="w-10 h-10 rounded-xl bg-white text-wave-700 flex items-center justify-center shrink-0">
-            <Icon name="info" className="w-5 h-5" />
-          </span>
-          <div>
-            <div className="font-display font-bold text-ink text-sm">Cloudflare R2 Free Tier</div>
-            <div className="mt-1.5 space-y-1">
-              <div className="text-xs text-ink-soft">
-                <span className="font-semibold text-ink">10 GB</span> storage gratis per bulan
-              </div>
-              <div className="text-xs text-ink-soft">
-                <span className="font-semibold text-ink">1 juta</span> operasi Class A (tulis) gratis per bulan
-              </div>
-              <div className="text-xs text-ink-soft">
-                <span className="font-semibold text-ink">10 juta</span> operasi Class B (baca) gratis per bulan
-              </div>
-            </div>
-            <p className="text-xs text-ink-mute mt-2 leading-relaxed">
-              Pantau penggunaan aktual via Cloudflare Dashboard → R2 → nama bucket → Metrics.
-            </p>
-          </div>
-        </div>
-      </Card>
     </div>
   );
 }
@@ -3731,7 +3822,7 @@ const NAV_ITEMS: NavItem[] = [
   { section: "Konten" },
   { id: "landing",   label: "Landing Page",  icon: "star"      },
   { section: "Sistema" },
-  { id: "storage",   label: "R2 Storage",    icon: "archive"   },
+  { id: "storage",   label: "System Storage", icon: "archive"   },
   { id: "activity",  label: "Activity Log",  icon: "clipboard" },
 ];
 
@@ -3746,7 +3837,7 @@ const TITLES: Record<string, [string, string]> = {
   loans:     ["Daftar Pinjaman", "Kelola pinjaman & cicilan coach"],
   financial: ["Financial",      "Income, expenses & payroll semua cabang"],
   landing:   ["Landing Page",   "Kelola konten halaman depan"],
-  storage:   ["R2 Storage",     "Monitoring & backup Cloudflare R2 storage"],
+  storage:   ["System Storage", "Monitoring, backup, dan pengelolaan file storage sistem"],
   activity:  ["Activity Log",   "Semua aktivitas CRUD lintas cabang"],
 };
 

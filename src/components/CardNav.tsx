@@ -175,7 +175,7 @@ const CardNav: React.FC<CardNavProps> = ({
       >
         <div className="card-nav-top absolute inset-x-0 top-0 h-[60px] flex items-center justify-between p-2 pl-[1.1rem] z-[2]">
           <div
-            className={`hamburger-menu ${isHamburgerOpen ? 'open' : ''} group h-full flex flex-col items-center justify-center cursor-pointer gap-[6px] order-2 md:order-none`}
+            className={`hamburger-menu ${isHamburgerOpen ? 'open' : ''} group h-full flex flex-col items-center justify-center cursor-pointer gap-[6px] order-1 md:order-none`}
             onClick={toggleMenu}
             onKeyDown={(e: React.KeyboardEvent<HTMLDivElement>) => {
               if (e.key === 'Enter' || e.key === ' ') {
@@ -201,13 +201,13 @@ const CardNav: React.FC<CardNavProps> = ({
             />
           </div>
 
-          <div className="logo-container flex items-center md:absolute md:left-1/2 md:top-1/2 md:-translate-x-1/2 md:-translate-y-1/2 order-1 md:order-none">
+          <div className="logo-container flex items-center md:absolute md:left-1/2 md:top-1/2 md:-translate-x-1/2 md:-translate-y-1/2 order-2 md:order-none">
             <img src={logo} alt={logoAlt} className="logo h-[28px]" />
           </div>
 
           <Link
             href={ctaHref}
-            className="card-nav-cta-button inline-flex border-0 rounded-[calc(0.75rem-0.2rem)] px-3 md:px-4 items-center h-full font-semibold text-sm cursor-pointer transition-colors duration-300 bg-ocean-600 text-white hover:bg-ocean-700"
+            className="card-nav-cta-button inline-flex border-0 rounded-[calc(0.75rem-0.2rem)] px-3 md:px-4 items-center h-full font-semibold text-sm cursor-pointer transition-colors duration-300 bg-ocean-600 text-white hover:bg-ocean-700 order-3 md:order-none"
           >
             {ctaText}
           </Link>

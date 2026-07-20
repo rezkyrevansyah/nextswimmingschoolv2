@@ -132,7 +132,7 @@ function ImageField({
   url,
   onUrlChange,
   onFileChange,
-  hint = "Gunakan upload R2. URL manual hanya untuk domain yang sudah diizinkan.",
+  hint = "Gunakan upload storage. URL manual hanya untuk domain yang sudah diizinkan.",
   square = false,
 }: {
   label: string;

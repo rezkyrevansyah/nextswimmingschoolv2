@@ -3,9 +3,9 @@
  * Body: multipart/form-data { file: File, target: string, id?: string }
  * Returns: { url: string }
  *
- * Owner only. Uploads a landing-page image to R2 and writes its URL to the
- * matching landing table/column. Targets are a hardcoded allowlist: the client
- * never supplies table or column names.
+ * Owner only. Uploads a landing-page image to Supabase Storage and writes its
+ * URL to the matching landing table/column. Targets are a hardcoded allowlist:
+ * the client never supplies table or column names.
  */
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";

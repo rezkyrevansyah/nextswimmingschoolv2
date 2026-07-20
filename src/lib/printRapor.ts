@@ -42,7 +42,7 @@ export interface PrintStudent {
   attendance_rate?: number | null; // 0–100
   best_times?: PrintBestTime[];
   criteria?: PrintCriterion[];
-  coach_signature_url?: string | null; // uploaded coach signature from R2
+  coach_signature_url?: string | null; // uploaded coach signature from Supabase Storage
 }
 
 /** All asset URIs — can be URL paths or data URIs (for server-side headless rendering) */

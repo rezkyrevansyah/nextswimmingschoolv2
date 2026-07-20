@@ -3,8 +3,8 @@
  * Body: multipart/form-data { file: File }
  * Returns: { url: string }
  *
- * Authenticated. Coach uploads their own signature image; stored in R2
- * and URL saved to profiles.signature_url.
+ * Authenticated. Coach uploads their own signature image; stored in
+ * Supabase Storage and URL saved to profiles.signature_url.
  */
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";

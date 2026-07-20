@@ -6,8 +6,8 @@
  * Strategy:
  *   - Server reads all SVG/PNG assets from /public/ as data URIs → no network
  *     requests inside headless Chromium (avoids CORS / timing issues)
- *   - avatar_url and coach_signature_url (R2 CDN URLs) are fetched server-side
- *     and converted to base64 data URIs before passing to Puppeteer
+ *   - avatar_url and coach_signature_url (Supabase Storage URLs) are fetched
+ *     server-side and converted to base64 data URIs before passing to Puppeteer
  *   - Puppeteer-core + @sparticuz/chromium-min for serverless/Vercel compatibility
  *   - CHROMIUM_PATH env var for local dev (point to system Chrome/Edge)
  *   - Vercel: set CHROMIUM_REMOTE_EXEC_URL to the sparticuz release tar URL
@@ -50,7 +50,7 @@ function buildAssets(): RaporAssets {
   };
 }
 
-// ── External image fetcher (for R2 CDN URLs) ──────────────────────────────────
+// ── External image fetcher (for Supabase Storage URLs) ────────────────────────
 
 /**
  * Fetch an external image URL and return it as a base64 data URI.
@@ -139,7 +139,7 @@ export async function POST(req: NextRequest) {
   try {
     const assets = buildAssets();
 
-    // Resolve external R2 URLs to data URIs so Puppeteer doesn't need network access.
+    // Resolve external storage URLs to data URIs so Puppeteer doesn't need network access.
     // Fetch avatar and signature in parallel; fall back to null (template uses placeholder).
     const [avatarDataUri, sigDataUri] = await Promise.all([
       student.avatar_url ? imageToDataUri(student.avatar_url) : Promise.resolve(null),

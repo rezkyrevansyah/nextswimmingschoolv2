@@ -20,17 +20,20 @@ function extractPublicKey(url: string): string | null {
   return withoutBucket.split("?")[0] || null;
 }
 
+interface DbRef { table: string; column: string; id: string }
+interface BackupFileOut { key: string; label: string; category: string; url: string; bucket: typeof BUCKET_PUBLIC | typeof BUCKET_PRIVATE; dbRef?: DbRef }
+
 async function listBucketPrefix(
   bucket: typeof BUCKET_PUBLIC | typeof BUCKET_PRIVATE,
   prefix: string,
   categoryLabel: string
-): Promise<{ key: string; label: string; category: string }[]> {
-  const items: { key: string; label: string; category: string }[] = [];
+): Promise<{ key: string; label: string; category: string; bucket: typeof BUCKET_PUBLIC | typeof BUCKET_PRIVATE }[]> {
+  const items: { key: string; label: string; category: string; bucket: typeof BUCKET_PUBLIC | typeof BUCKET_PRIVATE }[] = [];
   const trimmed = prefix.replace(/\/$/, "");
   const { data } = await storage().from(bucket).list(trimmed, { limit: 1000 });
   for (const obj of data ?? []) {
     if (!obj.name) continue;
-    items.push({ key: `${trimmed}/${obj.name}`, label: obj.name, category: categoryLabel });
+    items.push({ key: `${trimmed}/${obj.name}`, label: obj.name, category: categoryLabel, bucket });
   }
   return items;
 }
@@ -44,7 +47,7 @@ export async function GET(req: NextRequest) {
   }
 
   const category = req.nextUrl.searchParams.get("category") ?? "all";
-  const files: { key: string; label: string; category: string; url: string }[] = [];
+  const files: BackupFileOut[] = [];
 
   try {
     if (category === "all" || category === "avatars") {
@@ -53,7 +56,10 @@ export async function GET(req: NextRequest) {
         if (!row.avatar_url) continue;
         const key = extractPublicKey(row.avatar_url);
         if (!key) continue;
-        files.push({ key, label: `${row.full_name ?? row.id} — avatar`, category: "Avatar Profil", url: row.avatar_url });
+        files.push({
+          key, label: `${row.full_name ?? row.id} — avatar`, category: "Avatar Profil", url: row.avatar_url,
+          bucket: BUCKET_PUBLIC, dbRef: { table: "profiles", column: "avatar_url", id: row.id },
+        });
       }
     }
 
@@ -63,7 +69,10 @@ export async function GET(req: NextRequest) {
         if (!row.logo_url) continue;
         const key = extractPublicKey(row.logo_url);
         if (!key) continue;
-        files.push({ key, label: `Cabang ${row.name} — logo`, category: "Logo Cabang", url: row.logo_url });
+        files.push({
+          key, label: `Cabang ${row.name} — logo`, category: "Logo Cabang", url: row.logo_url,
+          bucket: BUCKET_PUBLIC, dbRef: { table: "branches", column: "logo_url", id: row.id },
+        });
       }
     }
 
@@ -73,7 +82,10 @@ export async function GET(req: NextRequest) {
         if (!row.photo_url) continue;
         const key = extractPublicKey(row.photo_url);
         if (!key) continue;
-        files.push({ key, label: `Kelas ${row.name} — foto`, category: "Foto Kelas", url: row.photo_url });
+        files.push({
+          key, label: `Kelas ${row.name} — foto`, category: "Foto Kelas", url: row.photo_url,
+          bucket: BUCKET_PUBLIC, dbRef: { table: "classes", column: "photo_url", id: row.id },
+        });
       }
     }
 
@@ -87,6 +99,8 @@ export async function GET(req: NextRequest) {
           label: `Bukti bayar ${row.period_label} (bill ${row.id.slice(0, 8)})`,
           category: "Bukti Pembayaran",
           url: signed?.signedUrl ?? "",
+          bucket: BUCKET_PRIVATE,
+          dbRef: { table: "bills", column: "proof_url", id: row.id },
         });
       }
     }
@@ -101,6 +115,8 @@ export async function GET(req: NextRequest) {
           label: `Sertifikat: ${row.title ?? row.name}`,
           category: "Sertifikat Coach",
           url: signed?.signedUrl ?? "",
+          bucket: BUCKET_PRIVATE,
+          dbRef: { table: "certifications", column: "photo_url", id: row.id },
         });
       }
     }
