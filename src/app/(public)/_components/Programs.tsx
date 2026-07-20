@@ -5,7 +5,7 @@ import Icon from "@/components/ui/Icon";
 import { cn } from "@/lib/utils";
 import { useLocale } from "@/components/providers/LocaleProvider";
 
-interface ProgramClass {
+interface ProgramItem {
   id: string;
   name: string;
   description: string | null;
@@ -13,7 +13,7 @@ interface ProgramClass {
   photo_url: string | null;
 }
 
-export default function Programs({ programs }: { programs: ProgramClass[] }) {
+export default function Programs({ programs }: { programs: ProgramItem[] }) {
   const { t } = useLocale();
 
   if (programs.length === 0) return null;

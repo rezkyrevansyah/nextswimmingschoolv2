@@ -853,3 +853,13 @@ CREATE TABLE public.landing_partners (
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT landing_partners_pkey PRIMARY KEY (id)
 );
+CREATE TABLE public.landing_programs (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  sort_order integer NOT NULL DEFAULT 0,
+  name text NOT NULL DEFAULT ''::text,
+  description text,
+  class_type text NOT NULL DEFAULT 'reguler'::text CHECK (class_type = ANY (ARRAY['reguler'::text, 'private'::text])),
+  photo_url text,
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT landing_programs_pkey PRIMARY KEY (id)
+);

@@ -12,9 +12,9 @@ import { createClient } from "@/utils/supabase/server";
 import { uploadToBucket, keys } from "@/utils/supabase-storage/upload";
 import { BUCKET_PUBLIC } from "@/utils/supabase-storage/client";
 
-type Target = "hero" | "safety" | "facility" | "testimonial" | "gallery" | "partner";
+type Target = "hero" | "safety" | "facility" | "testimonial" | "gallery" | "partner" | "program";
 
-const ROW_TARGETS: Target[] = ["facility", "testimonial", "gallery", "partner"];
+const ROW_TARGETS: Target[] = ["facility", "testimonial", "gallery", "partner", "program"];
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 const MAX_SIZE_MB = 5;
@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
   const id = (form.get("id") as string | null) ?? null;
 
   if (!file) return NextResponse.json({ error: "File wajib diunggah." }, { status: 400 });
-  if (!target || !["hero", "safety", "facility", "testimonial", "gallery", "partner"].includes(target)) {
+  if (!target || !["hero", "safety", "facility", "testimonial", "gallery", "partner", "program"].includes(target)) {
     return NextResponse.json({ error: "Target tidak valid." }, { status: 400 });
   }
   if (ROW_TARGETS.includes(target) && (!id || !UUID_RE.test(id))) {
@@ -67,6 +67,9 @@ export async function POST(req: NextRequest) {
   } else if (target === "partner") {
     const { data } = await supabase.from("landing_partners").select("id").eq("id", id!).single();
     if (!data) return NextResponse.json({ error: "Partner tidak ditemukan." }, { status: 404 });
+  } else if (target === "program") {
+    const { data } = await supabase.from("landing_programs").select("id").eq("id", id!).single();
+    if (!data) return NextResponse.json({ error: "Program tidak ditemukan." }, { status: 404 });
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());
@@ -98,6 +101,10 @@ export async function POST(req: NextRequest) {
     case "partner":
       url = await uploadToBucket(BUCKET_PUBLIC, keys.landingPartner(id!), buffer, contentType);
       ({ error: dbError } = await supabase.from("landing_partners").update({ logo_url: url }).eq("id", id!));
+      break;
+    case "program":
+      url = await uploadToBucket(BUCKET_PUBLIC, keys.landingProgram(id!), buffer, contentType);
+      ({ error: dbError } = await supabase.from("landing_programs").update({ photo_url: url }).eq("id", id!));
       break;
   }
 
