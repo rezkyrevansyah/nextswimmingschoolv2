@@ -69,7 +69,7 @@ const DotField = memo(function DotField({
 
     reducedMotionRef.current = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-    function resize() {
+    function scheduleResize() {
       clearTimeout(resizeTimer);
       resizeTimer = setTimeout(doResize, 100);
     }
@@ -257,7 +257,11 @@ const DotField = memo(function DotField({
     }
 
     doResize();
-    window.addEventListener("resize", resize);
+    window.addEventListener("resize", scheduleResize);
+
+    const parentEl = canvas.parentElement;
+    const resizeObserver = parentEl && "ResizeObserver" in window ? new ResizeObserver(scheduleResize) : null;
+    if (resizeObserver && parentEl) resizeObserver.observe(parentEl);
 
     if (!reducedMotionRef.current) {
       window.addEventListener("mousemove", onMouseMove, { passive: true });
@@ -273,8 +277,9 @@ const DotField = memo(function DotField({
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
       if (speedInterval) clearInterval(speedInterval);
       clearTimeout(resizeTimer);
-      window.removeEventListener("resize", resize);
+      window.removeEventListener("resize", scheduleResize);
       window.removeEventListener("mousemove", onMouseMove);
+      resizeObserver?.disconnect();
     };
   }, []);
 

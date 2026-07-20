@@ -42,7 +42,7 @@ export default function Hero() {
 
         <h1
           data-hero-reveal
-          className="mt-6 font-display font-extrabold leading-tight text-ink text-4xl sm:text-5xl lg:text-6xl"
+          className="mt-6 font-display font-extrabold leading-tight text-ink text-4xl sm:text-5xl lg:text-6xl min-h-[2.4em] sm:min-h-[2.2em] flex items-center justify-center"
         >
           <TextType
             text={t("landing.hero.greeting")}
