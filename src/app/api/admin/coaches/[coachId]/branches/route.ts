@@ -20,10 +20,12 @@ export async function POST(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const callerRole = user.user_metadata?.role as string | undefined;
+  const { data: callerProfile } = await supabase.from("profiles").select("role, branch_id").eq("id", user.id).single();
+  const callerRole = (user.user_metadata?.role as string | undefined) ?? callerProfile?.role ?? undefined;
   if (!callerRole || !["admin", "owner"].includes(callerRole)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+  const callerBranchId = callerProfile?.branch_id ?? (user.user_metadata?.branch_id as string | undefined) ?? null;
 
   const { coachId } = await params;
   const body = await req.json() as { branch_id?: string };
@@ -31,6 +33,10 @@ export async function POST(
 
   if (!branch_id) {
     return NextResponse.json({ error: "branch_id required" }, { status: 400 });
+  }
+
+  if (callerRole === "admin" && branch_id !== callerBranchId) {
+    return NextResponse.json({ error: "Anda hanya dapat mengelola coach di cabang Anda sendiri" }, { status: 403 });
   }
 
   const db = getSupabaseAdmin();
@@ -93,10 +99,12 @@ export async function DELETE(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const callerRole = user.user_metadata?.role as string | undefined;
+  const { data: callerProfile } = await supabase.from("profiles").select("role, branch_id").eq("id", user.id).single();
+  const callerRole = (user.user_metadata?.role as string | undefined) ?? callerProfile?.role ?? undefined;
   if (!callerRole || !["admin", "owner"].includes(callerRole)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+  const callerBranchId = callerProfile?.branch_id ?? (user.user_metadata?.branch_id as string | undefined) ?? null;
 
   const { coachId } = await params;
   const body = await req.json() as { branch_id?: string };
@@ -104,6 +112,10 @@ export async function DELETE(
 
   if (!branch_id) {
     return NextResponse.json({ error: "branch_id required" }, { status: 400 });
+  }
+
+  if (callerRole === "admin" && branch_id !== callerBranchId) {
+    return NextResponse.json({ error: "Anda hanya dapat mengelola coach di cabang Anda sendiri" }, { status: 403 });
   }
 
   const db = getSupabaseAdmin();

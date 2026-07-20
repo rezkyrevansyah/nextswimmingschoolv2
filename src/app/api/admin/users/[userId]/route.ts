@@ -12,13 +12,10 @@ async function checkCaller() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
-  let role = user.user_metadata?.role as string | undefined;
-  if (!role) {
-    const { data: prof } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-    role = prof?.role ?? undefined;
-  }
+  const { data: prof } = await supabase.from("profiles").select("role, branch_id").eq("id", user.id).single();
+  const role = (user.user_metadata?.role as string | undefined) ?? prof?.role ?? undefined;
   if (!role || !["admin", "owner"].includes(role)) return null;
-  return user;
+  return { ...user, role, branchId: prof?.branch_id ?? (user.user_metadata?.branch_id as string | undefined) ?? null };
 }
 
 export async function PATCH(
@@ -35,6 +32,29 @@ export async function PATCH(
     user_metadata?: Record<string, unknown>;
     profile?: Record<string, unknown>;
   };
+
+  // Only owner may change a user's role — an admin changing role (including their own)
+  // would otherwise be a privilege-escalation path (e.g. admin -> owner).
+  if (caller.role !== "owner") {
+    if (body.profile && "role" in body.profile) {
+      return NextResponse.json({ error: "Hanya owner yang dapat mengubah role akun" }, { status: 403 });
+    }
+    if (body.user_metadata && "role" in body.user_metadata) {
+      return NextResponse.json({ error: "Hanya owner yang dapat mengubah role akun" }, { status: 403 });
+    }
+  }
+
+  // Admins may only manage users within their own branch — otherwise any admin
+  // could act on another branch's accounts by supplying a different branch_id.
+  if (caller.role !== "owner") {
+    const { data: targetProfile } = await getSupabaseAdmin().from("profiles").select("branch_id").eq("id", userId).maybeSingle();
+    if (!targetProfile || targetProfile.branch_id !== caller.branchId) {
+      return NextResponse.json({ error: "Anda hanya dapat mengelola akun di cabang Anda sendiri" }, { status: 403 });
+    }
+    if (body.profile && "branch_id" in body.profile && body.profile.branch_id !== caller.branchId) {
+      return NextResponse.json({ error: "Tidak dapat memindahkan akun ke cabang lain" }, { status: 403 });
+    }
+  }
 
   // Update profiles table (bypasses RLS via service key)
   if (body.profile) {
@@ -125,6 +145,17 @@ export async function DELETE(
   // Prevent self-deletion
   if (caller.id === userId) {
     return NextResponse.json({ error: "Cannot delete your own account" }, { status: 400 });
+  }
+
+  // Admins may only delete users within their own branch
+  if (caller.role !== "owner") {
+    const { data: targetProfile } = await getSupabaseAdmin().from("profiles").select("branch_id, role").eq("id", userId).maybeSingle();
+    if (!targetProfile || targetProfile.branch_id !== caller.branchId) {
+      return NextResponse.json({ error: "Anda hanya dapat menghapus akun di cabang Anda sendiri" }, { status: 403 });
+    }
+    if (targetProfile.role === "owner" || targetProfile.role === "admin") {
+      return NextResponse.json({ error: "Tidak dapat menghapus akun admin/owner" }, { status: 403 });
+    }
   }
 
   const { error } = await getSupabaseAdmin().auth.admin.deleteUser(userId);

@@ -34,8 +34,10 @@ export default function RegisterPage() {
 
   useEffect(() => {
     const supabase = createClient();
-    supabase.from("branches").select("id, name, city").eq("status", "active").order("name")
-      .then(({ data }) => { if (data) setBranches(data); });
+    supabase.from("public_branches").select("id, name, city").order("name")
+      .then(({ data }) => {
+        if (data) setBranches(data.filter((b): b is Branch => !!b.id && !!b.name));
+      });
     supabase.from("landing_config").select("footer_wa_number").single()
       .then(({ data }) => { if (data?.footer_wa_number) setWaPhone(data.footer_wa_number); });
   }, []);

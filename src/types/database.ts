@@ -2932,6 +2932,14 @@ export type Database = {
           },
         ]
       }
+      public_branches: {
+        Row: {
+          id: string | null
+          name: string | null
+          city: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       auth_branch_id: { Args: never; Returns: string }

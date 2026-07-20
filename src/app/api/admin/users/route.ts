@@ -15,14 +15,12 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  let callerRole = user.user_metadata?.role as string | undefined;
-  if (!callerRole) {
-    const { data: prof } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-    callerRole = prof?.role ?? undefined;
-  }
+  const { data: callerProfile } = await supabase.from("profiles").select("role, branch_id").eq("id", user.id).single();
+  const callerRole = (user.user_metadata?.role as string | undefined) ?? callerProfile?.role ?? undefined;
   if (!callerRole || !["admin", "owner"].includes(callerRole)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+  const callerBranchId = callerProfile?.branch_id ?? (user.user_metadata?.branch_id as string | undefined) ?? null;
 
   const body = await req.json() as {
     email?: string;
@@ -50,6 +48,11 @@ export async function POST(req: NextRequest) {
   // Admins can only create coach/member/school — not admin/owner
   if (callerRole === "admin" && !["coach", "member", "school"].includes(role)) {
     return NextResponse.json({ error: "Admin can only create coach, member, or school accounts" }, { status: 403 });
+  }
+
+  // Admins may only create accounts in their own branch
+  if (callerRole === "admin" && branch_id && branch_id !== callerBranchId) {
+    return NextResponse.json({ error: "Anda hanya dapat membuat akun di cabang Anda sendiri" }, { status: 403 });
   }
 
   const db = getSupabaseAdmin();
