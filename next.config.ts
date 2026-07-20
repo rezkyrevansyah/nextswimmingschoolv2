@@ -18,15 +18,10 @@ const nextConfig: NextConfig = {
   },
   images: {
     remotePatterns: [
-      // Cloudflare R2 public bucket (r2.dev subdomain)
+      // Supabase Storage public bucket URLs
       {
         protocol: "https",
-        hostname: "**.r2.dev",
-      },
-      // Custom CDN domain if configured (e.g. cdn.nextswimmingschool.com)
-      {
-        protocol: "https",
-        hostname: "**.nextswimmingschool.com",
+        hostname: "**.supabase.co",
       },
     ],
   },

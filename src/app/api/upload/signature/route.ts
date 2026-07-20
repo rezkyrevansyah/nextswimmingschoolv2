@@ -8,7 +8,8 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
-import { uploadBuffer, keys } from "@/utils/r2/upload";
+import { uploadToBucket, keys } from "@/utils/supabase-storage/upload";
+import { BUCKET_PUBLIC } from "@/utils/supabase-storage/client";
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
@@ -29,7 +30,7 @@ export async function POST(req: NextRequest) {
 
   const buffer = Buffer.from(await file.arrayBuffer());
   const key = keys.signature(user.id);
-  const url = await uploadBuffer(key, buffer, file.type || "image/png");
+  const url = await uploadToBucket(BUCKET_PUBLIC, key, buffer, file.type || "image/png");
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await supabase.from("profiles").update({ signature_url: url } as any).eq("id", user.id);

@@ -9,7 +9,8 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
-import { uploadBuffer, keys } from "@/utils/r2/upload";
+import { uploadToBucket, keys } from "@/utils/supabase-storage/upload";
+import { BUCKET_PUBLIC } from "@/utils/supabase-storage/client";
 
 type Target = "hero" | "safety" | "facility" | "testimonial" | "gallery" | "partner";
 
@@ -75,27 +76,27 @@ export async function POST(req: NextRequest) {
   let dbError: { message: string } | null = null;
   switch (target) {
     case "hero":
-      url = await uploadBuffer(keys.landingHero(), buffer, contentType);
+      url = await uploadToBucket(BUCKET_PUBLIC, keys.landingHero(), buffer, contentType);
       ({ error: dbError } = await supabase.from("landing_hero").update({ bg_image_url: url }).eq("id", 1));
       break;
     case "safety":
-      url = await uploadBuffer(keys.landingSafety(), buffer, contentType);
+      url = await uploadToBucket(BUCKET_PUBLIC, keys.landingSafety(), buffer, contentType);
       ({ error: dbError } = await supabase.from("landing_safety").update({ photo_url: url }).eq("id", 1));
       break;
     case "facility":
-      url = await uploadBuffer(keys.landingFacility(id!), buffer, contentType);
+      url = await uploadToBucket(BUCKET_PUBLIC, keys.landingFacility(id!), buffer, contentType);
       ({ error: dbError } = await supabase.from("landing_facility_items").update({ photo_url: url }).eq("id", id!));
       break;
     case "testimonial":
-      url = await uploadBuffer(keys.landingTestimonial(id!), buffer, contentType);
+      url = await uploadToBucket(BUCKET_PUBLIC, keys.landingTestimonial(id!), buffer, contentType);
       ({ error: dbError } = await supabase.from("landing_testimonials").update({ avatar_url: url }).eq("id", id!));
       break;
     case "gallery":
-      url = await uploadBuffer(keys.landingGallery(id!), buffer, contentType);
+      url = await uploadToBucket(BUCKET_PUBLIC, keys.landingGallery(id!), buffer, contentType);
       ({ error: dbError } = await supabase.from("landing_gallery").update({ photo_url: url }).eq("id", id!));
       break;
     case "partner":
-      url = await uploadBuffer(keys.landingPartner(id!), buffer, contentType);
+      url = await uploadToBucket(BUCKET_PUBLIC, keys.landingPartner(id!), buffer, contentType);
       ({ error: dbError } = await supabase.from("landing_partners").update({ logo_url: url }).eq("id", id!));
       break;
   }

@@ -1,12 +1,17 @@
 "use client";
 /**
  * useUpload — thin React hook for all file uploads via Route Handlers.
- * All uploads go server-side → R2. Never touches R2 credentials on the client.
+ * All uploads go server-side → Supabase Storage. Never touches storage
+ * credentials on the client.
  *
  * Usage:
  *   const { upload, uploading } = useUpload();
  *   const url = await upload.avatar(file);
  *   const url = await upload.selfie(file, classId, date);
+ *
+ * Note: `selfie`, `paymentProof`, and `cert` write to the private bucket —
+ * the string they resolve to is a storage KEY, not a browsable URL. Render
+ * it via useSignedUrl(key) (src/hooks/useSignedUrl.ts), not <img src>.
  */
 import { useState } from "react";
 

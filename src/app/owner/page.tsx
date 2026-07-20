@@ -3325,7 +3325,6 @@ const BACKUP_CATEGORIES = [
   { key: "payments",    label: "Bukti Pembayaran" },
   { key: "certs",       label: "Sertifikat Coach" },
   { key: "attendances", label: "Selfie Absensi"   },
-  { key: "qrcodes",     label: "QR Code Member"   },
 ];
 
 const BACKUP_PAGE_SIZE = 20;
@@ -3351,7 +3350,7 @@ function OwnerStorage({ userId, userName }: { userId: string; userName: string }
     setStatsLoading(true);
     setStatsError(false);
     try {
-      const res = await fetch("/api/r2/stats");
+      const res = await fetch("/api/storage/stats");
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json() as StorageStats;
       setStats(data);
@@ -3369,14 +3368,14 @@ function OwnerStorage({ userId, userName }: { userId: string; userName: string }
     try {
       // Fetch per selected category (or all)
       if (selectedCats.has("all")) {
-        const res = await fetch("/api/r2/backup-list?category=all");
+        const res = await fetch("/api/storage/backup-list?category=all");
         if (!res.ok) throw new Error();
         const data = await res.json() as { files: BackupFile[] };
         setBackupList(data.files);
       } else {
         const allFiles: BackupFile[] = [];
         for (const cat of selectedCats) {
-          const res = await fetch(`/api/r2/backup-list?category=${cat}`);
+          const res = await fetch(`/api/storage/backup-list?category=${cat}`);
           if (!res.ok) continue;
           const data = await res.json() as { files: BackupFile[] };
           allFiles.push(...data.files);
@@ -3421,7 +3420,7 @@ function OwnerStorage({ userId, userName }: { userId: string; userName: string }
       for (let i = 0; i < backupList.length; i++) {
         const f = backupList[i];
         try {
-          const res = await fetch(`/api/r2?key=${encodeURIComponent(f.key)}&stream=1`);
+          const res = await fetch(`/api/storage?key=${encodeURIComponent(f.key)}&stream=1`);
           if (res.ok) {
             const blob = await res.blob();
             const folder = f.category.replace(/[\s/\\]/g, "_");
@@ -3436,7 +3435,7 @@ function OwnerStorage({ userId, userName }: { userId: string; userName: string }
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `R2-Backup-${new Date().toISOString().slice(0, 10)}.zip`;
+      a.download = `Storage-Backup-${new Date().toISOString().slice(0, 10)}.zip`;
       a.click();
       URL.revokeObjectURL(url);
       toast.success(`Backup selesai (${successCount} file berhasil diunduh)`);
@@ -3568,7 +3567,7 @@ function OwnerStorage({ userId, userName }: { userId: string; userName: string }
 
       {/* ── Backup System ── */}
       <Card>
-        <SectionTitle sub="Unduh file R2 tersusun rapi dalam folder per kategori">Backup Files</SectionTitle>
+        <SectionTitle sub="Unduh file tersusun rapi dalam folder per kategori">Backup Files</SectionTitle>
 
         {/* Category selector */}
         <div className="mt-4 space-y-2">

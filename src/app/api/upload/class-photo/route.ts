@@ -7,7 +7,8 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
-import { uploadBuffer, keys } from "@/utils/r2/upload";
+import { uploadToBucket, keys } from "@/utils/supabase-storage/upload";
+import { BUCKET_PUBLIC } from "@/utils/supabase-storage/client";
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
@@ -41,7 +42,7 @@ export async function POST(req: NextRequest) {
 
   const buffer = Buffer.from(await file.arrayBuffer());
   const key = keys.classPhoto(classId);
-  const url = await uploadBuffer(key, buffer, file.type || "image/jpeg");
+  const url = await uploadToBucket(BUCKET_PUBLIC, key, buffer, file.type || "image/jpeg");
 
   await supabase.from("classes").update({ photo_url: url }).eq("id", classId);
 

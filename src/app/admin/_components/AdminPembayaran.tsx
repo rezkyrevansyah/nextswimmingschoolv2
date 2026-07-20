@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useUpload } from "@/hooks/useUpload";
+import { useSignedUrl } from "@/hooks/useSignedUrl";
 import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
 import { Field, Input, Select, Textarea } from "@/components/ui/FormFields";
@@ -45,6 +46,8 @@ export default function AdminPembayaran({ branchId }: { branchId: string }) {
   const [verifying, setVerifying] = useState(false);
   // Detail modal
   const [detailBill, setDetailBill] = useState<BillRow | null>(null);
+  const verifyTargetProofUrl = useSignedUrl(verifyTarget?.proof_url);
+  const detailBillProofUrl = useSignedUrl(detailBill?.proof_url);
 
   // Tambah tagihan manual modal
   const [openAdd, setOpenAdd] = useState(false);
@@ -294,9 +297,9 @@ export default function AdminPembayaran({ branchId }: { branchId: string }) {
                     <img src={verifyProofPreview} alt="preview" className="w-full max-h-48 object-contain" />
                     <div className="absolute top-2 right-2 bg-ok-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">Terpilih</div>
                   </div>
-                ) : verifyTarget.proof_url ? (
+                ) : verifyTargetProofUrl ? (
                   <div className="rounded-xl border border-line overflow-hidden">
-                    <img src={verifyTarget.proof_url} alt="bukti" className="w-full max-h-40 object-contain bg-paper-tint" />
+                    <img src={verifyTargetProofUrl} alt="bukti" className="w-full max-h-40 object-contain bg-paper-tint" />
                     <div className="px-3 py-2 bg-paper-tint border-t border-line flex items-center gap-2 text-xs text-ink-mute">
                       <Icon name="eye" className="w-3.5 h-3.5" />
                       <span className="flex-1">Bukti sebelumnya. Klik untuk ganti.</span>
@@ -341,11 +344,11 @@ export default function AdminPembayaran({ branchId }: { branchId: string }) {
               {detailBill.discount_reason && <div className="col-span-2"><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Alasan diskon</div><div className="text-ink-soft">{detailBill.discount_reason}</div></div>}
               {detailBill.admin_notes && <div className="col-span-2"><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Catatan admin</div><div className="text-ink-soft">{detailBill.admin_notes}</div></div>}
             </div>
-            {detailBill.proof_url && (
+            {detailBillProofUrl && (
               <div className="pt-3 border-t border-line space-y-2">
                 <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Bukti Pembayaran</div>
-                <a href={detailBill.proof_url} target="_blank" rel="noreferrer" className="block rounded-xl overflow-hidden border border-line hover:border-ocean-300 transition-colors">
-                  <img src={detailBill.proof_url} alt="bukti" className="w-full max-h-64 object-contain bg-paper-tint" />
+                <a href={detailBillProofUrl} target="_blank" rel="noreferrer" className="block rounded-xl overflow-hidden border border-line hover:border-ocean-300 transition-colors">
+                  <img src={detailBillProofUrl} alt="bukti" className="w-full max-h-64 object-contain bg-paper-tint" />
                   <div className="px-3 py-2 bg-paper-tint border-t border-line flex items-center gap-1.5 text-xs text-ocean-600 font-semibold">
                     <Icon name="eye" className="w-3.5 h-3.5" />Buka gambar penuh
                   </div>

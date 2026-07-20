@@ -4,6 +4,7 @@ import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
 import { useUpload } from "@/hooks/useUpload";
+import { useSignedUrl } from "@/hooks/useSignedUrl";
 import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
 import { Field, Input, Select, Textarea } from "@/components/ui/FormFields";
@@ -89,6 +90,7 @@ export default function AdminApprovement({ branchId }: { branchId: string }) {
 
   // ── Modals: Sertifikasi ───────────────────────────────────────────────────
   const [detailCert, setDetailCert] = useState<CertRow | null>(null);
+  const detailCertPhotoUrl = useSignedUrl(detailCert?.photo_url);
   const [rejectCertTarget, setRejectCertTarget] = useState<CertRow | null>(null);
   const [certRejectReason, setCertRejectReason] = useState("");
   const [rejectingCert, setRejectingCert] = useState(false);
@@ -608,9 +610,9 @@ export default function AdminApprovement({ branchId }: { branchId: string }) {
                 )}
               </div>
             </div>
-            {detailCert.photo_url && (
-              <a href={detailCert.photo_url} target="_blank" rel="noreferrer" className="block">
-                <img src={detailCert.photo_url} alt="Foto sertifikat" className="w-full rounded-xl object-cover max-h-64 border border-line" />
+            {detailCertPhotoUrl && (
+              <a href={detailCertPhotoUrl} target="_blank" rel="noreferrer" className="block">
+                <img src={detailCertPhotoUrl} alt="Foto sertifikat" className="w-full rounded-xl object-cover max-h-64 border border-line" />
                 <span className="text-xs text-ocean-600 mt-1 block text-center">Klik untuk buka ukuran penuh</span>
               </a>
             )}

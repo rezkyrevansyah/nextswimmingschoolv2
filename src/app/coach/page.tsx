@@ -29,6 +29,7 @@ import { resolveRaporSigner } from "@/lib/rapor";
 import { printPayslip } from "@/lib/printPayslip";
 import { createClient } from "@/utils/supabase/client";
 import { useUpload } from "@/hooks/useUpload";
+import { useSignedUrl } from "@/hooks/useSignedUrl";
 import type { User } from "@supabase/supabase-js";
 
 
@@ -157,6 +158,18 @@ interface ProfileData {
   suspend_reason: string | null;
   user_no: string | null;
   certifications?: { id: string; title: string; issuer: string | null; valid_from: string | null; valid_until: string | null; photo_url: string | null; status: string; reject_reason: string | null }[];
+}
+
+// ── Cert photo (resolves private-bucket storage key → signed URL) ────────────
+
+function CertPhotoLink({ storageKey, title }: { storageKey: string; title: string }) {
+  const url = useSignedUrl(storageKey);
+  if (!url) return null;
+  return (
+    <a href={url} target="_blank" rel="noreferrer" className="block">
+      <img src={url} alt={title} className="w-full max-h-40 object-cover rounded-xl border border-line hover:opacity-90 transition-opacity" />
+    </a>
+  );
 }
 
 // ── Shell ──────────────────────────────────────────────────────────────────────
@@ -3219,6 +3232,7 @@ function CoachProfile({ profile, onRefresh, onLogout, onAvatarChange }: { profil
   // Cert modal
   const [openAddCert, setOpenAddCert] = useState(false);
   const [editCertTarget, setEditCertTarget] = useState<{ id: string; title: string; issuer: string | null; valid_from: string | null; valid_until: string | null; photo_url: string | null; status: string; reject_reason: string | null } | null>(null);
+  const editCertTargetPhotoUrl = useSignedUrl(editCertTarget?.photo_url);
   const [certForm, setCertForm] = useState({ title: "", issuer: "", issued_at: "", expires_at: "", no_expiry: false });
   const [certFile, setCertFile] = useState<File | null>(null);
   const certFileInputRef = useRef<HTMLInputElement>(null);
@@ -3538,11 +3552,7 @@ function CoachProfile({ profile, onRefresh, onLogout, onAvatarChange }: { profil
                   <Btn variant="soft" size="sm" icon="refresh" onClick={() => resubmitCert(s.id)}>Ajukan Lagi</Btn>
                 </div>
               )}
-              {s.photo_url && (
-                <a href={s.photo_url} target="_blank" rel="noreferrer" className="block">
-                  <img src={s.photo_url} alt={s.title} className="w-full max-h-40 object-cover rounded-xl border border-line hover:opacity-90 transition-opacity" />
-                </a>
-              )}
+              {s.photo_url && <CertPhotoLink storageKey={s.photo_url} title={s.title} />}
             </div>
           ))}
           {(profile?.certifications?.length ?? 0) === 0 && <div className="px-5 py-4 text-sm text-ink-mute">Belum ada sertifikasi.</div>}
@@ -3579,8 +3589,8 @@ function CoachProfile({ profile, onRefresh, onLogout, onAvatarChange }: { profil
           </label>
           <div>
             <div className="text-sm font-semibold text-ink mb-1.5">Foto sertifikat <span className="text-ink-faint font-normal text-xs">(opsional, bantu proses verifikasi)</span></div>
-            {editCertTarget?.photo_url && !certFile && (
-              <img src={editCertTarget.photo_url} alt="Foto saat ini" className="w-full max-h-36 object-cover rounded-xl border border-line mb-2" />
+            {editCertTargetPhotoUrl && !certFile && (
+              <img src={editCertTargetPhotoUrl} alt="Foto saat ini" className="w-full max-h-36 object-cover rounded-xl border border-line mb-2" />
             )}
             {certFile && (
               // eslint-disable-next-line @next/next/no-img-element -- blob URL from file picker
