@@ -1,6 +1,11 @@
 import type { landing as LandingEn } from "../en/landing";
 
 export const landing: typeof LandingEn = {
+  hero: {
+    greeting: "Selamat Datang di Next Swimming School",
+    subtitle: "Membangun perenang yang percaya diri, satu gaya renang setiap saat.",
+    cta: "Mulai Sekarang",
+  },
   nav: {
     logoAlt: "Next Swimming School",
     login: "Masuk",

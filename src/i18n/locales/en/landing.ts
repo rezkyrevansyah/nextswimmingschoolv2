@@ -1,4 +1,9 @@
 export const landing = {
+  hero: {
+    greeting: "Welcome to Next Swimming School",
+    subtitle: "Building confident, capable swimmers one stroke at a time.",
+    cta: "Get Started",
+  },
   nav: {
     logoAlt: "Next Swimming School",
     login: "Login",
