@@ -1444,6 +1444,12 @@ export type Database = {
         Update: { id?: string; sort_order?: number; photo_url?: string | null; alt_text?: string | null; updated_at?: string }
         Relationships: []
       }
+      landing_partners: {
+        Row: { id: string; sort_order: number; name: string; logo_url: string | null; website_url: string | null; updated_at: string }
+        Insert: { id?: string; sort_order?: number; name?: string; logo_url?: string | null; website_url?: string | null; updated_at?: string }
+        Update: { id?: string; sort_order?: number; name?: string; logo_url?: string | null; website_url?: string | null; updated_at?: string }
+        Relationships: []
+      }
       trial_bookings: {
         Row: { id: string; name: string; phone: string; age_group: string | null; branch_id: string | null; preferred_time: string | null; status: string; created_at: string }
         Insert: { id?: string; name: string; phone: string; age_group?: string | null; branch_id?: string | null; preferred_time?: string | null; status?: string; created_at?: string }

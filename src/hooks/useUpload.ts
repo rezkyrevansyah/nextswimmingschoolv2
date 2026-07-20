@@ -71,7 +71,7 @@ export function useUpload() {
     /** Landing page image (owner only). Row targets require the row id. */
     landingImage: (
       file: File,
-      target: "hero" | "safety" | "facility" | "testimonial" | "gallery",
+      target: "hero" | "safety" | "facility" | "testimonial" | "gallery" | "partner",
       id?: string,
     ) =>
       run(() =>

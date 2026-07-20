@@ -40,8 +40,9 @@ interface SafetyPointRow { id: string; sort_order: number; text: string; }
 interface FacilitiesData { section_label: string; headline: string; }
 interface FacilityItemRow { id: string; sort_order: number; title: string; body_text: string; photo_url: string | null; }
 interface GalleryItem { id: string; sort_order: number; photo_url: string | null; alt_text: string | null; }
+interface PartnerItem { id: string; sort_order: number; name: string; logo_url: string | null; website_url: string | null; }
 
-type Tab = "hero" | "whyus" | "safety" | "programs" | "facilities" | "coaches" | "testimonials" | "gallery" | "faq" | "finalcta" | "config";
+type Tab = "hero" | "whyus" | "safety" | "programs" | "facilities" | "coaches" | "testimonials" | "gallery" | "partners" | "faq" | "finalcta" | "config";
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: "hero",         label: "Hero",         icon: "star"     },
@@ -52,6 +53,7 @@ const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: "coaches",      label: "Coach",        icon: "swim"     },
   { id: "testimonials", label: "Testimoni",    icon: "users"    },
   { id: "gallery",      label: "Galeri",       icon: "grid"     },
+  { id: "partners",     label: "Partner",      icon: "link"     },
   { id: "faq",          label: "FAQ",          icon: "calendar" },
   { id: "finalcta",     label: "Final CTA",    icon: "arrow"    },
   { id: "config",       label: "Konfigurasi",  icon: "settings" },
@@ -131,19 +133,23 @@ function ImageField({
   onUrlChange,
   onFileChange,
   hint = "Gunakan upload R2. URL manual hanya untuk domain yang sudah diizinkan.",
+  square = false,
 }: {
   label: string;
   url: string;
   onUrlChange: (url: string) => void;
   onFileChange: (file: File | null) => void;
   hint?: string;
+  /** Pad the uploaded image to a square canvas (no crop, transparent padding for PNG/WebP) — for logos. */
+  square?: boolean;
 }) {
   const [mode, setMode] = useState<"url" | "upload">("upload");
   const [preview, setPreview] = useState<string | null>(null);
   const [fileName, setFileName] = useState("");
+  const [processing, setProcessing] = useState(false);
 
   return (
-    <Field label={label} hint={hint}>
+    <Field label={label} hint={square ? "Gambar akan otomatis dijadikan persegi (tanpa crop, padding transparan)." : hint}>
       <div className="space-y-3">
         <div className="flex gap-2">
           <button
@@ -166,21 +172,40 @@ function ImageField({
           <>
             <label className="cursor-pointer flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-line hover:border-ocean-400 bg-paper-tint hover:bg-ocean-50/30 transition-colors py-6 px-3">
               <Icon name="camera" className="w-6 h-6 text-ink-mute" />
-              <span className="text-xs text-ink-mute font-medium">{fileName || "Klik untuk pilih gambar"}</span>
+              <span className="text-xs text-ink-mute font-medium">{processing ? "Memproses gambar..." : (fileName || "Klik untuk pilih gambar")}</span>
               <input
                 type="file"
                 accept="image/*"
                 className="sr-only"
-                onChange={(e) => {
-                  const f = e.target.files?.[0] ?? null;
-                  onFileChange(f);
-                  setFileName(f?.name ?? "");
-                  setPreview(f ? URL.createObjectURL(f) : null);
+                disabled={processing}
+                onChange={async (e) => {
+                  const raw = e.target.files?.[0] ?? null;
+                  if (!raw) { onFileChange(null); setFileName(""); setPreview(null); return; }
+                  if (!square) {
+                    onFileChange(raw);
+                    setFileName(raw.name);
+                    setPreview(URL.createObjectURL(raw));
+                    return;
+                  }
+                  setProcessing(true);
+                  try {
+                    const { padImageToSquare } = await import("@/lib/imageSquarePad");
+                    const padded = await padImageToSquare(raw);
+                    onFileChange(padded);
+                    setFileName(padded.name);
+                    setPreview(URL.createObjectURL(padded));
+                  } finally {
+                    setProcessing(false);
+                  }
                 }}
               />
             </label>
             {(preview || url) && (
-              <img src={preview ?? url} alt="preview" className="w-full h-36 object-cover rounded-lg border border-line" />
+              <img
+                src={preview ?? url}
+                alt="preview"
+                className={square ? "w-36 h-36 mx-auto object-contain rounded-lg border border-line [background-image:linear-gradient(45deg,#eee_25%,transparent_25%),linear-gradient(-45deg,#eee_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#eee_75%),linear-gradient(-45deg,transparent_75%,#eee_75%)] [background-size:16px_16px] [background-position:0_0,0_8px,8px_-8px,-8px_0]" : "w-full h-36 object-cover rounded-lg border border-line"}
+              />
             )}
           </>
         ) : (
@@ -226,6 +251,7 @@ export default function LandingCMS() {
       {tab === "coaches"      && <CoachesTab />}
       {tab === "testimonials" && <TestimonialsTab />}
       {tab === "gallery"      && <GalleryTab />}
+      {tab === "partners"     && <PartnersTab />}
       {tab === "faq"          && <FAQTab />}
       {tab === "finalcta"     && <FinalCtaTab />}
       {tab === "config"       && <ConfigTab />}
@@ -519,6 +545,109 @@ function GalleryTab() {
         <div className="space-y-3">
           <ImageField label="Foto" url={form.photo_url} onUrlChange={(url) => setForm({ ...form, photo_url: url })} onFileChange={setPhotoFile} />
           <Field label="Alt text"><Input value={form.alt_text} onChange={(e) => setForm({ ...form, alt_text: e.target.value })} placeholder="Anak melompat ke kolam" /></Field>
+          <Field label="Urutan"><Input type="number" value={String(form.sort_order)} onChange={(e) => setForm({ ...form, sort_order: Number(e.target.value) })} /></Field>
+        </div>
+      </Modal>
+    </Card>
+  );
+}
+
+// ── Partners Tab ─────────────────────────────────────────────────────────────
+function PartnersTab() {
+  const toast = useToast();
+  const confirm = useConfirm();
+  const supabase = createClient();
+  const { upload, uploading } = useUpload();
+  const [items, setItems] = useState<PartnerItem[]>([]);
+  const [showModal, setShowModal] = useState(false);
+  const [editItem, setEditItem] = useState<PartnerItem | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [form, setForm] = useState({ name: "", logo_url: "", website_url: "", sort_order: 0 });
+
+  const load = useCallback(async () => {
+    const { data } = await supabase.from("landing_partners").select("id, sort_order, name, logo_url, website_url").order("sort_order");
+    setItems((data ?? []) as PartnerItem[]);
+  }, [supabase]);
+
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => { load(); }, [load]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  const openAdd = () => { setEditItem(null); setLogoFile(null); setForm({ name: "", logo_url: "", website_url: "", sort_order: items.length + 1 }); setShowModal(true); };
+  const openEdit = (p: PartnerItem) => { setEditItem(p); setLogoFile(null); setForm({ name: p.name, logo_url: p.logo_url ?? "", website_url: p.website_url ?? "", sort_order: p.sort_order }); setShowModal(true); };
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const websiteUrl = form.website_url.trim() || null;
+      if (editItem) {
+        let logoUrl = form.logo_url.trim() || null;
+        if (logoFile) logoUrl = await upload.landingImage(logoFile, "partner", editItem.id);
+        const { error } = await supabase.from("landing_partners").update({ name: form.name, sort_order: form.sort_order, logo_url: logoUrl, website_url: websiteUrl }).eq("id", editItem.id);
+        if (error) throw new Error(error.message);
+      } else {
+        const { data: inserted, error } = await supabase
+          .from("landing_partners")
+          .insert({ name: form.name, sort_order: form.sort_order, website_url: websiteUrl, logo_url: logoFile ? null : (form.logo_url.trim() || null) })
+          .select("id")
+          .single();
+        if (error || !inserted) throw new Error(error?.message ?? "Gagal menyimpan");
+        if (logoFile) await upload.landingImage(logoFile, "partner", inserted.id);
+      }
+    } catch (e) {
+      toast.error("Gagal menyimpan", (e as Error).message);
+      setSaving(false);
+      return;
+    }
+    await revalidate();
+    toast.success("Partner disimpan");
+    setSaving(false);
+    setShowModal(false);
+    load();
+  };
+
+  const del = async (p: PartnerItem) => {
+    const yes = await confirm({ title: "Hapus partner?", body: p.name || "Partner ini akan dihapus dari landing.", danger: true });
+    if (!yes) return;
+    const { error } = await supabase.from("landing_partners").delete().eq("id", p.id);
+    if (error) return toast.error("Gagal menghapus", error.message);
+    await revalidate();
+    toast.success("Partner dihapus");
+    load();
+  };
+
+  return (
+    <Card>
+      <div className="flex items-center justify-between">
+        <SectionTitle sub="Logo partner/sekolah yang tampil di landing">Partner</SectionTitle>
+        <Btn variant="soft" size="sm" icon="plus" onClick={openAdd}>Tambah</Btn>
+      </div>
+      <div className="mt-4 grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {items.map((p) => (
+          <div key={p.id} className="rounded-xl bg-paper-tint overflow-hidden border border-line">
+            <div className="h-20 bg-white flex items-center justify-center p-3">
+              {p.logo_url ? <img src={p.logo_url} alt={p.name} className="max-h-full max-w-full object-contain" /> : <Icon name="link" className="w-8 h-8 text-ocean-300" />}
+            </div>
+            <div className="p-3 flex items-start gap-2">
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-bold text-ink truncate">{p.name || "Tanpa nama"}</div>
+                {p.website_url && <div className="text-xs text-ocean-600 truncate">{p.website_url}</div>}
+              </div>
+              <button onClick={() => openEdit(p)} className="w-7 h-7 rounded-lg border border-line bg-white flex items-center justify-center hover:bg-paper-deep"><Icon name="edit" className="w-3.5 h-3.5 text-ink-mute" /></button>
+              <button onClick={() => del(p)} className="w-7 h-7 rounded-lg border border-danger-200 bg-danger-50 flex items-center justify-center hover:bg-danger-100"><Icon name="trash" className="w-3.5 h-3.5 text-danger-500" /></button>
+            </div>
+          </div>
+        ))}
+        {items.length === 0 && <div className="py-8 text-center text-ink-mute text-sm sm:col-span-2 lg:col-span-3">Belum ada partner.</div>}
+      </div>
+
+      <Modal open={showModal} onClose={() => setShowModal(false)} title={editItem ? "Edit Partner" : "Tambah Partner"} size="sm"
+        footer={<><Btn variant="ghost" onClick={() => setShowModal(false)}>Batal</Btn><Btn variant="primary" onClick={save} disabled={saving || uploading || !form.name.trim()}>{saving || uploading ? "Menyimpan..." : "Simpan"}</Btn></>}>
+        <div className="space-y-3">
+          <ImageField label="Logo" url={form.logo_url} onUrlChange={(url) => setForm({ ...form, logo_url: url })} onFileChange={setLogoFile} square />
+          <Field label="Nama partner/sekolah"><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="SD Ceria Bangsa" /></Field>
+          <Field label="Website (opsional)"><Input type="url" value={form.website_url} onChange={(e) => setForm({ ...form, website_url: e.target.value })} placeholder="https://..." /></Field>
           <Field label="Urutan"><Input type="number" value={String(form.sort_order)} onChange={(e) => setForm({ ...form, sort_order: Number(e.target.value) })} /></Field>
         </div>
       </Modal>

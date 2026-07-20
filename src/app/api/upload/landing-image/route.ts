@@ -11,9 +11,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { uploadBuffer, keys } from "@/utils/r2/upload";
 
-type Target = "hero" | "safety" | "facility" | "testimonial" | "gallery";
+type Target = "hero" | "safety" | "facility" | "testimonial" | "gallery" | "partner";
 
-const ROW_TARGETS: Target[] = ["facility", "testimonial", "gallery"];
+const ROW_TARGETS: Target[] = ["facility", "testimonial", "gallery", "partner"];
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 const MAX_SIZE_MB = 5;
@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
   const id = (form.get("id") as string | null) ?? null;
 
   if (!file) return NextResponse.json({ error: "File wajib diunggah." }, { status: 400 });
-  if (!target || !["hero", "safety", "facility", "testimonial", "gallery"].includes(target)) {
+  if (!target || !["hero", "safety", "facility", "testimonial", "gallery", "partner"].includes(target)) {
     return NextResponse.json({ error: "Target tidak valid." }, { status: 400 });
   }
   if (ROW_TARGETS.includes(target) && (!id || !UUID_RE.test(id))) {
@@ -63,33 +63,45 @@ export async function POST(req: NextRequest) {
   } else if (target === "gallery") {
     const { data } = await supabase.from("landing_gallery").select("id").eq("id", id!).single();
     if (!data) return NextResponse.json({ error: "Foto galeri tidak ditemukan." }, { status: 404 });
+  } else if (target === "partner") {
+    const { data } = await supabase.from("landing_partners").select("id").eq("id", id!).single();
+    if (!data) return NextResponse.json({ error: "Partner tidak ditemukan." }, { status: 404 });
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());
   const contentType = file.type || "image/jpeg";
 
   let url: string;
+  let dbError: { message: string } | null = null;
   switch (target) {
     case "hero":
       url = await uploadBuffer(keys.landingHero(), buffer, contentType);
-      await supabase.from("landing_hero").update({ bg_image_url: url }).eq("id", 1);
+      ({ error: dbError } = await supabase.from("landing_hero").update({ bg_image_url: url }).eq("id", 1));
       break;
     case "safety":
       url = await uploadBuffer(keys.landingSafety(), buffer, contentType);
-      await supabase.from("landing_safety").update({ photo_url: url }).eq("id", 1);
+      ({ error: dbError } = await supabase.from("landing_safety").update({ photo_url: url }).eq("id", 1));
       break;
     case "facility":
       url = await uploadBuffer(keys.landingFacility(id!), buffer, contentType);
-      await supabase.from("landing_facility_items").update({ photo_url: url }).eq("id", id!);
+      ({ error: dbError } = await supabase.from("landing_facility_items").update({ photo_url: url }).eq("id", id!));
       break;
     case "testimonial":
       url = await uploadBuffer(keys.landingTestimonial(id!), buffer, contentType);
-      await supabase.from("landing_testimonials").update({ avatar_url: url }).eq("id", id!);
+      ({ error: dbError } = await supabase.from("landing_testimonials").update({ avatar_url: url }).eq("id", id!));
       break;
     case "gallery":
       url = await uploadBuffer(keys.landingGallery(id!), buffer, contentType);
-      await supabase.from("landing_gallery").update({ photo_url: url }).eq("id", id!);
+      ({ error: dbError } = await supabase.from("landing_gallery").update({ photo_url: url }).eq("id", id!));
       break;
+    case "partner":
+      url = await uploadBuffer(keys.landingPartner(id!), buffer, contentType);
+      ({ error: dbError } = await supabase.from("landing_partners").update({ logo_url: url }).eq("id", id!));
+      break;
+  }
+
+  if (dbError) {
+    return NextResponse.json({ error: `Gagal menyimpan URL gambar: ${dbError.message}` }, { status: 500 });
   }
 
   return NextResponse.json({ url });

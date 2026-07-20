@@ -6,6 +6,10 @@ export const landing: typeof LandingEn = {
     subtitle: "Membangun perenang yang percaya diri, satu gaya renang setiap saat.",
     cta: "Mulai Sekarang",
   },
+  partners: {
+    label: "Dipercaya oleh Mitra Kami",
+    ariaLabel: "Logo mitra",
+  },
   nav: {
     logoAlt: "Next Swimming School",
     login: "Masuk",

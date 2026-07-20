@@ -844,3 +844,12 @@ CREATE TABLE public.coach_extra_rates (
   CONSTRAINT coach_extra_rates_set_by_fkey FOREIGN KEY (set_by) REFERENCES public.profiles(id),
   CONSTRAINT coach_extra_rates_coach_id_fkey FOREIGN KEY (coach_id) REFERENCES public.profiles(id)
 );
+CREATE TABLE public.landing_partners (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  sort_order integer NOT NULL DEFAULT 0,
+  name text NOT NULL DEFAULT ''::text,
+  logo_url text,
+  website_url text,
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT landing_partners_pkey PRIMARY KEY (id)
+);

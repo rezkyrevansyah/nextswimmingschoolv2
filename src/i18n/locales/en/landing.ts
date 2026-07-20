@@ -4,6 +4,10 @@ export const landing = {
     subtitle: "Building confident, capable swimmers one stroke at a time.",
     cta: "Get Started",
   },
+  partners: {
+    label: "Trusted by Our Partners",
+    ariaLabel: "Partner logos",
+  },
   nav: {
     logoAlt: "Next Swimming School",
     login: "Login",
