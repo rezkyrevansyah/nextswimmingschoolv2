@@ -12,9 +12,23 @@ interface PartnerRow {
 
 export default function Partners({ partners }: { partners: PartnerRow[] }) {
   const { t } = useLocale();
-  const logos = partners.filter((p) => p.logo_url);
+  const valid = partners.filter((p) => p.logo_url || p.name);
 
-  if (logos.length === 0) return null;
+  if (valid.length === 0) return null;
+
+  const items = valid.map((p) =>
+    p.logo_url
+      ? { src: p.logo_url, alt: p.name, title: p.name, href: p.website_url ?? undefined }
+      : {
+          node: (
+            <span className="inline-flex items-center rounded-full border border-ocean-200 bg-ocean-50 px-4 py-2 text-sm font-bold text-ocean-700 whitespace-nowrap">
+              {p.name}
+            </span>
+          ),
+          title: p.name,
+          href: p.website_url ?? undefined,
+        }
+  );
 
   return (
     <section className="py-16 sm:py-20 bg-paper-tint border-y border-line">
@@ -25,7 +39,7 @@ export default function Partners({ partners }: { partners: PartnerRow[] }) {
       </div>
       <div className="mt-8 relative h-16 overflow-hidden">
         <LogoLoop
-          logos={logos.map((p) => ({ src: p.logo_url!, alt: p.name, title: p.name, href: p.website_url ?? undefined }))}
+          logos={items}
           speed={60}
           direction="left"
           logoHeight={40}

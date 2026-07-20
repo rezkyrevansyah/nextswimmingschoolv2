@@ -4,6 +4,13 @@ export const landing = {
     subtitle: "Building confident, capable swimmers one stroke at a time.",
     cta: "Get Started",
   },
+  programs: {
+    label: "Our Programs",
+    headline: "Find the right class for every swimmer.",
+    subtitle: "From first splash to competitive stroke — structured programs for every age and goal.",
+    regular: "Group Class",
+    private: "Private Class",
+  },
   partners: {
     label: "Trusted by Our Partners",
     ariaLabel: "Partner logos",

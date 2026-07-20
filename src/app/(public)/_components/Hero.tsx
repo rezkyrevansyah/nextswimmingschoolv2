@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { gsap } from "gsap";
 import Btn from "@/components/ui/Btn";
 import TextType from "@/components/TextType";
+import DotField from "@/components/DotField";
 import { useLocale } from "@/components/providers/LocaleProvider";
 
 export default function Hero() {
@@ -26,7 +27,10 @@ export default function Hero() {
   }, []);
 
   return (
-    <section className="relative overflow-hidden grid-faint pt-56 pb-24 sm:pt-64 sm:pb-32">
+    <section className="relative overflow-hidden pt-56 pb-24 sm:pt-64 sm:pb-32">
+      <div className="absolute inset-0 pointer-events-none">
+        <DotField />
+      </div>
       <div ref={contentRef} className="relative mx-auto max-w-3xl px-6 text-center">
         <div
           data-hero-reveal
