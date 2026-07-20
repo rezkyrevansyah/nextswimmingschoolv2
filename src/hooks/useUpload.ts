@@ -15,6 +15,12 @@
  */
 import { useState } from "react";
 
+/** Downscales/re-encodes image files before upload; skips PDFs and small files. Dynamically imported so the Canvas code isn't in the initial bundle. */
+async function compressIfImage(file: File): Promise<File> {
+  const { compressImage } = await import("@/lib/imageCompress");
+  return compressImage(file);
+}
+
 async function postForm(endpoint: string, fields: Record<string, string | File>): Promise<string> {
   const form = new FormData();
   for (const [k, v] of Object.entries(fields)) form.append(k, v);
@@ -43,33 +49,33 @@ export function useUpload() {
   const upload = {
     /** Profile picture for the logged-in user */
     avatar: (file: File) =>
-      run(() => postForm("/api/upload/avatar", { file })),
+      run(async () => postForm("/api/upload/avatar", { file: await compressIfImage(file) })),
 
     /** Profile picture uploaded by admin for another profile */
     avatarForProfile: (file: File, profileId: string) =>
-      run(() => postForm("/api/upload/avatar", { file, profile_id: profileId })),
+      run(async () => postForm("/api/upload/avatar", { file: await compressIfImage(file), profile_id: profileId })),
 
     /** Coach clock-in selfie */
     selfie: (file: File, classId: string, date: string) =>
-      run(() => postForm("/api/upload/selfie", { file, classId, date })),
+      run(async () => postForm("/api/upload/selfie", { file: await compressIfImage(file), classId, date })),
 
     /** Payment proof (admin uploads) */
     paymentProof: (file: File, billId: string) =>
-      run(() => postForm("/api/upload/payment-proof", { file, billId })),
+      run(async () => postForm("/api/upload/payment-proof", { file: await compressIfImage(file), billId })),
 
     /** Coach certification photo */
     cert: (file: File, certId: string) =>
-      run(() => postForm("/api/upload/cert", { file, certId })),
+      run(async () => postForm("/api/upload/cert", { file: await compressIfImage(file), certId })),
 
     /** Branch logo (admin/owner) */
     logo: (file: File, branchId: string) =>
-      run(() => postForm("/api/upload/logo", { file, branchId })),
+      run(async () => postForm("/api/upload/logo", { file: await compressIfImage(file), branchId })),
 
     /** Class cover photo (admin/owner) */
     classPhoto: (file: File, classId: string) =>
-      run(() => postForm("/api/upload/class-photo", { file, classId })),
+      run(async () => postForm("/api/upload/class-photo", { file: await compressIfImage(file), classId })),
 
-    /** Coach signature image (coach only — stored in profiles.signature_url) */
+    /** Coach signature image (coach only — stored in profiles.signature_url). Not compressed: small line art, quality-sensitive. */
     signature: (file: File) =>
       run(() => postForm("/api/upload/signature", { file })),
 
@@ -79,9 +85,10 @@ export function useUpload() {
       target: "hero" | "safety" | "facility" | "testimonial" | "gallery" | "partner",
       id?: string,
     ) =>
-      run(() =>
-        postForm("/api/upload/landing-image", id ? { file, target, id } : { file, target }),
-      ),
+      run(async () => {
+        const compressed = await compressIfImage(file);
+        return postForm("/api/upload/landing-image", id ? { file: compressed, target, id } : { file: compressed, target });
+      }),
   };
 
   return { upload, uploading };
