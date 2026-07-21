@@ -112,6 +112,7 @@ interface RaporEntry {
   level_id?: string | null;
   member?: { member_no?: string | null; profile: { full_name: string; avatar_url?: string | null; birth_date?: string | null } | null } | null;
   class?: { name: string } | null;
+  rapor_levels?: { rapor_level_criteria: (PrintCriterion & { sort_order: number })[] } | null;
 }
 
 interface BestTimeRow {
@@ -2969,8 +2970,10 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
             {viewing && period && (() => {
               const vScores = (viewing as unknown as { scores?: Record<string, number | string> }).scores ?? {};
               const vNotes  = (viewing as unknown as { notes?: string | null }).notes ?? null;
-              const vClass  = (viewing as unknown as { class?: { class_criteria?: PrintCriterion[]; rapor_signer_coach_id?: string | null; class_coaches?: { coach_id: string; role: string; profile: { full_name: string; signature_url: string | null } | null }[] } }).class;
-              const vCrit   = (vClass?.class_criteria ?? []) as PrintCriterion[];
+              const vClass  = (viewing as unknown as { class?: { rapor_signer_coach_id?: string | null; class_coaches?: { coach_id: string; role: string; profile: { full_name: string; signature_url: string | null } | null }[] } }).class;
+              const vCrit   = [...(viewing.rapor_levels?.rapor_level_criteria ?? [])]
+                .sort((a, b) => a.sort_order - b.sort_order)
+                .map(c => ({ id: c.id, label: c.label, kind: c.kind as PrintCriterion["kind"] }));
               const signer  = resolveRaporSigner(vClass?.class_coaches ?? [], vClass?.rapor_signer_coach_id);
               const raporData = {
                 full_name: viewing.member?.profile?.full_name ?? "",

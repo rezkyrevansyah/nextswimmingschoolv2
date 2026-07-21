@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await db
     .from("rapor_entries")
-    .select("id, member_id, class_id, locked, scores, notes, personality, motivation, learning_achievements, level, level_id, period_id, member:members(member_no, profile:profiles(full_name, avatar_url, birth_date)), class:classes(name, rapor_signer_coach_id, class_coaches(coach_id, role, profile:profiles(full_name, signature_url)))")
+    .select("id, member_id, class_id, locked, scores, notes, personality, motivation, learning_achievements, level, level_id, period_id, member:members(member_no, profile:profiles(full_name, avatar_url, birth_date)), class:classes(name, rapor_signer_coach_id, class_coaches(coach_id, role, profile:profiles(full_name, signature_url))), rapor_levels(rapor_level_criteria(id, label, kind, options, sort_order))")
     .eq("period_id", periodId)
     .eq("coach_id", user.id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
