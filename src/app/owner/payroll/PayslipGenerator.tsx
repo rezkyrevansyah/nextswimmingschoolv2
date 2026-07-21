@@ -10,6 +10,7 @@ import { logActivity } from "@/lib/activityLog";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
+import { useLocale } from "@/components/providers/LocaleProvider";
 import { printPayslip as printPayslipUtil } from "@/lib/printPayslip";
 import {
   resolveTaxSetting,
@@ -79,6 +80,7 @@ export default function PayslipGenerator({
   invoices: InvoiceLike[];
   invoicesWithoutSlip: InvoiceLike[];
 }) {
+  const { t } = useLocale();
   const supabase = createClient();
   const toast = useToast();
   const confirm = useConfirm();
@@ -109,8 +111,8 @@ export default function PayslipGenerator({
   useEffect(() => { loadTaxSetting(); }, [loadTaxSetting]);
 
   const saveTaxSetting = async () => {
-    if (taxMode === "percent" && (!taxPercent || Number(taxPercent) <= 0)) return toast.error("Masukkan persentase pajak yang valid");
-    if (taxMode === "fixed" && (!taxFixed || Number(taxFixed) <= 0)) return toast.error("Masukkan nominal pajak yang valid");
+    if (taxMode === "percent" && (!taxPercent || Number(taxPercent) <= 0)) return toast.error(t("owner.payslip.invalidTaxPercent"));
+    if (taxMode === "fixed" && (!taxFixed || Number(taxFixed) <= 0)) return toast.error(t("owner.payslip.invalidTaxFixed"));
     setSavingTax(true);
     const payload = {
       coach_id: null,
@@ -126,11 +128,11 @@ export default function PayslipGenerator({
       : supabase.from("tax_settings").insert(payload);
     const { error } = await op;
     setSavingTax(false);
-    if (error) return toast.error("Gagal menyimpan pengaturan pajak", error.message);
-    toast.success("Pengaturan pajak disimpan");
+    if (error) return toast.error(t("owner.payslip.taxSaveFailed"), error.message);
+    toast.success(t("owner.payslip.taxSaved"));
     logActivity(supabase, {
       userId, userRole: "owner", userName, entityType: "tax_settings", entityId: taxSettingId ?? "new",
-      action: "update", label: `Pengaturan pajak diubah menjadi ${taxMode === "percent" ? `${taxPercent}%` : fmtIDR(Number(taxFixed))}`,
+      action: "update", label: t("owner.payslip.activityTaxUpdated", { value: taxMode === "percent" ? `${taxPercent}%` : fmtIDR(Number(taxFixed)) }),
     });
     loadTaxSetting();
   };
@@ -227,10 +229,10 @@ export default function PayslipGenerator({
   const netPreview = Number(genGross || 0) - totalDeductionsPreview;
 
   const savePayslip = async () => {
-    if (!genInvoiceId) return toast.error("Pilih invoice terlebih dahulu");
-    if (!genPeriod.trim()) return toast.error("Period label kosong");
+    if (!genInvoiceId) return toast.error(t("owner.payslip.selectInvoiceRequired"));
+    if (!genPeriod.trim()) return toast.error(t("owner.payslip.periodRequired"));
     const inv = invoicesEligible.find(e => e.id === genInvoiceId);
-    if (!inv || !inv.coach?.id) return toast.error("Invoice tidak ditemukan");
+    if (!inv || !inv.coach?.id) return toast.error(t("owner.payslip.invoiceNotFound"));
 
     setSavingSlip(true);
     const grossAmount = Number(genGross || 0);
@@ -239,7 +241,7 @@ export default function PayslipGenerator({
     if (effectiveTax > 0) {
       deductions.push({
         type: "tax",
-        label: "Pajak Penghasilan",
+        label: t("owner.payslip.incomeTaxDeductionLabel"),
         amount: effectiveTax,
         meta: { mode: taxSetting?.mode ?? null, percent_value: taxSetting?.percent_value ?? null, fixed_value: taxSetting?.fixed_value ?? null, gross_amount: grossAmount, overridden: genTaxOverride != null },
       });
@@ -250,7 +252,7 @@ export default function PayslipGenerator({
       if (amount <= 0) continue;
       deductions.push({
         type: "loan",
-        label: `Cicilan Pinjaman (${c.next.installmentNumber}/${c.loan.tenor_months})`,
+        label: t("owner.payslip.loanInstallmentDeductionLabel", { number: c.next.installmentNumber, total: c.loan.tenor_months }),
         amount,
         loan_id: c.loan.id,
         installment_number: c.next.installmentNumber,
@@ -258,7 +260,7 @@ export default function PayslipGenerator({
       });
     }
     if (otherDeductionAmount > 0) {
-      deductions.push({ type: "other", label: "Potongan Lain", amount: otherDeductionAmount });
+      deductions.push({ type: "other", label: t("owner.payslip.otherDeductionDeductionLabel"), amount: otherDeductionAmount });
     }
 
     const result = await generatePayslip(supabase, {
@@ -273,12 +275,12 @@ export default function PayslipGenerator({
     });
     setSavingSlip(false);
 
-    if ("error" in result) return toast.error("Gagal simpan", result.error);
-    toast.success("Slip gaji berhasil dibuat (draft)");
+    if ("error" in result) return toast.error(t("owner.payslip.saveFailed"), result.error);
+    toast.success(t("owner.payslip.generated"));
     logActivity(supabase, {
       userId, userRole: "owner", userName, entityType: "payslips", entityId: inv.coach.id,
       entityLabel: inv.coach.full_name, action: "create",
-      label: `Slip gaji ${inv.coach.full_name} periode ${genPeriod.trim()} dibuat (draft)`,
+      label: t("owner.payslip.activityGenerated", { coach: inv.coach.full_name, period: genPeriod.trim() }),
       meta: { gross_amount: grossAmount, deductions: totalDeductionsPreview, net_amount: netPreview },
     });
     setShowGenModal(false);
@@ -288,25 +290,25 @@ export default function PayslipGenerator({
 
   const [publishingId, setPublishingId] = useState<string | null>(null);
   const publishPayslip = async (p: OwnerPayslipRow) => {
-    const ok = await confirm({ title: "Terbitkan Slip Gaji?", body: `Slip gaji ${p.coach?.full_name ?? "coach"} periode ${p.period_label} akan diterbitkan dan dapat dilihat coach.`, confirmLabel: "Terbitkan" });
+    const ok = await confirm({ title: t("owner.payslip.publishConfirmTitle"), body: t("owner.payslip.publishConfirmBody", { coach: p.coach?.full_name ?? "coach", period: p.period_label }), confirmLabel: t("owner.payslip.publishConfirmLabel") });
     if (!ok) return;
     setPublishingId(p.id);
     const { error } = await supabase.from("payslips").update({ status: "published", published_at: new Date().toISOString(), published_by: userId }).eq("id", p.id);
     if (!error) await publishPayslipWithLoanClosure(supabase, p.id);
     setPublishingId(null);
-    if (error) return toast.error("Gagal terbitkan", error.message);
-    toast.success("Slip gaji diterbitkan");
-    logActivity(supabase, { userId, userRole: "owner", userName, branchId: p.branch_id, entityType: "payslips", entityId: p.id, entityLabel: p.coach?.full_name ?? undefined, action: "publish", label: `Slip gaji ${p.coach?.full_name ?? "coach"} periode ${p.period_label} diterbitkan`, meta: { net_amount: p.net_amount } });
+    if (error) return toast.error(t("owner.payslip.publishFailed"), error.message);
+    toast.success(t("owner.payslip.published"));
+    logActivity(supabase, { userId, userRole: "owner", userName, branchId: p.branch_id, entityType: "payslips", entityId: p.id, entityLabel: p.coach?.full_name ?? undefined, action: "publish", label: t("owner.payslip.activityPublished", { coach: p.coach?.full_name ?? "coach", period: p.period_label }), meta: { net_amount: p.net_amount } });
     setPayslips(prev => prev.map(s => s.id === p.id ? { ...s, status: "published", published_at: new Date().toISOString() } : s));
   };
 
   const deletePayslip = async (p: OwnerPayslipRow) => {
-    const ok = await confirm({ title: "Hapus Slip Gaji?", body: "Slip gaji draft ini akan dihapus, termasuk cicilan pinjaman yang sudah tercatat di dalamnya (akan dihitung ulang saat slip baru dibuat).", confirmLabel: "Hapus", danger: true });
+    const ok = await confirm({ title: t("owner.payslip.deleteConfirmTitle"), body: t("owner.payslip.deleteConfirmBody"), confirmLabel: t("owner.payslip.deleteConfirmLabel"), danger: true });
     if (!ok) return;
     const { error } = await supabase.from("payslips").delete().eq("id", p.id);
-    if (error) return toast.error("Gagal hapus", error.message);
-    toast.success("Slip gaji dihapus");
-    logActivity(supabase, { userId, userRole: "owner", userName, branchId: p.branch_id, entityType: "payslips", entityId: p.id, entityLabel: p.coach?.full_name ?? undefined, action: "delete", label: `Slip gaji draft ${p.coach?.full_name ?? "coach"} periode ${p.period_label} dihapus` });
+    if (error) return toast.error(t("owner.payslip.deleteFailed"), error.message);
+    toast.success(t("owner.payslip.deleted"));
+    logActivity(supabase, { userId, userRole: "owner", userName, branchId: p.branch_id, entityType: "payslips", entityId: p.id, entityLabel: p.coach?.full_name ?? undefined, action: "delete", label: t("owner.payslip.activityDeleted", { coach: p.coach?.full_name ?? "coach", period: p.period_label }) });
     setPayslips(prev => prev.filter(s => s.id !== p.id));
   };
 
@@ -332,18 +334,18 @@ export default function PayslipGenerator({
       {/* ── Tax Settings Card ────────────────────────────────────────────────── */}
       <Card className="space-y-3">
         <div>
-          <div className="font-display font-bold text-base">Pengaturan Pajak</div>
-          <p className="text-xs text-ink-mute mt-0.5">Berlaku global untuk semua coach. Perubahan di sini tidak mengubah slip gaji yang sudah pernah dibuat.</p>
+          <div className="font-display font-bold text-base">{t("owner.payslip.taxSettingsTitle")}</div>
+          <p className="text-xs text-ink-mute mt-0.5">{t("owner.payslip.taxSettingsSub")}</p>
         </div>
         <div className="flex flex-wrap items-end gap-3">
           <div className="flex gap-2">
             <button onClick={() => setTaxMode("percent")}
               className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors ${taxMode === "percent" ? "bg-ocean-700 text-white" : "bg-paper-tint text-ink-soft hover:bg-paper-deep"}`}>
-              Persentase (%)
+              {t("owner.payslip.taxModePercent")}
             </button>
             <button onClick={() => setTaxMode("fixed")}
               className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors ${taxMode === "fixed" ? "bg-ocean-700 text-white" : "bg-paper-tint text-ink-soft hover:bg-paper-deep"}`}>
-              Nominal Tetap (Rp)
+              {t("owner.payslip.taxModeFixed")}
             </button>
           </div>
           <div className="w-40">
@@ -353,39 +355,39 @@ export default function PayslipGenerator({
               <Input type="text" inputMode="numeric" value={taxFixed ? Number(taxFixed).toLocaleString("id-ID") : ""} onChange={e => setTaxFixed(e.target.value.replace(/\D/g, ""))} placeholder="50.000" className="font-mono" />
             )}
           </div>
-          <Btn variant="soft" size="sm" onClick={saveTaxSetting} disabled={savingTax}>{savingTax ? "…" : "Simpan"}</Btn>
+          <Btn variant="soft" size="sm" onClick={saveTaxSetting} disabled={savingTax}>{savingTax ? "…" : t("common.actions.save")}</Btn>
         </div>
       </Card>
 
       <div className="mt-8 pt-2">
         <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
           <div>
-            <div className="font-display font-bold text-xl">Slip Gaji</div>
-            <p className="text-sm text-ink-mute">Generate dan terbitkan slip gaji dari invoice yang sudah lunas.</p>
+            <div className="font-display font-bold text-xl">{t("owner.payslip.pageTitle")}</div>
+            <p className="text-sm text-ink-mute">{t("owner.payslip.pageSub")}</p>
           </div>
           <Btn variant="primary" icon="plus" onClick={() => { resetGenForm(); setShowGenModal(true); }}>
-            Generate Slip Gaji
+            {t("owner.payslip.generatePayslip")}
           </Btn>
         </div>
 
         <div className="flex gap-2 flex-wrap mb-4">
           <select value={branchFilter} onChange={e => setBranchFilter(e.target.value)} className="text-sm rounded-xl border border-line bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
-            <option value="all">Semua cabang</option>
+            <option value="all">{t("owner.payslip.filterAllBranches")}</option>
             {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
           <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="text-sm rounded-xl border border-line bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
-            <option value="all">Semua status</option>
-            <option value="draft">Draft</option>
-            <option value="published">Diterbitkan</option>
+            <option value="all">{t("owner.payslip.filterAllStatus")}</option>
+            <option value="draft">{t("owner.payslip.statusDraft")}</option>
+            <option value="published">{t("owner.payslip.statusPublished")}</option>
           </select>
-          <span className="text-xs text-ink-mute self-center ml-auto">{filteredPayslips.length} slip</span>
+          <span className="text-xs text-ink-mute self-center ml-auto">{t("owner.payslip.slipCount", { count: filteredPayslips.length })}</span>
         </div>
 
         <div className="bg-white border border-line rounded-2xl overflow-hidden">
           {loadingPayslips ? (
-            <div className="p-10 text-center text-ink-mute">Memuat data…</div>
+            <div className="p-10 text-center text-ink-mute">{t("owner.payslip.loading")}</div>
           ) : filteredPayslips.length === 0 ? (
-            <div className="p-10 text-center text-ink-mute">Belum ada slip gaji. Klik &ldquo;Generate Slip Gaji&rdquo; untuk membuat dari invoice yang sudah lunas.</div>
+            <div className="p-10 text-center text-ink-mute">{t("owner.payslip.empty")}</div>
           ) : (
             <div className="divide-y divide-line">
               {filteredPayslips.map(p => (
@@ -397,22 +399,22 @@ export default function PayslipGenerator({
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-semibold text-sm">{p.coach?.full_name ?? "—"}</span>
                       <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${p.status === "published" ? "bg-ok-50 text-ok-700" : "bg-warn-50 text-warn-700"}`}>
-                        {p.status === "published" ? "Diterbitkan" : "Draft"}
+                        {p.status === "published" ? t("owner.payslip.statusPublished") : t("owner.payslip.statusDraft")}
                       </span>
                     </div>
                     <div className="text-xs text-ink-mute mt-0.5">{p.period_label} · {p.branch?.name ?? "—"}</div>
-                    <div className="text-xs text-ink-mute">Gross {fmtIDR(p.gross_amount)} · Potongan {fmtIDR(p.deductions)} · <span className="text-ok-700 font-semibold">Net {fmtIDR(p.net_amount)}</span></div>
+                    <div className="text-xs text-ink-mute">{t("owner.payslip.grossDeductionsNetPrefix", { gross: fmtIDR(p.gross_amount), deductions: fmtIDR(p.deductions) })}<span className="text-ok-700 font-semibold">{fmtIDR(p.net_amount)}</span></div>
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
-                    <button onClick={() => openViewSlip(p)} className="w-8 h-8 rounded-lg border border-line hover:bg-paper-tint flex items-center justify-center text-ink-mute hover:text-ocean-600" title="Lihat / Cetak">
+                    <button onClick={() => openViewSlip(p)} className="w-8 h-8 rounded-lg border border-line hover:bg-paper-tint flex items-center justify-center text-ink-mute hover:text-ocean-600" title={t("owner.payslip.viewPrintTitle")}>
                       <Icon name="eye" className="w-4 h-4" />
                     </button>
                     {p.status === "draft" && (
                       <>
                         <Btn variant="soft" size="sm" onClick={() => publishPayslip(p)} disabled={publishingId === p.id}>
-                          {publishingId === p.id ? "…" : "Terbitkan"}
+                          {publishingId === p.id ? "…" : t("owner.payslip.statusPublished")}
                         </Btn>
-                        <button onClick={() => deletePayslip(p)} className="w-8 h-8 rounded-lg border border-line hover:bg-danger-50 flex items-center justify-center text-ink-mute hover:text-danger-600" title="Hapus">
+                        <button onClick={() => deletePayslip(p)} className="w-8 h-8 rounded-lg border border-line hover:bg-danger-50 flex items-center justify-center text-ink-mute hover:text-danger-600" title={t("owner.payslip.deleteTitle")}>
                           <Icon name="trash" className="w-4 h-4" />
                         </button>
                       </>
@@ -426,42 +428,42 @@ export default function PayslipGenerator({
       </div>
 
       {/* ── Modal: Generate Slip Gaji ────────────────────────────────────────── */}
-      <Modal open={showGenModal} onClose={() => setShowGenModal(false)} title="Generate Slip Gaji" size="lg"
+      <Modal open={showGenModal} onClose={() => setShowGenModal(false)} title={t("owner.payslip.generateModalTitle")} size="lg"
         footer={
           <div className="flex gap-2 justify-end w-full">
-            <Btn variant="ghost" onClick={() => setShowGenModal(false)}>Batal</Btn>
+            <Btn variant="ghost" onClick={() => setShowGenModal(false)}>{t("common.actions.cancel")}</Btn>
             <Btn variant="primary" onClick={savePayslip} disabled={savingSlip || !genInvoiceId}>
-              {savingSlip ? "Menyimpan…" : "Simpan sebagai Draft"}
+              {savingSlip ? t("common.actions.saving") : t("owner.payslip.saveAsDraft")}
             </Btn>
           </div>
         }>
         <div className="space-y-4">
-          <Field label="Invoice Coach (sudah lunas)">
+          <Field label={t("owner.payslip.fieldInvoice")}>
             <Select value={genInvoiceId} onChange={e => handleGenInvoiceChange(e.target.value)}>
-              <option value="">— Pilih invoice —</option>
+              <option value="">{t("owner.payslip.selectInvoicePlaceholder")}</option>
               {invoicesEligible.map(inv => (
                 <option key={inv.id} value={inv.id}>{inv.coach?.full_name ?? "—"} · {inv.period_label} · {fmtIDR(inv.total_amount)} ({inv.branch?.name ?? "—"})</option>
               ))}
             </Select>
           </Field>
           {invoicesEligible.length === 0 && (
-            <p className="text-xs text-ink-mute">Semua invoice lunas sudah memiliki slip gaji, atau belum ada invoice yang lunas.</p>
+            <p className="text-xs text-ink-mute">{t("owner.payslip.noEligibleInvoices")}</p>
           )}
 
           {genInvoiceId && (
             <>
-              <Field label="Periode"><Input value={genPeriod} onChange={e => setGenPeriod(e.target.value)} placeholder="Contoh: Juni 2026" /></Field>
-              <Field label="Gaji Kotor (Rp)"><Input type="number" inputMode="numeric" min={0} value={genGross} onChange={e => setGenGross(e.target.value.replace(/\D/g, ""))} /></Field>
+              <Field label={t("owner.payslip.fieldPeriod")}><Input value={genPeriod} onChange={e => setGenPeriod(e.target.value)} placeholder={t("owner.payslip.fieldPeriodPlaceholder")} /></Field>
+              <Field label={t("owner.payslip.fieldGrossSalary")}><Input type="number" inputMode="numeric" min={0} value={genGross} onChange={e => setGenGross(e.target.value.replace(/\D/g, ""))} /></Field>
 
               <div className="border border-line rounded-xl p-3.5 space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-semibold text-ink">Pajak Penghasilan</span>
+                  <span className="text-sm font-semibold text-ink">{t("owner.payslip.incomeTaxLabel")}</span>
                   {genTaxOverride == null ? (
                     <button type="button" onClick={() => setGenTaxOverride(String(computedTax))} className="text-xs text-ocean-600 hover:underline flex items-center gap-1">
-                      <Icon name="edit" className="w-3 h-3" /> Ubah manual
+                      <Icon name="edit" className="w-3 h-3" /> {t("owner.payslip.editManually")}
                     </button>
                   ) : (
-                    <button type="button" onClick={() => setGenTaxOverride(null)} className="text-xs text-ink-mute hover:underline">Pakai otomatis</button>
+                    <button type="button" onClick={() => setGenTaxOverride(null)} className="text-xs text-ink-mute hover:underline">{t("owner.payslip.useAutomatic")}</button>
                   )}
                 </div>
                 {genTaxOverride == null ? (
@@ -472,15 +474,15 @@ export default function PayslipGenerator({
               </div>
 
               {loadingLoans ? (
-                <div className="text-sm text-ink-mute">Memeriksa pinjaman aktif…</div>
+                <div className="text-sm text-ink-mute">{t("owner.payslip.checkingActiveLoans")}</div>
               ) : genLoanCandidates.length > 0 && (
                 <div className="border border-line rounded-xl p-3.5 space-y-3">
-                  <span className="text-sm font-semibold text-ink">Cicilan Pinjaman</span>
+                  <span className="text-sm font-semibold text-ink">{t("owner.payslip.loanInstallmentsLabel")}</span>
                   {genLoanCandidates.map(c => (
                     <div key={c.loan.id} className="flex items-center gap-2">
                       <input type="checkbox" checked={!!genLoanIncluded[c.loan.id]} onChange={e => setGenLoanIncluded(prev => ({ ...prev, [c.loan.id]: e.target.checked }))} className="w-4 h-4 rounded accent-ocean-600" />
                       <div className="flex-1 min-w-0">
-                        <div className="text-xs text-ink-soft">Cicilan ke-{c.next.installmentNumber} dari {c.loan.tenor_months} {c.loan.reason ? `· ${c.loan.reason}` : ""}</div>
+                        <div className="text-xs text-ink-soft">{t("owner.payslip.installmentOf", { number: c.next.installmentNumber, total: c.loan.tenor_months, reason: c.loan.reason ? ` · ${c.loan.reason}` : "" })}</div>
                       </div>
                       <div className="w-32">
                         <Input type="number" inputMode="numeric" min={0} disabled={!genLoanIncluded[c.loan.id]}
@@ -489,62 +491,62 @@ export default function PayslipGenerator({
                       </div>
                     </div>
                   ))}
-                  <p className="text-[11px] text-ink-faint">Uncheck untuk melewati cicilan bulan ini (misalnya coach sedang cuti).</p>
+                  <p className="text-[11px] text-ink-faint">{t("owner.payslip.skipInstallmentHint")}</p>
                 </div>
               )}
 
-              <Field label="Potongan Lain (Rp, opsional)"><Input type="number" inputMode="numeric" min={0} value={genOtherDeduction} onChange={e => setGenOtherDeduction(e.target.value.replace(/\D/g, ""))} /></Field>
+              <Field label={t("owner.payslip.fieldOtherDeduction")}><Input type="number" inputMode="numeric" min={0} value={genOtherDeduction} onChange={e => setGenOtherDeduction(e.target.value.replace(/\D/g, ""))} /></Field>
 
               <div className="bg-paper-tint border border-line rounded-xl px-4 py-3 space-y-1.5 text-sm">
-                <div className="flex justify-between"><span>Gaji Kotor</span><span className="font-mono">{fmtIDR(Number(genGross || 0))}</span></div>
-                <div className="flex justify-between text-danger-700"><span>Pajak</span><span className="font-mono">- {fmtIDR(effectiveTax)}</span></div>
-                {includedLoanTotal > 0 && <div className="flex justify-between text-danger-700"><span>Cicilan Pinjaman</span><span className="font-mono">- {fmtIDR(includedLoanTotal)}</span></div>}
-                {otherDeductionAmount > 0 && <div className="flex justify-between text-danger-700"><span>Potongan Lain</span><span className="font-mono">- {fmtIDR(otherDeductionAmount)}</span></div>}
+                <div className="flex justify-between"><span>{t("owner.payslip.grossSalaryLabel")}</span><span className="font-mono">{fmtIDR(Number(genGross || 0))}</span></div>
+                <div className="flex justify-between text-danger-700"><span>{t("owner.payslip.taxLabel")}</span><span className="font-mono">- {fmtIDR(effectiveTax)}</span></div>
+                {includedLoanTotal > 0 && <div className="flex justify-between text-danger-700"><span>{t("owner.payslip.loanInstallmentLabel")}</span><span className="font-mono">- {fmtIDR(includedLoanTotal)}</span></div>}
+                {otherDeductionAmount > 0 && <div className="flex justify-between text-danger-700"><span>{t("owner.payslip.otherDeductionLabel")}</span><span className="font-mono">- {fmtIDR(otherDeductionAmount)}</span></div>}
                 <div className="flex justify-between font-bold text-base pt-1.5 border-t border-line">
-                  <span className="text-ok-900">Gaji Bersih</span>
+                  <span className="text-ok-900">{t("owner.payslip.netSalaryLabel")}</span>
                   <span className="font-mono text-ok-700">{fmtIDR(netPreview)}</span>
                 </div>
               </div>
 
-              <Field label="Catatan (opsional)"><Textarea value={genNotes} onChange={e => setGenNotes(e.target.value)} rows={2} placeholder="Catatan untuk coach…" /></Field>
+              <Field label={t("owner.payslip.fieldNotes")}><Textarea value={genNotes} onChange={e => setGenNotes(e.target.value)} rows={2} placeholder={t("owner.payslip.fieldNotesPlaceholder")} /></Field>
             </>
           )}
         </div>
       </Modal>
 
       {/* ── Modal: View / Print Slip Gaji ────────────────────────────────────── */}
-      <Modal open={!!viewSlip} onClose={() => setViewSlip(null)} title="Detail Slip Gaji" size="md"
+      <Modal open={!!viewSlip} onClose={() => setViewSlip(null)} title={t("owner.payslip.detailModalTitle")} size="md"
         footer={
           <div className="flex gap-2 justify-between w-full">
-            <Btn variant="ghost" icon="print" onClick={() => viewSlip && printPayslip(viewSlip)}>Cetak</Btn>
-            <Btn variant="ghost" onClick={() => setViewSlip(null)}>Tutup</Btn>
+            <Btn variant="ghost" icon="print" onClick={() => viewSlip && printPayslip(viewSlip)}>{t("common.actions.print")}</Btn>
+            <Btn variant="ghost" onClick={() => setViewSlip(null)}>{t("common.actions.close")}</Btn>
           </div>
         }>
         {viewSlip && (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3 text-sm">
-              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Coach</div><div className="font-semibold">{viewSlip.coach?.full_name ?? "—"}</div></div>
-              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Cabang</div><div className="font-semibold">{viewSlip.branch?.name ?? "—"}</div></div>
-              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Periode</div><div>{viewSlip.period_label}</div></div>
-              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Status</div>
+              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">{t("owner.payslip.detailCoach")}</div><div className="font-semibold">{viewSlip.coach?.full_name ?? "—"}</div></div>
+              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">{t("owner.payslip.detailBranch")}</div><div className="font-semibold">{viewSlip.branch?.name ?? "—"}</div></div>
+              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">{t("owner.payslip.detailPeriod")}</div><div>{viewSlip.period_label}</div></div>
+              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">{t("owner.payslip.detailStatus")}</div>
                 <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${viewSlip.status === "published" ? "bg-ok-50 text-ok-700" : "bg-warn-50 text-warn-700"}`}>
-                  {viewSlip.status === "published" ? "Diterbitkan" : "Draft"}
+                  {viewSlip.status === "published" ? t("owner.payslip.statusPublished") : t("owner.payslip.statusDraft")}
                 </span>
               </div>
-              {viewSlip.published_at && <div className="col-span-2"><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Diterbitkan pada</div><div>{new Date(viewSlip.published_at).toLocaleDateString("id-ID", { dateStyle: "long" })}</div></div>}
+              {viewSlip.published_at && <div className="col-span-2"><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">{t("owner.payslip.publishedAt")}</div><div>{new Date(viewSlip.published_at).toLocaleDateString("id-ID", { dateStyle: "long" })}</div></div>}
             </div>
             <div className="border-t border-line pt-4 space-y-2">
-              <div className="flex justify-between py-2 border-b border-line text-sm"><span>Gaji Kotor</span><span className="font-mono font-semibold">{fmtIDR(viewSlip.gross_amount)}</span></div>
+              <div className="flex justify-between py-2 border-b border-line text-sm"><span>{t("owner.payslip.grossSalaryLabel")}</span><span className="font-mono font-semibold">{fmtIDR(viewSlip.gross_amount)}</span></div>
               {loadingViewDeductions ? (
-                <div className="text-sm text-ink-mute py-2">Memuat rincian potongan…</div>
+                <div className="text-sm text-ink-mute py-2">{t("owner.payslip.loadingDeductions")}</div>
               ) : viewDeductions.length > 0 ? (
                 viewDeductions.map(d => (
                   <div key={d.id} className="flex justify-between py-2 border-b border-line text-sm text-danger-700"><span>{d.label}</span><span className="font-mono">- {fmtIDR(d.amount)}</span></div>
                 ))
               ) : (
-                <div className="flex justify-between py-2 border-b border-line text-sm text-danger-700"><span>Potongan</span><span className="font-mono">- {fmtIDR(viewSlip.deductions)}</span></div>
+                <div className="flex justify-between py-2 border-b border-line text-sm text-danger-700"><span>{t("owner.payslip.deductionsFallbackLabel")}</span><span className="font-mono">- {fmtIDR(viewSlip.deductions)}</span></div>
               )}
-              <div className="flex justify-between py-2 text-base font-bold"><span>Gaji Bersih</span><span className="font-mono text-ok-700">{fmtIDR(viewSlip.net_amount)}</span></div>
+              <div className="flex justify-between py-2 text-base font-bold"><span>{t("owner.payslip.netSalaryLabel")}</span><span className="font-mono text-ok-700">{fmtIDR(viewSlip.net_amount)}</span></div>
             </div>
             {viewSlip.notes && (
               <div className="bg-paper-tint rounded-xl p-3 text-sm text-ink-mute">{viewSlip.notes}</div>

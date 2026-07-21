@@ -12,6 +12,7 @@ import { logActivity } from "@/lib/activityLog";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
+import { useLocale } from "@/components/providers/LocaleProvider";
 import { computeInstallmentAmount } from "@/lib/payroll";
 
 interface Branch {
@@ -51,13 +52,6 @@ interface CoachOption {
   branch_id: string | null;
 }
 
-const STATUS_LABEL: Record<string, string> = {
-  active: "Aktif",
-  paid_off: "Lunas",
-  written_off: "Dihapuskan",
-  cancelled: "Dibatalkan",
-};
-
 const STATUS_KIND: Record<string, string> = {
   active: "pending",
   paid_off: "paid",
@@ -66,9 +60,12 @@ const STATUS_KIND: Record<string, string> = {
 };
 
 export default function CoachLoans({ branches, userId, userName }: { branches: Branch[]; userId: string; userName: string }) {
+  const { t } = useLocale();
   const supabase = createClient();
   const toast = useToast();
   const confirm = useConfirm();
+
+  const statusLabel = (status: string) => t(`owner.coachLoans.statusLabel.${status}`);
 
   const [loans, setLoans] = useState<LoanRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -132,12 +129,12 @@ export default function CoachLoans({ branches, userId, userName }: { branches: B
   }, [form.principal_amount, form.tenor_months]);
 
   const saveLoan = async () => {
-    if (!form.coach_id) return toast.error("Pilih coach terlebih dahulu");
-    if (!form.branch_id) return toast.error("Pilih cabang terlebih dahulu");
+    if (!form.coach_id) return toast.error(t("owner.coachLoans.selectCoachRequired"));
+    if (!form.branch_id) return toast.error(t("owner.coachLoans.selectBranchRequired"));
     const principal = Number(form.principal_amount || 0);
     const tenor = Number(form.tenor_months || 0);
-    if (!principal || principal <= 0) return toast.error("Masukkan jumlah pokok pinjaman yang valid");
-    if (!tenor || tenor <= 0) return toast.error("Masukkan lama cicilan (bulan) yang valid");
+    if (!principal || principal <= 0) return toast.error(t("owner.coachLoans.invalidPrincipal"));
+    if (!tenor || tenor <= 0) return toast.error(t("owner.coachLoans.invalidTenor"));
 
     setSaving(true);
     const coach = coaches.find(c => c.id === form.coach_id);
@@ -153,12 +150,12 @@ export default function CoachLoans({ branches, userId, userName }: { branches: B
       created_by: userId,
     });
     setSaving(false);
-    if (error) return toast.error("Gagal menyimpan pinjaman", error.message);
-    toast.success("Pinjaman berhasil ditambahkan");
+    if (error) return toast.error(t("owner.coachLoans.saveFailed"), error.message);
+    toast.success(t("owner.coachLoans.created"));
     logActivity(supabase, {
       userId, userRole: "owner", userName, entityType: "coach_loans", entityId: form.coach_id,
       entityLabel: coach?.full_name, action: "create",
-      label: `Pinjaman baru untuk ${coach?.full_name ?? "coach"} sebesar ${fmtIDR(principal)} (${tenor} bulan)`,
+      label: t("owner.coachLoans.activityCreated", { coach: coach?.full_name ?? "coach", amount: fmtIDR(principal), tenor }),
       meta: { principal_amount: principal, tenor_months: tenor },
     });
     setShowCreate(false);
@@ -184,7 +181,7 @@ export default function CoachLoans({ branches, userId, userName }: { branches: B
 
   const writeOffLoan = async () => {
     if (!detail) return;
-    const ok = await confirm({ title: "Tulis-off Sisa Pinjaman?", body: `Sisa saldo ${fmtIDR(remaining)} akan dihapuskan dan pinjaman ${detail.coach?.full_name ?? "coach"} ditandai lunas. Tindakan ini tidak akan memotong gaji lagi.`, confirmLabel: "Tulis-off", danger: true });
+    const ok = await confirm({ title: t("owner.coachLoans.writeOffConfirmTitle"), body: t("owner.coachLoans.writeOffConfirmBody", { amount: fmtIDR(remaining), coach: detail.coach?.full_name ?? "coach" }), confirmLabel: t("owner.coachLoans.writeOffConfirmLabel"), danger: true });
     if (!ok) return;
     setActioning(true);
     if (remaining > 0) {
@@ -195,12 +192,12 @@ export default function CoachLoans({ branches, userId, userName }: { branches: B
     }
     const { error } = await supabase.from("coach_loans").update({ status: "written_off", closed_at: new Date().toISOString() }).eq("id", detail.id);
     setActioning(false);
-    if (error) return toast.error("Gagal menulis-off pinjaman", error.message);
-    toast.success("Pinjaman ditulis-off");
+    if (error) return toast.error(t("owner.coachLoans.writeOffFailed"), error.message);
+    toast.success(t("owner.coachLoans.writeOffSuccess"));
     logActivity(supabase, {
       userId, userRole: "owner", userName, entityType: "coach_loans", entityId: detail.id,
       entityLabel: detail.coach?.full_name, action: "update",
-      label: `Pinjaman ${detail.coach?.full_name ?? "coach"} ditulis-off (sisa ${fmtIDR(remaining)})`,
+      label: t("owner.coachLoans.activityWrittenOff", { coach: detail.coach?.full_name ?? "coach", amount: fmtIDR(remaining) }),
     });
     setDetail(null);
     loadLoans();
@@ -208,17 +205,17 @@ export default function CoachLoans({ branches, userId, userName }: { branches: B
 
   const cancelLoan = async () => {
     if (!detail) return;
-    const ok = await confirm({ title: "Batalkan Pinjaman?", body: "Pinjaman ini belum ada cicilan yang terpotong dan akan dibatalkan sepenuhnya.", confirmLabel: "Batalkan", danger: true });
+    const ok = await confirm({ title: t("owner.coachLoans.cancelConfirmTitle"), body: t("owner.coachLoans.cancelConfirmBody"), confirmLabel: t("owner.coachLoans.cancelConfirmLabel"), danger: true });
     if (!ok) return;
     setActioning(true);
     const { error } = await supabase.from("coach_loans").update({ status: "cancelled", closed_at: new Date().toISOString() }).eq("id", detail.id);
     setActioning(false);
-    if (error) return toast.error("Gagal membatalkan pinjaman", error.message);
-    toast.success("Pinjaman dibatalkan");
+    if (error) return toast.error(t("owner.coachLoans.cancelFailed"), error.message);
+    toast.success(t("owner.coachLoans.cancelSuccess"));
     logActivity(supabase, {
       userId, userRole: "owner", userName, entityType: "coach_loans", entityId: detail.id,
       entityLabel: detail.coach?.full_name, action: "update",
-      label: `Pinjaman ${detail.coach?.full_name ?? "coach"} dibatalkan`,
+      label: t("owner.coachLoans.activityCancelled", { coach: detail.coach?.full_name ?? "coach" }),
     });
     setDetail(null);
     loadLoans();
@@ -230,42 +227,42 @@ export default function CoachLoans({ branches, userId, userName }: { branches: B
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <h2 className="font-display font-bold text-2xl">Daftar Pinjaman</h2>
-          <p className="text-ink-mute text-sm mt-0.5">Kelola pinjaman karyawan dan pantau progres cicilan.</p>
+          <h2 className="font-display font-bold text-2xl">{t("owner.coachLoans.pageTitle")}</h2>
+          <p className="text-ink-mute text-sm mt-0.5">{t("owner.coachLoans.pageSub")}</p>
         </div>
         <Btn variant="primary" icon="plus" onClick={() => { setForm({ coach_id: "", branch_id: branches[0]?.id ?? "", principal_amount: "", tenor_months: "", reason: "", notes: "" }); setShowCreate(true); }}>
-          Tambah Pinjaman
+          {t("owner.coachLoans.addLoan")}
         </Btn>
       </div>
 
       <div className="grid sm:grid-cols-3 gap-4">
-        <Stat label="Pinjaman Aktif" value={activeLoans.length} icon="wallet" tone="warn" sub={activeLoans.length > 0 ? "sedang berjalan" : "tidak ada"} />
-        <Stat label="Total Saldo Outstanding" value={fmtIDR(totalOutstanding)} icon="chart" tone="ocean" sub="perkiraan pokok, belum dikurangi cicilan terbayar" />
-        <Stat label="Total Pinjaman" value={loans.length} icon="clipboard" tone="ok" sub="semua status" />
+        <Stat label={t("owner.coachLoans.statActiveLoans")} value={activeLoans.length} icon="wallet" tone="warn" sub={activeLoans.length > 0 ? t("owner.coachLoans.statActiveLoansSubRunning") : t("owner.coachLoans.statActiveLoansSubNone")} />
+        <Stat label={t("owner.coachLoans.statOutstandingBalance")} value={fmtIDR(totalOutstanding)} icon="chart" tone="ocean" sub={t("owner.coachLoans.statOutstandingBalanceSub")} />
+        <Stat label={t("owner.coachLoans.statTotalLoans")} value={loans.length} icon="clipboard" tone="ok" sub={t("owner.coachLoans.statTotalLoansSub")} />
       </div>
 
       <div className="flex gap-2 flex-wrap">
         {branches.length > 1 && (
           <select value={branchFilter} onChange={e => setBranchFilter(e.target.value)} className="text-sm rounded-xl border border-line bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
-            <option value="all">Semua cabang</option>
+            <option value="all">{t("owner.coachLoans.filterAllBranches")}</option>
             {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
         )}
         <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="text-sm rounded-xl border border-line bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
-          <option value="all">Semua status</option>
-          <option value="active">Aktif</option>
-          <option value="paid_off">Lunas</option>
-          <option value="written_off">Dihapuskan</option>
-          <option value="cancelled">Dibatalkan</option>
+          <option value="all">{t("owner.coachLoans.filterAllStatus")}</option>
+          <option value="active">{statusLabel("active")}</option>
+          <option value="paid_off">{statusLabel("paid_off")}</option>
+          <option value="written_off">{statusLabel("written_off")}</option>
+          <option value="cancelled">{statusLabel("cancelled")}</option>
         </select>
-        <span className="text-xs text-ink-mute self-center ml-auto">{filtered.length} pinjaman</span>
+        <span className="text-xs text-ink-mute self-center ml-auto">{t("owner.coachLoans.loanCount", { count: filtered.length })}</span>
       </div>
 
       <Card padded={false}>
         {loading ? (
-          <div className="p-10 text-center text-ink-mute">Memuat data…</div>
+          <div className="p-10 text-center text-ink-mute">{t("owner.coachLoans.loading")}</div>
         ) : filtered.length === 0 ? (
-          <div className="p-10 text-center text-ink-mute">Belum ada pinjaman. Klik &ldquo;Tambah Pinjaman&rdquo; untuk mulai.</div>
+          <div className="p-10 text-center text-ink-mute">{t("owner.coachLoans.empty")}</div>
         ) : (
           <div className="divide-y divide-line">
             {filtered.map(loan => (
@@ -274,14 +271,14 @@ export default function CoachLoans({ branches, userId, userName }: { branches: B
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-semibold text-sm">{loan.coach?.full_name ?? "—"}</span>
-                    <Status kind={STATUS_KIND[loan.status]}>{STATUS_LABEL[loan.status]}</Status>
+                    <Status kind={STATUS_KIND[loan.status]}>{statusLabel(loan.status)}</Status>
                   </div>
-                  <div className="text-xs text-ink-mute mt-0.5">{loan.branch?.name ?? "—"} · {loan.tenor_months} bulan · Cicilan {fmtIDR(loan.installment_amount)}/bulan</div>
+                  <div className="text-xs text-ink-mute mt-0.5">{loan.branch?.name ?? "—"} · {t("owner.coachLoans.perMonth", { tenor: loan.tenor_months, amount: fmtIDR(loan.installment_amount) })}</div>
                   {loan.reason && <div className="text-xs text-ink-faint mt-0.5 truncate">{loan.reason}</div>}
                 </div>
                 <div className="text-right shrink-0">
                   <div className="font-mono font-bold text-sm">{fmtIDR(loan.principal_amount)}</div>
-                  <div className="text-xs text-ink-mute">pokok pinjaman</div>
+                  <div className="text-xs text-ink-mute">{t("owner.coachLoans.principalLabel")}</div>
                 </div>
                 <Icon name="chevron" className="w-4 h-4 text-ink-faint shrink-0" />
               </div>
@@ -291,96 +288,96 @@ export default function CoachLoans({ branches, userId, userName }: { branches: B
       </Card>
 
       {/* Modal: Tambah Pinjaman */}
-      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Tambah Pinjaman" size="md"
+      <Modal open={showCreate} onClose={() => setShowCreate(false)} title={t("owner.coachLoans.addModalTitle")} size="md"
         footer={
           <div className="flex gap-2 justify-end w-full">
-            <Btn variant="ghost" onClick={() => setShowCreate(false)}>Batal</Btn>
-            <Btn variant="primary" onClick={saveLoan} disabled={saving}>{saving ? "Menyimpan…" : "Simpan Pinjaman"}</Btn>
+            <Btn variant="ghost" onClick={() => setShowCreate(false)}>{t("common.actions.cancel")}</Btn>
+            <Btn variant="primary" onClick={saveLoan} disabled={saving}>{saving ? t("common.actions.saving") : t("owner.coachLoans.saveLoan")}</Btn>
           </div>
         }>
         <div className="space-y-4">
-          <Field label="Coach">
+          <Field label={t("owner.coachLoans.fieldCoach")}>
             <Select value={form.coach_id} onChange={e => handleCoachChange(e.target.value)}>
-              <option value="">— Pilih coach —</option>
+              <option value="">{t("owner.coachLoans.selectCoachPlaceholder")}</option>
               {coaches.map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
             </Select>
           </Field>
-          <Field label="Cabang">
+          <Field label={t("owner.coachLoans.fieldBranch")}>
             <Select value={form.branch_id} onChange={e => setForm(f => ({ ...f, branch_id: e.target.value }))}>
-              <option value="">— Pilih cabang —</option>
+              <option value="">{t("owner.coachLoans.selectBranchPlaceholder")}</option>
               {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
             </Select>
           </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Jumlah Pokok (Rp)">
+            <Field label={t("owner.coachLoans.fieldPrincipal")}>
               <Input type="number" inputMode="numeric" min={0} value={form.principal_amount}
                 onChange={e => setForm(f => ({ ...f, principal_amount: e.target.value.replace(/\D/g, "") }))} />
             </Field>
-            <Field label="Lama Cicilan (bulan)">
+            <Field label={t("owner.coachLoans.fieldTenor")}>
               <Input type="number" inputMode="numeric" min={1} value={form.tenor_months}
                 onChange={e => setForm(f => ({ ...f, tenor_months: e.target.value.replace(/\D/g, "") }))} />
             </Field>
           </div>
           {previewInstallment > 0 && (
             <div className="bg-ocean-50 border border-ocean-200 rounded-xl px-4 py-3 flex items-center justify-between">
-              <span className="text-sm font-semibold text-ocean-900">Cicilan per Bulan</span>
+              <span className="text-sm font-semibold text-ocean-900">{t("owner.coachLoans.installmentPerMonth")}</span>
               <span className="font-mono font-bold text-ocean-700 text-lg">{fmtIDR(previewInstallment)}</span>
             </div>
           )}
-          <Field label="Alasan (opsional)"><Input value={form.reason} onChange={e => setForm(f => ({ ...f, reason: e.target.value }))} placeholder="Contoh: Pinjaman renovasi rumah" /></Field>
-          <Field label="Catatan (opsional)"><Textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2} /></Field>
+          <Field label={t("owner.coachLoans.fieldReason")}><Input value={form.reason} onChange={e => setForm(f => ({ ...f, reason: e.target.value }))} placeholder={t("owner.coachLoans.fieldReasonPlaceholder")} /></Field>
+          <Field label={t("owner.coachLoans.fieldNotes")}><Textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2} /></Field>
         </div>
       </Modal>
 
       {/* Modal: Detail Pinjaman */}
-      <Modal open={!!detail} onClose={() => setDetail(null)} title="Detail Pinjaman" size="md"
+      <Modal open={!!detail} onClose={() => setDetail(null)} title={t("owner.coachLoans.detailModalTitle")} size="md"
         footer={
           <div className="flex gap-2 justify-between w-full">
             <div className="flex gap-2">
               {detail?.status === "active" && installmentCount === 0 && (
-                <Btn variant="ghost" onClick={cancelLoan} disabled={actioning}>Batalkan</Btn>
+                <Btn variant="ghost" onClick={cancelLoan} disabled={actioning}>{t("owner.coachLoans.cancelBtn")}</Btn>
               )}
               {detail?.status === "active" && (
-                <Btn variant="danger" onClick={writeOffLoan} disabled={actioning}>{actioning ? "…" : "Tulis-off Sisa"}</Btn>
+                <Btn variant="danger" onClick={writeOffLoan} disabled={actioning}>{actioning ? "…" : t("owner.coachLoans.writeOffBtn")}</Btn>
               )}
             </div>
-            <Btn variant="ghost" onClick={() => setDetail(null)}>Tutup</Btn>
+            <Btn variant="ghost" onClick={() => setDetail(null)}>{t("common.actions.close")}</Btn>
           </div>
         }>
         {detail && (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3 text-sm">
-              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Coach</div><div className="font-semibold">{detail.coach?.full_name ?? "—"}</div></div>
-              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Cabang</div><div className="font-semibold">{detail.branch?.name ?? "—"}</div></div>
-              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Status</div><Status kind={STATUS_KIND[detail.status]}>{STATUS_LABEL[detail.status]}</Status></div>
-              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Tenor</div><div>{detail.tenor_months} bulan</div></div>
-              {detail.reason && <div className="col-span-2"><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Alasan</div><div>{detail.reason}</div></div>}
+              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">{t("owner.coachLoans.detailCoach")}</div><div className="font-semibold">{detail.coach?.full_name ?? "—"}</div></div>
+              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">{t("owner.coachLoans.detailBranch")}</div><div className="font-semibold">{detail.branch?.name ?? "—"}</div></div>
+              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">{t("owner.coachLoans.detailStatus")}</div><Status kind={STATUS_KIND[detail.status]}>{statusLabel(detail.status)}</Status></div>
+              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">{t("owner.coachLoans.detailTenor")}</div><div>{t("owner.coachLoans.detailTenorMonths", { tenor: detail.tenor_months })}</div></div>
+              {detail.reason && <div className="col-span-2"><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">{t("owner.coachLoans.detailReason")}</div><div>{detail.reason}</div></div>}
             </div>
 
             <div className="border-t border-line pt-4 space-y-2">
-              <div className="flex justify-between text-sm"><span>Pokok Pinjaman</span><span className="font-mono font-semibold">{fmtIDR(detail.principal_amount)}</span></div>
-              <div className="flex justify-between text-sm text-ok-700"><span>Sudah Dibayar</span><span className="font-mono">{fmtIDR(paidTotal)}</span></div>
-              <div className="flex justify-between text-base font-bold"><span>Sisa Saldo</span><span className="font-mono text-danger-600">{fmtIDR(Math.max(0, remaining))}</span></div>
+              <div className="flex justify-between text-sm"><span>{t("owner.coachLoans.principalAmount")}</span><span className="font-mono font-semibold">{fmtIDR(detail.principal_amount)}</span></div>
+              <div className="flex justify-between text-sm text-ok-700"><span>{t("owner.coachLoans.amountPaid")}</span><span className="font-mono">{fmtIDR(paidTotal)}</span></div>
+              <div className="flex justify-between text-base font-bold"><span>{t("owner.coachLoans.remainingBalance")}</span><span className="font-mono text-danger-600">{fmtIDR(Math.max(0, remaining))}</span></div>
               <div className="pt-1">
                 <div className="h-2 rounded-full bg-paper-deep overflow-hidden">
                   <div className="h-full bg-ok-500 rounded-full" style={{ width: `${clampPercent(installmentCount, detail.tenor_months)}%` }} />
                 </div>
-                <div className="text-xs text-ink-mute mt-1">{installmentCount} dari {detail.tenor_months} cicilan</div>
+                <div className="text-xs text-ink-mute mt-1">{t("owner.coachLoans.installmentsProgress", { paid: installmentCount, total: detail.tenor_months })}</div>
               </div>
             </div>
 
             <div className="border-t border-line pt-4">
-              <div className="text-xs font-bold uppercase tracking-widest text-ink-faint mb-2">Riwayat Pembayaran</div>
+              <div className="text-xs font-bold uppercase tracking-widest text-ink-faint mb-2">{t("owner.coachLoans.paymentHistoryTitle")}</div>
               {loadingPayments ? (
-                <p className="text-sm text-ink-mute">Memuat…</p>
+                <p className="text-sm text-ink-mute">{t("owner.coachLoans.loading")}</p>
               ) : payments.length === 0 ? (
-                <p className="text-sm text-ink-mute">Belum ada cicilan yang terpotong.</p>
+                <p className="text-sm text-ink-mute">{t("owner.coachLoans.noPaymentsYet")}</p>
               ) : (
                 <div className="space-y-1.5">
                   {payments.map(p => (
                     <div key={p.id} className="flex items-center justify-between py-2 border-b border-line text-sm">
                       <div>
-                        <div className="font-semibold text-ink">{p.kind === "installment" ? `Cicilan ke-${p.installment_number}` : p.kind === "write_off" ? "Tulis-off" : "Penyesuaian"}</div>
+                        <div className="font-semibold text-ink">{p.kind === "installment" ? t("owner.coachLoans.installmentNumber", { number: p.installment_number }) : p.kind === "write_off" ? t("owner.coachLoans.writeOffKind") : t("owner.coachLoans.adjustmentKind")}</div>
                         <div className="text-xs text-ink-mute">{p.period_label}</div>
                       </div>
                       <div className="font-mono font-bold">{fmtIDR(p.amount)}</div>

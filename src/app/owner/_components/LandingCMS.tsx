@@ -10,6 +10,7 @@ import Icon from "@/components/ui/Icon";
 import { Field, Input, Select, Textarea } from "@/components/ui/FormFields";
 import StarDisplay from "@/components/ui/StarDisplay";
 import { useUpload } from "@/hooks/useUpload";
+import { useLocale } from "@/components/providers/LocaleProvider";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -23,13 +24,15 @@ type Tab = "programs" | "coaches" | "whynext" | "testimonials" | "partners";
 
 const WHY_NEXT_ICONS = ["shield", "star", "check", "users", "target", "book", "swim", "clipboard", "sparkle"];
 
-const TABS: { id: Tab; label: string; icon: string }[] = [
-  { id: "programs",     label: "Program",      icon: "book"     },
-  { id: "coaches",      label: "Coach",        icon: "swim"     },
-  { id: "whynext",      label: "Why Next",     icon: "shield"   },
-  { id: "testimonials", label: "Testimoni",    icon: "users"    },
-  { id: "partners",     label: "Partner",      icon: "link"     },
-];
+function buildTabs(t: (key: string) => string): { id: Tab; label: string; icon: string }[] {
+  return [
+    { id: "programs",     label: t("owner.landingCms.tabPrograms"),     icon: "book"   },
+    { id: "coaches",      label: t("owner.landingCms.tabCoaches"),      icon: "swim"   },
+    { id: "whynext",      label: t("owner.landingCms.tabWhyNext"),      icon: "shield" },
+    { id: "testimonials", label: t("owner.landingCms.tabTestimonials"), icon: "users"  },
+    { id: "partners",     label: t("owner.landingCms.tabPartners"),     icon: "link"   },
+  ];
+}
 
 // ── Revalidate helper ─────────────────────────────────────────────────────────
 async function revalidate() {
@@ -42,7 +45,7 @@ function ImageField({
   url,
   onUrlChange,
   onFileChange,
-  hint = "Gunakan upload storage. URL manual hanya untuk domain yang sudah diizinkan.",
+  hint,
   square = false,
 }: {
   label: string;
@@ -53,13 +56,14 @@ function ImageField({
   /** Pad the uploaded image to a square canvas (no crop, transparent padding for PNG/WebP) — for logos. */
   square?: boolean;
 }) {
+  const { t } = useLocale();
   const [mode, setMode] = useState<"url" | "upload">("upload");
   const [preview, setPreview] = useState<string | null>(null);
   const [fileName, setFileName] = useState("");
   const [processing, setProcessing] = useState(false);
 
   return (
-    <Field label={label} hint={square ? "Gambar akan otomatis dijadikan persegi (tanpa crop, padding transparan)." : hint}>
+    <Field label={label} hint={square ? t("owner.landingCms.imageFieldSquareHint") : (hint ?? t("owner.landingCms.imageFieldDefaultHint"))}>
       <div className="space-y-3">
         <div className="flex gap-2">
           <button
@@ -67,14 +71,14 @@ function ImageField({
             onClick={() => { setMode("upload"); onFileChange(null); }}
             className={`flex-1 py-2 rounded-lg text-sm font-semibold border transition-colors ${mode === "upload" ? "bg-ocean-700 text-white border-ocean-700" : "bg-white text-ink-soft border-line hover:bg-paper-tint"}`}
           >
-            Upload File
+            {t("owner.landingCms.uploadFile")}
           </button>
           <button
             type="button"
             onClick={() => { setMode("url"); onFileChange(null); setPreview(null); setFileName(""); }}
             className={`flex-1 py-2 rounded-lg text-sm font-semibold border transition-colors ${mode === "url" ? "bg-ocean-700 text-white border-ocean-700" : "bg-white text-ink-soft border-line hover:bg-paper-tint"}`}
           >
-            Pakai URL
+            {t("owner.landingCms.useUrl")}
           </button>
         </div>
 
@@ -82,7 +86,7 @@ function ImageField({
           <>
             <label className="cursor-pointer flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-line hover:border-ocean-400 bg-paper-tint hover:bg-ocean-50/30 transition-colors py-6 px-3">
               <Icon name="camera" className="w-6 h-6 text-ink-mute" />
-              <span className="text-xs text-ink-mute font-medium">{processing ? "Memproses gambar..." : (fileName || "Klik untuk pilih gambar")}</span>
+              <span className="text-xs text-ink-mute font-medium">{processing ? t("owner.landingCms.processingImage") : (fileName || t("owner.landingCms.clickToChooseImage"))}</span>
               <input
                 type="file"
                 accept="image/*"
@@ -131,24 +135,26 @@ function ImageField({
 
 // ── Main component ────────────────────────────────────────────────────────────
 export default function LandingCMS() {
+  const { t } = useLocale();
   const [tab, setTab] = useState<Tab>("programs");
+  const tabs = buildTabs(t);
 
   return (
     <div className="space-y-6">
       {/* Tab bar */}
       <div className="flex flex-wrap gap-2">
-        {TABS.map((t) => (
+        {tabs.map((tb) => (
           <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
+            key={tb.id}
+            onClick={() => setTab(tb.id)}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
-              tab === t.id
+              tab === tb.id
                 ? "bg-ocean-700 text-white shadow-card"
                 : "bg-paper-tint text-ink-soft hover:bg-paper-deep hover:text-ink"
             }`}
           >
-            <Icon name={t.icon} className="w-4 h-4" />
-            {t.label}
+            <Icon name={tb.icon} className="w-4 h-4" />
+            {tb.label}
           </button>
         ))}
       </div>
@@ -164,6 +170,7 @@ export default function LandingCMS() {
 
 // ── Partners Tab ─────────────────────────────────────────────────────────────
 function PartnersTab() {
+  const { t } = useLocale();
   const toast = useToast();
   const confirm = useConfirm();
   const supabase = createClient();
@@ -202,36 +209,36 @@ function PartnersTab() {
           .insert({ name: form.name, sort_order: form.sort_order, website_url: websiteUrl, logo_url: logoFile ? null : (form.logo_url.trim() || null) })
           .select("id")
           .single();
-        if (error || !inserted) throw new Error(error?.message ?? "Gagal menyimpan");
+        if (error || !inserted) throw new Error(error?.message ?? t("owner.landingCms.saveFailedGeneric"));
         if (logoFile) await upload.landingImage(logoFile, "partner", inserted.id);
       }
     } catch (e) {
-      toast.error("Gagal menyimpan", (e as Error).message);
+      toast.error(t("owner.landingCms.partners.saveFailed"), (e as Error).message);
       setSaving(false);
       return;
     }
     await revalidate();
-    toast.success("Partner disimpan");
+    toast.success(t("owner.landingCms.partners.saved"));
     setSaving(false);
     setShowModal(false);
     load();
   };
 
   const del = async (p: PartnerItem) => {
-    const yes = await confirm({ title: "Hapus partner?", body: p.name || "Partner ini akan dihapus dari landing.", danger: true });
+    const yes = await confirm({ title: t("owner.landingCms.partners.deleteConfirmTitle"), body: p.name || t("owner.landingCms.partners.deleteConfirmBody"), danger: true });
     if (!yes) return;
     const { error } = await supabase.from("landing_partners").delete().eq("id", p.id);
-    if (error) return toast.error("Gagal menghapus", error.message);
+    if (error) return toast.error(t("owner.landingCms.partners.deleteFailed"), error.message);
     await revalidate();
-    toast.success("Partner dihapus");
+    toast.success(t("owner.landingCms.partners.deleted"));
     load();
   };
 
   return (
     <Card>
       <div className="flex items-center justify-between">
-        <SectionTitle sub="Logo partner/sekolah yang tampil di landing">Partner</SectionTitle>
-        <Btn variant="soft" size="sm" icon="plus" onClick={openAdd}>Tambah</Btn>
+        <SectionTitle sub={t("owner.landingCms.partners.sectionSub")}>{t("owner.landingCms.partners.sectionTitle")}</SectionTitle>
+        <Btn variant="soft" size="sm" icon="plus" onClick={openAdd}>{t("owner.landingCms.add")}</Btn>
       </div>
       <div className="mt-4 grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {items.map((p) => (
@@ -241,7 +248,7 @@ function PartnersTab() {
             </div>
             <div className="p-3 flex items-start gap-2">
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-bold text-ink truncate">{p.name || "Tanpa nama"}</div>
+                <div className="text-sm font-bold text-ink truncate">{p.name || t("owner.landingCms.noName")}</div>
                 {p.website_url && <div className="text-xs text-ocean-600 truncate">{p.website_url}</div>}
               </div>
               <button onClick={() => openEdit(p)} className="w-7 h-7 rounded-lg border border-line bg-white flex items-center justify-center hover:bg-paper-deep"><Icon name="edit" className="w-3.5 h-3.5 text-ink-mute" /></button>
@@ -249,16 +256,16 @@ function PartnersTab() {
             </div>
           </div>
         ))}
-        {items.length === 0 && <div className="py-8 text-center text-ink-mute text-sm sm:col-span-2 lg:col-span-3">Belum ada partner.</div>}
+        {items.length === 0 && <div className="py-8 text-center text-ink-mute text-sm sm:col-span-2 lg:col-span-3">{t("owner.landingCms.partners.empty")}</div>}
       </div>
 
-      <Modal open={showModal} onClose={() => setShowModal(false)} title={editItem ? "Edit Partner" : "Tambah Partner"} size="sm"
-        footer={<><Btn variant="ghost" onClick={() => setShowModal(false)}>Batal</Btn><Btn variant="primary" onClick={save} disabled={saving || uploading || !form.name.trim()}>{saving || uploading ? "Menyimpan..." : "Simpan"}</Btn></>}>
+      <Modal open={showModal} onClose={() => setShowModal(false)} title={editItem ? t("owner.landingCms.partners.editModalTitle") : t("owner.landingCms.partners.addModalTitle")} size="sm"
+        footer={<><Btn variant="ghost" onClick={() => setShowModal(false)}>{t("common.actions.cancel")}</Btn><Btn variant="primary" onClick={save} disabled={saving || uploading || !form.name.trim()}>{saving || uploading ? t("common.actions.saving") : t("common.actions.save")}</Btn></>}>
         <div className="space-y-3">
-          <ImageField label="Logo" url={form.logo_url} onUrlChange={(url) => setForm({ ...form, logo_url: url })} onFileChange={setLogoFile} square />
-          <Field label="Nama partner/sekolah"><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="SD Ceria Bangsa" /></Field>
-          <Field label="Website (opsional)"><Input type="url" value={form.website_url} onChange={(e) => setForm({ ...form, website_url: e.target.value })} placeholder="https://..." /></Field>
-          <Field label="Urutan"><Input type="number" value={String(form.sort_order)} onChange={(e) => setForm({ ...form, sort_order: Number(e.target.value) })} /></Field>
+          <ImageField label={t("owner.landingCms.partners.fieldLogo")} url={form.logo_url} onUrlChange={(url) => setForm({ ...form, logo_url: url })} onFileChange={setLogoFile} square />
+          <Field label={t("owner.landingCms.partners.fieldName")}><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={t("owner.landingCms.partners.fieldNamePlaceholder")} /></Field>
+          <Field label={t("owner.landingCms.partners.fieldWebsite")}><Input type="url" value={form.website_url} onChange={(e) => setForm({ ...form, website_url: e.target.value })} placeholder="https://..." /></Field>
+          <Field label={t("owner.landingCms.partners.fieldOrder")}><Input type="number" value={String(form.sort_order)} onChange={(e) => setForm({ ...form, sort_order: Number(e.target.value) })} /></Field>
         </div>
       </Modal>
     </Card>
@@ -268,6 +275,7 @@ function PartnersTab() {
 // ── Programs Tab ─────────────────────────────────────────────────────────────
 
 function ProgramsTab() {
+  const { t } = useLocale();
   const toast = useToast();
   const confirm = useConfirm();
   const supabase = createClient();
@@ -306,36 +314,36 @@ function ProgramsTab() {
           .insert({ name: form.name, description, class_type: form.class_type, sort_order: form.sort_order, photo_url: photoFile ? null : (form.photo_url.trim() || null) })
           .select("id")
           .single();
-        if (error || !inserted) throw new Error(error?.message ?? "Gagal menyimpan");
+        if (error || !inserted) throw new Error(error?.message ?? t("owner.landingCms.saveFailedGeneric"));
         if (photoFile) await upload.landingImage(photoFile, "program", inserted.id);
       }
     } catch (e) {
-      toast.error("Gagal menyimpan", (e as Error).message);
+      toast.error(t("owner.landingCms.programs.saveFailed"), (e as Error).message);
       setSaving(false);
       return;
     }
     await revalidate();
-    toast.success("Program disimpan");
+    toast.success(t("owner.landingCms.programs.saved"));
     setSaving(false);
     setShowModal(false);
     load();
   };
 
   const del = async (p: ProgramItem) => {
-    const yes = await confirm({ title: "Hapus program?", body: p.name || "Program ini akan dihapus dari landing.", danger: true });
+    const yes = await confirm({ title: t("owner.landingCms.programs.deleteConfirmTitle"), body: p.name || t("owner.landingCms.programs.deleteConfirmBody"), danger: true });
     if (!yes) return;
     const { error } = await supabase.from("landing_programs").delete().eq("id", p.id);
-    if (error) return toast.error("Gagal menghapus", error.message);
+    if (error) return toast.error(t("owner.landingCms.programs.deleteFailed"), error.message);
     await revalidate();
-    toast.success("Program dihapus");
+    toast.success(t("owner.landingCms.programs.deleted"));
     load();
   };
 
   return (
     <Card>
       <div className="flex items-center justify-between">
-        <SectionTitle sub="Daftar program/kelas yang tampil di section Our Programs">Program</SectionTitle>
-        <Btn variant="soft" size="sm" icon="plus" onClick={openAdd}>Tambah</Btn>
+        <SectionTitle sub={t("owner.landingCms.programs.sectionSub")}>{t("owner.landingCms.programs.sectionTitle")}</SectionTitle>
+        <Btn variant="soft" size="sm" icon="plus" onClick={openAdd}>{t("owner.landingCms.add")}</Btn>
       </div>
       <div className="mt-4 grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {items.map((p) => (
@@ -347,10 +355,10 @@ function ProgramsTab() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5">
                   <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${p.class_type === "private" ? "bg-wave-50 text-wave-700" : "bg-ocean-50 text-ocean-700"}`}>
-                    {p.class_type === "private" ? "Privat" : "Reguler"}
+                    {p.class_type === "private" ? t("owner.landingCms.programs.typePrivate") : t("owner.landingCms.programs.typeRegular")}
                   </span>
                 </div>
-                <div className="text-sm font-bold text-ink truncate mt-1">{p.name || "Tanpa nama"}</div>
+                <div className="text-sm font-bold text-ink truncate mt-1">{p.name || t("owner.landingCms.noName")}</div>
                 {p.description && <div className="text-xs text-ink-mute line-clamp-2">{p.description}</div>}
               </div>
               <button onClick={() => openEdit(p)} className="w-7 h-7 rounded-lg border border-line bg-white flex items-center justify-center hover:bg-paper-deep shrink-0"><Icon name="edit" className="w-3.5 h-3.5 text-ink-mute" /></button>
@@ -358,22 +366,22 @@ function ProgramsTab() {
             </div>
           </div>
         ))}
-        {items.length === 0 && <div className="py-8 text-center text-ink-mute text-sm sm:col-span-2 lg:col-span-3">Belum ada program.</div>}
+        {items.length === 0 && <div className="py-8 text-center text-ink-mute text-sm sm:col-span-2 lg:col-span-3">{t("owner.landingCms.programs.empty")}</div>}
       </div>
 
-      <Modal open={showModal} onClose={() => setShowModal(false)} title={editItem ? "Edit Program" : "Tambah Program"} size="sm"
-        footer={<><Btn variant="ghost" onClick={() => setShowModal(false)}>Batal</Btn><Btn variant="primary" onClick={save} disabled={saving || uploading || !form.name.trim()}>{saving || uploading ? "Menyimpan..." : "Simpan"}</Btn></>}>
+      <Modal open={showModal} onClose={() => setShowModal(false)} title={editItem ? t("owner.landingCms.programs.editModalTitle") : t("owner.landingCms.programs.addModalTitle")} size="sm"
+        footer={<><Btn variant="ghost" onClick={() => setShowModal(false)}>{t("common.actions.cancel")}</Btn><Btn variant="primary" onClick={save} disabled={saving || uploading || !form.name.trim()}>{saving || uploading ? t("common.actions.saving") : t("common.actions.save")}</Btn></>}>
         <div className="space-y-3">
-          <ImageField label="Foto" url={form.photo_url} onUrlChange={(url) => setForm({ ...form, photo_url: url })} onFileChange={setPhotoFile} />
-          <Field label="Nama program"><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Renang Anak Pemula" /></Field>
-          <Field label="Tipe kelas">
+          <ImageField label={t("owner.landingCms.programs.fieldPhoto")} url={form.photo_url} onUrlChange={(url) => setForm({ ...form, photo_url: url })} onFileChange={setPhotoFile} />
+          <Field label={t("owner.landingCms.programs.fieldName")}><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={t("owner.landingCms.programs.fieldNamePlaceholder")} /></Field>
+          <Field label={t("owner.landingCms.programs.fieldClassType")}>
             <Select value={form.class_type} onChange={(e) => setForm({ ...form, class_type: e.target.value })}>
-              <option value="reguler">Reguler</option>
-              <option value="private">Privat</option>
+              <option value="reguler">{t("owner.landingCms.programs.typeRegular")}</option>
+              <option value="private">{t("owner.landingCms.programs.typePrivate")}</option>
             </Select>
           </Field>
-          <Field label="Deskripsi singkat (opsional)"><Textarea rows={3} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Kelas dasar untuk anak usia 4-8 tahun, fokus pengenalan air dan keamanan." /></Field>
-          <Field label="Urutan"><Input type="number" value={String(form.sort_order)} onChange={(e) => setForm({ ...form, sort_order: Number(e.target.value) })} /></Field>
+          <Field label={t("owner.landingCms.programs.fieldDescription")}><Textarea rows={3} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder={t("owner.landingCms.programs.fieldDescriptionPlaceholder")} /></Field>
+          <Field label={t("owner.landingCms.programs.fieldOrder")}><Input type="number" value={String(form.sort_order)} onChange={(e) => setForm({ ...form, sort_order: Number(e.target.value) })} /></Field>
         </div>
       </Modal>
     </Card>
@@ -383,6 +391,7 @@ function ProgramsTab() {
 // ── Coaches Tab ──────────────────────────────────────────────────────────────
 
 function CoachesTab() {
+  const { t } = useLocale();
   const toast = useToast();
   const confirm = useConfirm();
   const supabase = createClient();
@@ -420,36 +429,36 @@ function CoachesTab() {
           .insert({ name: form.name, sort_order: form.sort_order, photo_url: photoFile ? null : (form.photo_url.trim() || null) })
           .select("id")
           .single();
-        if (error || !inserted) throw new Error(error?.message ?? "Gagal menyimpan");
+        if (error || !inserted) throw new Error(error?.message ?? t("owner.landingCms.saveFailedGeneric"));
         if (photoFile) await upload.landingImage(photoFile, "coach", inserted.id);
       }
     } catch (e) {
-      toast.error("Gagal menyimpan", (e as Error).message);
+      toast.error(t("owner.landingCms.coaches.saveFailed"), (e as Error).message);
       setSaving(false);
       return;
     }
     await revalidate();
-    toast.success("Coach disimpan");
+    toast.success(t("owner.landingCms.coaches.saved"));
     setSaving(false);
     setShowModal(false);
     load();
   };
 
   const del = async (c: CoachItem) => {
-    const yes = await confirm({ title: "Hapus coach?", body: c.name || "Coach ini akan dihapus dari landing.", danger: true });
+    const yes = await confirm({ title: t("owner.landingCms.coaches.deleteConfirmTitle"), body: c.name || t("owner.landingCms.coaches.deleteConfirmBody"), danger: true });
     if (!yes) return;
     const { error } = await supabase.from("landing_coaches").delete().eq("id", c.id);
-    if (error) return toast.error("Gagal menghapus", error.message);
+    if (error) return toast.error(t("owner.landingCms.coaches.deleteFailed"), error.message);
     await revalidate();
-    toast.success("Coach dihapus");
+    toast.success(t("owner.landingCms.coaches.deleted"));
     load();
   };
 
   return (
     <Card>
       <div className="flex items-center justify-between">
-        <SectionTitle sub="Foto + nama coach yang tampil di section Our Coach">Coach</SectionTitle>
-        <Btn variant="soft" size="sm" icon="plus" onClick={openAdd}>Tambah</Btn>
+        <SectionTitle sub={t("owner.landingCms.coaches.sectionSub")}>{t("owner.landingCms.coaches.sectionTitle")}</SectionTitle>
+        <Btn variant="soft" size="sm" icon="plus" onClick={openAdd}>{t("owner.landingCms.add")}</Btn>
       </div>
       <div className="mt-4 grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {items.map((c) => (
@@ -459,22 +468,22 @@ function CoachesTab() {
             </div>
             <div className="p-3 flex items-start gap-2">
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-bold text-ink truncate">{c.name || "Tanpa nama"}</div>
+                <div className="text-sm font-bold text-ink truncate">{c.name || t("owner.landingCms.noName")}</div>
               </div>
               <button onClick={() => openEdit(c)} className="w-7 h-7 rounded-lg border border-line bg-white flex items-center justify-center hover:bg-paper-deep shrink-0"><Icon name="edit" className="w-3.5 h-3.5 text-ink-mute" /></button>
               <button onClick={() => del(c)} className="w-7 h-7 rounded-lg border border-danger-200 bg-danger-50 flex items-center justify-center hover:bg-danger-100 shrink-0"><Icon name="trash" className="w-3.5 h-3.5 text-danger-500" /></button>
             </div>
           </div>
         ))}
-        {items.length === 0 && <div className="py-8 text-center text-ink-mute text-sm sm:col-span-2 lg:col-span-3">Belum ada coach.</div>}
+        {items.length === 0 && <div className="py-8 text-center text-ink-mute text-sm sm:col-span-2 lg:col-span-3">{t("owner.landingCms.coaches.empty")}</div>}
       </div>
 
-      <Modal open={showModal} onClose={() => setShowModal(false)} title={editItem ? "Edit Coach" : "Tambah Coach"} size="sm"
-        footer={<><Btn variant="ghost" onClick={() => setShowModal(false)}>Batal</Btn><Btn variant="primary" onClick={save} disabled={saving || uploading || !form.name.trim()}>{saving || uploading ? "Menyimpan..." : "Simpan"}</Btn></>}>
+      <Modal open={showModal} onClose={() => setShowModal(false)} title={editItem ? t("owner.landingCms.coaches.editModalTitle") : t("owner.landingCms.coaches.addModalTitle")} size="sm"
+        footer={<><Btn variant="ghost" onClick={() => setShowModal(false)}>{t("common.actions.cancel")}</Btn><Btn variant="primary" onClick={save} disabled={saving || uploading || !form.name.trim()}>{saving || uploading ? t("common.actions.saving") : t("common.actions.save")}</Btn></>}>
         <div className="space-y-3">
-          <ImageField label="Foto" url={form.photo_url} onUrlChange={(url) => setForm({ ...form, photo_url: url })} onFileChange={setPhotoFile} square />
-          <Field label="Nama coach"><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Coach Andi" /></Field>
-          <Field label="Urutan"><Input type="number" value={String(form.sort_order)} onChange={(e) => setForm({ ...form, sort_order: Number(e.target.value) })} /></Field>
+          <ImageField label={t("owner.landingCms.coaches.fieldPhoto")} url={form.photo_url} onUrlChange={(url) => setForm({ ...form, photo_url: url })} onFileChange={setPhotoFile} square />
+          <Field label={t("owner.landingCms.coaches.fieldName")}><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={t("owner.landingCms.coaches.fieldNamePlaceholder")} /></Field>
+          <Field label={t("owner.landingCms.coaches.fieldOrder")}><Input type="number" value={String(form.sort_order)} onChange={(e) => setForm({ ...form, sort_order: Number(e.target.value) })} /></Field>
         </div>
       </Modal>
     </Card>
@@ -484,6 +493,7 @@ function CoachesTab() {
 // ── Why Next Tab ─────────────────────────────────────────────────────────────
 
 function WhyNextTab() {
+  const { t } = useLocale();
   const toast = useToast();
   const confirm = useConfirm();
   const supabase = createClient();
@@ -517,32 +527,32 @@ function WhyNextTab() {
         if (error) throw new Error(error.message);
       }
     } catch (e) {
-      toast.error("Gagal menyimpan", (e as Error).message);
+      toast.error(t("owner.landingCms.whyNext.saveFailed"), (e as Error).message);
       setSaving(false);
       return;
     }
     await revalidate();
-    toast.success("Poin Why Next disimpan");
+    toast.success(t("owner.landingCms.whyNext.saved"));
     setSaving(false);
     setShowModal(false);
     load();
   };
 
   const del = async (w: WhyNextItem) => {
-    const yes = await confirm({ title: "Hapus poin ini?", body: w.title || "Poin ini akan dihapus dari landing.", danger: true });
+    const yes = await confirm({ title: t("owner.landingCms.whyNext.deleteConfirmTitle"), body: w.title || t("owner.landingCms.whyNext.deleteConfirmBody"), danger: true });
     if (!yes) return;
     const { error } = await supabase.from("landing_why_next").delete().eq("id", w.id);
-    if (error) return toast.error("Gagal menghapus", error.message);
+    if (error) return toast.error(t("owner.landingCms.whyNext.deleteFailed"), error.message);
     await revalidate();
-    toast.success("Poin dihapus");
+    toast.success(t("owner.landingCms.whyNext.deleted"));
     load();
   };
 
   return (
     <Card>
       <div className="flex items-center justify-between">
-        <SectionTitle sub="Poin keunggulan yang tampil di section Why Next">Why Next</SectionTitle>
-        <Btn variant="soft" size="sm" icon="plus" onClick={openAdd}>Tambah</Btn>
+        <SectionTitle sub={t("owner.landingCms.whyNext.sectionSub")}>{t("owner.landingCms.whyNext.sectionTitle")}</SectionTitle>
+        <Btn variant="soft" size="sm" icon="plus" onClick={openAdd}>{t("owner.landingCms.add")}</Btn>
       </div>
       <div className="mt-4 grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {items.map((w) => (
@@ -552,7 +562,7 @@ function WhyNextTab() {
                 <Icon name={w.icon} className="w-4.5 h-4.5 text-ocean-600" />
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-bold text-ink truncate">{w.title || "Tanpa judul"}</div>
+                <div className="text-sm font-bold text-ink truncate">{w.title || t("owner.landingCms.whyNext.noTitle")}</div>
                 {w.description && <div className="text-xs text-ink-mute line-clamp-2 mt-0.5">{w.description}</div>}
               </div>
               <button onClick={() => openEdit(w)} className="w-7 h-7 rounded-lg border border-line bg-white flex items-center justify-center hover:bg-paper-deep shrink-0"><Icon name="edit" className="w-3.5 h-3.5 text-ink-mute" /></button>
@@ -560,20 +570,20 @@ function WhyNextTab() {
             </div>
           </div>
         ))}
-        {items.length === 0 && <div className="py-8 text-center text-ink-mute text-sm sm:col-span-2 lg:col-span-3">Belum ada poin.</div>}
+        {items.length === 0 && <div className="py-8 text-center text-ink-mute text-sm sm:col-span-2 lg:col-span-3">{t("owner.landingCms.whyNext.empty")}</div>}
       </div>
 
-      <Modal open={showModal} onClose={() => setShowModal(false)} title={editItem ? "Edit Poin" : "Tambah Poin"} size="sm"
-        footer={<><Btn variant="ghost" onClick={() => setShowModal(false)}>Batal</Btn><Btn variant="primary" onClick={save} disabled={saving || !form.title.trim()}>{saving ? "Menyimpan..." : "Simpan"}</Btn></>}>
+      <Modal open={showModal} onClose={() => setShowModal(false)} title={editItem ? t("owner.landingCms.whyNext.editModalTitle") : t("owner.landingCms.whyNext.addModalTitle")} size="sm"
+        footer={<><Btn variant="ghost" onClick={() => setShowModal(false)}>{t("common.actions.cancel")}</Btn><Btn variant="primary" onClick={save} disabled={saving || !form.title.trim()}>{saving ? t("common.actions.saving") : t("common.actions.save")}</Btn></>}>
         <div className="space-y-3">
-          <Field label="Ikon">
+          <Field label={t("owner.landingCms.whyNext.fieldIcon")}>
             <Select value={form.icon} onChange={(e) => setForm({ ...form, icon: e.target.value })}>
               {WHY_NEXT_ICONS.map((ic) => <option key={ic} value={ic}>{ic}</option>)}
             </Select>
           </Field>
-          <Field label="Judul"><Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Coach Bersertifikat" /></Field>
-          <Field label="Deskripsi singkat (opsional)"><Textarea rows={3} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Setiap coach memiliki sertifikasi yang diverifikasi sebelum mengajar." /></Field>
-          <Field label="Urutan"><Input type="number" value={String(form.sort_order)} onChange={(e) => setForm({ ...form, sort_order: Number(e.target.value) })} /></Field>
+          <Field label={t("owner.landingCms.whyNext.fieldTitle")}><Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder={t("owner.landingCms.whyNext.fieldTitlePlaceholder")} /></Field>
+          <Field label={t("owner.landingCms.whyNext.fieldDescription")}><Textarea rows={3} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder={t("owner.landingCms.whyNext.fieldDescriptionPlaceholder")} /></Field>
+          <Field label={t("owner.landingCms.whyNext.fieldOrder")}><Input type="number" value={String(form.sort_order)} onChange={(e) => setForm({ ...form, sort_order: Number(e.target.value) })} /></Field>
         </div>
       </Modal>
     </Card>
@@ -583,6 +593,7 @@ function WhyNextTab() {
 // ── Testimonials Tab ──────────────────────────────────────────────────────────
 
 function TestimonialsTab() {
+  const { t } = useLocale();
   const toast = useToast();
   const confirm = useConfirm();
   const supabase = createClient();
@@ -604,7 +615,7 @@ function TestimonialsTab() {
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const openAdd = () => { setEditItem(null); setAvatarFile(null); setForm({ name: "", role: "", body_text: "", avatar_url: "", rating: 5, sort_order: items.length + 1 }); setShowModal(true); };
-  const openEdit = (t: TestimonialItem) => { setEditItem(t); setAvatarFile(null); setForm({ name: t.name, role: t.role ?? "", body_text: t.body_text, avatar_url: t.avatar_url ?? "", rating: t.rating, sort_order: t.sort_order }); setShowModal(true); };
+  const openEdit = (item: TestimonialItem) => { setEditItem(item); setAvatarFile(null); setForm({ name: item.name, role: item.role ?? "", body_text: item.body_text, avatar_url: item.avatar_url ?? "", rating: item.rating, sort_order: item.sort_order }); setShowModal(true); };
 
   const save = async () => {
     setSaving(true);
@@ -621,65 +632,65 @@ function TestimonialsTab() {
           .insert({ name: form.name, role, body_text: form.body_text, rating: form.rating, sort_order: form.sort_order, avatar_url: avatarFile ? null : (form.avatar_url.trim() || null) })
           .select("id")
           .single();
-        if (error || !inserted) throw new Error(error?.message ?? "Gagal menyimpan");
+        if (error || !inserted) throw new Error(error?.message ?? t("owner.landingCms.saveFailedGeneric"));
         if (avatarFile) await upload.landingImage(avatarFile, "testimonial-v2", inserted.id);
       }
     } catch (e) {
-      toast.error("Gagal menyimpan", (e as Error).message);
+      toast.error(t("owner.landingCms.testimonials.saveFailed"), (e as Error).message);
       setSaving(false);
       return;
     }
     await revalidate();
-    toast.success("Testimoni disimpan");
+    toast.success(t("owner.landingCms.testimonials.saved"));
     setSaving(false);
     setShowModal(false);
     load();
   };
 
-  const del = async (t: TestimonialItem) => {
-    const yes = await confirm({ title: "Hapus testimoni?", body: t.name || "Testimoni ini akan dihapus dari landing.", danger: true });
+  const del = async (item: TestimonialItem) => {
+    const yes = await confirm({ title: t("owner.landingCms.testimonials.deleteConfirmTitle"), body: item.name || t("owner.landingCms.testimonials.deleteConfirmBody"), danger: true });
     if (!yes) return;
-    const { error } = await supabase.from("landing_testimonials_v2").delete().eq("id", t.id);
-    if (error) return toast.error("Gagal menghapus", error.message);
+    const { error } = await supabase.from("landing_testimonials_v2").delete().eq("id", item.id);
+    if (error) return toast.error(t("owner.landingCms.testimonials.deleteFailed"), error.message);
     await revalidate();
-    toast.success("Testimoni dihapus");
+    toast.success(t("owner.landingCms.testimonials.deleted"));
     load();
   };
 
   return (
     <Card>
       <div className="flex items-center justify-between">
-        <SectionTitle sub="Testimoni member/orang tua yang tampil di landing">Testimoni</SectionTitle>
-        <Btn variant="soft" size="sm" icon="plus" onClick={openAdd}>Tambah</Btn>
+        <SectionTitle sub={t("owner.landingCms.testimonials.sectionSub")}>{t("owner.landingCms.testimonials.sectionTitle")}</SectionTitle>
+        <Btn variant="soft" size="sm" icon="plus" onClick={openAdd}>{t("owner.landingCms.add")}</Btn>
       </div>
       <div className="mt-4 grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {items.map((t) => (
-          <div key={t.id} className="rounded-xl bg-paper-tint overflow-hidden border border-line p-3">
+        {items.map((item) => (
+          <div key={item.id} className="rounded-xl bg-paper-tint overflow-hidden border border-line p-3">
             <div className="flex items-start gap-2">
               <div className="w-10 h-10 rounded-full bg-ocean-100 overflow-hidden shrink-0 flex items-center justify-center text-ocean-700 font-bold text-sm">
-                {t.avatar_url ? <img src={t.avatar_url} alt={t.name} className="w-full h-full object-cover" /> : t.name.charAt(0).toUpperCase() || "?"}
+                {item.avatar_url ? <img src={item.avatar_url} alt={item.name} className="w-full h-full object-cover" /> : item.name.charAt(0).toUpperCase() || "?"}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-bold text-ink truncate">{t.name || "Tanpa nama"}</div>
-                {t.role && <div className="text-xs text-ink-mute truncate">{t.role}</div>}
-                <StarDisplay stars={t.rating} size="sm" />
+                <div className="text-sm font-bold text-ink truncate">{item.name || t("owner.landingCms.noName")}</div>
+                {item.role && <div className="text-xs text-ink-mute truncate">{item.role}</div>}
+                <StarDisplay stars={item.rating} size="sm" />
               </div>
-              <button onClick={() => openEdit(t)} className="w-7 h-7 rounded-lg border border-line bg-white flex items-center justify-center hover:bg-paper-deep shrink-0"><Icon name="edit" className="w-3.5 h-3.5 text-ink-mute" /></button>
-              <button onClick={() => del(t)} className="w-7 h-7 rounded-lg border border-danger-200 bg-danger-50 flex items-center justify-center hover:bg-danger-100 shrink-0"><Icon name="trash" className="w-3.5 h-3.5 text-danger-500" /></button>
+              <button onClick={() => openEdit(item)} className="w-7 h-7 rounded-lg border border-line bg-white flex items-center justify-center hover:bg-paper-deep shrink-0"><Icon name="edit" className="w-3.5 h-3.5 text-ink-mute" /></button>
+              <button onClick={() => del(item)} className="w-7 h-7 rounded-lg border border-danger-200 bg-danger-50 flex items-center justify-center hover:bg-danger-100 shrink-0"><Icon name="trash" className="w-3.5 h-3.5 text-danger-500" /></button>
             </div>
-            <div className="text-xs text-ink-mute line-clamp-2 mt-2">{t.body_text}</div>
+            <div className="text-xs text-ink-mute line-clamp-2 mt-2">{item.body_text}</div>
           </div>
         ))}
-        {items.length === 0 && <div className="py-8 text-center text-ink-mute text-sm sm:col-span-2 lg:col-span-3">Belum ada testimoni.</div>}
+        {items.length === 0 && <div className="py-8 text-center text-ink-mute text-sm sm:col-span-2 lg:col-span-3">{t("owner.landingCms.testimonials.empty")}</div>}
       </div>
 
-      <Modal open={showModal} onClose={() => setShowModal(false)} title={editItem ? "Edit Testimoni" : "Tambah Testimoni"} size="sm"
-        footer={<><Btn variant="ghost" onClick={() => setShowModal(false)}>Batal</Btn><Btn variant="primary" onClick={save} disabled={saving || uploading || !form.name.trim() || !form.body_text.trim()}>{saving || uploading ? "Menyimpan..." : "Simpan"}</Btn></>}>
+      <Modal open={showModal} onClose={() => setShowModal(false)} title={editItem ? t("owner.landingCms.testimonials.editModalTitle") : t("owner.landingCms.testimonials.addModalTitle")} size="sm"
+        footer={<><Btn variant="ghost" onClick={() => setShowModal(false)}>{t("common.actions.cancel")}</Btn><Btn variant="primary" onClick={save} disabled={saving || uploading || !form.name.trim() || !form.body_text.trim()}>{saving || uploading ? t("common.actions.saving") : t("common.actions.save")}</Btn></>}>
         <div className="space-y-3">
-          <ImageField label="Foto (opsional)" url={form.avatar_url} onUrlChange={(url) => setForm({ ...form, avatar_url: url })} onFileChange={setAvatarFile} square />
-          <Field label="Nama"><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Ibu Sarah" /></Field>
-          <Field label="Peran (opsional)"><Input value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} placeholder="Ibu dari Kayla, 7 tahun" /></Field>
-          <Field label="Rating">
+          <ImageField label={t("owner.landingCms.testimonials.fieldPhoto")} url={form.avatar_url} onUrlChange={(url) => setForm({ ...form, avatar_url: url })} onFileChange={setAvatarFile} square />
+          <Field label={t("owner.landingCms.testimonials.fieldName")}><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={t("owner.landingCms.testimonials.fieldNamePlaceholder")} /></Field>
+          <Field label={t("owner.landingCms.testimonials.fieldRole")}><Input value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} placeholder={t("owner.landingCms.testimonials.fieldRolePlaceholder")} /></Field>
+          <Field label={t("owner.landingCms.testimonials.fieldRating")}>
             <div className="flex items-center gap-1">
               {[1, 2, 3, 4, 5].map((n) => (
                 <button key={n} type="button" onClick={() => setForm({ ...form, rating: n })} className="p-0.5">
@@ -688,8 +699,8 @@ function TestimonialsTab() {
               ))}
             </div>
           </Field>
-          <Field label="Isi testimoni"><Textarea rows={4} value={form.body_text} onChange={(e) => setForm({ ...form, body_text: e.target.value })} placeholder="Anak saya jadi lebih percaya diri di air setelah 2 bulan les di sini." /></Field>
-          <Field label="Urutan"><Input type="number" value={String(form.sort_order)} onChange={(e) => setForm({ ...form, sort_order: Number(e.target.value) })} /></Field>
+          <Field label={t("owner.landingCms.testimonials.fieldBody")}><Textarea rows={4} value={form.body_text} onChange={(e) => setForm({ ...form, body_text: e.target.value })} placeholder={t("owner.landingCms.testimonials.fieldBodyPlaceholder")} /></Field>
+          <Field label={t("owner.landingCms.testimonials.fieldOrder")}><Input type="number" value={String(form.sort_order)} onChange={(e) => setForm({ ...form, sort_order: Number(e.target.value) })} /></Field>
         </div>
       </Modal>
     </Card>

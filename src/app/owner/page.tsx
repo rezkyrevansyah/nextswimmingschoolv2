@@ -20,6 +20,7 @@ import { logActivity } from "@/lib/activityLog";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
+import { useLocale } from "@/components/providers/LocaleProvider";
 import LandingCMS from "./_components/LandingCMS";
 import PayslipGenerator from "./payroll/PayslipGenerator";
 import CoachLoans from "./payroll/CoachLoans";
@@ -112,6 +113,7 @@ interface Invoice {
 // ── Sub-pages ──────────────────────────────────────────────────────────────────
 
 function Dashboard({ branches }: { branches: Branch[] }) {
+  const { t } = useLocale();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const supabase = createClient();
 
@@ -136,34 +138,34 @@ function Dashboard({ branches }: { branches: Branch[] }) {
       <div className="bg-ocean-700 text-white rounded-2xl p-6 lg:p-8 relative overflow-hidden">
         <div className="absolute -right-20 -bottom-20 w-72 h-72 rounded-full bg-wave-500/30 blur-3xl" />
         <div className="relative">
-          <div className="text-wave-200 text-[11px] uppercase tracking-widest font-bold">Pagi, Owner</div>
+          <div className="text-wave-200 text-[11px] uppercase tracking-widest font-bold">{t("owner.dashboard.greeting")}</div>
           <h2 className="font-display font-extrabold text-3xl lg:text-4xl mt-1.5 leading-tight">
-            {branches.length} cabang, {totalMembers} member,<br className="hidden lg:block" /> {totalCoaches} coach aktif.
+            {t("owner.dashboard.heroHeadline", { branches: branches.length, members: totalMembers })}<br className="hidden lg:block" /> {t("owner.dashboard.heroHeadlineLine2", { coaches: totalCoaches })}
           </h2>
           <p className="text-white/70 mt-3 max-w-2xl">
-            {invoices.length > 0 ? `${invoices.length} invoice coach menunggu review.` : "Semua sistem berjalan normal."}
+            {invoices.length > 0 ? t("owner.dashboard.invoicesPending", { count: invoices.length }) : t("owner.dashboard.allNormal")}
           </p>
         </div>
       </div>
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Stat label="Member aktif"     value={totalMembers}    icon="users"   tone="ocean" sub="Lintas semua cabang" />
-        <Stat label="Coach aktif"      value={totalCoaches}    icon="swim"    tone="wave"  sub="Semua cabang" />
-        <Stat label="Kelas aktif"      value={totalClasses}    icon="grid"    tone="ocean" sub="Semua cabang" />
-        <Stat label="Invoice pending"  value={invoices.length} icon="invoice" tone="warn"  sub="Menunggu review" />
+        <Stat label={t("owner.dashboard.statMembers")}  value={totalMembers}    icon="users"   tone="ocean" sub={t("owner.dashboard.statMembersSub")} />
+        <Stat label={t("owner.dashboard.statCoaches")}  value={totalCoaches}    icon="swim"    tone="wave"  sub={t("owner.dashboard.statCoachesSub")} />
+        <Stat label={t("owner.dashboard.statClasses")}  value={totalClasses}    icon="grid"    tone="ocean" sub={t("owner.dashboard.statClassesSub")} />
+        <Stat label={t("owner.dashboard.statInvoicesPending")} value={invoices.length} icon="invoice" tone="warn" sub={t("owner.dashboard.statInvoicesPendingSub")} />
       </div>
 
       <Card>
-        <SectionTitle sub="Performa per cabang">Breakdown per cabang</SectionTitle>
+        <SectionTitle sub={t("owner.dashboard.branchBreakdownSub")}>{t("owner.dashboard.branchBreakdownTitle")}</SectionTitle>
         <div className="overflow-x-auto -mx-5 px-5">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-[11px] uppercase tracking-widest text-ink-faint font-bold border-b border-line">
-                <th className="text-left py-2.5 font-bold">Cabang</th>
-                <th className="text-left py-2.5 font-bold">Lokasi</th>
-                <th className="text-right py-2.5 font-bold">Member</th>
-                <th className="text-right py-2.5 font-bold">Coach</th>
-                <th className="text-right py-2.5 font-bold">Kelas</th>
+                <th className="text-left py-2.5 font-bold">{t("owner.dashboard.colBranch")}</th>
+                <th className="text-left py-2.5 font-bold">{t("owner.dashboard.colLocation")}</th>
+                <th className="text-right py-2.5 font-bold">{t("owner.dashboard.colMembers")}</th>
+                <th className="text-right py-2.5 font-bold">{t("owner.dashboard.colCoaches")}</th>
+                <th className="text-right py-2.5 font-bold">{t("owner.dashboard.colClasses")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-line">
@@ -190,7 +192,7 @@ function Dashboard({ branches }: { branches: Branch[] }) {
 
       {invoices.length > 0 && (
         <Card>
-          <SectionTitle sub="Menunggu review">Invoice masuk</SectionTitle>
+          <SectionTitle sub={t("owner.dashboard.incomingInvoicesSub")}>{t("owner.dashboard.incomingInvoicesTitle")}</SectionTitle>
           <div className="space-y-2">
             {invoices.map((iv) => (
               <div key={iv.id} className="flex items-center gap-3 p-3 rounded-xl bg-paper-tint">
@@ -210,6 +212,7 @@ function Dashboard({ branches }: { branches: Branch[] }) {
 }
 
 function Branches({ branches, onRefresh, userId, userName }: { branches: Branch[]; onRefresh: () => void; userId: string; userName: string }) {
+  const { t } = useLocale();
   const toast = useToast();
   const confirm = useConfirm();
   const router = useRouter();
@@ -234,7 +237,7 @@ function Branches({ branches, onRefresh, userId, userName }: { branches: Branch[
   const openEdit = (b: Branch) => { setName(b.name); setCity(b.city); setAddress(b.address); setWaPhone(b.wa_numbers?.[0] ?? ""); setBankName(b.bank_name ?? ""); setBankAccount(b.bank_account ?? ""); setBankHolder(b.bank_holder ?? ""); setEditItem(b); setShowAdd(true); };
 
   const save = async () => {
-    if (!name || !city) return toast.error("Nama dan kota wajib diisi");
+    if (!name || !city) return toast.error(t("owner.branches.nameCityRequired"));
     setSaving(true);
     const cleanWa = waPhone.trim() ? [waPhone.trim()] : [];
     const bankFields = {
@@ -244,14 +247,14 @@ function Branches({ branches, onRefresh, userId, userName }: { branches: Branch[
     };
     if (editItem) {
       const { error } = await supabase.from("branches").update({ name, city, address, wa_numbers: cleanWa, ...bankFields }).eq("id", editItem.id);
-      if (error) { toast.error("Gagal menyimpan", error.message); setSaving(false); return; }
-      toast.success("Cabang diperbarui");
-      logActivity(supabase, { userId, userRole: "owner", userName, entityType: "branches", entityId: editItem.id, entityLabel: name, action: "update", label: `Cabang ${name} diperbarui` });
+      if (error) { toast.error(t("owner.branches.saveFailed"), error.message); setSaving(false); return; }
+      toast.success(t("owner.branches.updated"));
+      logActivity(supabase, { userId, userRole: "owner", userName, entityType: "branches", entityId: editItem.id, entityLabel: name, action: "update", label: t("owner.branches.activityUpdated", { name }) });
     } else {
       const { data: inserted, error } = await supabase.from("branches").insert({ name, city, address, wa_numbers: cleanWa, status: "active", ...bankFields }).select("id").single();
-      if (error) { toast.error("Gagal membuat cabang", error.message); setSaving(false); return; }
-      toast.success("Cabang baru dibuat");
-      logActivity(supabase, { userId, userRole: "owner", userName, entityType: "branches", entityId: inserted?.id ?? "new", entityLabel: name, action: "create", label: `Cabang ${name} (${city}) dibuat` });
+      if (error) { toast.error(t("owner.branches.createFailed"), error.message); setSaving(false); return; }
+      toast.success(t("owner.branches.created"));
+      logActivity(supabase, { userId, userRole: "owner", userName, entityType: "branches", entityId: inserted?.id ?? "new", entityLabel: name, action: "create", label: t("owner.branches.activityCreated", { name, city }) });
     }
     setSaving(false);
     setShowAdd(false);
@@ -259,19 +262,19 @@ function Branches({ branches, onRefresh, userId, userName }: { branches: Branch[
   };
 
   const archive = async (b: Branch) => {
-    const yes = await confirm({ title: `Arsipkan cabang "${b.name}"?`, body: "Data tidak akan dihapus, hanya disembunyikan dari panel aktif." });
+    const yes = await confirm({ title: t("owner.branches.archiveConfirmTitle", { name: b.name }), body: t("owner.branches.archiveConfirmBody") });
     if (!yes) return;
     const { error } = await supabase.from("branches").update({ status: "archived" }).eq("id", b.id);
-    if (error) return toast.error("Gagal mengarsipkan", error.message);
-    toast.success("Cabang diarsipkan");
-    logActivity(supabase, { userId, userRole: "owner", userName, entityType: "branches", entityId: b.id, entityLabel: b.name, action: "archive", label: `Cabang ${b.name} diarsipkan` });
+    if (error) return toast.error(t("owner.branches.archiveFailed"), error.message);
+    toast.success(t("owner.branches.archived"));
+    logActivity(supabase, { userId, userRole: "owner", userName, entityType: "branches", entityId: b.id, entityLabel: b.name, action: "archive", label: t("owner.branches.activityArchived", { name: b.name }) });
     onRefresh();
   };
 
   const deleteBranch = async (b: Branch) => {
     const yes = await confirm({
-      title: `Hapus permanen cabang "${b.name}"?`,
-      body: `⚠️ PERINGATAN: Semua data cabang ini akan terhapus secara permanen — termasuk kelas, member, coach, absensi, tagihan, rapor, invoice, dan semua akun login terkait. Tindakan ini tidak bisa dibatalkan.`,
+      title: t("owner.branches.deleteConfirmTitle", { name: b.name }),
+      body: t("owner.branches.deleteConfirmBody"),
       danger: true,
     });
     if (!yes) return;
@@ -279,8 +282,8 @@ function Branches({ branches, onRefresh, userId, userName }: { branches: Branch[
     const res = await fetch(`/api/owner/branches/${b.id}`, { method: "DELETE" });
     const json = await res.json() as { error?: string; deleted_auth_users?: number };
 
-    if (!res.ok) return toast.error("Gagal menghapus cabang", json.error ?? "Unknown error");
-    toast.success(`Cabang "${b.name}" dihapus — ${json.deleted_auth_users ?? 0} akun login ikut dihapus`);
+    if (!res.ok) return toast.error(t("owner.branches.deleteFailed"), json.error ?? "Unknown error");
+    toast.success(t("owner.branches.deleted", { name: b.name, count: json.deleted_auth_users ?? 0 }));
     onRefresh();
   };
 
@@ -288,10 +291,10 @@ function Branches({ branches, onRefresh, userId, userName }: { branches: Branch[
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <h2 className="font-display font-bold text-2xl">Manajemen Cabang</h2>
-          <p className="text-ink-mute text-sm mt-0.5">Buat, edit, dan kelola cabang Next Swimming School.</p>
+          <h2 className="font-display font-bold text-2xl">{t("owner.branches.pageTitle")}</h2>
+          <p className="text-ink-mute text-sm mt-0.5">{t("owner.branches.pageSub")}</p>
         </div>
-        <Btn variant="primary" icon="plus" onClick={openAdd}>Tambah Cabang</Btn>
+        <Btn variant="primary" icon="plus" onClick={openAdd}>{t("owner.branches.addBranch")}</Btn>
       </div>
       <div className="grid lg:grid-cols-3 gap-5">
         {branches.map((b) => (
@@ -301,7 +304,7 @@ function Branches({ branches, onRefresh, userId, userName }: { branches: Branch[
               <div className="absolute inset-0 grid-faint opacity-15" />
               <div className="relative p-5 h-full flex items-end text-white">
                 <div>
-                  <div className="text-[10px] uppercase tracking-widest font-bold opacity-80">Cabang</div>
+                  <div className="text-[10px] uppercase tracking-widest font-bold opacity-80">{t("owner.branches.branchLabel")}</div>
                   <div className="font-display font-bold text-xl">{b.name}</div>
                 </div>
               </div>
@@ -317,17 +320,17 @@ function Branches({ branches, onRefresh, userId, userName }: { branches: Branch[
                 </div>
               )}
               <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-                <div className="p-2.5 rounded-xl bg-paper-tint"><div className="font-display font-bold text-lg text-ink">{b.member_count ?? 0}</div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Member</div></div>
-                <div className="p-2.5 rounded-xl bg-paper-tint"><div className="font-display font-bold text-lg text-ink">{b.coach_count ?? 0}</div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Coach</div></div>
-                <div className="p-2.5 rounded-xl bg-paper-tint"><div className="font-display font-bold text-lg text-ink">{b.class_count ?? 0}</div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Kelas</div></div>
+                <div className="p-2.5 rounded-xl bg-paper-tint"><div className="font-display font-bold text-lg text-ink">{b.member_count ?? 0}</div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("owner.branches.memberStat")}</div></div>
+                <div className="p-2.5 rounded-xl bg-paper-tint"><div className="font-display font-bold text-lg text-ink">{b.coach_count ?? 0}</div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("owner.branches.coachStat")}</div></div>
+                <div className="p-2.5 rounded-xl bg-paper-tint"><div className="font-display font-bold text-lg text-ink">{b.class_count ?? 0}</div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("owner.branches.classStat")}</div></div>
               </div>
               <div className="mt-4 flex flex-wrap gap-2">
-                <Btn variant="primary" size="sm" icon="grid" onClick={() => openAdminPanel(b)}>Buka Admin Panel</Btn>
-                <Btn variant="ghost" size="sm" icon="edit" onClick={() => openEdit(b)}>Edit</Btn>
+                <Btn variant="primary" size="sm" icon="grid" onClick={() => openAdminPanel(b)}>{t("owner.branches.openAdminPanel")}</Btn>
+                <Btn variant="ghost" size="sm" icon="edit" onClick={() => openEdit(b)}>{t("common.actions.edit")}</Btn>
                 {b.status !== "archived" && (
-                  <Btn variant="ghost" size="sm" icon="archive" onClick={() => archive(b)}>Arsip</Btn>
+                  <Btn variant="ghost" size="sm" icon="archive" onClick={() => archive(b)}>{t("owner.branches.archiveBtn")}</Btn>
                 )}
-                <Btn variant="danger" size="sm" icon="trash" onClick={() => deleteBranch(b)}>Hapus</Btn>
+                <Btn variant="danger" size="sm" icon="trash" onClick={() => deleteBranch(b)}>{t("common.actions.delete")}</Btn>
               </div>
             </div>
           </Card>
@@ -336,30 +339,30 @@ function Branches({ branches, onRefresh, userId, userName }: { branches: Branch[
           <span className="w-14 h-14 rounded-2xl bg-paper-tint group-hover:bg-white flex items-center justify-center mb-3">
             <Icon name="plus" className="w-6 h-6" />
           </span>
-          <div className="font-semibold">Tambah Cabang Baru</div>
+          <div className="font-semibold">{t("owner.branches.addNewBranch")}</div>
         </button>
       </div>
 
-      <Modal open={showAdd} onClose={() => setShowAdd(false)} title={editItem ? "Edit Cabang" : "Tambah Cabang"} size="sm"
+      <Modal open={showAdd} onClose={() => setShowAdd(false)} title={editItem ? t("owner.branches.editModalTitle") : t("owner.branches.addModalTitle")} size="sm"
         footer={
           <>
-            <Btn variant="ghost" onClick={() => setShowAdd(false)}>Batal</Btn>
-            <Btn variant="primary" onClick={save} disabled={saving}>{saving ? "Menyimpan…" : "Simpan"}</Btn>
+            <Btn variant="ghost" onClick={() => setShowAdd(false)}>{t("common.actions.cancel")}</Btn>
+            <Btn variant="primary" onClick={save} disabled={saving}>{saving ? t("common.actions.saving") : t("common.actions.save")}</Btn>
           </>
         }
       >
         <div className="space-y-4">
-          <Field label="Nama cabang" required><Input value={name} onChange={e => setName(e.target.value)} placeholder="Cabang Jakarta Selatan" /></Field>
-          <Field label="Kota" required><Input value={city} onChange={e => setCity(e.target.value)} placeholder="Jakarta" /></Field>
-          <Field label="Alamat"><Input value={address} onChange={e => setAddress(e.target.value)} placeholder="Jl. Sudirman No. 1" /></Field>
-          <Field label="Nomor WhatsApp Admin" hint="Dipakai di tombol hubungi admin. Format: 081234567890.">
-            <Input type="tel" value={waPhone} onChange={e => setWaPhone(e.target.value)} placeholder="081234567890" className="font-mono" />
+          <Field label={t("owner.branches.fieldName")} required><Input value={name} onChange={e => setName(e.target.value)} placeholder={t("owner.branches.fieldNamePlaceholder")} /></Field>
+          <Field label={t("owner.branches.fieldCity")} required><Input value={city} onChange={e => setCity(e.target.value)} placeholder={t("owner.branches.fieldCityPlaceholder")} /></Field>
+          <Field label={t("owner.branches.fieldAddress")}><Input value={address} onChange={e => setAddress(e.target.value)} placeholder={t("owner.branches.fieldAddressPlaceholder")} /></Field>
+          <Field label={t("owner.branches.fieldWaPhone")} hint={t("owner.branches.fieldWaPhoneHint")}>
+            <Input type="tel" value={waPhone} onChange={e => setWaPhone(e.target.value)} placeholder={t("owner.branches.fieldWaPhonePlaceholder")} className="font-mono" />
           </Field>
-          <Field label="Informasi Rekening" hint="Ditampilkan ke member di halaman tagihan saat ada tagihan aktif.">
+          <Field label={t("owner.branches.fieldBankInfo")} hint={t("owner.branches.fieldBankInfoHint")}>
             <div className="space-y-2">
-              <Input value={bankName} onChange={e => setBankName(e.target.value)} placeholder="Nama Bank (contoh: BCA)" />
-              <Input value={bankAccount} onChange={e => setBankAccount(e.target.value)} placeholder="Nomor Rekening" className="font-mono" />
-              <Input value={bankHolder} onChange={e => setBankHolder(e.target.value)} placeholder="Atas Nama" />
+              <Input value={bankName} onChange={e => setBankName(e.target.value)} placeholder={t("owner.branches.fieldBankName")} />
+              <Input value={bankAccount} onChange={e => setBankAccount(e.target.value)} placeholder={t("owner.branches.fieldBankAccount")} className="font-mono" />
+              <Input value={bankHolder} onChange={e => setBankHolder(e.target.value)} placeholder={t("owner.branches.fieldBankHolder")} />
             </div>
           </Field>
         </div>
@@ -369,6 +372,7 @@ function Branches({ branches, onRefresh, userId, userName }: { branches: Branch[
 }
 
 function Admins({ branches }: { branches: Branch[] }) {
+  const { t } = useLocale();
   const toast = useToast();
   const confirm = useConfirm();
   const supabase = createClient();
@@ -404,7 +408,7 @@ function Admins({ branches }: { branches: Branch[] }) {
   const saveAdmin = async () => {
     if (editTarget) {
       // Edit mode — update via server route to bypass RLS
-      if (!form.branch_id) return toast.error("Cabang wajib dipilih");
+      if (!form.branch_id) return toast.error(t("owner.admins.branchRequired"));
       setSaving(true);
       const res = await fetch(`/api/admin/users/${editTarget.id}`, {
         method: "PATCH",
@@ -415,15 +419,15 @@ function Admins({ branches }: { branches: Branch[] }) {
       });
       setSaving(false);
       const json = await res.json() as { error?: string };
-      if (!res.ok) return toast.error("Gagal menyimpan", json.error);
-      toast.success("Data admin diperbarui");
+      if (!res.ok) return toast.error(t("owner.admins.saveFailed"), json.error);
+      toast.success(t("owner.admins.updated"));
       setShowAdd(false);
       setEditTarget(null);
       load();
     } else {
       // Create mode
       if (!form.full_name || !form.email || !form.password || !form.branch_id) {
-        return toast.error("Semua field wajib diisi");
+        return toast.error(t("owner.admins.allFieldsRequired"));
       }
       setSaving(true);
       const res = await fetch("/api/admin/users", {
@@ -435,13 +439,13 @@ function Admins({ branches }: { branches: Branch[] }) {
       if (!res.ok) {
         const isEmailTaken = json.code === "EMAIL_TAKEN";
         toast.error(
-          isEmailTaken ? "Email sudah terdaftar" : "Gagal membuat admin",
+          isEmailTaken ? t("owner.admins.emailTaken") : t("owner.admins.createFailed"),
           json.error,
           isEmailTaken ? 7000 : 4000
         );
         setSaving(false); return;
       }
-      toast.success("Admin dibuat", "Akun langsung aktif");
+      toast.success(t("owner.admins.created"), t("owner.admins.createdSub"));
       setSaving(false);
       setShowAdd(false);
       load();
@@ -449,11 +453,11 @@ function Admins({ branches }: { branches: Branch[] }) {
   };
 
   const removeAdmin = async (a: AdminProfile) => {
-    const yes = await confirm({ title: `Hapus akun admin ${a.full_name}?`, body: "Akun login dan data profil akan dihapus permanen.", danger: true });
+    const yes = await confirm({ title: t("owner.admins.deleteConfirmTitle", { name: a.full_name }), body: t("owner.admins.deleteConfirmBody"), danger: true });
     if (!yes) return;
     const res = await fetch(`/api/admin/users/${a.id}`, { method: "DELETE" });
-    if (!res.ok) { const j = await res.json() as { error?: string }; return toast.error("Gagal hapus", j.error); }
-    toast.success("Akun admin dihapus");
+    if (!res.ok) { const j = await res.json() as { error?: string }; return toast.error(t("owner.admins.deleteFailed"), j.error); }
+    toast.success(t("owner.admins.deleted"));
     load();
   };
 
@@ -461,24 +465,24 @@ function Admins({ branches }: { branches: Branch[] }) {
     <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h2 className="font-display font-bold text-2xl">Akun Admin</h2>
-          <p className="text-ink-mute text-sm mt-0.5">Buat akun admin per cabang.</p>
+          <h2 className="font-display font-bold text-2xl">{t("owner.admins.pageTitle")}</h2>
+          <p className="text-ink-mute text-sm mt-0.5">{t("owner.admins.pageSub")}</p>
         </div>
-        <Btn variant="primary" icon="plus" onClick={() => { setForm({ full_name: "", email: "", phone: "", branch_id: "", password: "" }); setShowAdd(true); }}>Tambah Admin</Btn>
+        <Btn variant="primary" icon="plus" onClick={() => { setForm({ full_name: "", email: "", phone: "", branch_id: "", password: "" }); setShowAdd(true); }}>{t("owner.admins.addAdmin")}</Btn>
       </div>
       <Card padded={false}>
         {loading ? (
-          <div className="p-10 text-center text-ink-mute">Memuat data…</div>
+          <div className="p-10 text-center text-ink-mute">{t("owner.admins.loading")}</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-[11px] uppercase tracking-widest text-ink-faint font-bold border-b border-line">
-                  <th className="text-left py-3 px-5 font-bold">Admin</th>
-                  <th className="text-left py-3 font-bold hidden sm:table-cell">Email</th>
-                  <th className="text-left py-3 font-bold hidden md:table-cell">WhatsApp</th>
-                  <th className="text-left py-3 font-bold">Cabang</th>
-                  <th className="text-left py-3 font-bold">Status</th>
+                  <th className="text-left py-3 px-5 font-bold">{t("owner.admins.colAdmin")}</th>
+                  <th className="text-left py-3 font-bold hidden sm:table-cell">{t("owner.admins.colEmail")}</th>
+                  <th className="text-left py-3 font-bold hidden md:table-cell">{t("owner.admins.colWhatsapp")}</th>
+                  <th className="text-left py-3 font-bold">{t("owner.admins.colBranch")}</th>
+                  <th className="text-left py-3 font-bold">{t("owner.admins.colStatus")}</th>
                   <th className="text-right py-3 px-5" />
                 </tr>
               </thead>
@@ -494,7 +498,7 @@ function Admins({ branches }: { branches: Branch[] }) {
                     <td className="text-ink-mute hidden sm:table-cell">{a.email}</td>
                     <td className="text-ink-mute hidden md:table-cell">{a.phone ?? "—"}</td>
                     <td className="text-ink-soft">{a.branch?.name ?? "—"}</td>
-                    <td><Status kind="active">Aktif</Status></td>
+                    <td><Status kind="active">{t("common.status.active")}</Status></td>
                     <td className="text-right px-5">
                       <div className="flex items-center justify-end gap-1">
                         <button onClick={() => openEdit(a)} className="text-ink-mute hover:text-ocean-600 p-1.5"><Icon name="edit" className="w-4 h-4" /></button>
@@ -504,7 +508,7 @@ function Admins({ branches }: { branches: Branch[] }) {
                   </tr>
                 ))}
                 {admins.length === 0 && (
-                  <tr><td colSpan={6} className="text-center py-10 text-ink-mute">Belum ada akun admin</td></tr>
+                  <tr><td colSpan={6} className="text-center py-10 text-ink-mute">{t("owner.admins.empty")}</td></tr>
                 )}
               </tbody>
             </table>
@@ -512,25 +516,25 @@ function Admins({ branches }: { branches: Branch[] }) {
         )}
       </Card>
 
-      <Modal open={showAdd} onClose={() => { setShowAdd(false); setEditTarget(null); }} title={editTarget ? "Edit Admin" : "Tambah Admin Cabang"} size="sm"
+      <Modal open={showAdd} onClose={() => { setShowAdd(false); setEditTarget(null); }} title={editTarget ? t("owner.admins.editModalTitle") : t("owner.admins.addModalTitle")} size="sm"
         footer={
           <>
-            <Btn variant="ghost" onClick={() => { setShowAdd(false); setEditTarget(null); }}>Batal</Btn>
-            <Btn variant="primary" onClick={saveAdmin} disabled={saving}>{saving ? "Menyimpan…" : editTarget ? "Simpan" : "Buat Akun"}</Btn>
+            <Btn variant="ghost" onClick={() => { setShowAdd(false); setEditTarget(null); }}>{t("common.actions.cancel")}</Btn>
+            <Btn variant="primary" onClick={saveAdmin} disabled={saving}>{saving ? t("common.actions.saving") : editTarget ? t("common.actions.save") : t("owner.admins.createAccount")}</Btn>
           </>
         }
       >
         <div className="space-y-4">
-          <Field label="Nama lengkap" required><Input value={form.full_name} onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))} disabled={!!editTarget} /></Field>
-          {!editTarget && <Field label="Email" required><Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} /></Field>}
-          <Field label="Nomor WhatsApp"><Input type="tel" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="Mis. 081234567890" /></Field>
-          <Field label="Cabang" required>
+          <Field label={t("owner.admins.fieldFullName")} required><Input value={form.full_name} onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))} disabled={!!editTarget} /></Field>
+          {!editTarget && <Field label={t("owner.admins.fieldEmail")} required><Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} /></Field>}
+          <Field label={t("owner.admins.fieldPhone")}><Input type="tel" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder={t("owner.admins.fieldPhonePlaceholder")} /></Field>
+          <Field label={t("owner.admins.fieldBranch")} required>
             <Select value={form.branch_id} onChange={e => setForm(f => ({ ...f, branch_id: e.target.value }))}>
-              <option value="" disabled>Pilih cabang…</option>
+              <option value="" disabled>{t("owner.admins.fieldBranchPlaceholder")}</option>
               {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
             </Select>
           </Field>
-          {!editTarget && <Field label="Password awal" required hint="Admin bisa ganti setelah login">
+          {!editTarget && <Field label={t("owner.admins.fieldPassword")} required hint={t("owner.admins.fieldPasswordHint")}>
             <div className="relative">
               <Input type={showAdminPwd ? "text" : "password"} value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder="••••••••" className="pr-10" />
               <button type="button" tabIndex={-1} onClick={() => setShowAdminPwd(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-mute hover:text-ink transition-colors">
@@ -549,11 +553,8 @@ interface ClassMemberRow { id: string; full_name: string; phone: string | null; 
 interface CoachAttRow { id: string; date: string; status: string; note: string | null; profile: { full_name: string } | null; }
 interface MemberAttRow { id: string; date: string; status: string; note: string | null; profile: { full_name: string } | null; }
 
-const ATT_STATUS_LABEL: Record<string, string> = {
-  present: "Hadir", absent: "Absen", leave: "Izin", holiday: "Libur", substitute: "Substitusi",
-};
-
 function Classes({ branches }: { branches: Branch[] }) {
+  const { t } = useLocale();
   const supabase = createClient();
   const toast = useToast();
   const confirm = useConfirm();
@@ -600,8 +601,8 @@ function Classes({ branches }: { branches: Branch[] }) {
       .update({ goals: editForm.goals.trim() || null, description: editForm.description.trim() || null })
       .eq("id", editTarget.id);
     setSaving(false);
-    if (error) return toast.error("Gagal menyimpan", error.message);
-    toast.success("Kelas diperbarui");
+    if (error) return toast.error(t("owner.classes.saveFailed"), error.message);
+    toast.success(t("owner.classes.updated"));
     setEditTarget(null);
     load();
   };
@@ -670,8 +671,8 @@ function Classes({ branches }: { branches: Branch[] }) {
     }
     const { error } = await supabase.from("class_coaches").update({ role }).eq("class_id", classId).eq("coach_id", coachId);
     setSettingRole(null);
-    if (error) return toast.error("Gagal mengubah role", error.message);
-    toast.success(role === "head" ? "Ditetapkan sebagai Head Coach" : "Ditetapkan sebagai Assistant Coach");
+    if (error) return toast.error(t("owner.classes.roleChangeFailed"), error.message);
+    toast.success(role === "head" ? t("owner.classes.setAsHeadCoach") : t("owner.classes.setAsAssistantCoach"));
     setDetailCoaches(prev => prev.map(c => c.id === coachId ? { ...c, role } : role === "head" ? { ...c, role: c.role === "head" ? "assistant" : c.role } : c));
     setClasses(prev => prev.map(c => c.id !== classId ? c : {
       ...c,
@@ -684,8 +685,8 @@ function Classes({ branches }: { branches: Branch[] }) {
     setSavingSigner(true);
     const { error } = await supabase.from("classes").update({ rapor_signer_coach_id: coachId }).eq("id", classId);
     setSavingSigner(false);
-    if (error) return toast.error("Gagal menyimpan", error.message);
-    toast.success("Penanggung jawab TTD rapor disimpan");
+    if (error) return toast.error(t("owner.classes.saveFailed"), error.message);
+    toast.success(t("owner.classes.signerSaved"));
     setDetailClass(prev => prev && prev.id === classId ? { ...prev, rapor_signer_coach_id: coachId } : prev);
     setClasses(prev => prev.map(c => c.id === classId ? { ...c, rapor_signer_coach_id: coachId } : c));
   };
@@ -699,20 +700,20 @@ function Classes({ branches }: { branches: Branch[] }) {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="font-display font-bold text-2xl">Semua Kelas</h2>
-        <p className="text-ink-mute text-sm mt-0.5">Owner dapat mengedit tujuan dan deskripsi kelas. Konfigurasi lainnya dikelola admin cabang.</p>
+        <h2 className="font-display font-bold text-2xl">{t("owner.classes.pageTitle")}</h2>
+        <p className="text-ink-mute text-sm mt-0.5">{t("owner.classes.pageSub")}</p>
       </div>
 
       {loading ? (
-        <Card><div className="py-10 text-center text-ink-mute text-sm">Memuat data…</div></Card>
+        <Card><div className="py-10 text-center text-ink-mute text-sm">{t("owner.classes.loading")}</div></Card>
       ) : grouped.length === 0 ? (
-        <Card><div className="py-10 text-center text-ink-mute text-sm">Belum ada kelas aktif.</div></Card>
+        <Card><div className="py-10 text-center text-ink-mute text-sm">{t("owner.classes.empty")}</div></Card>
       ) : (
         grouped.map(({ branch, classes: bClasses }) => (
           <div key={branch.id} className="space-y-3">
             <div className="flex items-center gap-3">
               <div className="font-display font-bold text-lg text-ink">{branch.name}</div>
-              <div className="text-xs text-ink-faint font-semibold">{bClasses.length} kelas</div>
+              <div className="text-xs text-ink-faint font-semibold">{t("owner.classes.classCount", { count: bClasses.length })}</div>
             </div>
             <div className="grid sm:grid-cols-2 gap-3">
               {bClasses.map((c) => {
@@ -730,8 +731,8 @@ function Classes({ branches }: { branches: Branch[] }) {
                         </div>
                       </div>
                       <div className="flex items-center gap-1">
-                        <Btn variant="ghost" size="sm" icon="eye" onClick={() => openDetail(c)}>Detail</Btn>
-                        <Btn variant="ghost" size="sm" icon="edit" onClick={() => openEdit(c)}>Edit</Btn>
+                        <Btn variant="ghost" size="sm" icon="eye" onClick={() => openDetail(c)}>{t("owner.classes.detailBtn")}</Btn>
+                        <Btn variant="ghost" size="sm" icon="edit" onClick={() => openEdit(c)}>{t("owner.classes.editBtn")}</Btn>
                       </div>
                     </div>
 
@@ -740,19 +741,19 @@ function Classes({ branches }: { branches: Branch[] }) {
                       <div className="space-y-1.5">
                         {c.goals && (
                           <div>
-                            <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Tujuan</div>
+                            <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("owner.classes.goalsLabel")}</div>
                             <p className="text-xs text-ink-soft mt-0.5">{c.goals}</p>
                           </div>
                         )}
                         {c.description && (
                           <div>
-                            <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Deskripsi</div>
+                            <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("owner.classes.descriptionLabel")}</div>
                             <p className="text-xs text-ink-soft mt-0.5">{c.description}</p>
                           </div>
                         )}
                       </div>
                     ) : (
-                      <p className="text-xs text-ink-faint italic">Tujuan & deskripsi belum diisi.</p>
+                      <p className="text-xs text-ink-faint italic">{t("owner.classes.goalsDescriptionEmpty")}</p>
                     )}
 
                     <div className="border-t border-line pt-3 flex items-center justify-between gap-3 flex-wrap">
@@ -763,7 +764,7 @@ function Classes({ branches }: { branches: Branch[] }) {
                               <span>{headCoach.profile.full_name}</span>
                               {headCoach.role === "head" && <span className="px-1.5 py-0.5 rounded-full bg-ocean-50 text-ocean-700 text-[10px] font-bold uppercase tracking-wide">Head</span>}
                             </>
-                          : <span className="text-ink-faint">Belum ada coach</span>
+                          : <span className="text-ink-faint">{t("owner.classes.noCoachYet")}</span>
                         }
                       </div>
                       <div className="flex items-center gap-3 text-xs">
@@ -771,8 +772,8 @@ function Classes({ branches }: { branches: Branch[] }) {
                           {c.enrolled}/{c.capacity}
                         </span>
                         {(c.coach_spreadsheets ?? []).length > 0
-                          ? <span className="inline-flex items-center gap-1 text-ok-600 font-semibold"><Icon name="link" className="w-3 h-3" />{c.coach_spreadsheets!.length} spreadsheet</span>
-                          : <span className="text-warn-500 font-semibold">Belum ada spreadsheet</span>
+                          ? <span className="inline-flex items-center gap-1 text-ok-600 font-semibold"><Icon name="link" className="w-3 h-3" />{t("owner.classes.spreadsheetCount", { count: c.coach_spreadsheets!.length })}</span>
+                          : <span className="text-warn-500 font-semibold">{t("owner.classes.noSpreadsheet")}</span>
                         }
                       </div>
                     </div>
@@ -786,14 +787,14 @@ function Classes({ branches }: { branches: Branch[] }) {
 
       {/* Detail modal — Info | Coach | Member | Absensi Coach | Absensi Member */}
       <Modal open={!!detailClass} onClose={() => setDetailClass(null)}
-        title={`Detail Kelas — ${detailClass?.name ?? ""}`} size="xl"
-        footer={<Btn variant="ghost" onClick={() => setDetailClass(null)}>Tutup</Btn>}>
+        title={t("owner.classes.detailModalTitle", { name: detailClass?.name ?? "" })} size="xl"
+        footer={<Btn variant="ghost" onClick={() => setDetailClass(null)}>{t("owner.classes.closeBtn")}</Btn>}>
         {detailClass && (
           <div className="space-y-4">
             {/* Tab bar */}
             <div className="flex gap-1 flex-wrap border-b border-line pb-2">
               {(["info", "coach", "member", "att_coach", "att_member"] as const).map(tab => {
-                const labels: Record<string, string> = { info: "Info", coach: "Coach", member: "Member", att_coach: "Absensi Coach", att_member: "Absensi Member" };
+                const labels: Record<string, string> = { info: t("owner.classes.tabInfo"), coach: t("owner.classes.tabCoach"), member: t("owner.classes.tabMember"), att_coach: t("owner.classes.tabAttCoach"), att_member: t("owner.classes.tabAttMember") };
                 return (
                   <button key={tab} onClick={() => switchDetailTab(tab)}
                     className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${detailTab === tab ? "bg-ocean-600 text-white" : "text-ink-mute hover:bg-paper-tint"}`}>
@@ -808,28 +809,28 @@ function Classes({ branches }: { branches: Branch[] }) {
               <div className="space-y-4">
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Cabang</div>
+                    <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("owner.classes.infoBranch")}</div>
                     <div className="font-semibold text-ink">{(detailClass.branch as { name: string } | null | undefined)?.name ?? "—"}</div>
                   </div>
                   <div className="space-y-2">
-                    <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Status</div>
-                    <Status kind={detailClass.status === "active" ? "active" : "inactive"}>{detailClass.status === "active" ? "Aktif" : "Nonaktif"}</Status>
+                    <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("owner.classes.infoStatus")}</div>
+                    <Status kind={detailClass.status === "active" ? "active" : "inactive"}>{detailClass.status === "active" ? t("common.status.active") : t("common.status.inactive")}</Status>
                   </div>
                   <div className="space-y-2">
-                    <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Jadwal</div>
+                    <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("owner.classes.infoSchedule")}</div>
                     <div className="text-sm text-ink">{(detailClass.schedule_days ?? []).join(", ")} {detailClass.time_start && <span className="font-mono">{detailClass.time_start.slice(0,5)}{detailClass.time_end ? `–${detailClass.time_end.slice(0,5)}` : ""}</span>}</div>
                   </div>
                   <div className="space-y-2">
-                    <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Kapasitas</div>
-                    <div className="text-sm font-mono text-ink">{detailClass.enrolled}/{detailClass.capacity} peserta</div>
+                    <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("owner.classes.infoCapacity")}</div>
+                    <div className="text-sm font-mono text-ink">{detailClass.enrolled}/{detailClass.capacity} {t("owner.classes.infoCapacityParticipants")}</div>
                   </div>
                   <div className="space-y-2">
-                    <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Harga Bulanan</div>
+                    <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("owner.classes.infoMonthlyPrice")}</div>
                     <div className="text-sm font-mono text-ink">{detailClass.price_monthly != null ? `Rp ${Number(detailClass.price_monthly).toLocaleString("id-ID")}` : "—"}</div>
                   </div>
                   {(detailClass.coach_spreadsheets ?? []).length > 0 && (
                     <div className="space-y-2 sm:col-span-2">
-                      <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Spreadsheet Program</div>
+                      <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("owner.classes.infoSpreadsheetProgram")}</div>
                       <div className="space-y-1.5">
                         {detailClass.coach_spreadsheets!.map(s => (
                           <div key={s.coach_id} className="flex items-center gap-2.5 p-2.5 rounded-xl border border-line bg-paper-tint">
@@ -837,7 +838,7 @@ function Classes({ branches }: { branches: Branch[] }) {
                             <span className="flex-1 text-sm font-medium text-ink truncate">{s.coach?.full_name ?? "—"}</span>
                             <a href={s.spreadsheet_url} target="_blank" rel="noreferrer"
                               className="text-xs font-semibold text-ocean-600 hover:underline inline-flex items-center gap-1">
-                              <Icon name="link" className="w-3 h-3" />Buka
+                              <Icon name="link" className="w-3 h-3" />{t("owner.classes.infoOpenLink")}
                             </a>
                           </div>
                         ))}
@@ -847,13 +848,13 @@ function Classes({ branches }: { branches: Branch[] }) {
                 </div>
                 {detailClass.goals && (
                   <div>
-                    <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-1">Tujuan</div>
+                    <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-1">{t("owner.classes.goalsLabel")}</div>
                     <p className="text-sm text-ink-soft">{detailClass.goals}</p>
                   </div>
                 )}
                 {detailClass.description && (
                   <div>
-                    <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-1">Deskripsi</div>
+                    <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-1">{t("owner.classes.descriptionLabel")}</div>
                     <p className="text-sm text-ink-soft">{detailClass.description}</p>
                   </div>
                 )}
@@ -862,9 +863,9 @@ function Classes({ branches }: { branches: Branch[] }) {
 
             {/* Tab: Coach */}
             {detailTab === "coach" && (
-              detailLoading ? <div className="text-center py-10 text-ink-mute text-sm">Memuat…</div> : (
+              detailLoading ? <div className="text-center py-10 text-ink-mute text-sm">{t("owner.classes.coachLoading")}</div> : (
                 detailCoaches.length === 0
-                  ? <div className="text-center py-10 text-ink-mute text-sm">Belum ada coach di kelas ini.</div>
+                  ? <div className="text-center py-10 text-ink-mute text-sm">{t("owner.classes.coachEmpty")}</div>
                   : <div className="space-y-4">
                     <div className="divide-y divide-line">
                       {detailCoaches.map(c => (
@@ -874,28 +875,28 @@ function Classes({ branches }: { branches: Branch[] }) {
                             <div className="font-semibold text-ink text-sm">{c.full_name}</div>
                             <div className="text-xs text-ink-mute">{c.phone ?? "—"}</div>
                           </div>
-                          <Status kind={c.status === "active" ? "active" : "inactive"}>{c.status === "active" ? "Aktif" : "Nonaktif"}</Status>
+                          <Status kind={c.status === "active" ? "active" : "inactive"}>{c.status === "active" ? t("common.status.active") : t("common.status.inactive")}</Status>
                           <div className="flex gap-1.5 shrink-0">
                             <button onClick={() => detailClass && setCoachRole(detailClass.id, c.id, "head")} disabled={settingRole === c.id}
                               className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-colors ${c.role === "head" ? "bg-ocean-700 text-white" : "bg-paper-tint text-ink-soft hover:bg-paper-deep"}`}>
-                              Head Coach
+                              {t("owner.classes.headCoachBtn")}
                             </button>
                             <button onClick={() => detailClass && setCoachRole(detailClass.id, c.id, "assistant")} disabled={settingRole === c.id}
                               className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-colors ${c.role === "assistant" ? "bg-ocean-700 text-white" : "bg-paper-tint text-ink-soft hover:bg-paper-deep"}`}>
-                              Assistant
+                              {t("owner.classes.assistantBtn")}
                             </button>
                           </div>
                         </div>
                       ))}
                     </div>
                     <div className="border-t border-line pt-4">
-                      <div className="text-xs font-bold uppercase tracking-widest text-ink-faint mb-1.5">Penanggung Jawab TTD Rapor</div>
+                      <div className="text-xs font-bold uppercase tracking-widest text-ink-faint mb-1.5">{t("owner.classes.raporSignerTitle")}</div>
                       <Select value={detailClass?.rapor_signer_coach_id ?? ""} disabled={savingSigner}
                         onChange={e => detailClass && setRaporSigner(detailClass.id, e.target.value || null)}>
-                        <option value="">Otomatis (ikut Head Coach)</option>
+                        <option value="">{t("owner.classes.raporSignerAuto")}</option>
                         {detailCoaches.map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
                       </Select>
-                      <p className="text-[11px] text-ink-faint mt-1.5">Label cetak di rapor tetap tertulis &ldquo;Head Coach&rdquo; apa pun coach yang dipilih di sini.</p>
+                      <p className="text-[11px] text-ink-faint mt-1.5">{t("owner.classes.raporSignerHint")}</p>
                     </div>
                   </div>
               )
@@ -903,9 +904,9 @@ function Classes({ branches }: { branches: Branch[] }) {
 
             {/* Tab: Member */}
             {detailTab === "member" && (
-              detailLoading ? <div className="text-center py-10 text-ink-mute text-sm">Memuat…</div> : (
+              detailLoading ? <div className="text-center py-10 text-ink-mute text-sm">{t("owner.classes.coachLoading")}</div> : (
                 detailMembers.length === 0
-                  ? <div className="text-center py-10 text-ink-mute text-sm">Belum ada member aktif di kelas ini.</div>
+                  ? <div className="text-center py-10 text-ink-mute text-sm">{t("owner.classes.memberEmpty")}</div>
                   : <div className="divide-y divide-line">
                     {detailMembers.map(m => (
                       <div key={m.id} className="flex items-center gap-3 py-3">
@@ -914,7 +915,7 @@ function Classes({ branches }: { branches: Branch[] }) {
                           <div className="font-semibold text-ink text-sm">{m.full_name}</div>
                           <div className="text-xs text-ink-mute">{m.phone ?? "—"}</div>
                         </div>
-                        <Status kind={m.status === "active" ? "active" : "suspend"}>{m.status === "active" ? "Aktif" : m.status}</Status>
+                        <Status kind={m.status === "active" ? "active" : "suspend"}>{m.status === "active" ? t("common.status.active") : m.status}</Status>
                       </div>
                     ))}
                   </div>
@@ -923,17 +924,17 @@ function Classes({ branches }: { branches: Branch[] }) {
 
             {/* Tab: Absensi Coach */}
             {detailTab === "att_coach" && (
-              detailLoading ? <div className="text-center py-10 text-ink-mute text-sm">Memuat…</div> : (
+              detailLoading ? <div className="text-center py-10 text-ink-mute text-sm">{t("owner.classes.coachLoading")}</div> : (
                 detailCoachAtt.length === 0
-                  ? <div className="text-center py-10 text-ink-mute text-sm">Belum ada data absensi coach.</div>
+                  ? <div className="text-center py-10 text-ink-mute text-sm">{t("owner.classes.attCoachEmpty")}</div>
                   : <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b border-line text-xs uppercase tracking-widest text-ink-faint">
-                          <th className="text-left py-2 pr-4 font-semibold">Tanggal</th>
-                          <th className="text-left py-2 pr-4 font-semibold">Coach</th>
-                          <th className="text-left py-2 pr-4 font-semibold">Status</th>
-                          <th className="text-left py-2 font-semibold">Catatan</th>
+                          <th className="text-left py-2 pr-4 font-semibold">{t("owner.classes.colDate")}</th>
+                          <th className="text-left py-2 pr-4 font-semibold">{t("owner.classes.colCoach")}</th>
+                          <th className="text-left py-2 pr-4 font-semibold">{t("owner.classes.colStatus")}</th>
+                          <th className="text-left py-2 font-semibold">{t("owner.classes.colNote")}</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-line">
@@ -947,7 +948,7 @@ function Classes({ branches }: { branches: Branch[] }) {
                                 a.status === "absent" ? "bg-danger-50 text-danger-700" :
                                 a.status === "leave" ? "bg-warn-50 text-warn-700" :
                                 "bg-paper-tint text-ink-mute"
-                              }`}>{ATT_STATUS_LABEL[a.status] ?? a.status}</span>
+                              }`}>{t(`owner.classes.attStatus.${a.status}`)}</span>
                             </td>
                             <td className="py-2.5 text-ink-mute text-xs">{a.note ?? "—"}</td>
                           </tr>
@@ -960,17 +961,17 @@ function Classes({ branches }: { branches: Branch[] }) {
 
             {/* Tab: Absensi Member */}
             {detailTab === "att_member" && (
-              detailLoading ? <div className="text-center py-10 text-ink-mute text-sm">Memuat…</div> : (
+              detailLoading ? <div className="text-center py-10 text-ink-mute text-sm">{t("owner.classes.coachLoading")}</div> : (
                 detailMemberAtt.length === 0
-                  ? <div className="text-center py-10 text-ink-mute text-sm">Belum ada data absensi member.</div>
+                  ? <div className="text-center py-10 text-ink-mute text-sm">{t("owner.classes.attMemberEmpty")}</div>
                   : <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b border-line text-xs uppercase tracking-widest text-ink-faint">
-                          <th className="text-left py-2 pr-4 font-semibold">Tanggal</th>
-                          <th className="text-left py-2 pr-4 font-semibold">Member</th>
-                          <th className="text-left py-2 pr-4 font-semibold">Status</th>
-                          <th className="text-left py-2 font-semibold">Catatan</th>
+                          <th className="text-left py-2 pr-4 font-semibold">{t("owner.classes.colDate")}</th>
+                          <th className="text-left py-2 pr-4 font-semibold">{t("owner.classes.colMember")}</th>
+                          <th className="text-left py-2 pr-4 font-semibold">{t("owner.classes.colStatus")}</th>
+                          <th className="text-left py-2 font-semibold">{t("owner.classes.colNote")}</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-line">
@@ -984,7 +985,7 @@ function Classes({ branches }: { branches: Branch[] }) {
                                 a.status === "absent" ? "bg-danger-50 text-danger-700" :
                                 a.status === "leave" ? "bg-warn-50 text-warn-700" :
                                 "bg-paper-tint text-ink-mute"
-                              }`}>{ATT_STATUS_LABEL[a.status] ?? a.status}</span>
+                              }`}>{t(`owner.classes.attStatus.${a.status}`)}</span>
                             </td>
                             <td className="py-2.5 text-ink-mute text-xs">{a.note ?? "—"}</td>
                           </tr>
@@ -1000,21 +1001,21 @@ function Classes({ branches }: { branches: Branch[] }) {
 
       {/* Edit modal — goals & description only */}
       <Modal open={!!editTarget} onClose={() => setEditTarget(null)}
-        title={`Edit Kelas — ${editTarget?.name ?? ""}`} size="md"
-        footer={<><Btn variant="ghost" onClick={() => setEditTarget(null)}>Batal</Btn><Btn variant="primary" onClick={saveEdit} disabled={saving}>{saving ? "Menyimpan…" : "Simpan"}</Btn></>}>
+        title={t("owner.classes.editModalTitle", { name: editTarget?.name ?? "" })} size="md"
+        footer={<><Btn variant="ghost" onClick={() => setEditTarget(null)}>{t("common.actions.cancel")}</Btn><Btn variant="primary" onClick={saveEdit} disabled={saving}>{saving ? t("common.actions.saving") : t("common.actions.save")}</Btn></>}>
         <div className="space-y-4">
           <div className="p-3 rounded-xl bg-ocean-50 border border-ocean-100 text-xs text-ocean-800">
-            Owner hanya dapat mengedit tujuan dan deskripsi kelas. Untuk mengubah jadwal, kapasitas, atau harga — gunakan admin panel cabang.
+            {t("owner.classes.editHint")}
           </div>
-          <Field label="Tujuan kelas" hint="Opsional — tampil di coach page dan member page">
+          <Field label={t("owner.classes.fieldGoals")} hint={t("owner.classes.fieldGoalsHint")}>
             <Textarea rows={2} value={editForm.goals}
               onChange={e => setEditForm(f => ({ ...f, goals: e.target.value }))}
-              placeholder="Mis. Pengenalan air, membangun rasa percaya diri di air, blowing bubbles." />
+              placeholder={t("owner.classes.fieldGoalsPlaceholder")} />
           </Field>
-          <Field label="Deskripsi kelas" hint="Opsional — tampil di coach page dan member page">
+          <Field label={t("owner.classes.fieldDescription")} hint={t("owner.classes.fieldGoalsHint")}>
             <Textarea rows={3} value={editForm.description}
               onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))}
-              placeholder="Mis. Kelas ini dirancang untuk anak usia 4–6 tahun yang baru pertama kali belajar renang dengan pendekatan bermain yang menyenangkan." />
+              placeholder={t("owner.classes.fieldDescriptionPlaceholder")} />
           </Field>
         </div>
       </Modal>
@@ -1051,6 +1052,7 @@ interface LevelCriterion {
 interface BestTimeTemplateRow { id: string; stroke: string; distance: number; target_time_seconds: number | null; sort_order: number }
 
 function OwnerRaporLevels() {
+  const { t } = useLocale();
   const supabase = createClient();
   const toast = useToast();
   const confirm = useConfirm();
@@ -1076,39 +1078,39 @@ function OwnerRaporLevels() {
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const addLevel = async () => {
-    if (!newName.trim()) return toast.error("Nama level wajib diisi");
+    if (!newName.trim()) return toast.error(t("owner.raporLevels.nameRequired"));
     setCreating(true);
     const { error } = await supabase.from("rapor_levels").insert({
       name: newName.trim(), sort_order: levels.length, active: true,
     });
     setCreating(false);
-    if (error) return toast.error("Gagal menambah level", error.message);
-    toast.success("Level ditambahkan");
+    if (error) return toast.error(t("owner.raporLevels.addFailed"), error.message);
+    toast.success(t("owner.raporLevels.added"));
     setNewName("");
     load();
   };
 
   const saveRename = async () => {
-    if (!renaming || !renaming.name.trim()) return toast.error("Nama level wajib diisi");
+    if (!renaming || !renaming.name.trim()) return toast.error(t("owner.raporLevels.nameRequired"));
     const { error } = await supabase.from("rapor_levels").update({ name: renaming.name.trim() }).eq("id", renaming.id);
-    if (error) return toast.error("Gagal menyimpan", error.message);
-    toast.success("Level diperbarui");
+    if (error) return toast.error(t("owner.raporLevels.saveFailed"), error.message);
+    toast.success(t("owner.raporLevels.renamed"));
     setRenaming(null);
     load();
   };
 
   const toggleActive = async (lvl: RaporLevel) => {
     const { error } = await supabase.from("rapor_levels").update({ active: !lvl.active }).eq("id", lvl.id);
-    if (error) return toast.error("Gagal mengubah status", error.message);
+    if (error) return toast.error(t("owner.raporLevels.statusFailed"), error.message);
     setLevels(prev => prev.map(l => l.id === lvl.id ? { ...l, active: !l.active } : l));
   };
 
   const deleteLevel = async (lvl: RaporLevel) => {
-    const yes = await confirm({ body: `Hapus level "${lvl.name}"? Kriteria dan tabel waktu untuk level ini akan ikut terhapus. Rapor yang sudah diisi dengan level ini tidak akan terpengaruh.` });
+    const yes = await confirm({ body: t("owner.raporLevels.deleteConfirmBody", { name: lvl.name }) });
     if (!yes) return;
     const { error } = await supabase.from("rapor_levels").delete().eq("id", lvl.id);
-    if (error) return toast.error("Gagal menghapus level", error.message);
-    toast.success("Level dihapus");
+    if (error) return toast.error(t("owner.raporLevels.deleteFailed"), error.message);
+    toast.success(t("owner.raporLevels.deleted"));
     load();
   };
 
@@ -1134,7 +1136,12 @@ function OwnerRaporLevels() {
   const [editingCriterion, setEditingCriterion] = useState<{ id: string; label: string; kind: string; options: string[] } | null>(null);
   const [bulkKind, setBulkKind] = useState("score_10");
   const [applyingBulk, setApplyingBulk] = useState(false);
-  const kindLabel: Record<string, string> = { score_10: "Nilai 1–10", score_100: "Nilai 1–100", choice: "Pilihan ganda", text: "Teks bebas" };
+  const kindLabel: Record<string, string> = {
+    score_10: t("owner.raporLevels.kindLabel.score_10"),
+    score_100: t("owner.raporLevels.kindLabel.score_100"),
+    choice: t("owner.raporLevels.kindLabel.choice"),
+    text: t("owner.raporLevels.kindLabel.text"),
+  };
 
   const loadCriteria = useCallback(async (levelId: string) => {
     setLoadingCriteria(true);
@@ -1151,7 +1158,7 @@ function OwnerRaporLevels() {
   };
 
   const addCriterion = async () => {
-    if (!criteriaLevel || !criterionForm.label) return toast.error("Label wajib diisi");
+    if (!criteriaLevel || !criterionForm.label) return toast.error(t("owner.raporLevels.labelRequired"));
     setSavingCriterion(true);
     const opts = criterionForm.kind === "choice" ? criterionForm.options.filter(Boolean) : null;
     const { error } = await supabase.from("rapor_level_criteria").insert({
@@ -1159,28 +1166,28 @@ function OwnerRaporLevels() {
       options: opts, sort_order: criteria.length,
     });
     setSavingCriterion(false);
-    if (error) return toast.error("Gagal menyimpan", error.message);
-    toast.success("Kriteria ditambahkan");
+    if (error) return toast.error(t("owner.raporLevels.criterionSaveFailed"), error.message);
+    toast.success(t("owner.raporLevels.criterionAdded"));
     setCriterionForm({ label: "", kind: "score_10", options: [] });
     loadCriteria(criteriaLevel.id);
   };
 
   const deleteCriterion = async (id: string) => {
-    const yes = await confirm({ body: "Hapus kriteria ini? Rapor yang sudah diisi tidak akan terpengaruh." });
+    const yes = await confirm({ body: t("owner.raporLevels.criterionDeleteConfirmBody") });
     if (!yes) return;
     await supabase.from("rapor_level_criteria").delete().eq("id", id);
     setCriteria(prev => prev.filter(c => c.id !== id));
-    toast.success("Kriteria dihapus");
+    toast.success(t("owner.raporLevels.criterionDeleted"));
   };
 
   const updateCriterion = async () => {
-    if (!editingCriterion || !editingCriterion.label) return toast.error("Label wajib diisi");
+    if (!editingCriterion || !editingCriterion.label) return toast.error(t("owner.raporLevels.labelRequired"));
     const opts = editingCriterion.kind === "choice" ? editingCriterion.options.filter(Boolean) : null;
     const { error } = await supabase.from("rapor_level_criteria").update({ label: editingCriterion.label, kind: editingCriterion.kind, options: opts }).eq("id", editingCriterion.id);
-    if (error) return toast.error("Gagal menyimpan", error.message);
+    if (error) return toast.error(t("owner.raporLevels.criterionSaveFailed"), error.message);
     setCriteria(prev => prev.map(c => c.id === editingCriterion.id ? { ...c, label: editingCriterion.label, kind: editingCriterion.kind, options: opts } : c));
     setEditingCriterion(null);
-    toast.success("Kriteria diperbarui");
+    toast.success(t("owner.raporLevels.criterionUpdated"));
   };
 
   const duplicateCriterion = async (cr: LevelCriterion) => {
@@ -1191,21 +1198,21 @@ function OwnerRaporLevels() {
       options: cr.options ?? [], sort_order: criteria.length,
     });
     setSavingCriterion(false);
-    if (error) return toast.error("Gagal menduplikat", error.message);
-    toast.success("Kriteria diduplikat");
+    if (error) return toast.error(t("owner.raporLevels.duplicateFailed"), error.message);
+    toast.success(t("owner.raporLevels.criterionDuplicated"));
     loadCriteria(criteriaLevel.id);
   };
 
   const applyBulkKind = async () => {
     if (!criteriaLevel || criteria.length === 0) return;
-    const yes = await confirm({ body: `Ubah semua ${criteria.length} kriteria ke tipe "${kindLabel[bulkKind]}"? Options pilihan ganda akan dihapus kecuali tipe yang dipilih adalah pilihan ganda.` });
+    const yes = await confirm({ body: t("owner.raporLevels.bulkConfirmBody", { count: criteria.length, kind: kindLabel[bulkKind] }) });
     if (!yes) return;
     setApplyingBulk(true);
     const opts = bulkKind === "choice" ? ["Sangat Baik", "Baik", "Cukup", "Perlu Latihan"] : null;
     await Promise.all(criteria.map(cr => supabase.from("rapor_level_criteria").update({ kind: bulkKind, options: opts }).eq("id", cr.id)));
     setApplyingBulk(false);
     loadCriteria(criteriaLevel.id);
-    toast.success("Semua kriteria diperbarui");
+    toast.success(t("owner.raporLevels.bulkUpdated"));
   };
 
   // ── Personal Best Time template ─────────────────────────────────────────────
@@ -1233,57 +1240,57 @@ function OwnerRaporLevels() {
     if (!bestTimeLevel) return;
     const stroke = btForm.stroke.trim();
     const distance = parseInt(btForm.distance);
-    if (!stroke || !btForm.distance || isNaN(distance) || distance <= 0) return toast.error("Gaya dan jarak wajib diisi dengan benar");
+    if (!stroke || !btForm.distance || isNaN(distance) || distance <= 0) return toast.error(t("owner.raporLevels.strokeDistanceRequired"));
     const target = btForm.target.trim() ? parseFloat(btForm.target) : null;
     setSavingBt(true);
     const { error } = await supabase.from("rapor_level_best_times").insert({
       level_id: bestTimeLevel.id, stroke, distance, target_time_seconds: target, sort_order: bestTimeRows.length,
     });
     setSavingBt(false);
-    if (error) return toast.error("Gagal menambah baris", error.message);
-    toast.success("Baris waktu ditambahkan");
+    if (error) return toast.error(t("owner.raporLevels.addRowFailed"), error.message);
+    toast.success(t("owner.raporLevels.rowAdded"));
     setBtForm({ stroke: "", distance: "", target: "" });
     loadBestTimes(bestTimeLevel.id);
   };
 
   const deleteBestTimeRow = async (id: string) => {
-    const yes = await confirm({ body: "Hapus baris tabel waktu ini?" });
+    const yes = await confirm({ body: t("owner.raporLevels.rowDeleteConfirmBody") });
     if (!yes) return;
     await supabase.from("rapor_level_best_times").delete().eq("id", id);
     setBestTimeRows(prev => prev.filter(r => r.id !== id));
-    toast.success("Baris dihapus");
+    toast.success(t("owner.raporLevels.rowDeleted"));
   };
 
   const saveBestTimeEdit = async () => {
     if (!editingBt) return;
     const stroke = editingBt.stroke.trim();
     const distance = parseInt(editingBt.distance);
-    if (!stroke || !editingBt.distance || isNaN(distance) || distance <= 0) return toast.error("Gaya dan jarak wajib diisi dengan benar");
+    if (!stroke || !editingBt.distance || isNaN(distance) || distance <= 0) return toast.error(t("owner.raporLevels.strokeDistanceRequired"));
     const target = editingBt.target.trim() ? parseFloat(editingBt.target) : null;
     const { error } = await supabase.from("rapor_level_best_times").update({ stroke, distance, target_time_seconds: target }).eq("id", editingBt.id);
-    if (error) return toast.error("Gagal menyimpan", error.message);
+    if (error) return toast.error(t("owner.raporLevels.saveFailed"), error.message);
     setBestTimeRows(prev => prev.map(r => r.id === editingBt.id ? { ...r, stroke, distance, target_time_seconds: target } : r));
     setEditingBt(null);
-    toast.success("Baris diperbarui");
+    toast.success(t("owner.raporLevels.rowUpdated"));
   };
 
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="font-display font-bold text-2xl">Level Rapor</h2>
-        <p className="text-ink-mute text-sm mt-0.5">Atur level renang (mis. Level A, Level B). Setiap level punya kriteria penilaian dan standar tabel waktu sendiri — coach tinggal memilih level saat mengisi rapor.</p>
+        <h2 className="font-display font-bold text-2xl">{t("owner.raporLevels.pageTitle")}</h2>
+        <p className="text-ink-mute text-sm mt-0.5">{t("owner.raporLevels.pageSub")}</p>
       </div>
 
       <Card padded={false}>
         <div className="p-4 sm:p-5 border-b border-line flex items-center gap-2">
-          <Input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Mis. Level A" className="flex-1" />
-          <Btn variant="primary" icon="plus" onClick={addLevel} disabled={creating}>{creating ? "Menambah…" : "Tambah Level"}</Btn>
+          <Input value={newName} onChange={e => setNewName(e.target.value)} placeholder={t("owner.raporLevels.namePlaceholder")} className="flex-1" />
+          <Btn variant="primary" icon="plus" onClick={addLevel} disabled={creating}>{creating ? t("owner.raporLevels.adding") : t("owner.raporLevels.addLevel")}</Btn>
         </div>
 
         {loading ? (
-          <div className="py-10 text-center text-ink-mute text-sm">Memuat…</div>
+          <div className="py-10 text-center text-ink-mute text-sm">{t("owner.raporLevels.loading")}</div>
         ) : levels.length === 0 ? (
-          <div className="py-10 text-center text-ink-mute text-sm">Belum ada level. Tambahkan level pertama di atas.</div>
+          <div className="py-10 text-center text-ink-mute text-sm">{t("owner.raporLevels.empty")}</div>
         ) : (
           <div className="divide-y divide-line">
             {levels.map((lvl, i) => (
@@ -1298,22 +1305,22 @@ function OwnerRaporLevels() {
                 {renaming?.id === lvl.id ? (
                   <div className="flex-1 flex items-center gap-2">
                     <Input value={renaming.name} onChange={e => setRenaming(v => v ? { ...v, name: e.target.value } : v)} className="flex-1" />
-                    <Btn variant="primary" size="sm" onClick={saveRename}>Simpan</Btn>
-                    <Btn variant="ghost" size="sm" onClick={() => setRenaming(null)}>Batal</Btn>
+                    <Btn variant="primary" size="sm" onClick={saveRename}>{t("owner.raporLevels.saveBtn")}</Btn>
+                    <Btn variant="ghost" size="sm" onClick={() => setRenaming(null)}>{t("owner.raporLevels.cancelBtn")}</Btn>
                   </div>
                 ) : (
                   <>
                     <div className="flex-1 min-w-0">
                       <div className="font-semibold text-ink text-sm">{lvl.name}</div>
-                      {!lvl.active && <div className="text-xs text-ink-faint">Nonaktif</div>}
+                      {!lvl.active && <div className="text-xs text-ink-faint">{t("owner.raporLevels.inactive")}</div>}
                     </div>
-                    <Btn variant="ghost" size="sm" icon="book" onClick={() => openCriteria(lvl)}>Kriteria</Btn>
-                    <Btn variant="ghost" size="sm" icon="target" onClick={() => openBestTimes(lvl)}>Waktu</Btn>
-                    <button onClick={() => setRenaming({ id: lvl.id, name: lvl.name })} title="Ubah nama"
+                    <Btn variant="ghost" size="sm" icon="book" onClick={() => openCriteria(lvl)}>{t("owner.raporLevels.criteriaBtn")}</Btn>
+                    <Btn variant="ghost" size="sm" icon="target" onClick={() => openBestTimes(lvl)}>{t("owner.raporLevels.timeBtn")}</Btn>
+                    <button onClick={() => setRenaming({ id: lvl.id, name: lvl.name })} title={t("owner.raporLevels.renameTitle")}
                       className="w-8 h-8 rounded-lg hover:bg-paper-tint text-ink-mute hover:text-ocean-600 flex items-center justify-center"><Icon name="edit" className="w-4 h-4" /></button>
-                    <button onClick={() => toggleActive(lvl)} title={lvl.active ? "Nonaktifkan" : "Aktifkan"}
+                    <button onClick={() => toggleActive(lvl)} title={lvl.active ? t("owner.raporLevels.deactivateTitle") : t("owner.raporLevels.activateTitle")}
                       className="w-8 h-8 rounded-lg hover:bg-paper-tint text-ink-mute hover:text-ocean-600 flex items-center justify-center"><Icon name={lvl.active ? "archive" : "check"} className="w-4 h-4" /></button>
-                    <button onClick={() => deleteLevel(lvl)} title="Hapus"
+                    <button onClick={() => deleteLevel(lvl)} title={t("owner.raporLevels.deleteTitle")}
                       className="w-8 h-8 rounded-lg hover:bg-danger-50 text-ink-faint hover:text-danger-500 flex items-center justify-center"><Icon name="x" className="w-4 h-4" /></button>
                   </>
                 )}
@@ -1324,23 +1331,23 @@ function OwnerRaporLevels() {
       </Card>
 
       <Modal open={!!criteriaLevel} onClose={() => { setCriteriaLevel(null); setCriterionForm({ label: "", kind: "score_10", options: [] }); setEditingCriterion(null); }}
-        title={`Kriteria Penilaian — ${criteriaLevel?.name ?? ""}`} size="lg"
-        footer={<Btn variant="ghost" onClick={() => { setCriteriaLevel(null); setCriterionForm({ label: "", kind: "score_10", options: [] }); setEditingCriterion(null); }}>Tutup</Btn>}>
+        title={t("owner.raporLevels.criteriaModalTitle", { level: criteriaLevel?.name ?? "" })} size="lg"
+        footer={<Btn variant="ghost" onClick={() => { setCriteriaLevel(null); setCriterionForm({ label: "", kind: "score_10", options: [] }); setEditingCriterion(null); }}>{t("common.actions.close")}</Btn>}>
         <div className="space-y-5">
-          {loadingCriteria ? <div className="text-ink-mute text-sm text-center py-6">Memuat…</div> : (
+          {loadingCriteria ? <div className="text-ink-mute text-sm text-center py-6">{t("owner.raporLevels.criteriaLoading")}</div> : (
             <>
               {criteria.length > 0 ? (
                 <div className="space-y-2">
                   <div className="flex items-center gap-2 p-2.5 bg-paper-tint rounded-xl border border-line">
-                    <span className="text-xs text-ink-mute shrink-0">Ubah semua ke:</span>
+                    <span className="text-xs text-ink-mute shrink-0">{t("owner.raporLevels.changeAllTo")}</span>
                     <select value={bulkKind} onChange={e => setBulkKind(e.target.value)}
                       className="flex-1 text-xs border border-line rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-ocean-500">
-                      <option value="score_10">Nilai 1–10</option>
-                      <option value="score_100">Nilai 1–100</option>
-                      <option value="choice">Pilihan ganda</option>
-                      <option value="text">Teks bebas</option>
+                      <option value="score_10">{t("owner.raporLevels.kindLabel.score_10")}</option>
+                      <option value="score_100">{t("owner.raporLevels.kindLabel.score_100")}</option>
+                      <option value="choice">{t("owner.raporLevels.kindLabel.choice")}</option>
+                      <option value="text">{t("owner.raporLevels.kindLabel.text")}</option>
                     </select>
-                    <Btn variant="outline" size="sm" onClick={applyBulkKind} disabled={applyingBulk}>{applyingBulk ? "Mengubah…" : "Terapkan"}</Btn>
+                    <Btn variant="outline" size="sm" onClick={applyBulkKind} disabled={applyingBulk}>{applyingBulk ? t("owner.raporLevels.changingAll") : t("owner.raporLevels.applyBtn")}</Btn>
                   </div>
 
                   {criteria.map((cr, i) => (
@@ -1348,35 +1355,35 @@ function OwnerRaporLevels() {
                       {editingCriterion?.id === cr.id ? (
                         <div className="p-3 space-y-2 bg-ocean-50/40">
                           <div className="grid sm:grid-cols-2 gap-2">
-                            <Field label="Label"><Input value={editingCriterion.label} onChange={e => setEditingCriterion(v => v ? { ...v, label: e.target.value } : v)} /></Field>
-                            <Field label="Tipe">
+                            <Field label={t("owner.raporLevels.fieldLabel")}><Input value={editingCriterion.label} onChange={e => setEditingCriterion(v => v ? { ...v, label: e.target.value } : v)} /></Field>
+                            <Field label={t("owner.raporLevels.fieldKind")}>
                               <Select value={editingCriterion.kind} onChange={e => setEditingCriterion(v => v ? { ...v, kind: e.target.value } : v)}>
-                                <option value="score_10">Nilai 1–10</option>
-                                <option value="score_100">Nilai 1–100</option>
-                                <option value="choice">Pilihan ganda</option>
-                                <option value="text">Teks bebas</option>
+                                <option value="score_10">{t("owner.raporLevels.kindLabel.score_10")}</option>
+                                <option value="score_100">{t("owner.raporLevels.kindLabel.score_100")}</option>
+                                <option value="choice">{t("owner.raporLevels.kindLabel.choice")}</option>
+                                <option value="text">{t("owner.raporLevels.kindLabel.text")}</option>
                               </Select>
                             </Field>
                           </div>
                           {editingCriterion.kind === "choice" && (
-                            <Field label="Pilihan jawaban">
+                            <Field label={t("owner.raporLevels.fieldOptions")}>
                               <div className="space-y-1.5">
                                 {editingCriterion.options.map((opt, idx) => (
                                   <div key={idx} className="flex items-center gap-2">
                                     <span className="text-ink-mute text-sm w-5 text-right shrink-0">{idx + 1}.</span>
-                                    <Input value={opt} onChange={e => setEditingCriterion(v => { if (!v) return v; const opts = [...v.options]; opts[idx] = e.target.value; return { ...v, options: opts }; })} placeholder={`Pilihan ${idx + 1}`} className="flex-1" />
+                                    <Input value={opt} onChange={e => setEditingCriterion(v => { if (!v) return v; const opts = [...v.options]; opts[idx] = e.target.value; return { ...v, options: opts }; })} placeholder={t("owner.raporLevels.optionPlaceholder", { number: idx + 1 })} className="flex-1" />
                                     <button type="button" onClick={() => setEditingCriterion(v => v ? { ...v, options: v.options.filter((_, i) => i !== idx) } : v)} className="p-1 rounded text-ink-mute hover:text-danger-600 hover:bg-danger-50 transition-colors"><Icon name="x" className="w-3.5 h-3.5" /></button>
                                   </div>
                                 ))}
                                 <button type="button" onClick={() => setEditingCriterion(v => v ? { ...v, options: [...v.options, ""] } : v)} className="flex items-center gap-1.5 text-sm text-ocean-600 hover:text-ocean-700 font-medium mt-1">
-                                  <Icon name="plus" className="w-3.5 h-3.5" />Tambah pilihan
+                                  <Icon name="plus" className="w-3.5 h-3.5" />{t("owner.raporLevels.addOption")}
                                 </button>
                               </div>
                             </Field>
                           )}
                           <div className="flex gap-2">
-                            <Btn variant="primary" size="sm" onClick={updateCriterion}>Simpan</Btn>
-                            <Btn variant="ghost" size="sm" onClick={() => setEditingCriterion(null)}>Batal</Btn>
+                            <Btn variant="primary" size="sm" onClick={updateCriterion}>{t("owner.raporLevels.saveBtn")}</Btn>
+                            <Btn variant="ghost" size="sm" onClick={() => setEditingCriterion(null)}>{t("owner.raporLevels.cancelBtn")}</Btn>
                           </div>
                         </div>
                       ) : (
@@ -1387,15 +1394,15 @@ function OwnerRaporLevels() {
                             <div className="text-xs text-ink-mute">{kindLabel[cr.kind] ?? cr.kind}{cr.options && ` · ${cr.options.join(", ")}`}</div>
                           </div>
                           <button onClick={() => duplicateCriterion(cr)} disabled={savingCriterion}
-                            className="w-7 h-7 rounded-lg hover:bg-ocean-50 text-ink-faint hover:text-ocean-600 flex items-center justify-center shrink-0 disabled:opacity-50" title="Duplikat">
+                            className="w-7 h-7 rounded-lg hover:bg-ocean-50 text-ink-faint hover:text-ocean-600 flex items-center justify-center shrink-0 disabled:opacity-50" title={t("owner.raporLevels.duplicateTitle")}>
                             <Icon name="copy" className="w-3.5 h-3.5" />
                           </button>
                           <button onClick={() => setEditingCriterion({ id: cr.id, label: cr.label, kind: cr.kind, options: cr.options ?? [] })}
-                            className="w-7 h-7 rounded-lg hover:bg-ocean-50 text-ink-faint hover:text-ocean-600 flex items-center justify-center shrink-0" title="Edit">
+                            className="w-7 h-7 rounded-lg hover:bg-ocean-50 text-ink-faint hover:text-ocean-600 flex items-center justify-center shrink-0" title={t("owner.raporLevels.editTitle")}>
                             <Icon name="edit" className="w-3.5 h-3.5" />
                           </button>
                           <button onClick={() => deleteCriterion(cr.id)}
-                            className="w-7 h-7 rounded-lg hover:bg-danger-50 text-ink-faint hover:text-danger-500 flex items-center justify-center shrink-0" title="Hapus">
+                            className="w-7 h-7 rounded-lg hover:bg-danger-50 text-ink-faint hover:text-danger-500 flex items-center justify-center shrink-0" title={t("owner.raporLevels.deleteTitle")}>
                             <Icon name="x" className="w-3.5 h-3.5" />
                           </button>
                         </div>
@@ -1404,39 +1411,39 @@ function OwnerRaporLevels() {
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-ink-mute">Belum ada kriteria. Tambahkan di bawah.</p>
+                <p className="text-sm text-ink-mute">{t("owner.raporLevels.criteriaEmpty")}</p>
               )}
 
               <div className="border-t border-line pt-4 space-y-3">
-                <div className="text-xs font-bold uppercase tracking-widest text-ink-faint">Tambah Kriteria Baru</div>
+                <div className="text-xs font-bold uppercase tracking-widest text-ink-faint">{t("owner.raporLevels.addNewCriterionTitle")}</div>
                 <div className="grid sm:grid-cols-2 gap-3">
-                  <Field label="Label kriteria" required><Input value={criterionForm.label} onChange={e => setCriterionForm(f => ({ ...f, label: e.target.value }))} placeholder="Mis. Teknik gaya bebas" /></Field>
-                  <Field label="Tipe penilaian">
+                  <Field label={t("owner.raporLevels.fieldLabel")} required><Input value={criterionForm.label} onChange={e => setCriterionForm(f => ({ ...f, label: e.target.value }))} placeholder={t("owner.raporLevels.fieldLabelPlaceholder")} /></Field>
+                  <Field label={t("owner.raporLevels.fieldKind")}>
                     <Select value={criterionForm.kind} onChange={e => setCriterionForm(f => ({ ...f, kind: e.target.value }))}>
-                      <option value="score_10">Nilai 1–10</option>
-                      <option value="score_100">Nilai 1–100</option>
-                      <option value="choice">Pilihan ganda</option>
-                      <option value="text">Teks bebas</option>
+                      <option value="score_10">{t("owner.raporLevels.kindLabel.score_10")}</option>
+                      <option value="score_100">{t("owner.raporLevels.kindLabel.score_100")}</option>
+                      <option value="choice">{t("owner.raporLevels.kindLabel.choice")}</option>
+                      <option value="text">{t("owner.raporLevels.kindLabel.text")}</option>
                     </Select>
                   </Field>
                 </div>
                 {criterionForm.kind === "choice" && (
-                  <Field label="Pilihan jawaban">
+                  <Field label={t("owner.raporLevels.fieldOptions")}>
                     <div className="space-y-1.5">
                       {criterionForm.options.map((opt, idx) => (
                         <div key={idx} className="flex items-center gap-2">
                           <span className="text-ink-mute text-sm w-5 text-right shrink-0">{idx + 1}.</span>
-                          <Input value={opt} onChange={e => setCriterionForm(f => { const opts = [...f.options]; opts[idx] = e.target.value; return { ...f, options: opts }; })} placeholder={`Pilihan ${idx + 1}`} className="flex-1" />
+                          <Input value={opt} onChange={e => setCriterionForm(f => { const opts = [...f.options]; opts[idx] = e.target.value; return { ...f, options: opts }; })} placeholder={t("owner.raporLevels.optionPlaceholder", { number: idx + 1 })} className="flex-1" />
                           <button type="button" onClick={() => setCriterionForm(f => ({ ...f, options: f.options.filter((_, i) => i !== idx) }))} className="p-1 rounded text-ink-mute hover:text-danger-600 hover:bg-danger-50 transition-colors"><Icon name="x" className="w-3.5 h-3.5" /></button>
                         </div>
                       ))}
                       <button type="button" onClick={() => setCriterionForm(f => ({ ...f, options: [...f.options, ""] }))} className="flex items-center gap-1.5 text-sm text-ocean-600 hover:text-ocean-700 font-medium mt-1">
-                        <Icon name="plus" className="w-3.5 h-3.5" />Tambah pilihan
+                        <Icon name="plus" className="w-3.5 h-3.5" />{t("owner.raporLevels.addOption")}
                       </button>
                     </div>
                   </Field>
                 )}
-                <Btn variant="primary" size="sm" icon="plus" onClick={addCriterion} disabled={savingCriterion}>{savingCriterion ? "Menyimpan…" : "Tambah Kriteria"}</Btn>
+                <Btn variant="primary" size="sm" icon="plus" onClick={addCriterion} disabled={savingCriterion}>{savingCriterion ? t("owner.raporLevels.savingCriterion") : t("owner.raporLevels.addCriterion")}</Btn>
               </div>
             </>
           )}
@@ -1444,11 +1451,11 @@ function OwnerRaporLevels() {
       </Modal>
 
       <Modal open={!!bestTimeLevel} onClose={() => { setBestTimeLevel(null); setBtForm({ stroke: "", distance: "", target: "" }); setEditingBt(null); }}
-        title={`Tabel Personal Best Time — ${bestTimeLevel?.name ?? ""}`} size="lg"
-        footer={<Btn variant="ghost" onClick={() => { setBestTimeLevel(null); setBtForm({ stroke: "", distance: "", target: "" }); setEditingBt(null); }}>Tutup</Btn>}>
+        title={t("owner.raporLevels.bestTimeModalTitle", { level: bestTimeLevel?.name ?? "" })} size="lg"
+        footer={<Btn variant="ghost" onClick={() => { setBestTimeLevel(null); setBtForm({ stroke: "", distance: "", target: "" }); setEditingBt(null); }}>{t("common.actions.close")}</Btn>}>
         <div className="space-y-5">
-          <p className="text-xs text-ink-mute">Baris di sini menentukan gaya &amp; jarak yang muncul di tabel Personal Best Time saat coach mengisi rapor untuk level ini. Standar waktu (opsional) tampil sebagai acuan — coach tetap menginput waktu aktual member.</p>
-          {loadingBestTimes ? <div className="text-ink-mute text-sm text-center py-6">Memuat…</div> : (
+          <p className="text-xs text-ink-mute">{t("owner.raporLevels.bestTimeHint")}</p>
+          {loadingBestTimes ? <div className="text-ink-mute text-sm text-center py-6">{t("owner.raporLevels.criteriaLoading")}</div> : (
             <>
               {bestTimeRows.length > 0 ? (
                 <div className="space-y-2">
@@ -1456,12 +1463,12 @@ function OwnerRaporLevels() {
                     <div key={row.id} className="rounded-xl border border-line overflow-hidden">
                       {editingBt?.id === row.id ? (
                         <div className="p-3 grid grid-cols-3 gap-2 items-end bg-ocean-50/40">
-                          <Field label="Gaya"><Input value={editingBt.stroke} onChange={e => setEditingBt(v => v ? { ...v, stroke: e.target.value } : v)} /></Field>
-                          <Field label="Jarak (m)"><Input inputMode="numeric" value={editingBt.distance} onChange={e => setEditingBt(v => v ? { ...v, distance: e.target.value } : v)} /></Field>
-                          <Field label="Standar (dtk)"><Input inputMode="decimal" value={editingBt.target} onChange={e => setEditingBt(v => v ? { ...v, target: e.target.value } : v)} placeholder="Opsional" /></Field>
+                          <Field label={t("owner.raporLevels.fieldStroke")}><Input value={editingBt.stroke} onChange={e => setEditingBt(v => v ? { ...v, stroke: e.target.value } : v)} /></Field>
+                          <Field label={t("owner.raporLevels.fieldDistance")}><Input inputMode="numeric" value={editingBt.distance} onChange={e => setEditingBt(v => v ? { ...v, distance: e.target.value } : v)} /></Field>
+                          <Field label={t("owner.raporLevels.fieldTarget")}><Input inputMode="decimal" value={editingBt.target} onChange={e => setEditingBt(v => v ? { ...v, target: e.target.value } : v)} placeholder={t("owner.raporLevels.fieldTargetPlaceholder")} /></Field>
                           <div className="col-span-3 flex gap-2">
-                            <Btn variant="primary" size="sm" onClick={saveBestTimeEdit}>Simpan</Btn>
-                            <Btn variant="ghost" size="sm" onClick={() => setEditingBt(null)}>Batal</Btn>
+                            <Btn variant="primary" size="sm" onClick={saveBestTimeEdit}>{t("owner.raporLevels.saveBtn")}</Btn>
+                            <Btn variant="ghost" size="sm" onClick={() => setEditingBt(null)}>{t("owner.raporLevels.cancelBtn")}</Btn>
                           </div>
                         </div>
                       ) : (
@@ -1469,14 +1476,14 @@ function OwnerRaporLevels() {
                           <span className="w-6 h-6 rounded-full bg-ocean-50 text-ocean-700 text-xs font-bold flex items-center justify-center shrink-0">{i + 1}</span>
                           <div className="flex-1 min-w-0">
                             <div className="font-semibold text-ink text-sm">{row.stroke} · {row.distance}m</div>
-                            <div className="text-xs text-ink-mute">{row.target_time_seconds != null ? `Standar: ${fmtSwimTime(row.target_time_seconds)}` : "Tanpa standar waktu"}</div>
+                            <div className="text-xs text-ink-mute">{row.target_time_seconds != null ? t("owner.raporLevels.standardPrefix", { time: fmtSwimTime(row.target_time_seconds) }) : t("owner.raporLevels.noStandard")}</div>
                           </div>
                           <button onClick={() => setEditingBt({ id: row.id, stroke: row.stroke, distance: String(row.distance), target: row.target_time_seconds != null ? String(row.target_time_seconds) : "" })}
-                            className="w-7 h-7 rounded-lg hover:bg-ocean-50 text-ink-faint hover:text-ocean-600 flex items-center justify-center shrink-0" title="Edit">
+                            className="w-7 h-7 rounded-lg hover:bg-ocean-50 text-ink-faint hover:text-ocean-600 flex items-center justify-center shrink-0" title={t("owner.raporLevels.editTitle")}>
                             <Icon name="edit" className="w-3.5 h-3.5" />
                           </button>
                           <button onClick={() => deleteBestTimeRow(row.id)}
-                            className="w-7 h-7 rounded-lg hover:bg-danger-50 text-ink-faint hover:text-danger-500 flex items-center justify-center shrink-0" title="Hapus">
+                            className="w-7 h-7 rounded-lg hover:bg-danger-50 text-ink-faint hover:text-danger-500 flex items-center justify-center shrink-0" title={t("owner.raporLevels.deleteTitle")}>
                             <Icon name="x" className="w-3.5 h-3.5" />
                           </button>
                         </div>
@@ -1485,17 +1492,17 @@ function OwnerRaporLevels() {
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-ink-mute">Belum ada baris tabel waktu. Tambahkan di bawah.</p>
+                <p className="text-sm text-ink-mute">{t("owner.raporLevels.bestTimeEmpty")}</p>
               )}
 
               <div className="border-t border-line pt-4 space-y-3">
-                <div className="text-xs font-bold uppercase tracking-widest text-ink-faint">Tambah Baris Baru</div>
+                <div className="text-xs font-bold uppercase tracking-widest text-ink-faint">{t("owner.raporLevels.addNewRowTitle")}</div>
                 <div className="grid grid-cols-3 gap-3">
-                  <Field label="Gaya" required><Input value={btForm.stroke} onChange={e => setBtForm(f => ({ ...f, stroke: e.target.value }))} placeholder="Mis. Freestyle" /></Field>
-                  <Field label="Jarak (m)" required><Input inputMode="numeric" value={btForm.distance} onChange={e => setBtForm(f => ({ ...f, distance: e.target.value }))} placeholder="50" /></Field>
-                  <Field label="Standar (dtk)"><Input inputMode="decimal" value={btForm.target} onChange={e => setBtForm(f => ({ ...f, target: e.target.value }))} placeholder="Opsional" /></Field>
+                  <Field label={t("owner.raporLevels.fieldStroke")} required><Input value={btForm.stroke} onChange={e => setBtForm(f => ({ ...f, stroke: e.target.value }))} placeholder={t("owner.raporLevels.fieldStrokePlaceholder")} /></Field>
+                  <Field label={t("owner.raporLevels.fieldDistance")} required><Input inputMode="numeric" value={btForm.distance} onChange={e => setBtForm(f => ({ ...f, distance: e.target.value }))} placeholder="50" /></Field>
+                  <Field label={t("owner.raporLevels.fieldTarget")}><Input inputMode="decimal" value={btForm.target} onChange={e => setBtForm(f => ({ ...f, target: e.target.value }))} placeholder={t("owner.raporLevels.fieldTargetPlaceholder")} /></Field>
                 </div>
-                <Btn variant="primary" size="sm" icon="plus" onClick={addBestTimeRow} disabled={savingBt}>{savingBt ? "Menyimpan…" : "Tambah Baris"}</Btn>
+                <Btn variant="primary" size="sm" icon="plus" onClick={addBestTimeRow} disabled={savingBt}>{savingBt ? t("owner.raporLevels.savingCriterion") : t("owner.raporLevels.addRowBtn")}</Btn>
               </div>
             </>
           )}
@@ -1506,6 +1513,7 @@ function OwnerRaporLevels() {
 }
 
 function SettingsTarif({ branches }: { branches: Branch[] }) {
+  const { t } = useLocale();
   const toast = useToast();
   const supabase = createClient();
 
@@ -1624,7 +1632,7 @@ function SettingsTarif({ branches }: { branches: Branch[] }) {
 
   const saveGeneral = async (classId: string) => {
     const val = Number(generalRates[classId]);
-    if (!val || val <= 0) return toast.error("Masukkan nominal tarif yang valid");
+    if (!val || val <= 0) return toast.error(t("owner.ratesTarif.invalidRate"));
     const key = `gen:${classId}`;
     setSaving(key);
     const { data: existing } = await supabase.from("coach_rates").select("id").eq("class_id", classId).is("coach_id", null).maybeSingle();
@@ -1633,8 +1641,8 @@ function SettingsTarif({ branches }: { branches: Branch[] }) {
       : supabase.from("coach_rates").insert({ class_id: classId, coach_id: null, rate: val, rate_per_session: val });
     const { error } = await op;
     setSaving(null);
-    if (error) return toast.error("Gagal menyimpan", error.message);
-    toast.success("Tarif umum disimpan");
+    if (error) return toast.error(t("owner.ratesTarif.saveFailed"), error.message);
+    toast.success(t("owner.ratesTarif.generalRateSaved"));
     loadCoaches();
   };
 
@@ -1646,12 +1654,12 @@ function SettingsTarif({ branches }: { branches: Branch[] }) {
       await supabase.from("coach_rates").delete().eq("class_id", classId).eq("coach_id", coachId);
       setSaving(null);
       setCoachRates(prev => { const n = { ...prev }; delete n[`${classId}:${coachId}`]; return n; });
-      toast.success("Tarif khusus dihapus — akan pakai tarif umum");
+      toast.success(t("owner.ratesTarif.specificRateDeleted"));
       loadCoaches();
       return;
     }
     const val = Number(rawVal);
-    if (!val || val <= 0) return toast.error("Masukkan nominal tarif yang valid");
+    if (!val || val <= 0) return toast.error(t("owner.ratesTarif.invalidRate"));
     setSaving(key);
     const { data: existing } = await supabase.from("coach_rates").select("id").eq("class_id", classId).eq("coach_id", coachId).maybeSingle();
     const op = existing
@@ -1659,14 +1667,14 @@ function SettingsTarif({ branches }: { branches: Branch[] }) {
       : supabase.from("coach_rates").insert({ class_id: classId, coach_id: coachId, rate: val, rate_per_session: val });
     const { error } = await op;
     setSaving(null);
-    if (error) return toast.error("Gagal menyimpan", error.message);
-    toast.success("Tarif khusus disimpan");
+    if (error) return toast.error(t("owner.ratesTarif.saveFailed"), error.message);
+    toast.success(t("owner.ratesTarif.specificRateSaved"));
     loadCoaches();
   };
 
   const saveExtraRate = async (coachId: string) => {
     const val = Number(extraRateInput);
-    if (!val || val <= 0) return toast.error("Masukkan nominal tarif extra yang valid");
+    if (!val || val <= 0) return toast.error(t("owner.ratesTarif.invalidExtraRate"));
     setSaving("extra");
     const { data: existing } = await supabase.from("coach_extra_rates").select("id").eq("coach_id", coachId).maybeSingle();
     const op = existing
@@ -1674,44 +1682,44 @@ function SettingsTarif({ branches }: { branches: Branch[] }) {
       : supabase.from("coach_extra_rates").insert({ coach_id: coachId, rate_per_session: val });
     const { error } = await op;
     setSaving(null);
-    if (error) return toast.error("Gagal menyimpan", error.message);
-    toast.success("Tarif extra disimpan");
+    if (error) return toast.error(t("owner.ratesTarif.saveFailed"), error.message);
+    toast.success(t("owner.ratesTarif.extraRateSaved"));
     loadCoaches();
   };
 
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="font-display font-bold text-2xl">Tarif Coach</h2>
-        <p className="text-ink-mute text-sm mt-0.5">Kelola tarif per sesi tiap coach — klik baris untuk lihat &amp; atur tarif per kelas, plus tarif extra sesi di luar kelas reguler.</p>
+        <h2 className="font-display font-bold text-2xl">{t("owner.ratesTarif.pageTitle")}</h2>
+        <p className="text-ink-mute text-sm mt-0.5">{t("owner.ratesTarif.pageSub")}</p>
       </div>
 
       {/* Toolbar filter */}
       <div className="flex gap-2 flex-wrap">
         <div className="flex-1 min-w-48 relative">
           <Icon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-faint pointer-events-none" />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Cari nama coach…" className="w-full pl-9 pr-3 py-2 text-sm rounded-xl border border-line bg-white focus:outline-none focus:ring-1 focus:ring-ocean-400" />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t("owner.ratesTarif.searchPlaceholder")} className="w-full pl-9 pr-3 py-2 text-sm rounded-xl border border-line bg-white focus:outline-none focus:ring-1 focus:ring-ocean-400" />
         </div>
         {branches.length > 1 && (
           <select value={filterBranch} onChange={e => setFilterBranch(e.target.value)} className="text-sm rounded-xl border border-line bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
-            <option value="all">Semua Cabang</option>
+            <option value="all">{t("owner.ratesTarif.allBranches")}</option>
             {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
         )}
         <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="text-sm rounded-xl border border-line bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
-          <option value="all">Semua Status</option>
-          <option value="complete">Tarif Lengkap</option>
-          <option value="incomplete">Tarif Belum Lengkap</option>
-          <option value="no_extra">Belum Ada Tarif Extra</option>
+          <option value="all">{t("owner.ratesTarif.allStatus")}</option>
+          <option value="complete">{t("owner.ratesTarif.statusComplete")}</option>
+          <option value="incomplete">{t("owner.ratesTarif.statusIncomplete")}</option>
+          <option value="no_extra">{t("owner.ratesTarif.statusNoExtra")}</option>
         </select>
-        <span className="text-xs text-ink-mute self-center ml-auto">{filteredCoaches.length} coach</span>
+        <span className="text-xs text-ink-mute self-center ml-auto">{t("owner.ratesTarif.coachCount", { count: filteredCoaches.length })}</span>
       </div>
 
       <Card padded={false}>
         {loading ? (
-          <div className="p-10 text-center text-ink-mute text-sm">Memuat data…</div>
+          <div className="p-10 text-center text-ink-mute text-sm">{t("owner.ratesTarif.loading")}</div>
         ) : filteredCoaches.length === 0 ? (
-          <div className="p-10 text-center text-ink-mute text-sm">Tidak ada coach yang cocok dengan filter.</div>
+          <div className="p-10 text-center text-ink-mute text-sm">{t("owner.ratesTarif.empty")}</div>
         ) : (
           <div className="divide-y divide-line">
             {filteredCoaches.map(c => {
@@ -1725,22 +1733,22 @@ function SettingsTarif({ branches }: { branches: Branch[] }) {
                       <div className="font-semibold text-sm text-ink">{c.full_name}</div>
                       <div className="text-xs text-ink-mute mt-0.5 flex items-center gap-1.5 flex-wrap">
                         {c.branchIds.length === 0 ? (
-                          <span className="text-ink-faint">Belum ada kelas</span>
+                          <span className="text-ink-faint">{t("owner.ratesTarif.noClassYet")}</span>
                         ) : (
                           c.branchIds.map(bid => (
                             <span key={bid} className="px-1.5 py-0.5 rounded-full bg-paper-deep text-ink-mute text-[10px] font-semibold">{branches.find(b => b.id === bid)?.name ?? "—"}</span>
                           ))
                         )}
-                        <span>· {c.classCount} kelas</span>
+                        <span>{t("owner.ratesTarif.classCount", { count: c.classCount })}</span>
                       </div>
                     </div>
                     <div className="hidden sm:block text-right shrink-0">
-                      <div className="text-xs text-ink-faint">Tarif Extra</div>
-                      <div className="font-mono text-sm font-semibold">{c.extraRate != null ? fmtIDR(c.extraRate) : <span className="text-ink-faint">Belum diisi</span>}</div>
+                      <div className="text-xs text-ink-faint">{t("owner.ratesTarif.extraRateLabel")}</div>
+                      <div className="font-mono text-sm font-semibold">{c.extraRate != null ? fmtIDR(c.extraRate) : <span className="text-ink-faint">{t("owner.ratesTarif.extraRateEmpty")}</span>}</div>
                     </div>
                     {c.classCount > 0 && (
                       <span className={`px-2 py-0.5 rounded-full text-xs font-semibold shrink-0 ${incomplete ? "bg-warn-50 text-warn-700" : "bg-ok-50 text-ok-700"}`}>
-                        {incomplete ? "Belum Lengkap" : "Lengkap"}
+                        {incomplete ? t("owner.ratesTarif.statusIncompleteBadge") : t("owner.ratesTarif.statusCompleteBadge")}
                       </span>
                     )}
                     <Icon name={isExpanded ? "chevronD" : "chevron"} className="w-4 h-4 text-ink-faint shrink-0" />
@@ -1749,11 +1757,11 @@ function SettingsTarif({ branches }: { branches: Branch[] }) {
                   {isExpanded && (
                     <div className="px-4 pb-4 bg-paper-tint/60 space-y-4">
                       {loadingExpanded ? (
-                        <div className="py-6 text-center text-ink-mute text-sm">Memuat…</div>
+                        <div className="py-6 text-center text-ink-mute text-sm">{t("owner.ratesTarif.expandLoading")}</div>
                       ) : (
                         <>
                           {expandedClasses.length === 0 ? (
-                            <p className="text-xs text-ink-faint italic py-2">Coach ini belum ditugaskan ke kelas manapun.</p>
+                            <p className="text-xs text-ink-faint italic py-2">{t("owner.ratesTarif.noClassAssigned")}</p>
                           ) : (
                             <div className="space-y-3">
                               {expandedClasses.map(cls => {
@@ -1771,27 +1779,27 @@ function SettingsTarif({ branches }: { branches: Branch[] }) {
                                     <div className="grid sm:grid-cols-2 gap-3">
                                       <div className="flex items-end gap-2">
                                         <div className="flex-1">
-                                          <Field label="Tarif Umum" hint="Berlaku semua coach di kelas ini">
+                                          <Field label={t("owner.ratesTarif.fieldGeneralRate")} hint={t("owner.ratesTarif.fieldGeneralRateHint")}>
                                             <Input type="text" inputMode="numeric"
                                               value={generalRates[cls.id] ? Number(generalRates[cls.id]).toLocaleString("id-ID") : ""}
                                               onChange={e => setGeneralRates(r => ({ ...r, [cls.id]: e.target.value.replace(/\D/g, "") }))}
-                                              className="font-mono text-sm" placeholder="150.000" />
+                                              className="font-mono text-sm" placeholder={t("owner.ratesTarif.fieldGeneralRatePlaceholder")} />
                                           </Field>
                                         </div>
-                                        <Btn variant="soft" size="sm" onClick={() => saveGeneral(cls.id)} disabled={saving === genKey}>{saving === genKey ? "…" : "Simpan"}</Btn>
+                                        <Btn variant="soft" size="sm" onClick={() => saveGeneral(cls.id)} disabled={saving === genKey}>{saving === genKey ? "…" : t("common.actions.save")}</Btn>
                                       </div>
                                       <div className="flex items-end gap-2">
                                         <div className="flex-1">
-                                          <Field label="Tarif Khusus" hint="Override milik coach ini saja">
+                                          <Field label={t("owner.ratesTarif.fieldSpecificRate")} hint={t("owner.ratesTarif.fieldSpecificRateHint")}>
                                             <Input type="text" inputMode="numeric"
                                               value={coachRates[`${cls.id}:${c.id}`] ? Number(coachRates[`${cls.id}:${c.id}`]).toLocaleString("id-ID") : ""}
                                               onChange={e => setCoachRates(r => ({ ...r, [`${cls.id}:${c.id}`]: e.target.value.replace(/\D/g, "") }))}
                                               className="font-mono text-sm"
-                                              placeholder={generalRates[cls.id] ? `Pakai umum (${Number(generalRates[cls.id]).toLocaleString("id-ID")})` : "Belum ada tarif umum"} />
+                                              placeholder={generalRates[cls.id] ? t("owner.ratesTarif.fieldSpecificRateUseGeneral", { amount: Number(generalRates[cls.id]).toLocaleString("id-ID") }) : t("owner.ratesTarif.fieldSpecificRateNoGeneral")} />
                                           </Field>
                                         </div>
                                         <Btn variant="soft" size="sm" onClick={() => saveCoachRate(cls.id, c.id)} disabled={saving === specKey}>
-                                          {saving === specKey ? "…" : coachRates[`${cls.id}:${c.id}`] ? "Simpan" : "Hapus"}
+                                          {saving === specKey ? "…" : coachRates[`${cls.id}:${c.id}`] ? t("common.actions.save") : t("owner.ratesTarif.deleteBtn")}
                                         </Btn>
                                       </div>
                                     </div>
@@ -1803,17 +1811,17 @@ function SettingsTarif({ branches }: { branches: Branch[] }) {
 
                           <Card className="!bg-white space-y-2">
                             <div>
-                              <div className="text-sm font-bold text-ink">Tarif Extra</div>
-                              <p className="text-xs text-ink-mute mt-0.5">Tarif tambahan per 1x sesi extra di luar kelas reguler, berlaku global untuk coach ini.</p>
+                              <div className="text-sm font-bold text-ink">{t("owner.ratesTarif.extraRateSectionTitle")}</div>
+                              <p className="text-xs text-ink-mute mt-0.5">{t("owner.ratesTarif.extraRateSectionHint")}</p>
                             </div>
                             <div className="flex items-end gap-2">
                               <div className="flex-1 max-w-56">
                                 <Input type="text" inputMode="numeric"
                                   value={extraRateInput ? Number(extraRateInput).toLocaleString("id-ID") : ""}
                                   onChange={e => setExtraRateInput(e.target.value.replace(/\D/g, ""))}
-                                  className="font-mono text-sm" placeholder="100.000" />
+                                  className="font-mono text-sm" placeholder={t("owner.ratesTarif.extraRatePlaceholder")} />
                               </div>
-                              <Btn variant="soft" size="sm" onClick={() => saveExtraRate(c.id)} disabled={saving === "extra"}>{saving === "extra" ? "…" : "Simpan"}</Btn>
+                              <Btn variant="soft" size="sm" onClick={() => saveExtraRate(c.id)} disabled={saving === "extra"}>{saving === "extra" ? "…" : t("common.actions.save")}</Btn>
                             </div>
                           </Card>
                         </>
@@ -1831,6 +1839,7 @@ function SettingsTarif({ branches }: { branches: Branch[] }) {
 }
 
 function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: string; userName: string }) {
+  const { t } = useLocale();
   const supabase = createClient();
   const toast = useToast();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -1871,11 +1880,11 @@ function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: 
     setMarking(id);
     const { error } = await supabase.from("coach_invoices").update({ status: "paid", paid_at: new Date().toISOString() }).eq("id", id);
     setMarking(null);
-    if (error) return toast.error("Gagal update", error.message);
+    if (error) return toast.error(t("owner.invoices.updateFailed"), error.message);
     const inv = invoices.find(i => i.id === id);
     setInvoices(prev => prev.map(i => i.id === id ? { ...i, status: "paid", paid_at: new Date().toISOString() } : i));
     if (detail?.id === id) setDetail(prev => prev ? { ...prev, status: "paid", paid_at: new Date().toISOString() } : prev);
-    toast.success("Invoice ditandai lunas");
+    toast.success(t("owner.invoices.markedPaid"));
     logActivity(supabase, { userId, userRole: "owner", userName, branchId: inv?.branch?.name ? undefined : undefined, entityType: "coach_invoices", entityId: id, entityLabel: inv?.invoice_number ?? id, action: "update", label: `Invoice ${inv?.invoice_number ?? id} — ${inv?.coach?.full_name ?? "coach"} ditandai lunas (${fmtIDR(inv?.total_amount ?? 0)})`, meta: { amount: inv?.total_amount, coach: inv?.coach?.full_name } });
   };
 
@@ -1884,33 +1893,33 @@ function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { error } = await (supabase as any).from("coach_invoices").update({ status: "approved", approved_at: new Date().toISOString() }).eq("id", id);
     setApproving(null);
-    if (error) return toast.error("Gagal menyetujui", error.message);
+    if (error) return toast.error(t("owner.invoices.approveFailed"), error.message);
     const inv = invoices.find(i => i.id === id);
     setInvoices(prev => prev.map(i => i.id === id ? { ...i, status: "approved", approved_at: new Date().toISOString() } : i));
     if (detail?.id === id) setDetail(prev => prev ? { ...prev, status: "approved" } : prev);
     if (inv?.coach?.id) {
-      await supabase.from("notifications").insert({ user_id: inv.coach.id, title: "Invoice disetujui", body: `Invoice ${inv.invoice_number} (${inv.period_label}) telah disetujui. Menunggu pembayaran.`, icon: "check", kind: "success" });
+      await supabase.from("notifications").insert({ user_id: inv.coach.id, title: t("owner.invoices.notifApprovedTitle"), body: t("owner.invoices.notifApprovedBody", { number: inv.invoice_number, period: inv.period_label }), icon: "check", kind: "success" });
     }
-    toast.success("Invoice disetujui");
+    toast.success(t("owner.invoices.approved"));
     logActivity(supabase, { userId, userRole: "owner", userName, entityType: "coach_invoices", entityId: id, entityLabel: inv?.invoice_number ?? id, action: "update", label: `Invoice ${inv?.invoice_number ?? id} disetujui` });
   };
 
   const rejectInvoice = async (id: string, reason: string) => {
-    if (!reason.trim()) return toast.error("Isi alasan penolakan");
+    if (!reason.trim()) return toast.error(t("owner.invoices.reasonRequired"));
     setRejecting(id);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { error } = await (supabase as any).from("coach_invoices").update({ status: "rejected", rejected_at: new Date().toISOString(), rejection_reason: reason.trim() }).eq("id", id);
     setRejecting(null);
-    if (error) return toast.error("Gagal menolak", error.message);
+    if (error) return toast.error(t("owner.invoices.rejectFailed"), error.message);
     const inv = invoices.find(i => i.id === id);
     setInvoices(prev => prev.map(i => i.id === id ? { ...i, status: "rejected", rejection_reason: reason } : i));
     if (detail?.id === id) setDetail(prev => prev ? { ...prev, status: "rejected", rejection_reason: reason } : prev);
     if (inv?.coach?.id) {
-      await supabase.from("notifications").insert({ user_id: inv.coach.id, title: "Invoice ditolak", body: `Invoice ${inv.invoice_number} (${inv.period_label}) ditolak. Alasan: ${reason}`, icon: "warning", kind: "warn" });
+      await supabase.from("notifications").insert({ user_id: inv.coach.id, title: t("owner.invoices.notifRejectedTitle"), body: t("owner.invoices.notifRejectedBody", { number: inv.invoice_number, period: inv.period_label, reason }), icon: "warning", kind: "warn" });
     }
     setRejectModal(null);
     setRejectReason("");
-    toast.success("Invoice ditolak");
+    toast.success(t("owner.invoices.rejected"));
     logActivity(supabase, { userId, userRole: "owner", userName, entityType: "coach_invoices", entityId: id, entityLabel: inv?.invoice_number ?? id, action: "update", label: `Invoice ${inv?.invoice_number ?? id} ditolak: ${reason}` });
   };
 
@@ -1921,8 +1930,8 @@ function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: 
     const itemMap: Record<string, { name: string; sessions: number; rate: number }> = {};
     (iv.coach_invoice_items ?? []).forEach(item => {
       const key = item.item_type === "class" ? (item.class_id ?? item.id) : item.id;
-      const label = item.item_type === "extra" ? "Sesi Extra"
-        : item.item_type === "reimburse" ? `Reimburse — ${item.description ?? ""}`
+      const label = item.item_type === "extra" ? t("owner.invoices.printItemExtra")
+        : item.item_type === "reimburse" ? t("owner.invoices.printItemReimburse", { description: item.description ?? "" })
         : (item.class?.name ?? item.class_id ?? "—");
       if (!itemMap[key]) itemMap[key] = { name: label, sessions: 0, rate: item.rate };
       itemMap[key].sessions += item.session_count;
@@ -1940,14 +1949,14 @@ function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: 
       .badge{display:inline-block;padding:2px 10px;border-radius:4px;font-size:11px;font-weight:700;background:${iv.status === "paid" ? "#dcfce7" : "#fef9c3"};color:${iv.status === "paid" ? "#166534" : "#854d0e"}}
       footer{margin-top:40px;border-top:1px solid #e2e8f0;padding-top:12px;font-size:11px;color:#94a3b8;text-align:center}
       </style></head><body>
-      <h1>Invoice Coach</h1>
-      <div class="sub">${iv.invoice_number} &nbsp;·&nbsp; <span class="badge">${iv.status === "paid" ? "Lunas" : "Pending"}</span></div>
-      <div class="section">Informasi</div>
-      <div class="meta"><b>Periode:</b> ${iv.period_label}<br/><b>Coach:</b> ${iv.coach?.full_name ?? "—"}<br/><b>Cabang:</b> ${iv.branch?.name ?? "—"}<br/><b>Rekening:</b> ${iv.bank_info ?? "—"}${iv.paid_at ? `<br/><b>Dibayar:</b> ${new Date(iv.paid_at).toLocaleDateString("id-ID", { dateStyle: "long" })}` : ""}</div>
-      <div class="section">Rincian Kelas</div>
-      ${itemRows || '<div class="row"><span style="color:#94a3b8">Tidak ada rincian</span></div>'}
-      <div class="total"><span>Total</span><span>Rp ${iv.total_amount.toLocaleString("id-ID")}</span></div>
-      <footer>Next Swimming School &nbsp;·&nbsp; Dicetak ${new Date().toLocaleDateString("id-ID", { dateStyle: "long" })}</footer>
+      <h1>${t("owner.invoices.printHeading")}</h1>
+      <div class="sub">${iv.invoice_number} &nbsp;·&nbsp; <span class="badge">${iv.status === "paid" ? t("owner.invoices.printStatusPaid") : t("owner.invoices.printStatusPending")}</span></div>
+      <div class="section">${t("owner.invoices.printInfoSectionTitle")}</div>
+      <div class="meta"><b>${t("owner.invoices.printPeriodLabel")}:</b> ${iv.period_label}<br/><b>${t("owner.invoices.printCoachLabel")}:</b> ${iv.coach?.full_name ?? "—"}<br/><b>${t("owner.invoices.printBranchLabel")}:</b> ${iv.branch?.name ?? "—"}<br/><b>${t("owner.invoices.printBankLabel")}:</b> ${iv.bank_info ?? "—"}${iv.paid_at ? `<br/><b>${t("owner.invoices.printPaidLabel")}:</b> ${new Date(iv.paid_at).toLocaleDateString("id-ID", { dateStyle: "long" })}` : ""}</div>
+      <div class="section">${t("owner.invoices.printItemsSectionTitle")}</div>
+      ${itemRows || `<div class="row"><span style="color:#94a3b8">${t("owner.invoices.printNoItems")}</span></div>`}
+      <div class="total"><span>${t("owner.invoices.printTotalLabel")}</span><span>Rp ${iv.total_amount.toLocaleString("id-ID")}</span></div>
+      <footer>${t("owner.invoices.printFooter", { date: new Date().toLocaleDateString("id-ID", { dateStyle: "long" }) })}</footer>
       </body></html>`);
     w.document.close(); w.focus(); w.print();
   };
@@ -1956,26 +1965,26 @@ function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: 
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <h2 className="font-display font-bold text-2xl">Slip Gaji</h2>
-          <p className="text-ink-mute text-sm mt-0.5">Review invoice coach, setujui, tandai lunas, lalu terbitkan slip gaji — semua dalam satu tempat.</p>
+          <h2 className="font-display font-bold text-2xl">{t("owner.invoices.pageTitle")}</h2>
+          <p className="text-ink-mute text-sm mt-0.5">{t("owner.invoices.pageSub")}</p>
         </div>
         <Select value={branchFilter} onChange={e => setBranchFilter(e.target.value)} className="!w-44">
-          <option value="all">Semua cabang</option>
+          <option value="all">{t("owner.invoices.allBranches")}</option>
           {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
         </Select>
       </div>
 
       <div className="grid sm:grid-cols-3 gap-4">
-        <Stat label="Menunggu review"        value={totPending.length}                                                   icon="invoice" tone="warn"  sub={totPending.length > 0 ? "perlu tindakan" : "tidak ada"} />
-        <Stat label="Disetujui / belum lunas" value={fmtIDR(totApproved.reduce((a, i) => a + i.total_amount, 0))}      icon="check"   tone="ocean" sub={`${totApproved.length} invoice`} />
-        <Stat label="Sudah dibayar"          value={fmtIDR(totPaid.reduce((a, i) => a + i.total_amount, 0))}            icon="wallet"  tone="ok"    sub={`${totPaid.length} invoice`} />
+        <Stat label={t("owner.invoices.statPending")}        value={totPending.length}                                                   icon="invoice" tone="warn"  sub={totPending.length > 0 ? t("owner.invoices.statPendingSub") : t("owner.invoices.statPendingSubNone")} />
+        <Stat label={t("owner.invoices.statApproved")} value={fmtIDR(totApproved.reduce((a, i) => a + i.total_amount, 0))}      icon="check"   tone="ocean" sub={t("owner.invoices.statApprovedSub", { count: totApproved.length })} />
+        <Stat label={t("owner.invoices.statPaid")}          value={fmtIDR(totPaid.reduce((a, i) => a + i.total_amount, 0))}            icon="wallet"  tone="ok"    sub={t("owner.invoices.statPaidSub", { count: totPaid.length })} />
       </div>
 
       <Card padded={false}>
         {loading ? (
-          <div className="p-10 text-center text-ink-mute">Memuat data…</div>
+          <div className="p-10 text-center text-ink-mute">{t("owner.invoices.loading")}</div>
         ) : invoices.length === 0 ? (
-          <div className="p-10 text-center text-ink-mute">Tidak ada invoice.</div>
+          <div className="p-10 text-center text-ink-mute">{t("owner.invoices.empty")}</div>
         ) : (
           <div className="divide-y divide-line">
             {invoices.map((iv) => (
@@ -1987,7 +1996,7 @@ function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: 
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-mono text-xs font-bold text-ocean-700">{iv.invoice_number}</span>
                     <Status kind={iv.status === "paid" ? "paid" : iv.status === "approved" ? "approved" : iv.status === "rejected" ? "rejected" : "pending"}>
-                      {iv.status === "paid" ? "Lunas" : iv.status === "approved" ? "Disetujui" : iv.status === "rejected" ? "Ditolak" : "Menunggu Review"}
+                      {iv.status === "paid" ? t("owner.invoices.statusPaid") : iv.status === "approved" ? t("owner.invoices.statusApproved") : iv.status === "rejected" ? t("owner.invoices.statusRejected") : t("owner.invoices.statusPending")}
                     </Status>
                   </div>
                   <div className="text-xs text-ink-mute mt-0.5">
@@ -1996,22 +2005,22 @@ function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: 
                 </div>
                 <div className="font-mono font-bold text-sm shrink-0">{fmtIDR(iv.total_amount)}</div>
                 <div className="flex items-center gap-1.5 shrink-0">
-                  <button onClick={() => printInvoice(iv)} className="w-8 h-8 rounded-lg border border-line hover:bg-paper-tint flex items-center justify-center text-ink-mute hover:text-ocean-600" title="Cetak PDF">
+                  <button onClick={() => printInvoice(iv)} className="w-8 h-8 rounded-lg border border-line hover:bg-paper-tint flex items-center justify-center text-ink-mute hover:text-ocean-600" title={t("owner.invoices.printTitle")}>
                     <Icon name="print" className="w-4 h-4" />
                   </button>
                   {iv.status === "pending" && (
                     <>
                       <Btn variant="soft" size="sm" onClick={() => approveInvoice(iv.id)} disabled={approving === iv.id}>
-                        {approving === iv.id ? "…" : "Setujui"}
+                        {approving === iv.id ? "…" : t("owner.invoices.approveBtn")}
                       </Btn>
                       <Btn variant="ghost" size="sm" onClick={() => { setRejectModal(iv); setRejectReason(""); }}>
-                        Tolak
+                        {t("owner.invoices.rejectBtn")}
                       </Btn>
                     </>
                   )}
                   {iv.status === "approved" && (
                     <Btn variant="primary" size="sm" onClick={() => markPaid(iv.id)} disabled={marking === iv.id}>
-                      {marking === iv.id ? "…" : "Lunas"}
+                      {marking === iv.id ? "…" : t("owner.invoices.paidBtn")}
                     </Btn>
                   )}
                 </div>
@@ -2022,25 +2031,25 @@ function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: 
       </Card>
 
       {/* Detail modal */}
-      <Modal open={!!detail} onClose={() => setDetail(null)} title={detail?.invoice_number ?? "Detail Invoice"} size="md"
+      <Modal open={!!detail} onClose={() => setDetail(null)} title={detail?.invoice_number ?? t("owner.invoices.detailModalTitle")} size="md"
         footer={
           <div className="flex items-center gap-2 justify-between w-full">
-            <Btn variant="ghost" icon="print" onClick={() => detail && printInvoice(detail)}>Cetak PDF</Btn>
+            <Btn variant="ghost" icon="print" onClick={() => detail && printInvoice(detail)}>{t("owner.invoices.printBtn")}</Btn>
             <div className="flex gap-2">
               {detail?.status === "pending" && (
                 <>
                   <Btn variant="primary" onClick={() => detail && approveInvoice(detail.id)} disabled={approving === detail?.id}>
-                    {approving === detail?.id ? "…" : "Setujui"}
+                    {approving === detail?.id ? "…" : t("owner.invoices.approveBtn")}
                   </Btn>
-                  <Btn variant="ghost" onClick={() => { setRejectModal(detail); setDetail(null); }}>Tolak</Btn>
+                  <Btn variant="ghost" onClick={() => { setRejectModal(detail); setDetail(null); }}>{t("owner.invoices.rejectBtn")}</Btn>
                 </>
               )}
               {detail?.status === "approved" && (
                 <Btn variant="primary" onClick={() => detail && markPaid(detail.id)} disabled={marking === detail?.id}>
-                  {marking === detail?.id ? "Menyimpan…" : "Tandai Lunas"}
+                  {marking === detail?.id ? t("owner.invoices.marking") : t("owner.invoices.markPaidBtn")}
                 </Btn>
               )}
-              <Btn variant="ghost" onClick={() => setDetail(null)}>Tutup</Btn>
+              <Btn variant="ghost" onClick={() => setDetail(null)}>{t("owner.invoices.closeBtn")}</Btn>
             </div>
           </div>
         }>
@@ -2048,19 +2057,19 @@ function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: 
           <div className="space-y-4">
             {/* Meta */}
             <div className="grid grid-cols-2 gap-3 text-sm">
-              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Coach</div><div className="font-semibold">{detail.coach?.full_name ?? "—"}</div></div>
-              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Cabang</div><div className="font-semibold">{detail.branch?.name ?? "—"}</div></div>
-              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Periode</div><div>{detail.period_label}</div></div>
-              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Status</div><Status kind={detail.status === "paid" ? "paid" : detail.status === "approved" ? "approved" : detail.status === "rejected" ? "rejected" : "pending"}>{detail.status === "paid" ? "Lunas" : detail.status === "approved" ? "Disetujui" : detail.status === "rejected" ? "Ditolak" : "Menunggu Review"}</Status></div>
-              <div className="col-span-2"><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Rekening</div><div className="font-mono text-sm">{detail.bank_info ?? "—"}</div></div>
-              {detail.paid_at && <div className="col-span-2"><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Dibayar pada</div><div>{new Date(detail.paid_at).toLocaleDateString("id-ID", { dateStyle: "long" })}</div></div>}
+              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">{t("owner.invoices.metaCoach")}</div><div className="font-semibold">{detail.coach?.full_name ?? "—"}</div></div>
+              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">{t("owner.invoices.metaBranch")}</div><div className="font-semibold">{detail.branch?.name ?? "—"}</div></div>
+              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">{t("owner.invoices.metaPeriod")}</div><div>{detail.period_label}</div></div>
+              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">{t("owner.invoices.metaStatus")}</div><Status kind={detail.status === "paid" ? "paid" : detail.status === "approved" ? "approved" : detail.status === "rejected" ? "rejected" : "pending"}>{detail.status === "paid" ? t("owner.invoices.statusPaid") : detail.status === "approved" ? t("owner.invoices.statusApproved") : detail.status === "rejected" ? t("owner.invoices.statusRejected") : t("owner.invoices.statusPending")}</Status></div>
+              <div className="col-span-2"><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">{t("owner.invoices.metaBankInfo")}</div><div className="font-mono text-sm">{detail.bank_info ?? "—"}</div></div>
+              {detail.paid_at && <div className="col-span-2"><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">{t("owner.invoices.metaPaidAt")}</div><div>{new Date(detail.paid_at).toLocaleDateString("id-ID", { dateStyle: "long" })}</div></div>}
             </div>
 
             {/* Items breakdown */}
             <div className="border-t border-line pt-4">
-              <div className="text-xs font-bold uppercase tracking-widest text-ink-faint mb-2">Rincian Kelas</div>
+              <div className="text-xs font-bold uppercase tracking-widest text-ink-faint mb-2">{t("owner.invoices.itemsBreakdownTitle")}</div>
               {(detail.coach_invoice_items ?? []).length === 0 ? (
-                <p className="text-sm text-ink-mute">Tidak ada rincian.</p>
+                <p className="text-sm text-ink-mute">{t("owner.invoices.itemsEmpty")}</p>
               ) : (
                 <div className="space-y-1.5">
                   {/* Group by class (or unique per extra/reimburse row) */}
@@ -2068,8 +2077,8 @@ function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: 
                     const map: Record<string, { name: string; sessions: number; rate: number; proofUrl: string | null }> = {};
                     (detail.coach_invoice_items ?? []).forEach(item => {
                       const key = item.item_type === "class" ? (item.class_id ?? item.id) : item.id;
-                      const label = item.item_type === "extra" ? "Sesi Extra"
-                        : item.item_type === "reimburse" ? `Reimburse — ${item.description ?? ""}`
+                      const label = item.item_type === "extra" ? t("owner.invoices.printItemExtra")
+                        : item.item_type === "reimburse" ? t("owner.invoices.printItemReimburse", { description: item.description ?? "" })
                         : (item.class?.name ?? item.class_id ?? "—");
                       if (!map[key]) map[key] = { name: label, sessions: 0, rate: item.rate, proofUrl: item.proof_url };
                       map[key].sessions += item.session_count;
@@ -2081,7 +2090,7 @@ function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: 
                           <div className="text-xs text-ink-mute">{item.sessions} sesi × {fmtIDR(item.rate)}</div>
                           {item.proofUrl && (
                             <a href={item.proofUrl} target="_blank" rel="noreferrer" className="text-xs text-ocean-600 hover:underline inline-flex items-center gap-1 mt-0.5">
-                              <Icon name="link" className="w-3 h-3" />Lihat bukti
+                              <Icon name="link" className="w-3 h-3" />{t("owner.invoices.viewProof")}
                             </a>
                           )}
                         </div>
@@ -2090,7 +2099,7 @@ function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: 
                     ));
                   })()}
                   <div className="flex items-center justify-between pt-2 font-bold text-sm">
-                    <span>Total</span>
+                    <span>{t("owner.invoices.totalLabel")}</span>
                     <span className="font-mono text-ocean-700 text-base">{fmtIDR(detail.total_amount)}</span>
                   </div>
                 </div>
@@ -2101,24 +2110,24 @@ function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: 
       </Modal>
 
       {/* Reject Modal */}
-      <Modal open={!!rejectModal} onClose={() => { setRejectModal(null); setRejectReason(""); }} title="Tolak Invoice" size="sm"
+      <Modal open={!!rejectModal} onClose={() => { setRejectModal(null); setRejectReason(""); }} title={t("owner.invoices.rejectModalTitle")} size="sm"
         footer={
           <>
-            <Btn variant="ghost" onClick={() => { setRejectModal(null); setRejectReason(""); }}>Batal</Btn>
+            <Btn variant="ghost" onClick={() => { setRejectModal(null); setRejectReason(""); }}>{t("common.actions.cancel")}</Btn>
             <Btn variant="danger" onClick={() => rejectModal && rejectInvoice(rejectModal.id, rejectReason)} disabled={!!rejecting}>
-              {rejecting ? "Menolak…" : "Tolak Invoice"}
+              {rejecting ? t("owner.invoices.rejecting") : t("owner.invoices.rejectConfirmBtn")}
             </Btn>
           </>
         }>
         {rejectModal && (
           <div className="space-y-4">
             <div className="bg-paper-tint border border-line rounded-xl px-4 py-3 text-sm">
-              <div className="text-xs text-ink-mute font-bold uppercase tracking-widest mb-1">Invoice</div>
+              <div className="text-xs text-ink-mute font-bold uppercase tracking-widest mb-1">{t("owner.invoices.rejectModalInvoiceLabel")}</div>
               <div className="font-mono font-semibold text-ink">{rejectModal.invoice_number}</div>
               <div className="text-xs text-ink-mute">{rejectModal.coach?.full_name} · {rejectModal.period_label} · {fmtIDR(rejectModal.total_amount)}</div>
             </div>
-            <Field label="Alasan penolakan">
-              <Textarea value={rejectReason} onChange={e => setRejectReason(e.target.value)} placeholder="Contoh: Ada sesi yang belum diverifikasi, mohon periksa kembali." rows={3} />
+            <Field label={t("owner.invoices.fieldRejectReason")}>
+              <Textarea value={rejectReason} onChange={e => setRejectReason(e.target.value)} placeholder={t("owner.invoices.fieldRejectReasonPlaceholder")} rows={3} />
             </Field>
           </div>
         )}
@@ -2162,10 +2171,18 @@ type IncomeRow = (OwnerFinancialBill & { source: "bill" }) | (ManualTxnRow & { s
 type ExpenseRow = (OwnerFinancialExpense & { source: "invoice" }) | (ManualTxnRow & { source: "manual" });
 
 const MANUAL_CATEGORY_OPTIONS = ["Sponsorship", "Sewa", "Listrik", "Perlengkapan", "Lainnya"];
+const MANUAL_CATEGORY_LABEL_KEYS: Record<string, string> = {
+  Sponsorship: "owner.financial.categorySponsorship",
+  Sewa: "owner.financial.categoryRent",
+  Listrik: "owner.financial.categoryElectricity",
+  Perlengkapan: "owner.financial.categorySupplies",
+  Lainnya: "owner.financial.categoryOther",
+};
 
 type FinancialTab = "overview" | "income" | "expenses" | "moneyflow";
 
 function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; userId: string; userName: string }) {
+  const { t } = useLocale();
   const supabase = createClient();
   const toast = useToast();
   const confirm = useConfirm();
@@ -2252,11 +2269,11 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
 
   const saveTxn = async () => {
     if (!showTxnModal) return;
-    if (!txnForm.branch_id) return toast.error("Pilih cabang terlebih dahulu");
-    if (!txnForm.description.trim()) return toast.error("Deskripsi wajib diisi");
+    if (!txnForm.branch_id) return toast.error(t("owner.financial.branchRequired"));
+    if (!txnForm.description.trim()) return toast.error(t("owner.financial.descriptionRequired"));
     const amount = Number(txnForm.amount || 0);
-    if (!amount || amount <= 0) return toast.error("Masukkan nominal yang valid");
-    if (txnForm.isReimburse && !txnForm.proofUrl.trim()) return toast.error("Masukkan link bukti untuk pengeluaran reimburse");
+    if (!amount || amount <= 0) return toast.error(t("owner.financial.invalidAmount"));
+    if (txnForm.isReimburse && !txnForm.proofUrl.trim()) return toast.error(t("owner.financial.proofRequired"));
     const category = txnForm.category === "Lainnya" ? (txnForm.categoryOther.trim() || "Lainnya") : txnForm.category;
 
     setSavingTxn(true);
@@ -2270,8 +2287,8 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
       ? await supabase.from("manual_transactions").update({ ...payload, updated_at: new Date().toISOString() }).eq("id", showTxnModal.edit!.id)
       : await supabase.from("manual_transactions").insert({ ...payload, created_by: userId, created_by_role: "owner" });
     setSavingTxn(false);
-    if (error) return toast.error(isEdit ? "Gagal menyimpan" : "Gagal menambah", error.message);
-    toast.success(isEdit ? "Transaksi diperbarui" : "Transaksi ditambahkan");
+    if (error) return toast.error(isEdit ? t("owner.financial.saveFailed") : t("owner.financial.addFailed"), error.message);
+    toast.success(isEdit ? t("owner.financial.txnUpdated") : t("owner.financial.txnAdded"));
     logActivity(supabase, {
       userId, userRole: "owner", userName, branchId: txnForm.branch_id, entityType: "manual_transactions",
       entityId: showTxnModal.edit?.id ?? "new", action: isEdit ? "update" : "create",
@@ -2283,11 +2300,11 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
   };
 
   const deleteTxn = async (row: ManualTxnRow) => {
-    const ok = await confirm({ title: "Hapus transaksi manual?", body: `"${row.description}" (${fmtIDR(row.amount)}) akan dihapus permanen.`, confirmLabel: "Hapus", danger: true });
+    const ok = await confirm({ title: t("owner.financial.deleteConfirmTitle"), body: t("owner.financial.deleteConfirmBody", { description: row.description, amount: fmtIDR(row.amount) }), confirmLabel: t("common.actions.delete"), danger: true });
     if (!ok) return;
     const { error } = await supabase.from("manual_transactions").delete().eq("id", row.id);
-    if (error) return toast.error("Gagal menghapus", error.message);
-    toast.success("Transaksi dihapus");
+    if (error) return toast.error(t("owner.financial.txnDeleteFailed"), error.message);
+    toast.success(t("owner.financial.txnDeleted"));
     logActivity(supabase, {
       userId, userRole: "owner", userName, branchId: row.branch_id, entityType: "manual_transactions",
       entityId: row.id, action: "delete", label: `${row.kind === "income" ? "Income" : "Expense"} manual "${row.description}" (${fmtIDR(row.amount)}) dihapus`,
@@ -2415,18 +2432,18 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
 
   // ── Sub-tab nav ──────────────────────────────────────────────────────────────
   const FTABS: { id: FinancialTab; label: string; icon: string }[] = [
-    { id: "overview",  label: "Overview",    icon: "grid"    },
-    { id: "income",    label: "Income",      icon: "wallet"  },
-    { id: "expenses",  label: "Expenses",    icon: "invoice" },
-    { id: "moneyflow", label: "Money Flow",  icon: "chart"   },
+    { id: "overview",  label: t("owner.financial.tabOverview"),    icon: "grid"    },
+    { id: "income",    label: t("owner.financial.tabIncome"),      icon: "wallet"  },
+    { id: "expenses",  label: t("owner.financial.tabExpenses"),    icon: "invoice" },
+    { id: "moneyflow", label: t("owner.financial.tabMoneyFlow"),  icon: "chart"   },
   ];
 
   return (
     <div className="space-y-5">
       {/* Header */}
       <div>
-        <h2 className="font-display font-bold text-2xl">Financial</h2>
-        <p className="text-ink-mute text-sm mt-0.5">Income, expenses & payroll semua cabang.</p>
+        <h2 className="font-display font-bold text-2xl">{t("owner.financial.pageTitle")}</h2>
+        <p className="text-ink-mute text-sm mt-0.5">{t("owner.financial.pageSub")}</p>
       </div>
 
       {/* Sub-tabs */}
@@ -2444,9 +2461,9 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
         <div className="space-y-5">
           {/* Stat cards */}
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Stat label="Total Income" value={fmtIDR(totalIncome)} icon="wallet" tone="ok" sub={`${paidBills.length} transaksi lunas`} />
-            <Stat label="Total Expenses" value={fmtIDR(totalExpenses)} icon="invoice" tone="danger" sub={`${expenses.filter(e=>e.status==="paid").length} invoice coach`} />
-            <Stat label="Net" value={fmtIDR(netAmount)} icon="chart" tone={netAmount >= 0 ? "ocean" : "warn"} />
+            <Stat label={t("owner.financial.statTotalIncome")} value={fmtIDR(totalIncome)} icon="wallet" tone="ok" sub={t("owner.financial.statTotalIncomeSub", { count: paidBills.length })} />
+            <Stat label={t("owner.financial.statTotalExpenses")} value={fmtIDR(totalExpenses)} icon="invoice" tone="danger" sub={t("owner.financial.statTotalExpensesSub", { count: expenses.filter(e=>e.status==="paid").length })} />
+            <Stat label={t("owner.financial.statNet")} value={fmtIDR(netAmount)} icon="chart" tone={netAmount >= 0 ? "ocean" : "warn"} />
           </div>
 
           {/* Bar chart: Income vs Expenses per month */}
@@ -2454,8 +2471,8 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
             {/* Header row */}
             <div className="flex items-start justify-between gap-3 mb-5">
               <div>
-                <div className="font-display font-bold text-base text-ink">Income vs Expenses</div>
-                <div className="text-xs text-ink-mute mt-0.5">{chartMonths} bulan terakhir · perbandingan pemasukan &amp; pengeluaran</div>
+                <div className="font-display font-bold text-base text-ink">{t("owner.financial.chartTitle")}</div>
+                <div className="text-xs text-ink-mute mt-0.5">{t("owner.financial.chartSub", { count: chartMonths })}</div>
               </div>
               <div className="flex gap-1 shrink-0 bg-paper-tint rounded-xl p-1">
                 {([3, 6, 12] as const).map(n => (
@@ -2464,14 +2481,14 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
                     onClick={() => setChartMonths(n)}
                     className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${chartMonths === n ? "bg-white shadow-card text-ocean-700" : "text-ink-mute hover:text-ink"}`}
                   >
-                    {n}B
+                    {t("owner.financial.chartMonthShort", { count: n })}
                   </button>
                 ))}
               </div>
             </div>
 
             {loadingBills || loadingExpenses ? (
-              <div className="h-48 flex items-center justify-center text-ink-mute text-sm">Memuat…</div>
+              <div className="h-48 flex items-center justify-center text-ink-mute text-sm">{t("owner.financial.chartLoading")}</div>
             ) : (
               <>
                 {/* Vertical grouped bar chart */}
@@ -2487,10 +2504,10 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
                         {/* Tooltip */}
                         <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-ink text-white text-[10px] leading-tight rounded-lg px-2.5 py-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 w-36 shadow-float">
                           <div className="font-semibold mb-1">{m.label}</div>
-                          <div className="flex justify-between gap-2"><span className="text-ok-300">Income</span><span>{fmtIDR(m.income)}</span></div>
-                          <div className="flex justify-between gap-2"><span className="text-danger-300">Expenses</span><span>{fmtIDR(m.expense)}</span></div>
+                          <div className="flex justify-between gap-2"><span className="text-ok-300">{t("owner.financial.chartLegendIncome")}</span><span>{fmtIDR(m.income)}</span></div>
+                          <div className="flex justify-between gap-2"><span className="text-danger-300">{t("owner.financial.chartLegendExpenses")}</span><span>{fmtIDR(m.expense)}</span></div>
                           <div className={`flex justify-between gap-2 mt-1 pt-1 border-t border-white/20 font-semibold ${netPositive ? "text-ok-300" : "text-danger-300"}`}>
-                            <span>Net</span><span>{netPositive ? "+" : ""}{fmtIDR(m.net)}</span>
+                            <span>{t("owner.financial.statNet")}</span><span>{netPositive ? "+" : ""}{fmtIDR(m.net)}</span>
                           </div>
                         </div>
                         {/* Bars + labels */}
@@ -2528,23 +2545,23 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
                   <div className="flex gap-4 text-xs text-ink-mute">
                     <span className="flex items-center gap-1.5">
                       <span className="w-3 h-3 rounded-sm bg-ok-500 inline-block" />
-                      Income
+                      {t("owner.financial.chartLegendIncome")}
                     </span>
                     <span className="flex items-center gap-1.5">
                       <span className="w-3 h-3 rounded-sm bg-danger-500 inline-block" />
-                      Expenses
+                      {t("owner.financial.chartLegendExpenses")}
                     </span>
                     <span className="flex items-center gap-1.5">
                       <span className="w-2 h-2 rounded-full bg-ok-500 inline-block" />
-                      Net +
+                      {t("owner.financial.chartLegendNetPositive")}
                     </span>
                     <span className="flex items-center gap-1.5">
                       <span className="w-2 h-2 rounded-full bg-danger-500 inline-block" />
-                      Net −
+                      {t("owner.financial.chartLegendNetNegative")}
                     </span>
                   </div>
                   <div className="text-xs text-ink-faint">
-                    Maks: {fmtIDR(barMax)}
+                    {t("owner.financial.chartMax", { amount: fmtIDR(barMax) })}
                   </div>
                 </div>
 
@@ -2566,7 +2583,7 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
           {/* Top cabang by income */}
           {branches.length > 0 && (
             <div className="bg-white border border-line rounded-2xl p-5">
-              <div className="font-display font-bold text-base mb-4">Income per Cabang</div>
+              <div className="font-display font-bold text-base mb-4">{t("owner.financial.branchIncomeTitle")}</div>
               <div className="grid gap-3">
                 {branches.map(b => {
                   const inc = branchIncomeMap[b.id] ?? 0;
@@ -2576,7 +2593,7 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
                       <div className="flex flex-wrap items-start justify-between gap-2">
                         <div className="min-w-0 flex-1">
                           <div className="text-sm font-semibold text-ink break-words">{b.name}</div>
-                          <div className="text-[11px] uppercase tracking-widest text-ink-faint mt-0.5">Kontribusi</div>
+                          <div className="text-[11px] uppercase tracking-widest text-ink-faint mt-0.5">{t("owner.financial.branchIncomeContribution")}</div>
                         </div>
                         <div className="text-sm font-mono font-bold text-ocean-700 whitespace-nowrap">{fmtIDR(inc)}</div>
                       </div>
@@ -2584,7 +2601,7 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
                         <div className="h-full rounded-full bg-gradient-to-r from-ocean-500 to-wave-500 transition-all duration-500" style={{ width: `${width}%` }} />
                       </div>
                       <div className="mt-1 text-[11px] text-ink-mute">
-                        {inc > 0 ? `${Math.round(width)}% dari cabang tertinggi` : "Belum ada pemasukan"}
+                        {inc > 0 ? t("owner.financial.branchIncomePercent", { percent: Math.round(width) }) : t("owner.financial.branchIncomeEmpty")}
                       </div>
                     </div>
                   );
@@ -2599,38 +2616,38 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
       {tab === "income" && (
         <div className="space-y-4">
           <div className="flex justify-end">
-            <Btn variant="primary" icon="plus" size="sm" onClick={() => openAddTxn("income")}>Tambah Income</Btn>
+            <Btn variant="primary" icon="plus" size="sm" onClick={() => openAddTxn("income")}>{t("owner.financial.addIncomeBtn")}</Btn>
           </div>
           {/* Filters */}
           <div className="bg-white border border-line rounded-2xl p-4 space-y-3">
             <div className="flex gap-2 flex-wrap">
               <div className="flex-1 min-w-48 relative">
                 <Icon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-faint pointer-events-none" />
-                <input value={incomeSearch} onChange={e => setIncomeSearch(e.target.value)} placeholder="Cari member, kelas, periode, deskripsi…" className="w-full pl-9 pr-3 py-2 text-sm rounded-xl border border-line bg-paper-tint focus:outline-none focus:ring-1 focus:ring-ocean-400" />
+                <input value={incomeSearch} onChange={e => setIncomeSearch(e.target.value)} placeholder={t("owner.financial.searchIncomePlaceholder")} className="w-full pl-9 pr-3 py-2 text-sm rounded-xl border border-line bg-paper-tint focus:outline-none focus:ring-1 focus:ring-ocean-400" />
               </div>
               <select value={incomeBranch} onChange={e => setIncomeBranch(e.target.value)} className="text-sm rounded-xl border border-line bg-paper-tint px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
-                <option value="all">Semua cabang</option>
+                <option value="all">{t("owner.financial.allBranches")}</option>
                 {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
               <select value={incomeStatus} onChange={e => setIncomeStatus(e.target.value)} className="text-sm rounded-xl border border-line bg-paper-tint px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
-                <option value="">Semua status</option>
-                <option value="unpaid">Belum Bayar</option>
-                <option value="paid">Lunas</option>
-                <option value="partial">Sebagian</option>
-                <option value="school_covered">Sekolah</option>
-                <option value="free">Gratis</option>
+                <option value="">{t("owner.financial.allStatus")}</option>
+                <option value="unpaid">{t("owner.financial.statusUnpaid")}</option>
+                <option value="paid">{t("owner.financial.statusPaid")}</option>
+                <option value="partial">{t("owner.financial.statusPartial")}</option>
+                <option value="school_covered">{t("owner.financial.statusSchoolCovered")}</option>
+                <option value="free">{t("owner.financial.statusFree")}</option>
               </select>
               <select value={incomeType} onChange={e => setIncomeType(e.target.value)} className="text-sm rounded-xl border border-line bg-paper-tint px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
-                <option value="">Semua tipe</option>
-                <option value="monthly">Bulanan</option>
-                <option value="session_pack">Paket Sesi</option>
-                <option value="custom">Custom</option>
+                <option value="">{t("owner.financial.allTypes")}</option>
+                <option value="monthly">{t("owner.financial.typeMonthly")}</option>
+                <option value="session_pack">{t("owner.financial.typeSessionPack")}</option>
+                <option value="custom">{t("owner.financial.typeCustom")}</option>
               </select>
               <select value={incomeMethod} onChange={e => setIncomeMethod(e.target.value)} className="text-sm rounded-xl border border-line bg-paper-tint px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
-                <option value="">Semua metode</option>
-                <option value="transfer">Transfer</option>
-                <option value="cash">Cash</option>
-                <option value="qris">QRIS</option>
+                <option value="">{t("owner.financial.allMethods")}</option>
+                <option value="transfer">{t("owner.financial.methodTransfer")}</option>
+                <option value="cash">{t("owner.financial.methodCash")}</option>
+                <option value="qris">{t("owner.financial.methodQris")}</option>
               </select>
             </div>
             <div className="flex gap-2 flex-wrap items-center">
@@ -2638,37 +2655,37 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
               <span className="text-ink-faint text-sm">—</span>
               <input type="date" value={incomeDateTo} onChange={e => setIncomeDateTo(e.target.value)} className="text-sm rounded-xl border border-line bg-paper-tint px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400" />
               {(incomeSearch || incomeStatus || incomeBranch !== "all" || incomeType || incomeMethod || incomeDateFrom || incomeDateTo) && (
-                <button onClick={() => { setIncomeSearch(""); setIncomeStatus(""); setIncomeBranch("all"); setIncomeType(""); setIncomeMethod(""); setIncomeDateFrom(""); setIncomeDateTo(""); }} className="text-xs text-ocean-600 hover:underline">Reset filter</button>
+                <button onClick={() => { setIncomeSearch(""); setIncomeStatus(""); setIncomeBranch("all"); setIncomeType(""); setIncomeMethod(""); setIncomeDateFrom(""); setIncomeDateTo(""); }} className="text-xs text-ocean-600 hover:underline">{t("owner.financial.resetFilter")}</button>
               )}
-              <span className="text-xs text-ink-mute ml-auto">{filteredIncome.length} baris</span>
+              <span className="text-xs text-ink-mute ml-auto">{t("owner.financial.rowCount", { count: filteredIncome.length })}</span>
             </div>
           </div>
 
           {/* Table */}
           <div className="bg-white border border-line rounded-2xl overflow-hidden">
             {loadingBills ? (
-              <div className="p-10 text-center text-ink-mute">Memuat data…</div>
+              <div className="p-10 text-center text-ink-mute">{t("owner.financial.loading")}</div>
             ) : incomePagedRows.length === 0 ? (
-              <div className="p-10 text-center text-ink-mute">Tidak ada data.</div>
+              <div className="p-10 text-center text-ink-mute">{t("owner.financial.empty")}</div>
             ) : (
               <>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-line bg-paper-tint">
-                        <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs">Cabang</th>
-                        <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs">Member</th>
-                        <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs">Kelas</th>
-                        <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs">Periode</th>
-                        <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs">Tipe</th>
-                        <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs">Metode</th>
+                        <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs">{t("owner.financial.colBranch")}</th>
+                        <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs">{t("owner.financial.colMember")}</th>
+                        <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs">{t("owner.financial.colClass")}</th>
+                        <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs">{t("owner.financial.colPeriod")}</th>
+                        <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs">{t("owner.financial.colType")}</th>
+                        <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs">{t("owner.financial.colMethod")}</th>
                         <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs cursor-pointer select-none hover:text-ocean-600" onClick={() => { setIncomeSortBy("paid_at"); setIncomeSortDir(d => d === "asc" ? "desc" : "asc"); }}>
-                          Tanggal {incomeSortBy === "paid_at" ? (incomeSortDir === "asc" ? "↑" : "↓") : ""}
+                          {t("owner.financial.colDate")} {incomeSortBy === "paid_at" ? (incomeSortDir === "asc" ? "↑" : "↓") : ""}
                         </th>
                         <th className="text-right px-4 py-2.5 font-semibold text-ink-mute text-xs cursor-pointer select-none hover:text-ocean-600" onClick={() => { setIncomeSortBy("total"); setIncomeSortDir(d => d === "asc" ? "desc" : "asc"); }}>
-                          Total {incomeSortBy === "total" ? (incomeSortDir === "asc" ? "↑" : "↓") : ""}
+                          {t("owner.financial.colTotal")} {incomeSortBy === "total" ? (incomeSortDir === "asc" ? "↑" : "↓") : ""}
                         </th>
-                        <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs">Status</th>
+                        <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs">{t("owner.financial.colStatus")}</th>
                         <th className="px-4 py-2.5 w-20"></th>
                       </tr>
                     </thead>
@@ -2678,7 +2695,7 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
                           <td className="px-4 py-2.5 text-xs text-ink-mute">{row.branch?.name ?? "—"}</td>
                           <td className="px-4 py-2.5 font-medium">
                             {row.description}
-                            <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-paper-deep text-ink-mute text-[10px] font-semibold align-middle">Manual</span>
+                            <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-paper-deep text-ink-mute text-[10px] font-semibold align-middle">{t("owner.financial.manualBadge")}</span>
                           </td>
                           <td className="px-4 py-2.5 text-xs text-ink-mute">—</td>
                           <td className="px-4 py-2.5 text-xs text-ink-mute">{row.category ?? "—"}</td>
@@ -2687,12 +2704,12 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
                           <td className="px-4 py-2.5 text-xs text-ink-mute">{new Date(row.occurred_at).toLocaleDateString("id-ID", { dateStyle: "short" })}</td>
                           <td className="px-4 py-2.5 text-right font-mono font-bold text-sm">{fmtIDR(row.amount)}</td>
                           <td className="px-4 py-2.5">
-                            <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-ok-50 text-ok-700">Tercatat</span>
+                            <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-ok-50 text-ok-700">{t("owner.financial.recordedBadge")}</span>
                           </td>
                           <td className="px-4 py-2.5">
                             <div className="flex items-center gap-1 justify-end">
-                              <button onClick={() => openEditTxn(row)} className="w-7 h-7 rounded-lg hover:bg-paper-deep flex items-center justify-center text-ink-mute hover:text-ocean-600" title="Edit"><Icon name="edit" className="w-3.5 h-3.5" /></button>
-                              <button onClick={() => deleteTxn(row)} className="w-7 h-7 rounded-lg hover:bg-danger-50 flex items-center justify-center text-ink-mute hover:text-danger-600" title="Hapus"><Icon name="trash" className="w-3.5 h-3.5" /></button>
+                              <button onClick={() => openEditTxn(row)} className="w-7 h-7 rounded-lg hover:bg-paper-deep flex items-center justify-center text-ink-mute hover:text-ocean-600" title={t("owner.financial.editBtn")}><Icon name="edit" className="w-3.5 h-3.5" /></button>
+                              <button onClick={() => deleteTxn(row)} className="w-7 h-7 rounded-lg hover:bg-danger-50 flex items-center justify-center text-ink-mute hover:text-danger-600" title={t("owner.financial.deleteBtn")}><Icon name="trash" className="w-3.5 h-3.5" /></button>
                             </div>
                           </td>
                         </tr>
@@ -2703,14 +2720,14 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
                           <td className="px-4 py-2.5 text-xs text-ink-mute">{row.class?.name ?? "—"}</td>
                           <td className="px-4 py-2.5 text-xs">{row.period_label}</td>
                           <td className="px-4 py-2.5 text-xs">
-                            <span className="px-2 py-0.5 rounded-full bg-ocean-50 text-ocean-700 font-semibold">{row.type === "monthly" ? "Bulanan" : row.type === "session_pack" ? "Paket" : row.type === "custom" ? "Custom" : row.type}</span>
+                            <span className="px-2 py-0.5 rounded-full bg-ocean-50 text-ocean-700 font-semibold">{row.type === "monthly" ? t("owner.financial.typeMonthly") : row.type === "session_pack" ? t("owner.financial.typeSessionPack") : row.type === "custom" ? t("owner.financial.typeCustom") : row.type}</span>
                           </td>
                           <td className="px-4 py-2.5 text-xs text-ink-mute capitalize">{row.paid_method ?? "—"}</td>
                           <td className="px-4 py-2.5 text-xs text-ink-mute">{row.paid_at ? new Date(row.paid_at).toLocaleDateString("id-ID", { dateStyle: "short" }) : "—"}</td>
                           <td className="px-4 py-2.5 text-right font-mono font-bold text-sm">{fmtIDR(row.total)}</td>
                           <td className="px-4 py-2.5">
                             <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${row.status === "paid" ? "bg-ok-50 text-ok-700" : row.status === "unpaid" ? "bg-warn-50 text-warn-700" : row.status === "partial" ? "bg-ocean-50 text-ocean-700" : "bg-paper-deep text-ink-mute"}`}>
-                              {row.status === "paid" ? "Lunas" : row.status === "unpaid" ? "Belum" : row.status === "partial" ? "Sebagian" : row.status === "school_covered" ? "Sekolah" : "Gratis"}
+                              {row.status === "paid" ? t("owner.financial.statusPaid") : row.status === "unpaid" ? t("common.status.unpaid") : row.status === "partial" ? t("owner.financial.statusPartial") : row.status === "school_covered" ? t("owner.financial.statusSchoolCovered") : t("owner.financial.statusFree")}
                             </span>
                           </td>
                           <td className="px-4 py-2.5"></td>
@@ -2721,7 +2738,7 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
                 </div>
                 {/* Pagination */}
                 <div className="flex items-center justify-between px-4 py-3 border-t border-line text-sm">
-                  <div className="text-ink-mute text-xs">{filteredIncome.length} baris · hal. {incomeSafePage + 1}/{incomeTotalPages}</div>
+                  <div className="text-ink-mute text-xs">{t("owner.financial.rowsPage", { count: filteredIncome.length, page: incomeSafePage + 1, total: incomeTotalPages })}</div>
                   <div className="flex gap-1">
                     {[{ label: "«", act: () => setIncomePage(0) }, { label: "‹", act: () => setIncomePage(p => Math.max(0, p - 1)) }, { label: "›", act: () => setIncomePage(p => Math.min(incomeTotalPages - 1, p + 1)) }, { label: "»", act: () => setIncomePage(incomeTotalPages - 1) }].map((btn, i) => (
                       <button key={i} onClick={btn.act} disabled={(i < 2 && incomeSafePage === 0) || (i >= 2 && incomeSafePage >= incomeTotalPages - 1)} className="w-8 h-8 rounded-lg border border-line text-sm hover:bg-paper-tint disabled:opacity-30 disabled:cursor-not-allowed">{btn.label}</button>
@@ -2738,57 +2755,57 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
       {tab === "expenses" && (
         <div className="space-y-4">
           <div className="flex justify-end">
-            <Btn variant="primary" icon="plus" size="sm" onClick={() => openAddTxn("expense")}>Tambah Expense</Btn>
+            <Btn variant="primary" icon="plus" size="sm" onClick={() => openAddTxn("expense")}>{t("owner.financial.addExpenseBtn")}</Btn>
           </div>
           <div className="grid sm:grid-cols-2 gap-4">
-            <Stat label="Reimburse Admin" value={manualExpense.filter(t => t.is_reimburse).length} icon="invoice" tone="warn"
+            <Stat label={t("owner.financial.statReimburseAdmin")} value={manualExpense.filter(t => t.is_reimburse).length} icon="invoice" tone="warn"
               sub={fmtIDR(manualExpense.filter(t => t.is_reimburse).reduce((s, t) => s + t.amount, 0))} />
           </div>
           <div className="bg-white border border-line rounded-2xl p-4 space-y-3">
             <div className="flex gap-2 flex-wrap">
               <div className="flex-1 min-w-48 relative">
                 <Icon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-faint pointer-events-none" />
-                <input value={expenseSearch} onChange={e => setExpenseSearch(e.target.value)} placeholder="Cari coach, periode, nomor invoice, deskripsi…" className="w-full pl-9 pr-3 py-2 text-sm rounded-xl border border-line bg-paper-tint focus:outline-none focus:ring-1 focus:ring-ocean-400" />
+                <input value={expenseSearch} onChange={e => setExpenseSearch(e.target.value)} placeholder={t("owner.financial.searchExpensePlaceholder")} className="w-full pl-9 pr-3 py-2 text-sm rounded-xl border border-line bg-paper-tint focus:outline-none focus:ring-1 focus:ring-ocean-400" />
               </div>
               <select value={expenseBranch} onChange={e => setExpenseBranch(e.target.value)} className="text-sm rounded-xl border border-line bg-paper-tint px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
-                <option value="all">Semua cabang</option>
+                <option value="all">{t("owner.financial.allBranches")}</option>
                 {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
               <select value={expenseStatus} onChange={e => setExpenseStatus(e.target.value)} className="text-sm rounded-xl border border-line bg-paper-tint px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
-                <option value="">Semua status</option>
-                <option value="pending">Pending</option>
-                <option value="paid">Lunas</option>
+                <option value="">{t("owner.financial.allStatus")}</option>
+                <option value="pending">{t("owner.financial.statusPending")}</option>
+                <option value="paid">{t("owner.financial.statusPaid")}</option>
               </select>
               <select value={expenseReimburseFilter} onChange={e => setExpenseReimburseFilter(e.target.value)} className="text-sm rounded-xl border border-line bg-paper-tint px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
-                <option value="all">Semua tipe</option>
-                <option value="reimburse">Reimburse saja</option>
-                <option value="non_reimburse">Non-Reimburse</option>
+                <option value="all">{t("owner.financial.allReimburseTypes")}</option>
+                <option value="reimburse">{t("owner.financial.reimburseOnly")}</option>
+                <option value="non_reimburse">{t("owner.financial.nonReimburse")}</option>
               </select>
               {(expenseSearch || expenseStatus || expenseBranch !== "all" || expenseReimburseFilter !== "all") && (
-                <button onClick={() => { setExpenseSearch(""); setExpenseStatus(""); setExpenseBranch("all"); setExpenseReimburseFilter("all"); }} className="text-xs text-ocean-600 hover:underline">Reset</button>
+                <button onClick={() => { setExpenseSearch(""); setExpenseStatus(""); setExpenseBranch("all"); setExpenseReimburseFilter("all"); }} className="text-xs text-ocean-600 hover:underline">{t("owner.financial.resetBtn")}</button>
               )}
-              <span className="text-xs text-ink-mute ml-auto">{filteredExpenses.length} invoice</span>
+              <span className="text-xs text-ink-mute ml-auto">{t("owner.financial.invoiceCount", { count: filteredExpenses.length })}</span>
             </div>
           </div>
 
           <div className="bg-white border border-line rounded-2xl overflow-hidden">
             {loadingExpenses ? (
-              <div className="p-10 text-center text-ink-mute">Memuat data…</div>
+              <div className="p-10 text-center text-ink-mute">{t("owner.financial.loading")}</div>
             ) : expensePagedRows.length === 0 ? (
-              <div className="p-10 text-center text-ink-mute">Tidak ada data.</div>
+              <div className="p-10 text-center text-ink-mute">{t("owner.financial.empty")}</div>
             ) : (
               <>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-line bg-paper-tint">
-                        <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs">Cabang</th>
-                        <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs">Coach</th>
-                        <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs">Nomor Invoice</th>
-                        <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs">Periode</th>
-                        <th className="text-right px-4 py-2.5 font-semibold text-ink-mute text-xs">Total</th>
-                        <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs">Status</th>
-                        <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs">Dibayar</th>
+                        <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs">{t("owner.financial.colBranch")}</th>
+                        <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs">{t("owner.financial.colCoach")}</th>
+                        <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs">{t("owner.financial.colInvoiceNumber")}</th>
+                        <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs">{t("owner.financial.colPeriod")}</th>
+                        <th className="text-right px-4 py-2.5 font-semibold text-ink-mute text-xs">{t("owner.financial.colTotal")}</th>
+                        <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs">{t("owner.financial.colStatus")}</th>
+                        <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs">{t("owner.financial.colPaidAt")}</th>
                         <th className="px-4 py-2.5 w-20"></th>
                       </tr>
                     </thead>
@@ -2798,11 +2815,11 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
                           <td className="px-4 py-2.5 text-xs text-ink-mute">{row.branch?.name ?? "—"}</td>
                           <td className="px-4 py-2.5 font-medium">
                             {row.description}
-                            <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-paper-deep text-ink-mute text-[10px] font-semibold align-middle">Manual</span>
-                            {row.is_reimburse && <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-warn-50 text-warn-700 text-[10px] font-semibold align-middle">Reimburse</span>}
+                            <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-paper-deep text-ink-mute text-[10px] font-semibold align-middle">{t("owner.financial.manualBadge")}</span>
+                            {row.is_reimburse && <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-warn-50 text-warn-700 text-[10px] font-semibold align-middle">{t("owner.financial.reimburseBadge")}</span>}
                             {row.proof_url && (
                               <a href={row.proof_url} target="_blank" rel="noreferrer" className="block text-xs text-ocean-600 hover:underline mt-0.5 w-fit">
-                                <Icon name="link" className="w-3 h-3 inline mr-1" />Lihat bukti
+                                <Icon name="link" className="w-3 h-3 inline mr-1" />{t("owner.financial.viewProof")}
                               </a>
                             )}
                           </td>
@@ -2810,13 +2827,13 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
                           <td className="px-4 py-2.5 text-xs">{row.category ?? "—"}</td>
                           <td className="px-4 py-2.5 text-right font-mono font-bold">{fmtIDR(row.amount)}</td>
                           <td className="px-4 py-2.5">
-                            <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-ok-50 text-ok-700">Tercatat</span>
+                            <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-ok-50 text-ok-700">{t("owner.financial.recordedBadge")}</span>
                           </td>
                           <td className="px-4 py-2.5 text-xs text-ink-mute">{new Date(row.occurred_at).toLocaleDateString("id-ID", { dateStyle: "short" })}</td>
                           <td className="px-4 py-2.5">
                             <div className="flex items-center gap-1 justify-end">
-                              <button onClick={() => openEditTxn(row)} className="w-7 h-7 rounded-lg hover:bg-paper-deep flex items-center justify-center text-ink-mute hover:text-ocean-600" title="Edit"><Icon name="edit" className="w-3.5 h-3.5" /></button>
-                              <button onClick={() => deleteTxn(row)} className="w-7 h-7 rounded-lg hover:bg-danger-50 flex items-center justify-center text-ink-mute hover:text-danger-600" title="Hapus"><Icon name="trash" className="w-3.5 h-3.5" /></button>
+                              <button onClick={() => openEditTxn(row)} className="w-7 h-7 rounded-lg hover:bg-paper-deep flex items-center justify-center text-ink-mute hover:text-ocean-600" title={t("owner.financial.editBtn")}><Icon name="edit" className="w-3.5 h-3.5" /></button>
+                              <button onClick={() => deleteTxn(row)} className="w-7 h-7 rounded-lg hover:bg-danger-50 flex items-center justify-center text-ink-mute hover:text-danger-600" title={t("owner.financial.deleteBtn")}><Icon name="trash" className="w-3.5 h-3.5" /></button>
                             </div>
                           </td>
                         </tr>
@@ -2829,7 +2846,7 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
                           <td className="px-4 py-2.5 text-right font-mono font-bold">{fmtIDR(row.total_amount)}</td>
                           <td className="px-4 py-2.5">
                             <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${row.status === "paid" ? "bg-ok-50 text-ok-700" : "bg-warn-50 text-warn-700"}`}>
-                              {row.status === "paid" ? "Lunas" : "Pending"}
+                              {row.status === "paid" ? t("owner.financial.statusPaid") : t("owner.financial.statusPending")}
                             </span>
                           </td>
                           <td className="px-4 py-2.5 text-xs text-ink-mute">{row.paid_at ? new Date(row.paid_at).toLocaleDateString("id-ID", { dateStyle: "short" }) : "—"}</td>
@@ -2840,7 +2857,7 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
                   </table>
                 </div>
                 <div className="flex items-center justify-between px-4 py-3 border-t border-line text-sm">
-                  <div className="text-ink-mute text-xs">{filteredExpenses.length} invoice · hal. {expenseSafePage + 1}/{expenseTotalPages}</div>
+                  <div className="text-ink-mute text-xs">{t("owner.financial.invoicesPage", { count: filteredExpenses.length, page: expenseSafePage + 1, total: expenseTotalPages })}</div>
                   <div className="flex gap-1">
                     {[{ label: "«", act: () => setExpensePage(0) }, { label: "‹", act: () => setExpensePage(p => Math.max(0, p - 1)) }, { label: "›", act: () => setExpensePage(p => Math.min(expenseTotalPages - 1, p + 1)) }, { label: "»", act: () => setExpensePage(expenseTotalPages - 1) }].map((btn, i) => (
                       <button key={i} onClick={btn.act} disabled={(i < 2 && expenseSafePage === 0) || (i >= 2 && expenseSafePage >= expenseTotalPages - 1)} className="w-8 h-8 rounded-lg border border-line text-sm hover:bg-paper-tint disabled:opacity-30 disabled:cursor-not-allowed">{btn.label}</button>
@@ -2857,15 +2874,15 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
       {tab === "moneyflow" && (
         <div className="space-y-3">
           {loadingBills || loadingExpenses ? (
-            <div className="p-10 text-center text-ink-mute">Memuat data…</div>
+            <div className="p-10 text-center text-ink-mute">{t("owner.financial.loading")}</div>
           ) : moneyFlowData.length === 0 ? (
-            <div className="p-10 text-center text-ink-mute">Belum ada data transaksi.</div>
+            <div className="p-10 text-center text-ink-mute">{t("owner.financial.moneyFlowEmpty")}</div>
           ) : (
             <>
               <div className="grid sm:grid-cols-3 gap-4">
-                <Stat label="Total Income (12 bln)" value={fmtIDR(moneyFlowData.reduce((s, m) => s + m.income, 0))} icon="wallet" tone="ok" />
-                <Stat label="Total Expenses (12 bln)" value={fmtIDR(moneyFlowData.reduce((s, m) => s + m.expense, 0))} icon="invoice" tone="danger" />
-                <Stat label="Net (12 bln)" value={fmtIDR(moneyFlowData.reduce((s, m) => s + m.net, 0))} icon="chart" tone="ocean" />
+                <Stat label={t("owner.financial.moneyFlowTotalIncome")} value={fmtIDR(moneyFlowData.reduce((s, m) => s + m.income, 0))} icon="wallet" tone="ok" />
+                <Stat label={t("owner.financial.moneyFlowTotalExpenses")} value={fmtIDR(moneyFlowData.reduce((s, m) => s + m.expense, 0))} icon="invoice" tone="danger" />
+                <Stat label={t("owner.financial.moneyFlowTotalNet")} value={fmtIDR(moneyFlowData.reduce((s, m) => s + m.net, 0))} icon="chart" tone="ocean" />
               </div>
 
               <div className="bg-white border border-line rounded-2xl overflow-hidden">
@@ -2873,10 +2890,10 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-line bg-paper-tint">
-                        <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs">Bulan</th>
-                        <th className="text-right px-4 py-2.5 font-semibold text-ok-700 text-xs">Income</th>
-                        <th className="text-right px-4 py-2.5 font-semibold text-danger-700 text-xs">Expenses</th>
-                        <th className="text-right px-4 py-2.5 font-semibold text-ink-mute text-xs">Net</th>
+                        <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs">{t("owner.financial.colMonth")}</th>
+                        <th className="text-right px-4 py-2.5 font-semibold text-ok-700 text-xs">{t("owner.financial.colIncome")}</th>
+                        <th className="text-right px-4 py-2.5 font-semibold text-danger-700 text-xs">{t("owner.financial.colExpenses")}</th>
+                        <th className="text-right px-4 py-2.5 font-semibold text-ink-mute text-xs">{t("owner.financial.colNet")}</th>
                         <th className="px-4 py-2.5 w-48"></th>
                       </tr>
                     </thead>
@@ -2913,45 +2930,47 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
 
       {/* ── Modal: Tambah/Edit Transaksi Manual ─────────────────────────────── */}
       <Modal open={!!showTxnModal} onClose={() => setShowTxnModal(null)}
-        title={showTxnModal?.edit ? `Edit ${showTxnModal.kind === "income" ? "Income" : "Expense"} Manual` : `Tambah ${showTxnModal?.kind === "income" ? "Income" : "Expense"} Manual`}
+        title={showTxnModal?.edit
+          ? t("owner.financial.txnModalEditTitle", { kind: showTxnModal.kind === "income" ? t("owner.financial.txnKindIncome") : t("owner.financial.txnKindExpense") })
+          : t("owner.financial.txnModalAddTitle", { kind: showTxnModal?.kind === "income" ? t("owner.financial.txnKindIncome") : t("owner.financial.txnKindExpense") })}
         size="md"
         footer={
           <div className="flex gap-2 justify-end w-full">
-            <Btn variant="ghost" onClick={() => setShowTxnModal(null)}>Batal</Btn>
-            <Btn variant="primary" onClick={saveTxn} disabled={savingTxn}>{savingTxn ? "Menyimpan…" : "Simpan"}</Btn>
+            <Btn variant="ghost" onClick={() => setShowTxnModal(null)}>{t("common.actions.cancel")}</Btn>
+            <Btn variant="primary" onClick={saveTxn} disabled={savingTxn}>{savingTxn ? t("common.actions.saving") : t("common.actions.save")}</Btn>
           </div>
         }>
         <div className="space-y-4">
-          <Field label="Cabang">
+          <Field label={t("owner.financial.fieldBranch")}>
             <Select value={txnForm.branch_id} onChange={e => setTxnForm(f => ({ ...f, branch_id: e.target.value }))}>
-              <option value="">— Pilih cabang —</option>
+              <option value="">{t("owner.financial.fieldBranchPlaceholder")}</option>
               {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
             </Select>
           </Field>
-          <Field label="Kategori">
+          <Field label={t("owner.financial.fieldCategory")}>
             <Select value={txnForm.category} onChange={e => setTxnForm(f => ({ ...f, category: e.target.value }))}>
-              {MANUAL_CATEGORY_OPTIONS.map(c => <option key={c} value={c}>{c}</option>)}
+              {MANUAL_CATEGORY_OPTIONS.map(c => <option key={c} value={c}>{t(MANUAL_CATEGORY_LABEL_KEYS[c])}</option>)}
             </Select>
           </Field>
           {txnForm.category === "Lainnya" && (
-            <Field label="Kategori Custom"><Input value={txnForm.categoryOther} onChange={e => setTxnForm(f => ({ ...f, categoryOther: e.target.value }))} placeholder="Contoh: Donasi alumni" /></Field>
+            <Field label={t("owner.financial.fieldCategoryOther")}><Input value={txnForm.categoryOther} onChange={e => setTxnForm(f => ({ ...f, categoryOther: e.target.value }))} placeholder={t("owner.financial.fieldCategoryOtherPlaceholder")} /></Field>
           )}
-          <Field label="Deskripsi"><Input value={txnForm.description} onChange={e => setTxnForm(f => ({ ...f, description: e.target.value }))} placeholder="Contoh: Sponsorship acara renang tahunan" /></Field>
+          <Field label={t("owner.financial.fieldDescription")}><Input value={txnForm.description} onChange={e => setTxnForm(f => ({ ...f, description: e.target.value }))} placeholder={t("owner.financial.fieldDescriptionPlaceholder")} /></Field>
           {showTxnModal?.kind === "expense" && (
             <>
-              <Switch checked={txnForm.isReimburse} onChange={v => setTxnForm(f => ({ ...f, isReimburse: v }))} label="Ini pengeluaran reimburse (perlu bukti)" />
+              <Switch checked={txnForm.isReimburse} onChange={v => setTxnForm(f => ({ ...f, isReimburse: v }))} label={t("owner.financial.fieldIsReimburse")} />
               {txnForm.isReimburse && (
-                <Field label="Link Bukti (Google Drive)">
-                  <Input value={txnForm.proofUrl} onChange={e => setTxnForm(f => ({ ...f, proofUrl: e.target.value }))} placeholder="https://drive.google.com/..." type="url" />
+                <Field label={t("owner.financial.fieldProofUrl")}>
+                  <Input value={txnForm.proofUrl} onChange={e => setTxnForm(f => ({ ...f, proofUrl: e.target.value }))} placeholder={t("owner.financial.fieldProofUrlPlaceholder")} type="url" />
                 </Field>
               )}
             </>
           )}
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Nominal (Rp)"><Input type="number" inputMode="numeric" min={0} value={txnForm.amount} onChange={e => setTxnForm(f => ({ ...f, amount: e.target.value.replace(/\D/g, "") }))} /></Field>
-            <Field label="Tanggal"><Input type="date" value={txnForm.occurred_at} onChange={e => setTxnForm(f => ({ ...f, occurred_at: e.target.value }))} className="font-mono" /></Field>
+            <Field label={t("owner.financial.fieldAmount")}><Input type="number" inputMode="numeric" min={0} value={txnForm.amount} onChange={e => setTxnForm(f => ({ ...f, amount: e.target.value.replace(/\D/g, "") }))} /></Field>
+            <Field label={t("owner.financial.fieldDate")}><Input type="date" value={txnForm.occurred_at} onChange={e => setTxnForm(f => ({ ...f, occurred_at: e.target.value }))} className="font-mono" /></Field>
           </div>
-          <Field label="Catatan (opsional)"><Textarea value={txnForm.notes} onChange={e => setTxnForm(f => ({ ...f, notes: e.target.value }))} rows={2} /></Field>
+          <Field label={t("owner.financial.fieldNotes")}><Textarea value={txnForm.notes} onChange={e => setTxnForm(f => ({ ...f, notes: e.target.value }))} rows={2} /></Field>
         </div>
       </Modal>
 
@@ -2969,26 +2988,10 @@ interface ActivityLogRow {
   created_at: string;
 }
 
-const ENTITY_LABELS: Record<string, string> = {
-  branches: "Cabang", members: "Member", member_classes: "Kelas Member",
-  classes: "Kelas", class_packages: "Paket", bills: "Tagihan",
-  coach_attendances: "Absensi Coach", coach_invoices: "Invoice Coach",
-  coach_leaves: "Izin Coach", certifications: "Sertifikasi",
-  announcements: "Pengumuman", payslips: "Slip Gaji",
-  registrations: "Registrasi", rapor_periods: "Rapor",
-  schools: "Sekolah", coach_rates: "Tarif Coach", profiles: "Profil",
-};
-
 const ACTION_BADGE: Record<string, string> = {
   create: "active", update: "manual", delete: "rejected",
   approve: "approved", reject: "rejected", publish: "active",
   archive: "archived", restore: "ok", suspend: "suspend", unsuspend: "ok",
-};
-
-const ACTION_LABEL: Record<string, string> = {
-  create: "Buat", update: "Ubah", delete: "Hapus",
-  approve: "Setujui", reject: "Tolak", publish: "Terbitkan",
-  archive: "Arsip", restore: "Pulihkan", suspend: "Suspend", unsuspend: "Aktifkan",
 };
 
 const ENTITY_COLORS: Record<string, string> = {
@@ -3000,6 +3003,7 @@ const ENTITY_COLORS: Record<string, string> = {
 };
 
 function OwnerActivityLog({ branches }: { branches: Branch[] }) {
+  const { t } = useLocale();
   const supabase = createClient();
   const [logs, setLogs] = useState<ActivityLogRow[]>([]);
   const [total, setTotal] = useState(0);
@@ -3071,7 +3075,23 @@ function OwnerActivityLog({ branches }: { branches: Branch[] }) {
   const fmtShortDate = (iso: string) => new Date(iso).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
 
   const branchName = (log: ActivityLogRow) =>
-    log.branch_name ?? branches.find(b => b.id === log.branch_id)?.name ?? "Lintas cabang";
+    log.branch_name ?? branches.find(b => b.id === log.branch_id)?.name ?? t("owner.activityLog.crossBranch");
+
+  const entityLabel: Record<string, string> = {
+    branches: t("owner.activityLog.entityLabel.branches"), members: t("owner.activityLog.entityLabel.members"), member_classes: t("owner.activityLog.entityLabel.member_classes"),
+    classes: t("owner.activityLog.entityLabel.classes"), class_packages: t("owner.activityLog.entityLabel.class_packages"), bills: t("owner.activityLog.entityLabel.bills"),
+    coach_attendances: t("owner.activityLog.entityLabel.coach_attendances"), coach_invoices: t("owner.activityLog.entityLabel.coach_invoices"),
+    coach_leaves: t("owner.activityLog.entityLabel.coach_leaves"), certifications: t("owner.activityLog.entityLabel.certifications"),
+    announcements: t("owner.activityLog.entityLabel.announcements"), payslips: t("owner.activityLog.entityLabel.payslips"),
+    registrations: t("owner.activityLog.entityLabel.registrations"), rapor_periods: t("owner.activityLog.entityLabel.rapor_periods"),
+    schools: t("owner.activityLog.entityLabel.schools"), coach_rates: t("owner.activityLog.entityLabel.coach_rates"), profiles: t("owner.activityLog.entityLabel.profiles"),
+  };
+
+  const actionLabel: Record<string, string> = {
+    create: t("owner.activityLog.actionLabel.create"), update: t("owner.activityLog.actionLabel.update"), delete: t("owner.activityLog.actionLabel.delete"),
+    approve: t("owner.activityLog.actionLabel.approve"), reject: t("owner.activityLog.actionLabel.reject"), publish: t("owner.activityLog.actionLabel.publish"),
+    archive: t("owner.activityLog.actionLabel.archive"), restore: t("owner.activityLog.actionLabel.restore"), suspend: t("owner.activityLog.actionLabel.suspend"), unsuspend: t("owner.activityLog.actionLabel.unsuspend"),
+  };
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -3079,15 +3099,15 @@ function OwnerActivityLog({ branches }: { branches: Branch[] }) {
     <div className="space-y-5">
       {/* Header */}
       <div>
-        <h2 className="font-display font-bold text-2xl">Activity Log</h2>
-        <p className="text-ink-mute text-sm mt-0.5">Semua aktivitas CRUD dari semua role lintas cabang.</p>
+        <h2 className="font-display font-bold text-2xl">{t("owner.activityLog.pageTitle")}</h2>
+        <p className="text-ink-mute text-sm mt-0.5">{t("owner.activityLog.pageSub")}</p>
       </div>
 
       {/* Stats */}
       <div className="grid sm:grid-cols-3 gap-4">
-        <Stat label="Hari ini"   value={statsToday} icon="calendar"  tone="ocean" />
-        <Stat label="7 hari ini" value={statsWeek}  icon="chart"     tone="wave"  />
-        <Stat label="Total log"  value={total}      icon="clipboard" tone="ok"    />
+        <Stat label={t("owner.activityLog.statToday")} value={statsToday} icon="calendar"  tone="ocean" />
+        <Stat label={t("owner.activityLog.statWeek")}  value={statsWeek}  icon="chart"     tone="wave"  />
+        <Stat label={t("owner.activityLog.statTotal")} value={total}      icon="clipboard" tone="ok"    />
       </div>
 
       {/* Search + filter bar */}
@@ -3095,58 +3115,58 @@ function OwnerActivityLog({ branches }: { branches: Branch[] }) {
         <div className="flex gap-2 flex-wrap">
           <div className="flex-1 min-w-52 relative">
             <Icon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-faint pointer-events-none" />
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Cari aktivitas…"
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t("owner.activityLog.searchPlaceholder")}
               className="w-full pl-9 pr-3 py-2 text-sm rounded-xl border border-line bg-paper-tint focus:outline-none focus:ring-1 focus:ring-ocean-400" />
           </div>
           <button onClick={() => setShowFilters(f => !f)}
             className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border text-sm font-semibold transition-colors ${showFilters ? "bg-ocean-50 border-ocean-200 text-ocean-700" : "border-line text-ink-soft hover:bg-paper-tint"}`}>
-            <Icon name="filter" className="w-4 h-4" /> Filter
+            <Icon name="filter" className="w-4 h-4" /> {t("owner.activityLog.filterBtn")}
             {activeFilterCount > 0 && <span className="bg-ocean-600 text-white text-[10px] font-bold rounded-full w-4 h-4 inline-flex items-center justify-center">{activeFilterCount}</span>}
           </button>
           {(activeFilterCount > 0 || search) && (
-            <button onClick={resetFilters} className="text-xs text-ocean-600 hover:underline px-2">Reset</button>
+            <button onClick={resetFilters} className="text-xs text-ocean-600 hover:underline px-2">{t("owner.activityLog.resetBtn")}</button>
           )}
-          <span className="text-xs text-ink-mute self-center ml-auto">{total} aktivitas</span>
+          <span className="text-xs text-ink-mute self-center ml-auto">{t("owner.activityLog.activityCount", { count: total })}</span>
         </div>
 
         {showFilters && (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-1 border-t border-line">
             <div>
-              <label className="block text-xs font-semibold text-ink-faint mb-1">Cabang</label>
+              <label className="block text-xs font-semibold text-ink-faint mb-1">{t("owner.activityLog.filterBranch")}</label>
               <select value={filterBranch} onChange={e => setFilterBranch(e.target.value)} className="w-full text-sm rounded-xl border border-line bg-paper-tint px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
-                <option value="all">Semua cabang</option>
+                <option value="all">{t("owner.activityLog.allBranches")}</option>
                 {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-xs font-semibold text-ink-faint mb-1">Entitas</label>
+              <label className="block text-xs font-semibold text-ink-faint mb-1">{t("owner.activityLog.filterEntity")}</label>
               <select value={filterEntity} onChange={e => setFilterEntity(e.target.value)} className="w-full text-sm rounded-xl border border-line bg-paper-tint px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
-                <option value="all">Semua entitas</option>
-                {Object.entries(ENTITY_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                <option value="all">{t("owner.activityLog.allEntities")}</option>
+                {Object.entries(entityLabel).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-xs font-semibold text-ink-faint mb-1">Aksi</label>
+              <label className="block text-xs font-semibold text-ink-faint mb-1">{t("owner.activityLog.filterAction")}</label>
               <select value={filterAction} onChange={e => setFilterAction(e.target.value)} className="w-full text-sm rounded-xl border border-line bg-paper-tint px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
-                <option value="all">Semua aksi</option>
-                {Object.entries(ACTION_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                <option value="all">{t("owner.activityLog.allActions")}</option>
+                {Object.entries(actionLabel).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-xs font-semibold text-ink-faint mb-1">Role</label>
+              <label className="block text-xs font-semibold text-ink-faint mb-1">{t("owner.activityLog.filterRole")}</label>
               <select value={filterRole} onChange={e => setFilterRole(e.target.value)} className="w-full text-sm rounded-xl border border-line bg-paper-tint px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
-                <option value="all">Semua role</option>
-                <option value="owner">Owner</option>
-                <option value="admin">Admin</option>
-                <option value="coach">Coach</option>
+                <option value="all">{t("owner.activityLog.allRoles")}</option>
+                <option value="owner">{t("owner.activityLog.roleOwner")}</option>
+                <option value="admin">{t("owner.activityLog.roleAdmin")}</option>
+                <option value="coach">{t("owner.activityLog.roleCoach")}</option>
               </select>
             </div>
             <div>
-              <label className="block text-xs font-semibold text-ink-faint mb-1">Dari tanggal</label>
+              <label className="block text-xs font-semibold text-ink-faint mb-1">{t("owner.activityLog.filterDateFrom")}</label>
               <input type="date" value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)} className="w-full text-sm rounded-xl border border-line bg-paper-tint px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400" />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-ink-faint mb-1">Sampai tanggal</label>
+              <label className="block text-xs font-semibold text-ink-faint mb-1">{t("owner.activityLog.filterDateTo")}</label>
               <input type="date" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)} className="w-full text-sm rounded-xl border border-line bg-paper-tint px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400" />
             </div>
           </div>
@@ -3156,12 +3176,12 @@ function OwnerActivityLog({ branches }: { branches: Branch[] }) {
       {/* Activity feed */}
       <div className="bg-white border border-line rounded-2xl overflow-hidden">
         {loading ? (
-          <div className="p-10 text-center text-ink-mute">Memuat data…</div>
+          <div className="p-10 text-center text-ink-mute">{t("owner.activityLog.loading")}</div>
         ) : logs.length === 0 ? (
           <div className="p-10 text-center">
             <Icon name="clipboard" className="w-10 h-10 text-ink-faint mx-auto mb-3" />
-            <div className="font-display font-bold text-ink">Belum ada aktivitas</div>
-            <p className="text-sm text-ink-mute mt-1">Aktivitas akan muncul setelah ada perubahan data.</p>
+            <div className="font-display font-bold text-ink">{t("owner.activityLog.empty")}</div>
+            <p className="text-sm text-ink-mute mt-1">{t("owner.activityLog.emptySub")}</p>
           </div>
         ) : (
           <>
@@ -3170,12 +3190,12 @@ function OwnerActivityLog({ branches }: { branches: Branch[] }) {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-line bg-paper-tint">
-                    <th className="text-left px-4 py-3 font-semibold text-ink-mute text-xs uppercase tracking-wide">Waktu</th>
-                    <th className="text-left px-4 py-3 font-semibold text-ink-mute text-xs uppercase tracking-wide">Cabang</th>
-                    <th className="text-left px-4 py-3 font-semibold text-ink-mute text-xs uppercase tracking-wide">Oleh</th>
-                    <th className="text-left px-4 py-3 font-semibold text-ink-mute text-xs uppercase tracking-wide">Entitas</th>
-                    <th className="text-left px-4 py-3 font-semibold text-ink-mute text-xs uppercase tracking-wide">Aksi</th>
-                    <th className="text-left px-4 py-3 font-semibold text-ink-mute text-xs uppercase tracking-wide">Keterangan</th>
+                    <th className="text-left px-4 py-3 font-semibold text-ink-mute text-xs uppercase tracking-wide">{t("owner.activityLog.colTime")}</th>
+                    <th className="text-left px-4 py-3 font-semibold text-ink-mute text-xs uppercase tracking-wide">{t("owner.activityLog.colBranch")}</th>
+                    <th className="text-left px-4 py-3 font-semibold text-ink-mute text-xs uppercase tracking-wide">{t("owner.activityLog.colBy")}</th>
+                    <th className="text-left px-4 py-3 font-semibold text-ink-mute text-xs uppercase tracking-wide">{t("owner.activityLog.colEntity")}</th>
+                    <th className="text-left px-4 py-3 font-semibold text-ink-mute text-xs uppercase tracking-wide">{t("owner.activityLog.colAction")}</th>
+                    <th className="text-left px-4 py-3 font-semibold text-ink-mute text-xs uppercase tracking-wide">{t("owner.activityLog.colDescription")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line">
@@ -3197,11 +3217,11 @@ function OwnerActivityLog({ branches }: { branches: Branch[] }) {
                       </td>
                       <td className="px-4 py-3">
                         <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${ENTITY_COLORS[log.entity_type] ?? "bg-paper-deep text-ink-soft"}`}>
-                          {ENTITY_LABELS[log.entity_type] ?? log.entity_type}
+                          {entityLabel[log.entity_type] ?? log.entity_type}
                         </span>
                       </td>
                       <td className="px-4 py-3">
-                        <Status kind={ACTION_BADGE[log.action] ?? "manual"}>{ACTION_LABEL[log.action] ?? log.action}</Status>
+                        <Status kind={ACTION_BADGE[log.action] ?? "manual"}>{actionLabel[log.action] ?? log.action}</Status>
                       </td>
                       <td className="px-4 py-3 max-w-xs">
                         <span className="text-sm text-ink truncate block">{log.label}</span>
@@ -3222,9 +3242,9 @@ function OwnerActivityLog({ branches }: { branches: Branch[] }) {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-semibold text-sm text-ink">{log.user_name}</span>
-                        <Status kind={ACTION_BADGE[log.action] ?? "manual"}>{ACTION_LABEL[log.action] ?? log.action}</Status>
+                        <Status kind={ACTION_BADGE[log.action] ?? "manual"}>{actionLabel[log.action] ?? log.action}</Status>
                         <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${ENTITY_COLORS[log.entity_type] ?? "bg-paper-deep text-ink-soft"}`}>
-                          {ENTITY_LABELS[log.entity_type] ?? log.entity_type}
+                          {entityLabel[log.entity_type] ?? log.entity_type}
                         </span>
                       </div>
                       <div className="text-sm text-ink mt-0.5 leading-snug">{log.label}</div>
@@ -3238,7 +3258,7 @@ function OwnerActivityLog({ branches }: { branches: Branch[] }) {
             {/* Pagination */}
             <div className="flex items-center justify-between px-4 py-3 border-t border-line text-sm">
               <div className="text-xs text-ink-mute">
-                {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, total)} dari {total} aktivitas · hal. {page + 1}/{totalPages}
+                {t("owner.activityLog.paginationSummary", { from: page * PAGE_SIZE + 1, to: Math.min((page + 1) * PAGE_SIZE, total), total, page: page + 1, total_pages: totalPages })}
               </div>
               <div className="flex gap-1">
                 {[
@@ -3259,29 +3279,29 @@ function OwnerActivityLog({ branches }: { branches: Branch[] }) {
       </div>
 
       {/* Detail modal */}
-      <Modal open={!!detailLog} onClose={() => setDetailLog(null)} title="Detail Aktivitas" size="md"
-        footer={<Btn variant="ghost" onClick={() => setDetailLog(null)}>Tutup</Btn>}>
+      <Modal open={!!detailLog} onClose={() => setDetailLog(null)} title={t("owner.activityLog.detailModalTitle")} size="md"
+        footer={<Btn variant="ghost" onClick={() => setDetailLog(null)}>{t("common.actions.close")}</Btn>}>
         {detailLog && (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3 text-sm">
-              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Waktu</div><div>{fmtShortDate(detailLog.created_at)} {fmtTime(detailLog.created_at)}</div></div>
-              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Cabang</div><div>{branchName(detailLog)}</div></div>
-              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Oleh</div><div className="font-semibold">{detailLog.user_name} <span className="text-xs text-ink-mute font-normal">({detailLog.user_role})</span></div></div>
-              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Entitas</div>
+              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">{t("owner.activityLog.detailTime")}</div><div>{fmtShortDate(detailLog.created_at)} {fmtTime(detailLog.created_at)}</div></div>
+              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">{t("owner.activityLog.detailBranch")}</div><div>{branchName(detailLog)}</div></div>
+              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">{t("owner.activityLog.detailBy")}</div><div className="font-semibold">{detailLog.user_name} <span className="text-xs text-ink-mute font-normal">({detailLog.user_role})</span></div></div>
+              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">{t("owner.activityLog.detailEntity")}</div>
                 <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${ENTITY_COLORS[detailLog.entity_type] ?? "bg-paper-deep text-ink-soft"}`}>
-                  {ENTITY_LABELS[detailLog.entity_type] ?? detailLog.entity_type}
+                  {entityLabel[detailLog.entity_type] ?? detailLog.entity_type}
                 </span>
               </div>
-              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Aksi</div><Status kind={ACTION_BADGE[detailLog.action] ?? "manual"}>{ACTION_LABEL[detailLog.action] ?? detailLog.action}</Status></div>
-              {detailLog.entity_label && <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Subjek</div><div className="font-semibold">{detailLog.entity_label}</div></div>}
+              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">{t("owner.activityLog.detailAction")}</div><Status kind={ACTION_BADGE[detailLog.action] ?? "manual"}>{actionLabel[detailLog.action] ?? detailLog.action}</Status></div>
+              {detailLog.entity_label && <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">{t("owner.activityLog.detailSubject")}</div><div className="font-semibold">{detailLog.entity_label}</div></div>}
             </div>
             <div className="border-t border-line pt-3">
-              <div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-1">Keterangan</div>
+              <div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-1">{t("owner.activityLog.detailDescription")}</div>
               <p className="text-sm text-ink leading-relaxed">{detailLog.label}</p>
             </div>
             {detailLog.meta && Object.keys(detailLog.meta).length > 0 && (
               <div>
-                <div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-1">Detail</div>
+                <div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-1">{t("owner.activityLog.detailMeta")}</div>
                 <pre className="bg-paper-tint rounded-xl p-3 text-xs font-mono overflow-auto text-ink-soft">{JSON.stringify(detailLog.meta, null, 2)}</pre>
               </div>
             )}
@@ -3306,12 +3326,12 @@ function fmtBytes(n: number): string {
   return n + " B";
 }
 
-function fmtRelTime(iso: string): string {
+function fmtRelTime(iso: string, t: (key: string, vars?: Record<string, string | number>) => string): string {
   const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-  if (diff < 60) return "baru saja";
-  if (diff < 3600) return `${Math.floor(diff / 60)} menit lalu`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)} jam lalu`;
-  return `${Math.floor(diff / 86400)} hari lalu`;
+  if (diff < 60) return t("owner.storage.justNow");
+  if (diff < 3600) return t("owner.storage.minutesAgo", { n: Math.floor(diff / 60) });
+  if (diff < 86400) return t("owner.storage.hoursAgo", { n: Math.floor(diff / 3600) });
+  return t("owner.storage.daysAgo", { n: Math.floor(diff / 86400) });
 }
 
 // Stable color per category (keyed by prefix, not array position) so the
@@ -3333,17 +3353,18 @@ function categoryColor(prefix: string): string {
 }
 
 const BACKUP_CATEGORIES = [
-  { key: "avatars",     label: "Avatar Profil"   },
-  { key: "logos",       label: "Logo Cabang"      },
-  { key: "classes",     label: "Foto Kelas"       },
-  { key: "payments",    label: "Bukti Pembayaran" },
-  { key: "certs",       label: "Sertifikat Coach" },
-  { key: "attendances", label: "Selfie Absensi"   },
+  { key: "avatars",     labelKey: "owner.storage.categoryAvatars"     },
+  { key: "logos",       labelKey: "owner.storage.categoryLogos"       },
+  { key: "classes",     labelKey: "owner.storage.categoryClasses"     },
+  { key: "payments",    labelKey: "owner.storage.categoryPayments"    },
+  { key: "certs",       labelKey: "owner.storage.categoryCerts"       },
+  { key: "attendances", labelKey: "owner.storage.categoryAttendances" },
 ];
 
 const BACKUP_PAGE_SIZE = 20;
 
 function OwnerStorage({ userId, userName }: { userId: string; userName: string }) {
+  const { t } = useLocale();
   const supabase = createClient();
   const toast = useToast();
 
@@ -3404,7 +3425,7 @@ function OwnerStorage({ userId, userName }: { userId: string; userName: string }
       setBackupLoaded(true);
       setBackupPage(0);
     } catch {
-      toast.error("Gagal memuat daftar file");
+      toast.error(t("owner.storage.listLoadFailed"));
     }
     setBackupLoading(false);
   };
@@ -3443,8 +3464,8 @@ function OwnerStorage({ userId, userName }: { userId: string; userName: string }
     const targets = backupList.filter(f => selectedFiles.has(f.key));
     if (targets.length === 0) return;
     const yes = await confirm({
-      title: `Hapus ${targets.length} file terpilih?`,
-      body: "File akan dihapus permanen dari storage dan tidak bisa dikembalikan. Jika file terhubung ke data (avatar, logo, dsb), referensinya juga akan dikosongkan.",
+      title: t("owner.storage.deleteSelectedConfirmTitle", { count: targets.length }),
+      body: t("owner.storage.deleteSelectedConfirmBody"),
       danger: true,
     });
     if (!yes) return;
@@ -3461,12 +3482,12 @@ function OwnerStorage({ userId, userName }: { userId: string; userName: string }
       const data = await res.json() as { deleted: number; failed: { key: string; error: string }[] };
       if (!res.ok) throw new Error();
 
-      toast.success(`${data.deleted} file berhasil dihapus`, data.failed.length > 0 ? `${data.failed.length} file gagal dihapus.` : undefined);
+      toast.success(t("owner.storage.deleteSuccess", { count: data.deleted }), data.failed.length > 0 ? t("owner.storage.deleteFailedSub", { count: data.failed.length }) : undefined);
       logActivity(supabase, {
         userId, userRole: "owner", userName,
         entityType: "system_storage", entityId: "delete",
         action: "delete",
-        label: `${data.deleted} file storage dihapus oleh owner`,
+        label: t("owner.storage.activityDeleted", { count: data.deleted }),
         meta: { count: data.deleted, keys: targets.map(f => f.key) },
       });
 
@@ -3476,7 +3497,7 @@ function OwnerStorage({ userId, userName }: { userId: string; userName: string }
       setSelectMode(false);
       loadStats();
     } catch {
-      toast.error("Gagal menghapus file", "Terjadi kesalahan saat menghapus file terpilih.");
+      toast.error(t("owner.storage.deleteFailed"), t("owner.storage.deleteFailedGeneric"));
     }
     setDeleting(false);
   };
@@ -3510,16 +3531,16 @@ function OwnerStorage({ userId, userName }: { userId: string; userName: string }
       a.download = `Storage-Backup-${new Date().toISOString().slice(0, 10)}.zip`;
       a.click();
       URL.revokeObjectURL(url);
-      toast.success(`Backup selesai (${successCount} file berhasil diunduh)`);
+      toast.success(t("owner.storage.downloadSuccess", { count: successCount }));
       logActivity(supabase, {
         userId, userRole: "owner", userName,
         entityType: "system_storage", entityId: "backup",
         action: "create",
-        label: `Backup system storage diunduh (${successCount}/${backupList.length} file)`,
+        label: t("owner.storage.activityBackupDownloaded", { success: successCount, total: backupList.length }),
         meta: { success_count: successCount, total_count: backupList.length },
       });
     } catch {
-      toast.error("Backup gagal", "Terjadi kesalahan saat membuat ZIP.");
+      toast.error(t("owner.storage.downloadFailed"), t("owner.storage.downloadFailedSub"));
     }
     setDownloading(false);
     setDownloadProgress(null);
@@ -3554,10 +3575,10 @@ function OwnerStorage({ userId, userName }: { userId: string; userName: string }
           <div className="flex items-center gap-3 text-danger-600">
             <Icon name="warning" className="w-5 h-5 shrink-0" />
             <div className="flex-1">
-              <div className="font-semibold text-sm">Gagal memuat data storage</div>
-              <div className="text-xs text-ink-mute mt-0.5">Pastikan koneksi Supabase Storage berfungsi normal.</div>
+              <div className="font-semibold text-sm">{t("owner.storage.statsLoadFailed")}</div>
+              <div className="text-xs text-ink-mute mt-0.5">{t("owner.storage.statsLoadFailedSub")}</div>
             </div>
-            <Btn variant="ghost" size="sm" icon="refresh" onClick={loadStats}>Retry</Btn>
+            <Btn variant="ghost" size="sm" icon="refresh" onClick={loadStats}>{t("common.actions.retry")}</Btn>
           </div>
         </Card>
       ) : stats ? (
@@ -3565,26 +3586,26 @@ function OwnerStorage({ userId, userName }: { userId: string; userName: string }
           <div className="bg-ocean-700 text-white rounded-2xl shadow-card p-5 relative overflow-hidden">
             <div className="absolute -right-6 -bottom-6 w-24 h-24 rounded-full bg-wave-500/30 blur-2xl" />
             <div className="relative">
-              <div className="text-wave-200 text-[10px] uppercase tracking-widest font-bold">Total Ukuran</div>
+              <div className="text-wave-200 text-[10px] uppercase tracking-widest font-bold">{t("owner.storage.totalSize")}</div>
               <div className="font-display font-bold text-2xl mt-1">{fmtBytes(stats.totalSize)}</div>
-              <div className="text-white/60 text-xs mt-1">Terpakai di Supabase Storage</div>
+              <div className="text-white/60 text-xs mt-1">{t("owner.storage.totalSizeSub")}</div>
             </div>
           </div>
           <div className="bg-white rounded-2xl border border-line shadow-card p-5">
-            <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Total File</div>
+            <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("owner.storage.totalFiles")}</div>
             <div className="font-display font-bold text-2xl text-ink mt-1 tabular-nums">{stats.totalCount.toLocaleString("id-ID")}</div>
-            <div className="text-xs text-ink-mute mt-1">{stats.categories.filter(c => c.count > 0).length} kategori aktif</div>
+            <div className="text-xs text-ink-mute mt-1">{t("owner.storage.activeCategoriesSub", { count: stats.categories.filter(c => c.count > 0).length })}</div>
           </div>
           <div className="bg-white rounded-2xl border border-line shadow-card p-5">
-            <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Diperbarui</div>
-            <div className="font-semibold text-ink text-sm mt-1">{fmtRelTime(stats.fetchedAt)}</div>
+            <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("owner.storage.updatedAt")}</div>
+            <div className="font-semibold text-ink text-sm mt-1">{fmtRelTime(stats.fetchedAt, t)}</div>
             <button
               type="button"
               onClick={loadStats}
               className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-ocean-600 hover:underline"
             >
               <Icon name="refresh" className="w-3.5 h-3.5" />
-              Refresh
+              {t("owner.storage.refreshBtn")}
             </button>
           </div>
         </div>
@@ -3593,12 +3614,12 @@ function OwnerStorage({ userId, userName }: { userId: string; userName: string }
       {/* ── Distribusi Storage ── */}
       {stats && (
         <Card>
-          <SectionTitle sub="Penggunaan storage per kategori file">Distribusi Storage</SectionTitle>
+          <SectionTitle sub={t("owner.storage.distributionSub")}>{t("owner.storage.distributionTitle")}</SectionTitle>
           {/* Stacked bar — every category renders (even size=0, in gray), so the bar always reads as a complete whole */}
           <div className="h-4 rounded-full overflow-hidden flex mt-4 mb-5 bg-archive-500/30">
             {stats.totalSize === 0 ? (
               <div className="h-full w-full flex items-center justify-center">
-                <span className="text-[10px] font-semibold text-ink-faint">Belum ada file</span>
+                <span className="text-[10px] font-semibold text-ink-faint">{t("owner.storage.noFilesYet")}</span>
               </div>
             ) : (
               stats.categories.map((cat) => {
@@ -3617,9 +3638,9 @@ function OwnerStorage({ userId, userName }: { userId: string; userName: string }
           {/* Legend + table — same categoryColor() function as the bar, so colors always match */}
           <div className="space-y-0">
             <div className="grid grid-cols-4 gap-2 text-[10px] uppercase tracking-widest font-bold text-ink-faint pb-2 border-b border-line">
-              <div className="col-span-2">Kategori</div>
-              <div className="text-right">File</div>
-              <div className="text-right">Ukuran</div>
+              <div className="col-span-2">{t("owner.storage.colCategory")}</div>
+              <div className="text-right">{t("owner.storage.colFiles")}</div>
+              <div className="text-right">{t("owner.storage.colSize")}</div>
             </div>
             {stats.categories.map((cat) => {
               const pct = stats.totalSize > 0 ? (cat.size / stats.totalSize) * 100 : 0;
@@ -3638,7 +3659,7 @@ function OwnerStorage({ userId, userName }: { userId: string; userName: string }
                   <div className="text-right text-sm text-ink-soft tabular-nums">{cat.count.toLocaleString("id-ID")}</div>
                   <div className="text-right">
                     <div className="text-sm font-semibold text-ink tabular-nums">{fmtBytes(cat.size)}</div>
-                    <div className="text-[10px] text-ink-faint">{empty ? "kosong" : `${pct.toFixed(1)}%`}</div>
+                    <div className="text-[10px] text-ink-faint">{empty ? t("owner.storage.emptyBadge") : `${pct.toFixed(1)}%`}</div>
                   </div>
                 </div>
               );
@@ -3649,18 +3670,18 @@ function OwnerStorage({ userId, userName }: { userId: string; userName: string }
 
       {/* ── Backup System ── */}
       <Card>
-        <SectionTitle sub="Unduh file tersusun rapi dalam folder per kategori">Backup Files</SectionTitle>
+        <SectionTitle sub={t("owner.storage.backupSub")}>{t("owner.storage.backupTitle")}</SectionTitle>
 
         {/* Category selector */}
         <div className="mt-4 space-y-2">
-          <div className="text-xs font-semibold text-ink-mute uppercase tracking-wider">Pilih Kategori</div>
+          <div className="text-xs font-semibold text-ink-mute uppercase tracking-wider">{t("owner.storage.selectCategoryLabel")}</div>
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
               onClick={() => { setSelectedCats(new Set(["all"])); setBackupLoaded(false); setBackupList([]); setSelectMode(false); setSelectedFiles(new Set()); }}
               className={`px-3 py-1.5 rounded-lg text-sm font-semibold border transition ${selectedCats.has("all") ? "bg-ocean-700 text-white border-ocean-700" : "bg-white border-line text-ink-soft hover:border-ocean-300"}`}
             >
-              Semua Kategori
+              {t("owner.storage.allCategoriesBtn")}
             </button>
             {BACKUP_CATEGORIES.map(cat => (
               <button
@@ -3669,7 +3690,7 @@ function OwnerStorage({ userId, userName }: { userId: string; userName: string }
                 onClick={() => toggleCat(cat.key)}
                 className={`px-3 py-1.5 rounded-lg text-sm font-semibold border transition ${!selectedCats.has("all") && selectedCats.has(cat.key) ? "bg-ocean-700 text-white border-ocean-700" : "bg-white border-line text-ink-soft hover:border-ocean-300"}`}
               >
-                {cat.label}
+                {t(cat.labelKey)}
               </button>
             ))}
           </div>
@@ -3678,14 +3699,14 @@ function OwnerStorage({ userId, userName }: { userId: string; userName: string }
         {/* Load preview button */}
         <div className="mt-4 flex items-center gap-3 flex-wrap">
           <Btn variant="soft" size="sm" icon="eye" disabled={backupLoading} onClick={loadBackupList}>
-            {backupLoading ? "Memuat…" : "Lihat Daftar File"}
+            {backupLoading ? t("owner.storage.loadingFileList") : t("owner.storage.viewFileListBtn")}
           </Btn>
           {backupLoaded && backupList.length > 0 && !selectMode && (
-            <Btn variant="ghost" size="sm" icon="check" onClick={() => setSelectMode(true)}>Pilih File</Btn>
+            <Btn variant="ghost" size="sm" icon="check" onClick={() => setSelectMode(true)}>{t("owner.storage.selectFilesBtn")}</Btn>
           )}
           {backupLoaded && (
             <span className="text-sm text-ink-mute">
-              {backupList.length} file ditemukan
+              {t("owner.storage.filesFoundSummary", { count: backupList.length })}
               {Object.keys(backupByCat).length > 1 && (
                 <> · {Object.entries(backupByCat).map(([cat, n]) => `${cat} (${n})`).join(", ")}</>
               )}
@@ -3696,9 +3717,9 @@ function OwnerStorage({ userId, userName }: { userId: string; userName: string }
         {/* Select-mode toolbar */}
         {selectMode && (
           <div className="mt-3 flex items-center gap-3 flex-wrap px-3.5 py-2.5 rounded-xl bg-ocean-50 border border-ocean-100">
-            <span className="text-sm font-semibold text-ocean-700">{selectedFiles.size} file dipilih</span>
-            <Btn variant="ghost" size="sm" onClick={() => setSelectedFiles(new Set(backupList.map(f => f.key)))}>Pilih Semua</Btn>
-            <Btn variant="ghost" size="sm" onClick={() => { setSelectMode(false); setSelectedFiles(new Set()); }}>Batal</Btn>
+            <span className="text-sm font-semibold text-ocean-700">{t("owner.storage.filesSelected", { count: selectedFiles.size })}</span>
+            <Btn variant="ghost" size="sm" onClick={() => setSelectedFiles(new Set(backupList.map(f => f.key)))}>{t("owner.storage.selectAllBtn")}</Btn>
+            <Btn variant="ghost" size="sm" onClick={() => { setSelectMode(false); setSelectedFiles(new Set()); }}>{t("owner.storage.cancelBtn")}</Btn>
             <Btn
               variant="danger"
               size="sm"
@@ -3707,7 +3728,7 @@ function OwnerStorage({ userId, userName }: { userId: string; userName: string }
               disabled={selectedFiles.size === 0 || deleting}
               onClick={deleteSelected}
             >
-              {deleting ? "Menghapus…" : "Hapus Terpilih"}
+              {deleting ? t("owner.storage.deletingBtn") : t("owner.storage.deleteSelectedBtn")}
             </Btn>
           </div>
         )}
@@ -3742,7 +3763,7 @@ function OwnerStorage({ userId, userName }: { userId: string; userName: string }
             </div>
             {totalBackupPages > 1 && (
               <div className="px-4 py-2.5 border-t border-line flex items-center justify-between bg-paper-tint">
-                <span className="text-xs text-ink-mute">{backupList.length} file · hal. {safeBackupPage + 1}/{totalBackupPages}</span>
+                <span className="text-xs text-ink-mute">{t("owner.storage.backupPagination", { count: backupList.length, page: safeBackupPage + 1, total: totalBackupPages })}</span>
                 <div className="flex gap-1">
                   <button type="button" disabled={safeBackupPage === 0} onClick={() => setBackupPage(p => p - 1)}
                     className="px-2.5 py-1 rounded-lg border border-line text-xs disabled:opacity-40 hover:bg-white transition">‹</button>
@@ -3757,7 +3778,7 @@ function OwnerStorage({ userId, userName }: { userId: string; userName: string }
         {backupLoaded && backupList.length === 0 && (
           <div className="mt-4 py-8 text-center text-sm text-ink-mute">
             <Icon name="archive" className="w-8 h-8 text-ink-faint mx-auto mb-2" />
-            Tidak ada file ditemukan untuk kategori yang dipilih
+            {t("owner.storage.noFilesFoundForCategory")}
           </div>
         )}
 
@@ -3766,7 +3787,7 @@ function OwnerStorage({ userId, userName }: { userId: string; userName: string }
           {downloadProgress ? (
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
-                <span className="font-semibold text-ink">Mengunduh file…</span>
+                <span className="font-semibold text-ink">{t("owner.storage.downloadingLabel")}</span>
                 <span className="text-ink-mute tabular-nums">{downloadProgress.done}/{downloadProgress.total}</span>
               </div>
               <div className="h-2 bg-paper-deep rounded-full overflow-hidden">
@@ -3775,7 +3796,7 @@ function OwnerStorage({ userId, userName }: { userId: string; userName: string }
                   style={{ width: `${(downloadProgress.done / downloadProgress.total) * 100}%` }}
                 />
               </div>
-              <div className="text-xs text-ink-mute">ZIP dibuat di browser — jangan tutup tab ini</div>
+              <div className="text-xs text-ink-mute">{t("owner.storage.zipHint")}</div>
             </div>
           ) : (
             <Btn
@@ -3784,7 +3805,7 @@ function OwnerStorage({ userId, userName }: { userId: string; userName: string }
               disabled={!backupLoaded || backupList.length === 0 || downloading}
               onClick={downloadBackup}
             >
-              {downloading ? "Memproses…" : `Unduh Backup ZIP${backupLoaded ? ` (${backupList.length} file)` : ""}`}
+              {downloading ? t("owner.storage.processingBtn") : (backupLoaded ? t("owner.storage.downloadBackupBtnCount", { count: backupList.length }) : t("owner.storage.downloadBackupBtn"))}
             </Btn>
           )}
         </div>
@@ -3793,10 +3814,7 @@ function OwnerStorage({ userId, userName }: { userId: string; userName: string }
         <div className="mt-4 p-3.5 bg-warn-50 border border-warn-200 rounded-xl flex items-start gap-2.5">
           <Icon name="warning" className="w-4 h-4 text-warn-600 shrink-0 mt-0.5" />
           <div className="text-xs text-warn-700 leading-relaxed">
-            <span className="font-semibold">Perhatian:</span> Backup diproses di browser.
-            Kategori selfie absensi bisa sangat banyak dan memakan waktu lama.
-            Disarankan backup per-kategori untuk file yang banyak.
-            Pastikan RAM browser mencukupi untuk ZIP besar.
+            <span className="font-semibold">{t("owner.storage.warningTitle")}</span> {t("owner.storage.warningBody")}
           </div>
         </div>
       </Card>
@@ -3806,46 +3824,51 @@ function OwnerStorage({ userId, userName }: { userId: string; userName: string }
 
 // ── Nav items ──────────────────────────────────────────────────────────────────
 
-const NAV_ITEMS: NavItem[] = [
-  { section: "Overview" },
-  { id: "dashboard", label: "Dashboard",     icon: "grid"    },
-  { section: "Manajemen" },
-  { id: "branches",  label: "Cabang",        icon: "pin"     },
-  { id: "admins",    label: "Admin",         icon: "users"   },
-  { id: "classes",   label: "Kelas",         icon: "swim"    },
-  { id: "levels",    label: "Level Rapor",   icon: "book"    },
-  { section: "Keuangan" },
-  { id: "rates",     label: "Tarif Coach",   icon: "settings"},
-  { id: "invoices",  label: "Slip Gaji",     icon: "invoice" },
-  { id: "loans",     label: "Daftar Pinjaman", icon: "wallet" },
-  { id: "financial", label: "Financial",    icon: "chart"   },
-  { section: "Konten" },
-  { id: "landing",   label: "Landing Page",  icon: "star"      },
-  { section: "Sistema" },
-  { id: "storage",   label: "System Storage", icon: "archive"   },
-  { id: "activity",  label: "Activity Log",  icon: "clipboard" },
-];
+function buildNavItems(t: (key: string) => string): NavItem[] {
+  return [
+    { section: t("owner.nav.sectionOverview") },
+    { id: "dashboard", label: t("owner.nav.dashboard"), icon: "grid"    },
+    { section: t("owner.nav.sectionManagement") },
+    { id: "branches",  label: t("owner.nav.branches"),  icon: "pin"     },
+    { id: "admins",    label: t("owner.nav.admins"),    icon: "users"   },
+    { id: "classes",   label: t("owner.nav.classes"),   icon: "swim"    },
+    { id: "levels",    label: t("owner.nav.levels"),    icon: "book"    },
+    { section: t("owner.nav.sectionFinance") },
+    { id: "rates",     label: t("owner.nav.rates"),     icon: "settings"},
+    { id: "invoices",  label: t("owner.nav.invoices"),  icon: "invoice" },
+    { id: "loans",     label: t("owner.nav.loans"),     icon: "wallet" },
+    { id: "financial", label: t("owner.nav.financial"), icon: "chart"   },
+    { section: t("owner.nav.sectionContent") },
+    { id: "landing",   label: t("owner.nav.landing"),   icon: "star"      },
+    { section: t("owner.nav.sectionSystem") },
+    { id: "storage",   label: t("owner.nav.storage"),   icon: "archive"   },
+    { id: "activity",  label: t("owner.nav.activity"),  icon: "clipboard" },
+  ];
+}
 
-const TITLES: Record<string, [string, string]> = {
-  dashboard: ["Dashboard",      "Owner overview · semua cabang"],
-  branches:  ["Cabang",         "Kelola cabang Next Swimming School"],
-  admins:    ["Admin",          "Akun admin per cabang"],
-  classes:   ["Kelas",          "Semua kelas lintas cabang"],
-  levels:    ["Level Rapor",    "Template kriteria & standar waktu per level renang"],
-  rates:     ["Settings Tarif", "Tarif coach per kelas"],
-  invoices:  ["Slip Gaji",      "Invoice coach & penerbitan slip gaji"],
-  loans:     ["Daftar Pinjaman", "Kelola pinjaman & cicilan coach"],
-  financial: ["Financial",      "Income, expenses & payroll semua cabang"],
-  landing:   ["Landing Page",   "Kelola konten halaman depan"],
-  storage:   ["System Storage", "Monitoring, backup, dan pengelolaan file storage sistem"],
-  activity:  ["Activity Log",   "Semua aktivitas CRUD lintas cabang"],
-};
+function buildTitles(t: (key: string) => string): Record<string, [string, string]> {
+  return {
+    dashboard: [t("owner.titles.dashboard.title"), t("owner.titles.dashboard.sub")],
+    branches:  [t("owner.titles.branches.title"),  t("owner.titles.branches.sub")],
+    admins:    [t("owner.titles.admins.title"),    t("owner.titles.admins.sub")],
+    classes:   [t("owner.titles.classes.title"),   t("owner.titles.classes.sub")],
+    levels:    [t("owner.titles.levels.title"),    t("owner.titles.levels.sub")],
+    rates:     [t("owner.titles.rates.title"),     t("owner.titles.rates.sub")],
+    invoices:  [t("owner.titles.invoices.title"),  t("owner.titles.invoices.sub")],
+    loans:     [t("owner.titles.loans.title"),     t("owner.titles.loans.sub")],
+    financial: [t("owner.titles.financial.title"), t("owner.titles.financial.sub")],
+    landing:   [t("owner.titles.landing.title"),   t("owner.titles.landing.sub")],
+    storage:   [t("owner.titles.storage.title"),   t("owner.titles.storage.sub")],
+    activity:  [t("owner.titles.activity.title"),  t("owner.titles.activity.sub")],
+  };
+}
 
 // ── Main page ──────────────────────────────────────────────────────────────────
 
 export default function OwnerPage() {
   const supabase = createClient();
   const router = useRouter();
+  const { t } = useLocale();
   const [active, setActive] = useState("dashboard");
   const [mobileNav, setMobileNav] = useState(false);
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -3901,7 +3924,7 @@ export default function OwnerPage() {
       // Non-owner somehow on owner page
       const { data: prof } = await supabase.from("profiles").select("id").eq("id", user.id).maybeSingle();
       if (!prof) {
-        setInitError("Data akun tidak ditemukan di database. Kemungkinan data telah direset. Silakan hubungi owner untuk membuat ulang akun Anda.");
+        setInitError(t("owner.shell.notFoundBody"));
         return;
       }
       setProfile({ full_name: user.user_metadata?.full_name ?? "Owner" });
@@ -3931,17 +3954,18 @@ export default function OwnerPage() {
     activity:  <OwnerActivityLog branches={branches} />,
   };
 
-  const [title, sub] = TITLES[active] ?? ["Owner", ""];
+  const navItems = useMemo(() => buildNavItems(t), [t]);
+  const [title, sub] = buildTitles(t)[active] ?? ["Owner", ""];
 
   const brand = useMemo(() => (
     <div className="flex items-center gap-2.5">
       <Logo size={36} />
       <div className="min-w-0">
         <div className="font-display font-extrabold text-[14px] text-ocean-700 leading-tight">Owner Panel</div>
-        <div className="text-[10px] text-ink-mute tracking-wide">{profile?.full_name ?? "Owner"} · Pemilik</div>
+        <div className="text-[10px] text-ink-mute tracking-wide">{profile?.full_name ?? "Owner"} · {t("owner.shell.role")}</div>
       </div>
     </div>
-  ), [profile?.full_name]);
+  ), [profile?.full_name, t]);
 
   if (initError) return (
     <div className="min-h-screen flex items-center justify-center bg-paper-tint px-4">
@@ -3950,11 +3974,11 @@ export default function OwnerPage() {
           <Icon name="warning" className="w-7 h-7" />
         </div>
         <div>
-          <h2 className="font-display font-bold text-xl text-ink">Data Tidak Ditemukan</h2>
+          <h2 className="font-display font-bold text-xl text-ink">{t("owner.shell.notFoundTitle")}</h2>
           <p className="text-sm text-ink-mute mt-2 leading-relaxed">{initError}</p>
         </div>
         <Btn variant="primary" className="w-full" onClick={async () => { await supabase.auth.signOut(); window.location.href = "/login"; }}>
-          Kembali ke Login
+          {t("owner.shell.backToLogin")}
         </Btn>
       </div>
     </div>
@@ -3963,13 +3987,13 @@ export default function OwnerPage() {
   return (
     <div className="flex bg-paper-tint min-h-screen">
       <Sidebar
-        items={NAV_ITEMS}
+        items={navItems}
         active={active}
         onSelect={(id) => { setActive(id); setMobileNav(false); }}
         brand={brand}
         footer={
           <button onClick={logout} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold text-ink-mute hover:bg-paper-tint">
-            <Icon name="logout" className="w-4 h-4" /> Logout
+            <Icon name="logout" className="w-4 h-4" /> {t("common.actions.logout")}
           </button>
         }
       />
@@ -3980,7 +4004,7 @@ export default function OwnerPage() {
           <div className="absolute inset-0 bg-ink/40" onClick={() => setMobileNav(false)} />
           <div className="absolute left-0 top-0 bottom-0 w-72 bg-white border-r border-line p-3 overflow-y-auto">
             <div className="px-2 py-2 mb-2">{brand}</div>
-            {NAV_ITEMS.map((it) =>
+            {navItems.map((it) =>
               it.section ? (
                 <div key={it.section} className="px-3 pt-3 pb-1 text-[10px] uppercase tracking-widest font-bold text-ink-faint">{it.section}</div>
               ) : (
@@ -3998,7 +4022,7 @@ export default function OwnerPage() {
         <Topbar
           title={title}
           sub={sub}
-          search="Cari cabang, admin, invoice…"
+          search={t("owner.shell.searchPlaceholder")}
           onMenu={() => setMobileNav(true)}
           right={
             <>
