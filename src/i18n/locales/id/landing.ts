@@ -13,6 +13,21 @@ export const landing: typeof LandingEn = {
     regular: "Kelas Reguler",
     private: "Kelas Privat",
   },
+  coaches: {
+    label: "Coach Kami",
+    headline: "Kenali tim di balik setiap gaya renang.",
+    subtitle: "Bersertifikat, berpengalaman, dan sungguh-sungguh peduli pada kemajuan setiap perenang.",
+  },
+  whyNext: {
+    label: "Kenapa Next",
+    headline: "Lima alasan keluarga mempercayakan kami.",
+    subtitle: "Lebih dari sekadar les renang — sistem lengkap untuk orang tua, coach, dan progres yang bisa dipantau.",
+  },
+  testimonials: {
+    label: "Testimoni",
+    headline: "Kata keluarga renang kami.",
+    subtitle: "Cerita nyata dari orang tua dan member yang merasakan progresnya langsung.",
+  },
   partners: {
     label: "Dipercaya oleh Mitra Kami",
     ariaLabel: "Logo mitra",

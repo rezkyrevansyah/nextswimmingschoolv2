@@ -21,6 +21,8 @@ export const keys = {
   landingGallery:     (id: string)   => `landing/gallery/${id}.jpg`,
   landingPartner:     (id: string)   => `landing/partners/${id}.jpg`,
   landingProgram:     (id: string)   => `landing/programs/${id}.jpg`,
+  landingCoach:       (id: string)   => `landing/coaches/${id}.jpg`,
+  landingTestimonialV2: (id: string) => `landing/testimonials-v2/${id}.jpg`,
 } as const;
 
 // ── Upload from a Buffer ─────────────────────────────────────────────────────

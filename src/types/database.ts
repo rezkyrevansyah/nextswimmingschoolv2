@@ -1456,6 +1456,24 @@ export type Database = {
         Update: { id?: string; sort_order?: number; name?: string; description?: string | null; class_type?: string; photo_url?: string | null; updated_at?: string }
         Relationships: []
       }
+      landing_coaches: {
+        Row: { id: string; sort_order: number; name: string; photo_url: string | null; updated_at: string }
+        Insert: { id?: string; sort_order?: number; name?: string; photo_url?: string | null; updated_at?: string }
+        Update: { id?: string; sort_order?: number; name?: string; photo_url?: string | null; updated_at?: string }
+        Relationships: []
+      }
+      landing_why_next: {
+        Row: { id: string; sort_order: number; icon: string; title: string; description: string | null; updated_at: string }
+        Insert: { id?: string; sort_order?: number; icon?: string; title?: string; description?: string | null; updated_at?: string }
+        Update: { id?: string; sort_order?: number; icon?: string; title?: string; description?: string | null; updated_at?: string }
+        Relationships: []
+      }
+      landing_testimonials_v2: {
+        Row: { id: string; sort_order: number; name: string; role: string | null; body_text: string; avatar_url: string | null; rating: number; updated_at: string }
+        Insert: { id?: string; sort_order?: number; name?: string; role?: string | null; body_text?: string; avatar_url?: string | null; rating?: number; updated_at?: string }
+        Update: { id?: string; sort_order?: number; name?: string; role?: string | null; body_text?: string; avatar_url?: string | null; rating?: number; updated_at?: string }
+        Relationships: []
+      }
       trial_bookings: {
         Row: { id: string; name: string; phone: string; age_group: string | null; branch_id: string | null; preferred_time: string | null; status: string; created_at: string }
         Insert: { id?: string; name: string; phone: string; age_group?: string | null; branch_id?: string | null; preferred_time?: string | null; status?: string; created_at?: string }

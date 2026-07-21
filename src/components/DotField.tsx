@@ -260,8 +260,18 @@ const DotField = memo(function DotField({
     window.addEventListener("resize", scheduleResize);
 
     const parentEl = canvas.parentElement;
-    const resizeObserver = parentEl && "ResizeObserver" in window ? new ResizeObserver(scheduleResize) : null;
+    const resizeObserver = parentEl && "ResizeObserver" in window ? new ResizeObserver(() => doResize()) : null;
     if (resizeObserver && parentEl) resizeObserver.observe(parentEl);
+
+    // Layout (fonts, GSAP reveal, reflow) can keep nudging the section's
+    // height for a few frames after mount, faster than a single resize
+    // event fires. Re-sync a handful of times right after mount to catch up.
+    let settleFrames = 0;
+    const settleId = setInterval(() => {
+      doResize();
+      settleFrames += 1;
+      if (settleFrames >= 10) clearInterval(settleId);
+    }, 150);
 
     if (!reducedMotionRef.current) {
       window.addEventListener("mousemove", onMouseMove, { passive: true });
@@ -277,6 +287,7 @@ const DotField = memo(function DotField({
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
       if (speedInterval) clearInterval(speedInterval);
       clearTimeout(resizeTimer);
+      clearInterval(settleId);
       window.removeEventListener("resize", scheduleResize);
       window.removeEventListener("mousemove", onMouseMove);
       resizeObserver?.disconnect();

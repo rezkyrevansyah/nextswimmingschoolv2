@@ -12,9 +12,9 @@ import { createClient } from "@/utils/supabase/server";
 import { uploadToBucket, keys } from "@/utils/supabase-storage/upload";
 import { BUCKET_PUBLIC } from "@/utils/supabase-storage/client";
 
-type Target = "hero" | "safety" | "facility" | "testimonial" | "gallery" | "partner" | "program";
+type Target = "hero" | "safety" | "facility" | "testimonial" | "gallery" | "partner" | "program" | "coach" | "testimonial-v2";
 
-const ROW_TARGETS: Target[] = ["facility", "testimonial", "gallery", "partner", "program"];
+const ROW_TARGETS: Target[] = ["facility", "testimonial", "gallery", "partner", "program", "coach", "testimonial-v2"];
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 const MAX_SIZE_MB = 5;
@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
   const id = (form.get("id") as string | null) ?? null;
 
   if (!file) return NextResponse.json({ error: "File wajib diunggah." }, { status: 400 });
-  if (!target || !["hero", "safety", "facility", "testimonial", "gallery", "partner", "program"].includes(target)) {
+  if (!target || !["hero", "safety", "facility", "testimonial", "gallery", "partner", "program", "coach", "testimonial-v2"].includes(target)) {
     return NextResponse.json({ error: "Target tidak valid." }, { status: 400 });
   }
   if (ROW_TARGETS.includes(target) && (!id || !UUID_RE.test(id))) {
@@ -70,6 +70,12 @@ export async function POST(req: NextRequest) {
   } else if (target === "program") {
     const { data } = await supabase.from("landing_programs").select("id").eq("id", id!).single();
     if (!data) return NextResponse.json({ error: "Program tidak ditemukan." }, { status: 404 });
+  } else if (target === "coach") {
+    const { data } = await supabase.from("landing_coaches").select("id").eq("id", id!).single();
+    if (!data) return NextResponse.json({ error: "Coach tidak ditemukan." }, { status: 404 });
+  } else if (target === "testimonial-v2") {
+    const { data } = await supabase.from("landing_testimonials_v2").select("id").eq("id", id!).single();
+    if (!data) return NextResponse.json({ error: "Testimoni tidak ditemukan." }, { status: 404 });
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());
@@ -105,6 +111,14 @@ export async function POST(req: NextRequest) {
     case "program":
       url = await uploadToBucket(BUCKET_PUBLIC, keys.landingProgram(id!), buffer, contentType);
       ({ error: dbError } = await supabase.from("landing_programs").update({ photo_url: url }).eq("id", id!));
+      break;
+    case "coach":
+      url = await uploadToBucket(BUCKET_PUBLIC, keys.landingCoach(id!), buffer, contentType);
+      ({ error: dbError } = await supabase.from("landing_coaches").update({ photo_url: url }).eq("id", id!));
+      break;
+    case "testimonial-v2":
+      url = await uploadToBucket(BUCKET_PUBLIC, keys.landingTestimonialV2(id!), buffer, contentType);
+      ({ error: dbError } = await supabase.from("landing_testimonials_v2").update({ avatar_url: url }).eq("id", id!));
       break;
   }
 

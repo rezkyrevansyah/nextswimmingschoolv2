@@ -11,6 +11,21 @@ export const landing = {
     regular: "Group Class",
     private: "Private Class",
   },
+  coaches: {
+    label: "Our Coaches",
+    headline: "Meet the team behind every stroke.",
+    subtitle: "Certified, experienced, and genuinely invested in every swimmer's progress.",
+  },
+  whyNext: {
+    label: "Why Next",
+    headline: "Five reasons families trust us.",
+    subtitle: "More than swimming lessons — a complete system built for parents, coaches, and progress you can see.",
+  },
+  testimonials: {
+    label: "Testimonials",
+    headline: "What our swimming families say.",
+    subtitle: "Real stories from parents and members who've seen the progress firsthand.",
+  },
   partners: {
     label: "Trusted by Our Partners",
     ariaLabel: "Partner logos",

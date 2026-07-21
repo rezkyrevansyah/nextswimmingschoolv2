@@ -863,3 +863,31 @@ CREATE TABLE public.landing_programs (
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT landing_programs_pkey PRIMARY KEY (id)
 );
+CREATE TABLE public.landing_coaches (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  sort_order integer NOT NULL DEFAULT 0,
+  name text NOT NULL DEFAULT ''::text,
+  photo_url text,
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT landing_coaches_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.landing_why_next (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  sort_order integer NOT NULL DEFAULT 0,
+  icon text NOT NULL DEFAULT 'shield'::text,
+  title text NOT NULL DEFAULT ''::text,
+  description text,
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT landing_why_next_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.landing_testimonials_v2 (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  sort_order integer NOT NULL DEFAULT 0,
+  name text NOT NULL DEFAULT ''::text,
+  role text,
+  body_text text NOT NULL DEFAULT ''::text,
+  avatar_url text,
+  rating smallint NOT NULL DEFAULT 5 CHECK (rating >= 1 AND rating <= 5),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT landing_testimonials_v2_pkey PRIMARY KEY (id)
+);
