@@ -35,6 +35,8 @@ interface Student {
   level: string | null;
   criteria: PrintCriterion[];
   best_times: PrintBestTime[];
+  level_strokes: string[];
+  level_distances: number[];
 }
 
 const PAGE_SIZE = 15;
@@ -78,7 +80,7 @@ export default function AdminRaporList({ branchId, periods }: { branchId: string
         ),
         rapor_entries(
           id, scores, notes, personality, motivation, learning_achievements, level, level_id, period_id, locked,
-          rapor_levels(id, name, rapor_level_criteria(id, label, kind, options, sort_order))
+          rapor_levels(id, name, rapor_level_criteria(id, label, kind, options, sort_order), rapor_level_strokes(name, sort_order), rapor_level_distances(distance, sort_order))
         )
       `)
       .eq("branch_id", branchId);
@@ -101,11 +103,13 @@ export default function AdminRaporList({ branchId, periods }: { branchId: string
       const mc = (m.member_classes as unknown as { classes: { id: string; name: string; rapor_signer_coach_id: string | null; class_coaches: { coach_id: string; role: string; profile: { full_name: string; signature_url: string | null } | null }[] } | null }[])?.[0];
       const cls = mc?.classes;
       const signer = resolveRaporSigner(cls?.class_coaches ?? [], cls?.rapor_signer_coach_id);
-      const entry = (m.rapor_entries as unknown as { id: string; scores: Record<string, number | string>; notes: string | null; personality: string | null; motivation: string | null; learning_achievements: string | null; level: string | null; period_id: string; locked: boolean; rapor_levels: { id: string; name: string; rapor_level_criteria: { id: string; label: string; kind: string; options: string[] | null; sort_order: number }[] } | null }[])
+      const entry = (m.rapor_entries as unknown as { id: string; scores: Record<string, number | string>; notes: string | null; personality: string | null; motivation: string | null; learning_achievements: string | null; level: string | null; period_id: string; locked: boolean; rapor_levels: { id: string; name: string; rapor_level_criteria: { id: string; label: string; kind: string; options: string[] | null; sort_order: number }[]; rapor_level_strokes: { name: string; sort_order: number }[]; rapor_level_distances: { distance: number; sort_order: number }[] } | null }[])
         ?.find((e) => e.period_id === periodId);
       const criteria: PrintCriterion[] = [...(entry?.rapor_levels?.rapor_level_criteria ?? [])]
         .sort((a, b) => a.sort_order - b.sort_order)
         .map(c => ({ id: c.id, label: c.label, kind: c.kind as PrintCriterion["kind"] }));
+      const levelStrokes = [...(entry?.rapor_levels?.rapor_level_strokes ?? [])].sort((a, b) => a.sort_order - b.sort_order).map(s => s.name);
+      const levelDistances = [...(entry?.rapor_levels?.rapor_level_distances ?? [])].sort((a, b) => a.sort_order - b.sort_order).map(d => d.distance);
       return {
         id: m.id,
         full_name: profile?.full_name ?? "—",
@@ -124,6 +128,8 @@ export default function AdminRaporList({ branchId, periods }: { branchId: string
         level: entry?.level ?? null,
         criteria,
         best_times: btByMember.get(m.id) ?? [],
+        level_strokes: levelStrokes,
+        level_distances: levelDistances,
       };
     });
     setStudents(rows);
@@ -170,6 +176,7 @@ export default function AdminRaporList({ branchId, periods }: { branchId: string
     period_label: selectedPeriod?.label ?? "—", scores: s.scores, notes: s.notes,
     personality: s.personality, motivation: s.motivation, learning_achievements: s.learning_achievements,
     criteria: s.criteria, best_times: s.best_times,
+    level_strokes: s.level_strokes, level_distances: s.level_distances,
   });
 
   const handleDownloadOne = async (s: Student) => {

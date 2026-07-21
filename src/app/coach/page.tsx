@@ -22,9 +22,10 @@ import Bell from "@/components/layout/Bell";
 import BetaFeedback, { BETA_FEEDBACK_ENABLED } from "@/components/layout/BetaFeedback";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
+import { useLocale } from "@/components/providers/LocaleProvider";
 import { fmtIDR, fmtDate, fmtDateLong, waLink, mailtoLink, countTextStats } from "@/lib/utils";
 import { downloadRaporPdf, printSingleRaporPopup, fmtSwimTime, type PrintCriterion, type PrintBestTime } from "@/lib/printRapor";
-import { mergeBestTimeTemplate, type LevelBestTimeTemplateRow, type RecordedBestTime } from "@/lib/raporLevels";
+import { buildBestTimeMatrix, findUnmatchedRecordedTimes, type LevelDistance, type LevelStroke, type MatrixCell, type RecordedBestTime } from "@/lib/raporLevels";
 import { resolveRaporSigner } from "@/lib/rapor";
 import { printPayslip } from "@/lib/printPayslip";
 import { createClient } from "@/utils/supabase/client";
@@ -116,16 +117,6 @@ interface RaporEntry {
 interface BestTimeRow {
   id: string; stroke: string; distance: number; time_seconds: number;
 }
-
-interface BtRow {
-  id?: string;       // undefined = belum tersimpan di DB
-  stroke: string;    // gaya renang, free text
-  distance: string;  // jarak dalam meter sebagai string
-  time: string;      // waktu dalam detik sebagai string
-}
-
-const STROKE_SUGGESTIONS = ["Freestyle", "Backstroke", "Breaststroke", "Butterfly", "IM"];
-const DISTANCE_SUGGESTIONS = ["25", "50", "100", "200", "400"];
 
 const MONTHS_LONG_ID = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
 /** Formats "YYYY-MM" or "YYYY-MM-DD" → "Januari 2026" */
@@ -2374,6 +2365,7 @@ interface Criterion {
 }
 
 function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: string; branchId: string; coachName: string; branchName: string }) {
+  const { t } = useLocale();
   const supabase = createClient();
   const toast = useToast();
   const [period, setPeriod] = useState<{ id: string; label: string; date_to: string } | null>(null);
@@ -2390,9 +2382,12 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
   const [learningAchievements, setLearningAchievements] = useState("");
   const [level, setLevel] = useState("");
   const [levelId, setLevelId] = useState("");
-  const [levelOptions, setLevelOptions] = useState<{ id: string; name: string }[]>([]);
+  const [levelOptions, setLevelOptions] = useState<{ id: string; name: string; all_classes: boolean; class_ids: string[] }[]>([]);
   const [loadingLevelTemplate, setLoadingLevelTemplate] = useState(false);
-  const [bestTimes, setBestTimes] = useState<BtRow[]>([]);
+  const [levelDistances, setLevelDistances] = useState<LevelDistance[]>([]);
+  const [levelStrokes, setLevelStrokes] = useState<LevelStroke[]>([]);
+  const [bestTimeMatrix, setBestTimeMatrix] = useState<MatrixCell[]>([]);
+  const [otherRecorded, setOtherRecorded] = useState<RecordedBestTime[]>([]);
   const [removedBtIds, setRemovedBtIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [page, setPage] = useState(0);
@@ -2411,10 +2406,13 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
         .from("profiles").select("signature_url").eq("id", coachId).single();
       if (prof?.signature_url) setSignatureUrl(prof.signature_url as string);
 
-      // Load active rapor levels (owner-managed)
+      // Load active rapor levels (owner-managed), with their class scope
       const { data: levelRows } = await supabase
-        .from("rapor_levels").select("id, name").eq("active", true).order("sort_order");
-      setLevelOptions((levelRows ?? []) as { id: string; name: string }[]);
+        .from("rapor_levels").select("id, name, all_classes, rapor_level_classes(class_id)").eq("active", true).order("sort_order");
+      setLevelOptions((levelRows ?? []).map(l => ({
+        id: l.id, name: l.name, all_classes: l.all_classes,
+        class_ids: (l.rapor_level_classes as unknown as { class_id: string }[] ?? []).map(r => r.class_id),
+      })));
 
       // 1. Find active period
       const { data: periodData } = await supabase
@@ -2467,16 +2465,25 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
   const loadLevelTemplate = async (levelIdToLoad: string, existingBestTimes: RecordedBestTime[]) => {
     if (!levelIdToLoad) {
       setCriteria([]);
-      setBestTimes(existingBestTimes.map(r => ({ id: r.id, stroke: r.stroke, distance: String(r.distance), time: String(r.time_seconds) })));
+      setLevelDistances([]);
+      setLevelStrokes([]);
+      setBestTimeMatrix([]);
+      setOtherRecorded(existingBestTimes);
       return;
     }
     setLoadingLevelTemplate(true);
-    const [{ data: critRows }, { data: btTemplateRows }] = await Promise.all([
+    const [{ data: critRows }, { data: distRows }, { data: strokeRows }] = await Promise.all([
       supabase.from("rapor_level_criteria").select("id, label, kind, options, sort_order").eq("level_id", levelIdToLoad).order("sort_order"),
-      supabase.from("rapor_level_best_times").select("id, stroke, distance, target_time_seconds, sort_order").eq("level_id", levelIdToLoad).order("sort_order"),
+      supabase.from("rapor_level_distances").select("id, distance, sort_order").eq("level_id", levelIdToLoad).order("sort_order"),
+      supabase.from("rapor_level_strokes").select("id, name, sort_order").eq("level_id", levelIdToLoad).order("sort_order"),
     ]);
+    const distances = (distRows ?? []) as LevelDistance[];
+    const strokes = (strokeRows ?? []) as LevelStroke[];
     setCriteria((critRows ?? []) as Criterion[]);
-    setBestTimes(mergeBestTimeTemplate((btTemplateRows ?? []) as LevelBestTimeTemplateRow[], existingBestTimes));
+    setLevelDistances(distances);
+    setLevelStrokes(strokes);
+    setBestTimeMatrix(buildBestTimeMatrix(distances, strokes, existingBestTimes));
+    setOtherRecorded(findUnmatchedRecordedTimes(distances, strokes, existingBestTimes));
     setLoadingLevelTemplate(false);
   };
 
@@ -2490,7 +2497,7 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
     setLearningAchievements(e.learning_achievements ?? "");
     setLevel(e.level ?? "");
     setLevelId(e.level_id ?? "");
-    // Load best times for this member, then merge with the level's template (if any)
+    // Load best times for this member, then build the matrix from the level's template (if any)
     const { data: btRows } = await supabase
       .from("member_best_times")
       .select("id, stroke, distance, time_seconds")
@@ -2502,13 +2509,21 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
     setOpen(e);
   };
 
+  // Levels available for the class of the entry currently open — all_classes
+  // levels always show, others only when this class is in their scope.
+  const visibleLevelOptions = useMemo(() => {
+    if (!open) return levelOptions;
+    return levelOptions.filter(l => l.all_classes || l.class_ids.includes(open.class_id));
+  }, [levelOptions, open]);
+
   const handleLevelChange = async (newLevelId: string) => {
     setLevelId(newLevelId);
     const found = levelOptions.find(l => l.id === newLevelId);
     setLevel(found?.name ?? "");
-    const existingBestTimes: RecordedBestTime[] = bestTimes
-      .filter(r => r.stroke && r.distance)
-      .map(r => ({ id: r.id ?? "", stroke: r.stroke, distance: parseInt(r.distance) || 0, time_seconds: parseFloat(r.time) || 0 }));
+    const existingBestTimes: RecordedBestTime[] = [
+      ...bestTimeMatrix.filter(c => c.time.trim()).map(c => ({ id: c.recordedId ?? "", stroke: c.stroke, distance: c.distance, time_seconds: parseFloat(c.time) || 0 })),
+      ...otherRecorded,
+    ];
     await loadLevelTemplate(newLevelId, existingBestTimes);
   };
 
@@ -2557,31 +2572,29 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
       await supabase.from("member_best_times").delete().eq("id", id);
     }
     setRemovedBtIds([]);
-    // Upsert best times (dynamic rows)
-    const savedRows: BtRow[] = [...bestTimes];
-    for (let i = 0; i < savedRows.length; i++) {
-      const row = savedRows[i];
-      const stroke = row.stroke.trim();
-      const distNum = parseInt(row.distance);
-      const timeSec = parseFloat(row.time);
-      if (!stroke || !row.distance || isNaN(distNum) || distNum <= 0 || isNaN(timeSec) || timeSec <= 0) continue;
-      if (row.id) {
+    // Upsert best times — one row per filled matrix cell
+    const savedCells: MatrixCell[] = [...bestTimeMatrix];
+    for (let i = 0; i < savedCells.length; i++) {
+      const cell = savedCells[i];
+      const timeSec = parseFloat(cell.time);
+      if (!cell.time.trim() || isNaN(timeSec) || timeSec <= 0) continue;
+      if (cell.recordedId) {
         await supabase.from("member_best_times")
           .update({ time_seconds: timeSec, coach_id: coachId, recorded_at: today })
-          .eq("id", row.id);
+          .eq("id", cell.recordedId);
       } else {
         const { data: ins } = await supabase.from("member_best_times")
           .upsert(
-            { member_id: open.member_id, branch_id: branchId, stroke, distance: distNum, time_seconds: timeSec, coach_id: coachId, recorded_at: today },
+            { member_id: open.member_id, branch_id: branchId, stroke: cell.stroke, distance: cell.distance, time_seconds: timeSec, coach_id: coachId, recorded_at: today },
             { onConflict: "member_id,branch_id,stroke,distance" }
           )
           .select("id").single();
         if (ins) {
-          savedRows[i] = { ...row, id: ins.id };
+          savedCells[i] = { ...cell, recordedId: ins.id };
         }
       }
     }
-    setBestTimes(savedRows);
+    setBestTimeMatrix(savedCells);
     setSaving(false);
     // Notify member when rapor is first filled (not on updates)
     if (isNew) {
@@ -2786,8 +2799,8 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
           )}
         </div>
       )}
-      <Modal open={!!open} onClose={() => { setOpen(null); setBestTimes([]); setRemovedBtIds([]); setLevel(""); setLevelId(""); }} title={`Rapor — ${open?.member?.profile?.full_name ?? ""}`} size="lg"
-        footer={<><Btn variant="ghost" onClick={() => { setOpen(null); setBestTimes([]); setRemovedBtIds([]); setLevel(""); setLevelId(""); }}>Batal</Btn><Btn variant="primary" onClick={saveRapor} disabled={saving || notesInvalid}>{saving ? "Menyimpan…" : "Simpan rapor"}</Btn></>}>
+      <Modal open={!!open} onClose={() => { setOpen(null); setBestTimeMatrix([]); setOtherRecorded([]); setRemovedBtIds([]); setLevel(""); setLevelId(""); }} title={`Rapor — ${open?.member?.profile?.full_name ?? ""}`} size="lg"
+        footer={<><Btn variant="ghost" onClick={() => { setOpen(null); setBestTimeMatrix([]); setOtherRecorded([]); setRemovedBtIds([]); setLevel(""); setLevelId(""); }}>Batal</Btn><Btn variant="primary" onClick={saveRapor} disabled={saving || notesInvalid}>{saving ? "Menyimpan…" : "Simpan rapor"}</Btn></>}>
         <div className="space-y-5">
           {criteria.length === 0 && (
             <p className="text-xs text-warn-600">Pilih level member di bawah untuk memuat aspek penilaian.</p>
@@ -2831,7 +2844,7 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
               className="w-full border border-line rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ocean-500 bg-white disabled:opacity-60"
             >
               <option value="">— Pilih level —</option>
-              {levelOptions.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+              {visibleLevelOptions.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
             </select>
           </Field>
           <Field
@@ -2861,86 +2874,71 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
 
           {/* Personal Best Time */}
           <div className="border-t border-line pt-4 space-y-3">
-            <div className="text-xs font-bold uppercase tracking-widest text-ink-mute">Personal Best Time</div>
-            <p className="text-xs text-ink-mute -mt-1">Masukkan waktu terbaik (detik, mis. 34.58). Tambah atau hapus gaya dan jarak sesuai kebutuhan member.</p>
-
-            {/* datalist untuk autocomplete */}
-            <datalist id="bt-stroke-list">
-              {STROKE_SUGGESTIONS.map(s => <option key={s} value={s} />)}
-            </datalist>
-            <datalist id="bt-distance-list">
-              {DISTANCE_SUGGESTIONS.map(d => <option key={d} value={d} />)}
-            </datalist>
-
-            <div className="space-y-2">
-              {/* Header — hanya tampil jika ada rows */}
-              {bestTimes.length > 0 && (
-                <div className="grid grid-cols-[1fr_72px_96px_32px] gap-2 text-[10px] font-bold text-ink-mute uppercase tracking-widest px-1">
-                  <span>Gaya</span>
-                  <span className="text-center">Jarak (m)</span>
-                  <span className="text-center">Waktu (dtk)</span>
-                  <span />
+            <div className="text-xs font-bold uppercase tracking-widest text-ink-mute">{t("coach.bestTime.sectionTitle")}</div>
+            {levelDistances.length === 0 || levelStrokes.length === 0 ? (
+              <p className="text-xs text-ink-faint italic">{t("coach.bestTime.emptyNoTemplate")}</p>
+            ) : (
+              <>
+                <p className="text-xs text-ink-mute -mt-1">{t("coach.bestTime.hint")}</p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs border-collapse">
+                    <thead>
+                      <tr>
+                        <th className="text-left p-1.5 font-bold text-ink-mute uppercase tracking-widest border-b border-line" />
+                        {levelDistances.map(d => (
+                          <th key={d.id} className="text-center p-1.5 font-bold text-ink-mute uppercase tracking-widest border-b border-line">{d.distance}m</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {levelStrokes.map(s => (
+                        <tr key={s.id}>
+                          <td className="p-1.5 font-semibold text-ink border-b border-line whitespace-nowrap">{s.name}</td>
+                          {levelDistances.map(d => {
+                            const idx = bestTimeMatrix.findIndex(c => c.strokeId === s.id && c.distanceId === d.id);
+                            const cell = idx >= 0 ? bestTimeMatrix[idx] : null;
+                            return (
+                              <td key={d.id} className="p-1.5 border-b border-line">
+                                <input
+                                  type="number" min="0" step="0.01"
+                                  value={cell?.time ?? ""}
+                                  onChange={e => setBestTimeMatrix(prev => prev.map((c, i) => i === idx ? { ...c, time: e.target.value } : c))}
+                                  placeholder={t("coach.bestTime.timePlaceholder")}
+                                  className="w-full border border-line rounded-lg px-2 py-1.5 text-xs text-center font-mono focus:outline-none focus:ring-2 focus:ring-ocean-500 bg-white placeholder:text-ink-faint"
+                                />
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-              )}
+              </>
+            )}
 
-              {/* Dynamic rows */}
-              {bestTimes.map((row, idx) => (
-                <div key={idx} className="grid grid-cols-[1fr_72px_96px_32px] gap-2 items-center">
-                  <input
-                    type="text"
-                    list="bt-stroke-list"
-                    value={row.stroke}
-                    onChange={e => setBestTimes(prev => prev.map((r, i) => i === idx ? { ...r, stroke: e.target.value } : r))}
-                    placeholder="Gaya…"
-                    className="border border-line rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-ocean-500 bg-white min-w-0"
-                  />
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    list="bt-distance-list"
-                    value={row.distance}
-                    onChange={e => setBestTimes(prev => prev.map((r, i) => i === idx ? { ...r, distance: e.target.value } : r))}
-                    placeholder="25"
-                    className="border border-line rounded-lg px-2 py-1.5 text-xs text-center font-mono focus:outline-none focus:ring-2 focus:ring-ocean-500 bg-white"
-                  />
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={row.time}
-                    onChange={e => setBestTimes(prev => prev.map((r, i) => i === idx ? { ...r, time: e.target.value } : r))}
-                    placeholder="—"
-                    className="border border-line rounded-lg px-2 py-1.5 text-xs text-center font-mono focus:outline-none focus:ring-2 focus:ring-ocean-500 bg-white placeholder:text-ink-faint"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (row.id) setRemovedBtIds(prev => [...prev, row.id!]);
-                      setBestTimes(prev => prev.filter((_, i) => i !== idx));
-                    }}
-                    className="w-8 h-8 rounded-lg border border-line hover:bg-danger-50 hover:border-danger-200 flex items-center justify-center text-ink-faint hover:text-danger-500 transition-colors"
-                    title="Hapus baris ini"
-                  >
-                    <Icon name="x" className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              ))}
-
-              {/* Empty state */}
-              {bestTimes.length === 0 && (
-                <p className="text-xs text-ink-faint italic">Belum ada catatan waktu. Klik tombol di bawah untuk menambahkan.</p>
-              )}
-
-              {/* Tambah baris */}
-              <button
-                type="button"
-                onClick={() => setBestTimes(prev => [...prev, { stroke: "", distance: "", time: "" }])}
-                className="flex items-center gap-1.5 text-xs font-semibold text-ocean-600 hover:text-ocean-700 transition-colors mt-1"
-              >
-                <Icon name="plus" className="w-3.5 h-3.5" />
-                Tambah Gaya
-              </button>
-            </div>
+            {otherRecorded.length > 0 && (
+              <div className="space-y-2 pt-2">
+                <div className="text-xs font-bold uppercase tracking-widest text-ink-mute">{t("coach.bestTime.otherRecordedTitle")}</div>
+                <p className="text-xs text-ink-mute -mt-1">{t("coach.bestTime.otherRecordedHint")}</p>
+                {otherRecorded.map(row => (
+                  <div key={row.id} className="flex items-center gap-2 text-xs">
+                    <span className="flex-1 font-semibold text-ink">{row.stroke} · {row.distance}m</span>
+                    <span className="font-mono text-ink-mute">{row.time_seconds}s</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRemovedBtIds(prev => [...prev, row.id]);
+                        setOtherRecorded(prev => prev.filter(r => r.id !== row.id));
+                      }}
+                      className="w-7 h-7 rounded-lg border border-line hover:bg-danger-50 hover:border-danger-200 flex items-center justify-center text-ink-faint hover:text-danger-500 transition-colors"
+                    >
+                      <Icon name="x" className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="border-t border-line pt-4 space-y-4">

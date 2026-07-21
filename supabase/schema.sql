@@ -797,6 +797,7 @@ CREATE TABLE public.rapor_levels (
   sort_order integer NOT NULL DEFAULT 0,
   active boolean NOT NULL DEFAULT true,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
+  all_classes boolean NOT NULL DEFAULT true,
   CONSTRAINT rapor_levels_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.rapor_level_criteria (
@@ -834,6 +835,8 @@ CREATE TABLE public.manual_transactions (
   created_by_role text,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone,
+  is_reimburse boolean NOT NULL DEFAULT false,
+  proof_url text,
   CONSTRAINT manual_transactions_pkey PRIMARY KEY (id),
   CONSTRAINT manual_transactions_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branches(id),
   CONSTRAINT manual_transactions_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id)
@@ -910,4 +913,41 @@ CREATE TABLE public.landing_branches (
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT landing_branches_pkey PRIMARY KEY (id),
   CONSTRAINT landing_branches_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branches(id)
+);
+CREATE TABLE public.rapor_level_distances (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  level_id uuid NOT NULL,
+  distance integer NOT NULL CHECK (distance > 0),
+  sort_order integer NOT NULL DEFAULT 0,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT rapor_level_distances_pkey PRIMARY KEY (id),
+  CONSTRAINT rapor_level_distances_level_id_fkey FOREIGN KEY (level_id) REFERENCES public.rapor_levels(id)
+);
+CREATE TABLE public.rapor_level_strokes (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  level_id uuid NOT NULL,
+  name text NOT NULL,
+  sort_order integer NOT NULL DEFAULT 0,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT rapor_level_strokes_pkey PRIMARY KEY (id),
+  CONSTRAINT rapor_level_strokes_level_id_fkey FOREIGN KEY (level_id) REFERENCES public.rapor_levels(id)
+);
+CREATE TABLE public.rapor_level_best_time_targets (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  level_id uuid NOT NULL,
+  stroke_id uuid NOT NULL,
+  distance_id uuid NOT NULL,
+  target_time_seconds numeric CHECK (target_time_seconds IS NULL OR target_time_seconds > 0::numeric),
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT rapor_level_best_time_targets_pkey PRIMARY KEY (id),
+  CONSTRAINT rapor_level_best_time_targets_level_id_fkey FOREIGN KEY (level_id) REFERENCES public.rapor_levels(id),
+  CONSTRAINT rapor_level_best_time_targets_stroke_id_fkey FOREIGN KEY (stroke_id) REFERENCES public.rapor_level_strokes(id),
+  CONSTRAINT rapor_level_best_time_targets_distance_id_fkey FOREIGN KEY (distance_id) REFERENCES public.rapor_level_distances(id)
+);
+CREATE TABLE public.rapor_level_classes (
+  level_id uuid NOT NULL,
+  class_id uuid NOT NULL,
+  CONSTRAINT rapor_level_classes_pkey PRIMARY KEY (level_id, class_id),
+  CONSTRAINT rapor_level_classes_level_id_fkey FOREIGN KEY (level_id) REFERENCES public.rapor_levels(id),
+  CONSTRAINT rapor_level_classes_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.classes(id)
 );

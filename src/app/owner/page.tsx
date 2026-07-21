@@ -15,7 +15,6 @@ import Topbar from "@/components/layout/Topbar";
 import Bell from "@/components/layout/Bell";
 import BetaFeedback, { BETA_FEEDBACK_ENABLED } from "@/components/layout/BetaFeedback";
 import { fmtIDR, clampPercent } from "@/lib/utils";
-import { fmtSwimTime } from "@/lib/printRapor";
 import { logActivity } from "@/lib/activityLog";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
@@ -1043,13 +1042,18 @@ interface RaporLevel {
   name: string;
   sort_order: number;
   active: boolean;
+  all_classes: boolean;
 }
+
+interface ClassOption { id: string; name: string; branch_id: string; branch_name: string | null; }
 
 interface LevelCriterion {
   id: string; label: string; kind: string; options: string[] | null; sort_order: number;
 }
 
-interface BestTimeTemplateRow { id: string; stroke: string; distance: number; target_time_seconds: number | null; sort_order: number }
+interface LevelDistanceRow { id: string; distance: number; sort_order: number }
+interface LevelStrokeRow { id: string; name: string; sort_order: number }
+interface BestTimeTargetRow { id: string; stroke_id: string; distance_id: string; target_time_seconds: number | null }
 
 function OwnerRaporLevels() {
   const { t } = useLocale();
@@ -1068,14 +1072,50 @@ function OwnerRaporLevels() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase.from("rapor_levels").select("id, name, sort_order, active").order("sort_order");
+    const { data } = await supabase.from("rapor_levels").select("id, name, sort_order, active, all_classes").order("sort_order");
     setLevels((data ?? []) as RaporLevel[]);
     setLoading(false);
   }, [supabase]);
 
+  // ── Class scope ──────────────────────────────────────────────────────────────
+  const [classScopeLevel, setClassScopeLevel] = useState<RaporLevel | null>(null);
+  const [classOptions, setClassOptions] = useState<ClassOption[]>([]);
+  const [selectedClassIds, setSelectedClassIds] = useState<Set<string>>(new Set());
+
+  const loadClassOptions = useCallback(async () => {
+    const { data } = await supabase.from("classes").select("id, name, branch_id, branch:branches(name)").eq("status", "active").order("branch_id").order("name");
+    setClassOptions((data ?? []).map(c => ({ id: c.id, name: c.name, branch_id: c.branch_id, branch_name: (c.branch as unknown as { name: string } | null)?.name ?? null })));
+  }, [supabase]);
+
   /* eslint-disable react-hooks/set-state-in-effect -- async data loader */
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); loadClassOptions(); }, [load, loadClassOptions]);
   /* eslint-enable react-hooks/set-state-in-effect */
+
+  const openClassScope = async (lvl: RaporLevel) => {
+    setClassScopeLevel(lvl);
+    const { data } = await supabase.from("rapor_level_classes").select("class_id").eq("level_id", lvl.id);
+    setSelectedClassIds(new Set((data ?? []).map(r => r.class_id)));
+  };
+
+  const setAllClasses = async (value: boolean) => {
+    if (!classScopeLevel) return;
+    const { error } = await supabase.from("rapor_levels").update({ all_classes: value }).eq("id", classScopeLevel.id);
+    if (error) return toast.error(t("owner.raporLevels.saveFailed"), error.message);
+    setClassScopeLevel(prev => prev ? { ...prev, all_classes: value } : prev);
+    setLevels(prev => prev.map(l => l.id === classScopeLevel.id ? { ...l, all_classes: value } : l));
+  };
+
+  const toggleClassSelection = async (classId: string) => {
+    if (!classScopeLevel) return;
+    const checked = selectedClassIds.has(classId);
+    if (checked) {
+      await supabase.from("rapor_level_classes").delete().eq("level_id", classScopeLevel.id).eq("class_id", classId);
+      setSelectedClassIds(prev => { const next = new Set(prev); next.delete(classId); return next; });
+    } else {
+      await supabase.from("rapor_level_classes").insert({ level_id: classScopeLevel.id, class_id: classId });
+      setSelectedClassIds(prev => new Set(prev).add(classId));
+    }
+  };
 
   const addLevel = async () => {
     if (!newName.trim()) return toast.error(t("owner.raporLevels.nameRequired"));
@@ -1215,63 +1255,110 @@ function OwnerRaporLevels() {
     toast.success(t("owner.raporLevels.bulkUpdated"));
   };
 
-  // ── Personal Best Time template ─────────────────────────────────────────────
-  const [bestTimeRows, setBestTimeRows] = useState<BestTimeTemplateRow[]>([]);
+  // ── Personal Best Time matrix (distances x strokes x per-cell target) ───────
+  const [distances, setDistances] = useState<LevelDistanceRow[]>([]);
+  const [strokes, setStrokes] = useState<LevelStrokeRow[]>([]);
+  const [targets, setTargets] = useState<BestTimeTargetRow[]>([]);
   const [loadingBestTimes, setLoadingBestTimes] = useState(false);
-  const [btForm, setBtForm] = useState({ stroke: "", distance: "", target: "" });
-  const [savingBt, setSavingBt] = useState(false);
-  const [editingBt, setEditingBt] = useState<{ id: string; stroke: string; distance: string; target: string } | null>(null);
+  const [newDistance, setNewDistance] = useState("");
+  const [addingDistance, setAddingDistance] = useState(false);
+  const [newStroke, setNewStroke] = useState("");
+  const [addingStroke, setAddingStroke] = useState(false);
+  const [cellDrafts, setCellDrafts] = useState<Map<string, string>>(new Map());
+  const [savingCell, setSavingCell] = useState<string | null>(null);
 
-  const loadBestTimes = useCallback(async (levelId: string) => {
+  const targetKey = (strokeId: string, distanceId: string) => `${strokeId}:${distanceId}`;
+
+  const loadBestTimeMatrix = useCallback(async (levelId: string) => {
     setLoadingBestTimes(true);
-    const { data } = await supabase.from("rapor_level_best_times").select("id, stroke, distance, target_time_seconds, sort_order").eq("level_id", levelId).order("sort_order");
-    setBestTimeRows((data ?? []) as BestTimeTemplateRow[]);
+    const [{ data: d }, { data: s }, { data: tg }] = await Promise.all([
+      supabase.from("rapor_level_distances").select("id, distance, sort_order").eq("level_id", levelId).order("sort_order"),
+      supabase.from("rapor_level_strokes").select("id, name, sort_order").eq("level_id", levelId).order("sort_order"),
+      supabase.from("rapor_level_best_time_targets").select("id, stroke_id, distance_id, target_time_seconds").eq("level_id", levelId),
+    ]);
+    setDistances((d ?? []) as LevelDistanceRow[]);
+    setStrokes((s ?? []) as LevelStrokeRow[]);
+    setTargets((tg ?? []) as BestTimeTargetRow[]);
+    setCellDrafts(new Map());
     setLoadingBestTimes(false);
   }, [supabase]);
 
   const openBestTimes = (lvl: RaporLevel) => {
     setBestTimeLevel(lvl);
-    setBtForm({ stroke: "", distance: "", target: "" });
-    setEditingBt(null);
-    loadBestTimes(lvl.id);
+    setNewDistance("");
+    setNewStroke("");
+    loadBestTimeMatrix(lvl.id);
   };
 
-  const addBestTimeRow = async () => {
+  const addDistance = async () => {
     if (!bestTimeLevel) return;
-    const stroke = btForm.stroke.trim();
-    const distance = parseInt(btForm.distance);
-    if (!stroke || !btForm.distance || isNaN(distance) || distance <= 0) return toast.error(t("owner.raporLevels.strokeDistanceRequired"));
-    const target = btForm.target.trim() ? parseFloat(btForm.target) : null;
-    setSavingBt(true);
-    const { error } = await supabase.from("rapor_level_best_times").insert({
-      level_id: bestTimeLevel.id, stroke, distance, target_time_seconds: target, sort_order: bestTimeRows.length,
+    const distance = parseInt(newDistance);
+    if (!newDistance.trim() || isNaN(distance) || distance <= 0) return toast.error(t("owner.raporLevels.distanceRequired"));
+    setAddingDistance(true);
+    const { error } = await supabase.from("rapor_level_distances").insert({
+      level_id: bestTimeLevel.id, distance, sort_order: distances.length,
     });
-    setSavingBt(false);
-    if (error) return toast.error(t("owner.raporLevels.addRowFailed"), error.message);
+    setAddingDistance(false);
+    if (error) {
+      if (error.code === "23505") return toast.error(t("owner.raporLevels.distanceDuplicate"));
+      return toast.error(t("owner.raporLevels.addRowFailed"), error.message);
+    }
     toast.success(t("owner.raporLevels.rowAdded"));
-    setBtForm({ stroke: "", distance: "", target: "" });
-    loadBestTimes(bestTimeLevel.id);
+    setNewDistance("");
+    loadBestTimeMatrix(bestTimeLevel.id);
   };
 
-  const deleteBestTimeRow = async (id: string) => {
-    const yes = await confirm({ body: t("owner.raporLevels.rowDeleteConfirmBody") });
+  const deleteDistance = async (id: string) => {
+    const yes = await confirm({ body: t("owner.raporLevels.deleteDistanceConfirmBody") });
     if (!yes) return;
-    await supabase.from("rapor_level_best_times").delete().eq("id", id);
-    setBestTimeRows(prev => prev.filter(r => r.id !== id));
+    await supabase.from("rapor_level_distances").delete().eq("id", id);
+    if (bestTimeLevel) loadBestTimeMatrix(bestTimeLevel.id);
     toast.success(t("owner.raporLevels.rowDeleted"));
   };
 
-  const saveBestTimeEdit = async () => {
-    if (!editingBt) return;
-    const stroke = editingBt.stroke.trim();
-    const distance = parseInt(editingBt.distance);
-    if (!stroke || !editingBt.distance || isNaN(distance) || distance <= 0) return toast.error(t("owner.raporLevels.strokeDistanceRequired"));
-    const target = editingBt.target.trim() ? parseFloat(editingBt.target) : null;
-    const { error } = await supabase.from("rapor_level_best_times").update({ stroke, distance, target_time_seconds: target }).eq("id", editingBt.id);
-    if (error) return toast.error(t("owner.raporLevels.saveFailed"), error.message);
-    setBestTimeRows(prev => prev.map(r => r.id === editingBt.id ? { ...r, stroke, distance, target_time_seconds: target } : r));
-    setEditingBt(null);
-    toast.success(t("owner.raporLevels.rowUpdated"));
+  const addStroke = async () => {
+    if (!bestTimeLevel) return;
+    const name = newStroke.trim();
+    if (!name) return toast.error(t("owner.raporLevels.strokeRequired"));
+    setAddingStroke(true);
+    const { error } = await supabase.from("rapor_level_strokes").insert({
+      level_id: bestTimeLevel.id, name, sort_order: strokes.length,
+    });
+    setAddingStroke(false);
+    if (error) {
+      if (error.code === "23505") return toast.error(t("owner.raporLevels.strokeDuplicate"));
+      return toast.error(t("owner.raporLevels.addRowFailed"), error.message);
+    }
+    toast.success(t("owner.raporLevels.rowAdded"));
+    setNewStroke("");
+    loadBestTimeMatrix(bestTimeLevel.id);
+  };
+
+  const deleteStroke = async (id: string) => {
+    const yes = await confirm({ body: t("owner.raporLevels.deleteStrokeConfirmBody") });
+    if (!yes) return;
+    await supabase.from("rapor_level_strokes").delete().eq("id", id);
+    if (bestTimeLevel) loadBestTimeMatrix(bestTimeLevel.id);
+    toast.success(t("owner.raporLevels.rowDeleted"));
+  };
+
+  const saveTargetCell = async (strokeId: string, distanceId: string, rawValue: string) => {
+    if (!bestTimeLevel) return;
+    const key = targetKey(strokeId, distanceId);
+    const existing = targets.find(tg => tg.stroke_id === strokeId && tg.distance_id === distanceId);
+    const value = rawValue.trim() ? parseFloat(rawValue) : null;
+    setSavingCell(key);
+    if (value == null) {
+      if (existing) await supabase.from("rapor_level_best_time_targets").delete().eq("id", existing.id);
+    } else if (existing) {
+      await supabase.from("rapor_level_best_time_targets").update({ target_time_seconds: value }).eq("id", existing.id);
+    } else {
+      await supabase.from("rapor_level_best_time_targets").insert({
+        level_id: bestTimeLevel.id, stroke_id: strokeId, distance_id: distanceId, target_time_seconds: value,
+      });
+    }
+    setSavingCell(null);
+    loadBestTimeMatrix(bestTimeLevel.id);
   };
 
   return (
@@ -1316,6 +1403,7 @@ function OwnerRaporLevels() {
                     </div>
                     <Btn variant="ghost" size="sm" icon="book" onClick={() => openCriteria(lvl)}>{t("owner.raporLevels.criteriaBtn")}</Btn>
                     <Btn variant="ghost" size="sm" icon="target" onClick={() => openBestTimes(lvl)}>{t("owner.raporLevels.timeBtn")}</Btn>
+                    <Btn variant="ghost" size="sm" icon="users" onClick={() => openClassScope(lvl)}>{t("owner.raporLevels.classScopeBtn")}</Btn>
                     <button onClick={() => setRenaming({ id: lvl.id, name: lvl.name })} title={t("owner.raporLevels.renameTitle")}
                       className="w-8 h-8 rounded-lg hover:bg-paper-tint text-ink-mute hover:text-ocean-600 flex items-center justify-center"><Icon name="edit" className="w-4 h-4" /></button>
                     <button onClick={() => toggleActive(lvl)} title={lvl.active ? t("owner.raporLevels.deactivateTitle") : t("owner.raporLevels.activateTitle")}
@@ -1450,63 +1538,139 @@ function OwnerRaporLevels() {
         </div>
       </Modal>
 
-      <Modal open={!!bestTimeLevel} onClose={() => { setBestTimeLevel(null); setBtForm({ stroke: "", distance: "", target: "" }); setEditingBt(null); }}
+      <Modal open={!!bestTimeLevel} onClose={() => setBestTimeLevel(null)}
         title={t("owner.raporLevels.bestTimeModalTitle", { level: bestTimeLevel?.name ?? "" })} size="lg"
-        footer={<Btn variant="ghost" onClick={() => { setBestTimeLevel(null); setBtForm({ stroke: "", distance: "", target: "" }); setEditingBt(null); }}>{t("common.actions.close")}</Btn>}>
-        <div className="space-y-5">
+        footer={<Btn variant="ghost" onClick={() => setBestTimeLevel(null)}>{t("common.actions.close")}</Btn>}>
+        <div className="space-y-6">
           <p className="text-xs text-ink-mute">{t("owner.raporLevels.bestTimeHint")}</p>
           {loadingBestTimes ? <div className="text-ink-mute text-sm text-center py-6">{t("owner.raporLevels.criteriaLoading")}</div> : (
             <>
-              {bestTimeRows.length > 0 ? (
-                <div className="space-y-2">
-                  {bestTimeRows.map((row, i) => (
-                    <div key={row.id} className="rounded-xl border border-line overflow-hidden">
-                      {editingBt?.id === row.id ? (
-                        <div className="p-3 grid grid-cols-3 gap-2 items-end bg-ocean-50/40">
-                          <Field label={t("owner.raporLevels.fieldStroke")}><Input value={editingBt.stroke} onChange={e => setEditingBt(v => v ? { ...v, stroke: e.target.value } : v)} /></Field>
-                          <Field label={t("owner.raporLevels.fieldDistance")}><Input inputMode="numeric" value={editingBt.distance} onChange={e => setEditingBt(v => v ? { ...v, distance: e.target.value } : v)} /></Field>
-                          <Field label={t("owner.raporLevels.fieldTarget")}><Input inputMode="decimal" value={editingBt.target} onChange={e => setEditingBt(v => v ? { ...v, target: e.target.value } : v)} placeholder={t("owner.raporLevels.fieldTargetPlaceholder")} /></Field>
-                          <div className="col-span-3 flex gap-2">
-                            <Btn variant="primary" size="sm" onClick={saveBestTimeEdit}>{t("owner.raporLevels.saveBtn")}</Btn>
-                            <Btn variant="ghost" size="sm" onClick={() => setEditingBt(null)}>{t("owner.raporLevels.cancelBtn")}</Btn>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-3 p-3 hover:bg-paper-tint">
-                          <span className="w-6 h-6 rounded-full bg-ocean-50 text-ocean-700 text-xs font-bold flex items-center justify-center shrink-0">{i + 1}</span>
-                          <div className="flex-1 min-w-0">
-                            <div className="font-semibold text-ink text-sm">{row.stroke} · {row.distance}m</div>
-                            <div className="text-xs text-ink-mute">{row.target_time_seconds != null ? t("owner.raporLevels.standardPrefix", { time: fmtSwimTime(row.target_time_seconds) }) : t("owner.raporLevels.noStandard")}</div>
-                          </div>
-                          <button onClick={() => setEditingBt({ id: row.id, stroke: row.stroke, distance: String(row.distance), target: row.target_time_seconds != null ? String(row.target_time_seconds) : "" })}
-                            className="w-7 h-7 rounded-lg hover:bg-ocean-50 text-ink-faint hover:text-ocean-600 flex items-center justify-center shrink-0" title={t("owner.raporLevels.editTitle")}>
-                            <Icon name="edit" className="w-3.5 h-3.5" />
-                          </button>
-                          <button onClick={() => deleteBestTimeRow(row.id)}
-                            className="w-7 h-7 rounded-lg hover:bg-danger-50 text-ink-faint hover:text-danger-500 flex items-center justify-center shrink-0" title={t("owner.raporLevels.deleteTitle")}>
-                            <Icon name="x" className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      )}
-                    </div>
+              <div className="space-y-2">
+                <div className="text-xs font-bold uppercase tracking-widest text-ink-faint">{t("owner.raporLevels.distancesTitle")}</div>
+                {distances.length === 0 && <p className="text-sm text-ink-mute">{t("owner.raporLevels.distancesEmpty")}</p>}
+                <div className="flex flex-wrap gap-2">
+                  {distances.map(d => (
+                    <span key={d.id} className="inline-flex items-center gap-1.5 pl-3 pr-1.5 py-1.5 rounded-full bg-ocean-50 text-ocean-700 text-sm font-semibold">
+                      {d.distance}m
+                      <button type="button" onClick={() => deleteDistance(d.id)} className="w-5 h-5 rounded-full hover:bg-danger-100 text-ocean-700 hover:text-danger-600 flex items-center justify-center">
+                        <Icon name="x" className="w-3 h-3" />
+                      </button>
+                    </span>
                   ))}
                 </div>
-              ) : (
-                <p className="text-sm text-ink-mute">{t("owner.raporLevels.bestTimeEmpty")}</p>
-              )}
-
-              <div className="border-t border-line pt-4 space-y-3">
-                <div className="text-xs font-bold uppercase tracking-widest text-ink-faint">{t("owner.raporLevels.addNewRowTitle")}</div>
-                <div className="grid grid-cols-3 gap-3">
-                  <Field label={t("owner.raporLevels.fieldStroke")} required><Input value={btForm.stroke} onChange={e => setBtForm(f => ({ ...f, stroke: e.target.value }))} placeholder={t("owner.raporLevels.fieldStrokePlaceholder")} /></Field>
-                  <Field label={t("owner.raporLevels.fieldDistance")} required><Input inputMode="numeric" value={btForm.distance} onChange={e => setBtForm(f => ({ ...f, distance: e.target.value }))} placeholder="50" /></Field>
-                  <Field label={t("owner.raporLevels.fieldTarget")}><Input inputMode="decimal" value={btForm.target} onChange={e => setBtForm(f => ({ ...f, target: e.target.value }))} placeholder={t("owner.raporLevels.fieldTargetPlaceholder")} /></Field>
+                <div className="flex items-center gap-2">
+                  <Input inputMode="numeric" value={newDistance} onChange={e => setNewDistance(e.target.value)} placeholder={t("owner.raporLevels.addDistancePlaceholder")} className="max-w-[140px]" />
+                  <Btn variant="outline" size="sm" icon="plus" onClick={addDistance} disabled={addingDistance}>{t("owner.raporLevels.addDistanceBtn")}</Btn>
                 </div>
-                <Btn variant="primary" size="sm" icon="plus" onClick={addBestTimeRow} disabled={savingBt}>{savingBt ? t("owner.raporLevels.savingCriterion") : t("owner.raporLevels.addRowBtn")}</Btn>
+              </div>
+
+              <div className="space-y-2">
+                <div className="text-xs font-bold uppercase tracking-widest text-ink-faint">{t("owner.raporLevels.strokesTitle")}</div>
+                {strokes.length === 0 && <p className="text-sm text-ink-mute">{t("owner.raporLevels.strokesEmpty")}</p>}
+                <div className="flex flex-wrap gap-2">
+                  {strokes.map(s => (
+                    <span key={s.id} className="inline-flex items-center gap-1.5 pl-3 pr-1.5 py-1.5 rounded-full bg-wave-50 text-wave-700 text-sm font-semibold">
+                      {s.name}
+                      <button type="button" onClick={() => deleteStroke(s.id)} className="w-5 h-5 rounded-full hover:bg-danger-100 text-wave-700 hover:text-danger-600 flex items-center justify-center">
+                        <Icon name="x" className="w-3 h-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Input value={newStroke} onChange={e => setNewStroke(e.target.value)} placeholder={t("owner.raporLevels.addStrokePlaceholder")} className="max-w-[220px]" />
+                  <Btn variant="outline" size="sm" icon="plus" onClick={addStroke} disabled={addingStroke}>{t("owner.raporLevels.addStrokeBtn")}</Btn>
+                </div>
+              </div>
+
+              <div className="space-y-2 border-t border-line pt-4">
+                <div className="text-xs font-bold uppercase tracking-widest text-ink-faint">{t("owner.raporLevels.targetsTitle")}</div>
+                <p className="text-xs text-ink-mute">{t("owner.raporLevels.targetsHint")}</p>
+                {distances.length === 0 || strokes.length === 0 ? (
+                  <p className="text-sm text-ink-mute">{t("owner.raporLevels.targetsEmptyNeedBoth")}</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm border-collapse">
+                      <thead>
+                        <tr>
+                          <th className="text-left p-2 text-xs uppercase tracking-widest text-ink-faint font-bold border-b border-line">{t("owner.raporLevels.strokesTitle")}</th>
+                          {distances.map(d => (
+                            <th key={d.id} className="text-center p-2 text-xs uppercase tracking-widest text-ink-faint font-bold border-b border-line">{d.distance}m</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {strokes.map(s => (
+                          <tr key={s.id}>
+                            <td className="p-2 font-semibold text-ink border-b border-line">{s.name}</td>
+                            {distances.map(d => {
+                              const key = targetKey(s.id, d.id);
+                              const existing = targets.find(tg => tg.stroke_id === s.id && tg.distance_id === d.id);
+                              const draft = cellDrafts.get(key);
+                              const value = draft !== undefined ? draft : (existing?.target_time_seconds != null ? String(existing.target_time_seconds) : "");
+                              return (
+                                <td key={d.id} className="p-2 border-b border-line">
+                                  <Input
+                                    inputMode="decimal"
+                                    value={value}
+                                    placeholder={t("owner.raporLevels.targetPlaceholder")}
+                                    disabled={savingCell === key}
+                                    onChange={e => setCellDrafts(prev => new Map(prev).set(key, e.target.value))}
+                                    onBlur={e => saveTargetCell(s.id, d.id, e.target.value)}
+                                    className="text-center"
+                                  />
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             </>
           )}
         </div>
+      </Modal>
+
+      <Modal open={!!classScopeLevel} onClose={() => setClassScopeLevel(null)}
+        title={t("owner.raporLevels.classScopeModalTitle", { level: classScopeLevel?.name ?? "" })} size="md"
+        footer={<Btn variant="ghost" onClick={() => setClassScopeLevel(null)}>{t("common.actions.close")}</Btn>}>
+        {classScopeLevel && (
+          <div className="space-y-4">
+            <p className="text-xs text-ink-mute">{t("owner.raporLevels.classScopeHint")}</p>
+            <div className="flex gap-2">
+              <button type="button" onClick={() => setAllClasses(true)}
+                className={`flex-1 py-2 rounded-lg text-sm font-semibold border transition-colors ${classScopeLevel.all_classes ? "bg-ocean-700 text-white border-ocean-700" : "bg-white text-ink-soft border-line hover:bg-paper-tint"}`}>
+                {t("owner.raporLevels.allClasses")}
+              </button>
+              <button type="button" onClick={() => setAllClasses(false)}
+                className={`flex-1 py-2 rounded-lg text-sm font-semibold border transition-colors ${!classScopeLevel.all_classes ? "bg-ocean-700 text-white border-ocean-700" : "bg-white text-ink-soft border-line hover:bg-paper-tint"}`}>
+                {t("owner.raporLevels.specificClasses")}
+              </button>
+            </div>
+
+            {!classScopeLevel.all_classes && (
+              classOptions.length === 0 ? (
+                <p className="text-sm text-ink-mute">{t("owner.raporLevels.classesEmpty")}</p>
+              ) : (
+                <div className="max-h-80 overflow-y-auto divide-y divide-line border border-line rounded-xl">
+                  {classOptions.map(c => (
+                    <label key={c.id} className="flex items-center gap-3 p-3 hover:bg-paper-tint cursor-pointer">
+                      <input type="checkbox" className="rounded border-line accent-ocean-600"
+                        checked={selectedClassIds.has(c.id)} onChange={() => toggleClassSelection(c.id)} />
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-ink text-sm">{c.name}</div>
+                        {c.branch_name && <div className="text-xs text-ink-mute">{c.branch_name}</div>}
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              )
+            )}
+          </div>
+        )}
       </Modal>
     </div>
   );

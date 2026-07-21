@@ -2979,6 +2979,55 @@ export type Database = {
           },
         ]
       }
+      rapor_level_best_time_targets: {
+        Row: {
+          created_at: string
+          distance_id: string
+          id: string
+          level_id: string
+          stroke_id: string
+          target_time_seconds: number | null
+        }
+        Insert: {
+          created_at?: string
+          distance_id: string
+          id?: string
+          level_id: string
+          stroke_id: string
+          target_time_seconds?: number | null
+        }
+        Update: {
+          created_at?: string
+          distance_id?: string
+          id?: string
+          level_id?: string
+          stroke_id?: string
+          target_time_seconds?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rapor_level_best_time_targets_distance_id_fkey"
+            columns: ["distance_id"]
+            isOneToOne: false
+            referencedRelation: "rapor_level_distances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rapor_level_best_time_targets_level_id_fkey"
+            columns: ["level_id"]
+            isOneToOne: false
+            referencedRelation: "rapor_levels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rapor_level_best_time_targets_stroke_id_fkey"
+            columns: ["stroke_id"]
+            isOneToOne: false
+            referencedRelation: "rapor_level_strokes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       rapor_level_best_times: {
         Row: {
           created_at: string
@@ -3010,6 +3059,36 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "rapor_level_best_times_level_id_fkey"
+            columns: ["level_id"]
+            isOneToOne: false
+            referencedRelation: "rapor_levels"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rapor_level_classes: {
+        Row: {
+          class_id: string
+          level_id: string
+        }
+        Insert: {
+          class_id: string
+          level_id: string
+        }
+        Update: {
+          class_id?: string
+          level_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rapor_level_classes_class_id_fkey"
+            columns: ["class_id"]
+            isOneToOne: false
+            referencedRelation: "classes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rapor_level_classes_level_id_fkey"
             columns: ["level_id"]
             isOneToOne: false
             referencedRelation: "rapor_levels"
@@ -3055,9 +3134,74 @@ export type Database = {
           },
         ]
       }
+      rapor_level_distances: {
+        Row: {
+          created_at: string
+          distance: number
+          id: string
+          level_id: string
+          sort_order: number
+        }
+        Insert: {
+          created_at?: string
+          distance: number
+          id?: string
+          level_id: string
+          sort_order?: number
+        }
+        Update: {
+          created_at?: string
+          distance?: number
+          id?: string
+          level_id?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rapor_level_distances_level_id_fkey"
+            columns: ["level_id"]
+            isOneToOne: false
+            referencedRelation: "rapor_levels"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rapor_level_strokes: {
+        Row: {
+          created_at: string
+          id: string
+          level_id: string
+          name: string
+          sort_order: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          level_id: string
+          name: string
+          sort_order?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          level_id?: string
+          name?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rapor_level_strokes_level_id_fkey"
+            columns: ["level_id"]
+            isOneToOne: false
+            referencedRelation: "rapor_levels"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       rapor_levels: {
         Row: {
           active: boolean
+          all_classes: boolean
           created_at: string
           id: string
           name: string
@@ -3065,6 +3209,7 @@ export type Database = {
         }
         Insert: {
           active?: boolean
+          all_classes?: boolean
           created_at?: string
           id?: string
           name: string
@@ -3072,6 +3217,7 @@ export type Database = {
         }
         Update: {
           active?: boolean
+          all_classes?: boolean
           created_at?: string
           id?: string
           name?: string

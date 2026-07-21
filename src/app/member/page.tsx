@@ -1058,6 +1058,8 @@ interface RaporEntryFull {
   coachReviews: CoachReviewSlot[];
   criteria: PrintCriterion[];
   best_times: PrintBestTime[];
+  level_strokes: string[];
+  level_distances: number[];
   coach_signature_url: string | null;
 }
 
@@ -1078,7 +1080,7 @@ function MemberRapor({ memberId, memberName, branchId, avatarUrl, memberNo, birt
     if (!memberId) return;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data } = await (supabase as any).from("rapor_entries")
-      .select("id, scores, notes, personality, motivation, learning_achievements, level, coach_id, period_id, class_id, rapor_periods(label, is_open), classes(name, rapor_signer_coach_id, class_coaches(coach_id, role, profile:profiles(full_name, signature_url))), coach:profiles!rapor_entries_coach_id_fkey(full_name, signature_url)")
+      .select("id, scores, notes, personality, motivation, learning_achievements, level, level_id, coach_id, period_id, class_id, rapor_periods(label, is_open), classes(name, rapor_signer_coach_id, class_coaches(coach_id, role, profile:profiles(full_name, signature_url))), coach:profiles!rapor_entries_coach_id_fkey(full_name, signature_url)")
       .eq("member_id", memberId)
       .order("created_at", { ascending: false }) as { data: any[] | null };
     if (!data) return;
@@ -1114,6 +1116,23 @@ function MemberRapor({ memberId, memberName, branchId, avatarUrl, memberNo, birt
       time_seconds: (r as { time_seconds: number }).time_seconds,
     }));
 
+    // Load each distinct level's ordered strokes/distances in one batch pair of queries
+    const levelIds = [...new Set(data.map((e) => e.level_id).filter(Boolean))];
+    const [{ data: levelStrokeRows }, { data: levelDistanceRows }] = levelIds.length
+      ? await Promise.all([
+          supabase.from("rapor_level_strokes").select("level_id, name, sort_order").in("level_id", levelIds).order("sort_order"),
+          supabase.from("rapor_level_distances").select("level_id, distance, sort_order").in("level_id", levelIds).order("sort_order"),
+        ])
+      : [{ data: [] }, { data: [] }];
+    const strokesByLevel = new Map<string, string[]>();
+    for (const row of (levelStrokeRows ?? []) as { level_id: string; name: string }[]) {
+      strokesByLevel.set(row.level_id, [...(strokesByLevel.get(row.level_id) ?? []), row.name]);
+    }
+    const distancesByLevel = new Map<string, number[]>();
+    for (const row of (levelDistanceRows ?? []) as { level_id: string; distance: number }[]) {
+      distancesByLevel.set(row.level_id, [...(distancesByLevel.get(row.level_id) ?? []), row.distance]);
+    }
+
     setEntries(data.map((e) => {
       const p = e.rapor_periods as unknown as { label: string; is_open: boolean } | null;
       const cls = e.classes as unknown as { name: string; rapor_signer_coach_id: string | null; class_coaches: { coach_id: string; role: string; profile: { full_name: string; signature_url: string | null } | null }[] } | null;
@@ -1146,6 +1165,8 @@ function MemberRapor({ memberId, memberName, branchId, avatarUrl, memberNo, birt
         coachReviews,
         criteria: criteriaByClass.get(e.class_id) ?? [],
         best_times: bestTimesArr,
+        level_strokes: e.level_id ? (strokesByLevel.get(e.level_id) ?? []) : [],
+        level_distances: e.level_id ? (distancesByLevel.get(e.level_id) ?? []) : [],
         coach_signature_url: signer?.signature_url ?? null,
       };
     }));
@@ -1348,6 +1369,8 @@ function MemberRapor({ memberId, memberName, branchId, avatarUrl, memberNo, birt
                 learning_achievements: selectedEntry.learning_achievements,
                 criteria: selectedEntry.criteria,
                 best_times: selectedEntry.best_times,
+                level_strokes: selectedEntry.level_strokes,
+                level_distances: selectedEntry.level_distances,
                 coach_signature_url: selectedEntry.coach_signature_url,
               };
               return (<>

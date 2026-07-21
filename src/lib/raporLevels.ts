@@ -1,8 +1,12 @@
-export interface LevelBestTimeTemplateRow {
+export interface LevelDistance {
   id: string;
-  stroke: string;
   distance: number;
-  target_time_seconds: number | null;
+  sort_order: number;
+}
+
+export interface LevelStroke {
+  id: string;
+  name: string;
   sort_order: number;
 }
 
@@ -13,43 +17,62 @@ export interface RecordedBestTime {
   time_seconds: number;
 }
 
-export interface BestTimeFormRow {
-  id?: string;
+export interface MatrixCell {
+  strokeId: string;
+  distanceId: string;
   stroke: string;
-  distance: string;
+  distance: number;
+  recordedId?: string;
   time: string;
 }
 
 /**
- * Builds the initial Personal Best Time form rows for a rapor entry: one row
- * per level template entry (pre-filled with the member's recorded time when
- * one exists), followed by any recorded times that don't match a template
- * row (e.g. leftover data from before a level had a template, or an extra
- * stroke a coach added manually) so no existing data is silently dropped.
+ * Builds the stroke x distance matrix a coach fills in: one cell per
+ * (stroke, distance) pair defined by the level, ordered by each list's
+ * sort_order, pre-filled from a matching recorded best time when one exists
+ * (case-insensitive stroke match, exact distance match).
  */
-export function mergeBestTimeTemplate(
-  template: LevelBestTimeTemplateRow[],
+export function buildBestTimeMatrix(
+  distances: LevelDistance[],
+  strokes: LevelStroke[],
   recorded: RecordedBestTime[]
-): BestTimeFormRow[] {
-  const sortedTemplate = [...template].sort((a, b) => a.sort_order - b.sort_order);
-  const matchedRecordedIds = new Set<string>();
+): MatrixCell[] {
+  const sortedDistances = [...distances].sort((a, b) => a.sort_order - b.sort_order);
+  const sortedStrokes = [...strokes].sort((a, b) => a.sort_order - b.sort_order);
 
-  const templateRows: BestTimeFormRow[] = sortedTemplate.map(t => {
-    const hit = recorded.find(
-      r => r.stroke.toLowerCase() === t.stroke.toLowerCase() && r.distance === t.distance
-    );
-    if (hit) matchedRecordedIds.add(hit.id);
-    return {
-      id: hit?.id,
-      stroke: t.stroke,
-      distance: String(t.distance),
-      time: hit ? String(hit.time_seconds) : "",
-    };
-  });
+  const cells: MatrixCell[] = [];
+  for (const stroke of sortedStrokes) {
+    for (const distance of sortedDistances) {
+      const hit = recorded.find(
+        r => r.stroke.toLowerCase() === stroke.name.toLowerCase() && r.distance === distance.distance
+      );
+      cells.push({
+        strokeId: stroke.id,
+        distanceId: distance.id,
+        stroke: stroke.name,
+        distance: distance.distance,
+        recordedId: hit?.id,
+        time: hit ? String(hit.time_seconds) : "",
+      });
+    }
+  }
+  return cells;
+}
 
-  const extraRows: BestTimeFormRow[] = recorded
-    .filter(r => !matchedRecordedIds.has(r.id))
-    .map(r => ({ id: r.id, stroke: r.stroke, distance: String(r.distance), time: String(r.time_seconds) }));
-
-  return [...templateRows, ...extraRows];
+/**
+ * Recorded best times that don't match any current (stroke, distance) pair
+ * in the level's live template — e.g. the level's strokes/distances were
+ * edited after this member's time was recorded. Surfaced separately so
+ * historical data is never silently dropped from view.
+ */
+export function findUnmatchedRecordedTimes(
+  distances: LevelDistance[],
+  strokes: LevelStroke[],
+  recorded: RecordedBestTime[]
+): RecordedBestTime[] {
+  const strokeNames = new Set(strokes.map(s => s.name.toLowerCase()));
+  const distanceValues = new Set(distances.map(d => d.distance));
+  return recorded.filter(
+    r => !strokeNames.has(r.stroke.toLowerCase()) || !distanceValues.has(r.distance)
+  );
 }

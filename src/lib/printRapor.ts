@@ -41,6 +41,8 @@ export interface PrintStudent {
   learning_achievements?: string | null;
   attendance_rate?: number | null; // 0–100
   best_times?: PrintBestTime[];
+  level_strokes?: string[];   // ordered stroke names from the member's level (rapor_level_strokes), sort_order-sorted
+  level_distances?: number[]; // ordered distances from the member's level (rapor_level_distances), sort_order-sorted
   criteria?: PrintCriterion[];
   coach_signature_url?: string | null; // uploaded coach signature from Supabase Storage
 }
@@ -250,11 +252,17 @@ function buildRaporHtml(s: PrintStudent, assets: RaporAssets): string {
       }).join("")
     : `<tr><td colspan="2" style="text-align:center;color:#888;font-style:italic;padding:12px">Belum ada penilaian</td></tr>`;
 
-  // PBT columns
-  const uniqueStrokes = [...new Set(bestTimes.map(t => t.stroke.toUpperCase()))].sort();
-  const uniqueDists   = [...new Set(bestTimes.map(t => Number(t.distance)))].sort((a, b) => a - b);
-  const STROKES = uniqueStrokes.length > 0 ? uniqueStrokes : ["FREESTYLE", "BACKSTROKE", "BREASTSTROKE", "BUTTERFLY"];
-  const DISTS   = uniqueDists.length   > 0 ? uniqueDists   : [25, 50, 100];
+  // PBT columns — prefer the member's LEVEL-defined strokes/distances (consistent grid shape
+  // across every member on the same level); fall back to dynamic discovery from this member's
+  // own recorded times for legacy entries with no level, or a level with an empty template.
+  const uniqueStrokesFallback = [...new Set(bestTimes.map(t => t.stroke.toUpperCase()))].sort();
+  const uniqueDistsFallback   = [...new Set(bestTimes.map(t => Number(t.distance)))].sort((a, b) => a - b);
+  const STROKES = (s.level_strokes && s.level_strokes.length > 0)
+    ? s.level_strokes.map(x => x.toUpperCase())
+    : (uniqueStrokesFallback.length > 0 ? uniqueStrokesFallback : ["FREESTYLE", "BACKSTROKE", "BREASTSTROKE", "BUTTERFLY"]);
+  const DISTS = (s.level_distances && s.level_distances.length > 0)
+    ? s.level_distances
+    : (uniqueDistsFallback.length > 0 ? uniqueDistsFallback : [25, 50, 100]);
 
   const distHeaders = DISTS.map(d => `<th>${d}M</th>`).join("");
   const pbtRows = STROKES.map(stroke => {

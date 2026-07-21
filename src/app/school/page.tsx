@@ -423,6 +423,8 @@ interface Student {
   level: string | null;
   criteria: Criterion[];
   best_times: PrintBestTime[];
+  level_strokes: string[];
+  level_distances: number[];
 }
 
 type SchoolTab = "rapor" | "absensi";
@@ -481,7 +483,7 @@ export default function SchoolPage() {
           )
         ),
         rapor_entries(
-          id, scores, notes, personality, motivation, learning_achievements, level, period_id, locked
+          id, scores, notes, personality, motivation, learning_achievements, level, level_id, period_id, locked
         )
       `)
       .eq("school_id", sId)
@@ -501,13 +503,31 @@ export default function SchoolPage() {
       btByMember.set(row.member_id, list);
     }
 
+    // Fetch each distinct level's ordered strokes/distances in one batch pair of queries
+    const entriesRaw = data.flatMap(m => (m.rapor_entries as unknown as { level_id: string | null; period_id: string }[]) ?? []);
+    const levelIds = [...new Set(entriesRaw.filter(e => e.period_id === pid && e.level_id).map(e => e.level_id as string))];
+    const [{ data: levelStrokeRows }, { data: levelDistanceRows }] = levelIds.length
+      ? await Promise.all([
+          supabase.from("rapor_level_strokes").select("level_id, name, sort_order").in("level_id", levelIds).order("sort_order"),
+          supabase.from("rapor_level_distances").select("level_id, distance, sort_order").in("level_id", levelIds).order("sort_order"),
+        ])
+      : [{ data: [] }, { data: [] }];
+    const strokesByLevel = new Map<string, string[]>();
+    for (const row of (levelStrokeRows ?? []) as { level_id: string; name: string }[]) {
+      strokesByLevel.set(row.level_id, [...(strokesByLevel.get(row.level_id) ?? []), row.name]);
+    }
+    const distancesByLevel = new Map<string, number[]>();
+    for (const row of (levelDistanceRows ?? []) as { level_id: string; distance: number }[]) {
+      distancesByLevel.set(row.level_id, [...(distancesByLevel.get(row.level_id) ?? []), row.distance]);
+    }
+
     const rows: Student[] = data.map((m) => {
       const profile = (m.profile as unknown as { full_name: string; avatar_url: string | null; birth_date: string | null } | null);
       const mc = (m.member_classes as unknown as { classes: { id: string; name: string; rapor_signer_coach_id: string | null; class_coaches: { coach_id: string; role: string; profile: { full_name: string; signature_url: string | null } | null }[]; class_criteria: { id: string; label: string; kind: string; options: string[] | null; sort_order: number }[] } | null }[])?.[0];
       const cls = mc?.classes;
       const signer = resolveRaporSigner(cls?.class_coaches ?? [], cls?.rapor_signer_coach_id);
       const entry = pid
-        ? (m.rapor_entries as unknown as { id: string; scores: Record<string, number | string>; notes: string | null; personality: string | null; motivation: string | null; learning_achievements: string | null; level: string | null; period_id: string; locked: boolean }[])
+        ? (m.rapor_entries as unknown as { id: string; scores: Record<string, number | string>; notes: string | null; personality: string | null; motivation: string | null; learning_achievements: string | null; level: string | null; level_id: string | null; period_id: string; locked: boolean }[])
           ?.find((e) => e.period_id === pid)
         : undefined;
       const criteria: Criterion[] = [...(cls?.class_criteria ?? [])]
@@ -534,6 +554,8 @@ export default function SchoolPage() {
         level: entry?.level ?? null,
         criteria,
         best_times: btByMember.get(m.id) ?? [],
+        level_strokes: entry?.level_id ? (strokesByLevel.get(entry.level_id) ?? []) : [],
+        level_distances: entry?.level_id ? (distancesByLevel.get(entry.level_id) ?? []) : [],
       };
     });
     setStudents(rows);
@@ -648,6 +670,7 @@ export default function SchoolPage() {
     period_label: s.period_label ?? "—", scores: s.scores, notes: s.notes,
     personality: s.personality, motivation: s.motivation, learning_achievements: s.learning_achievements,
     criteria: s.criteria, best_times: s.best_times,
+    level_strokes: s.level_strokes, level_distances: s.level_distances,
   });
 
   const downloadZipFor = async (targets: Student[]) => {
