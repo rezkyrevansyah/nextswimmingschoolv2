@@ -2,7 +2,7 @@ export const landing = {
   hero: {
     greeting: "Welcome to Next Swimming School",
     subtitle: "Building confident, capable swimmers one stroke at a time.",
-    cta: "Get Started",
+    cta: "Contact Us",
   },
   programs: {
     label: "Our Programs",
@@ -10,6 +10,8 @@ export const landing = {
     subtitle: "From first splash to competitive stroke — structured programs for every age and goal.",
     regular: "Group Class",
     private: "Private Class",
+    ctaText: "Found a class that fits? Reserve your spot today.",
+    ctaButton: "Register Now",
   },
   coaches: {
     label: "Our Coaches",
@@ -25,10 +27,33 @@ export const landing = {
     label: "Testimonials",
     headline: "What our swimming families say.",
     subtitle: "Real stories from parents and members who've seen the progress firsthand.",
+    ctaText: "Ready to see the same progress for your child?",
+    ctaButton: "Register Now",
   },
   partners: {
     label: "Trusted by Our Partners",
     ariaLabel: "Partner logos",
+  },
+  branches: {
+    label: "Our Branches",
+    headline: "Visit us at a branch near you.",
+    subtitle: "Active branches ready to welcome new swimmers.",
+    viewOnMap: "View on Map",
+    chatOnWhatsapp: "Chat on WhatsApp",
+  },
+  faq: {
+    label: "FAQ",
+    headline: "Frequently asked questions.",
+    subtitle: "Can't find what you're looking for? Reach out to us on WhatsApp.",
+    ctaText: "Still have questions?",
+    ctaButton: "Chat on WhatsApp",
+    ctaMessage: "Hi Next Swimming School admin, I have a question that wasn't covered in the FAQ.",
+  },
+  footer: {
+    linksHeading: "Explore",
+    contactHeading: "Contact",
+    followHeading: "Follow Us",
+    copyrightFallback: "© {year} Next Swimming School. All rights reserved.",
   },
   nav: {
     logoAlt: "Next Swimming School",

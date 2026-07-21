@@ -8,7 +8,8 @@ type IconName =
   | "eye" | "eye-off" | "star" | "whatsapp" | "chat" | "school" | "book" | "flag"
   | "clipboard" | "sparkle" | "shield" | "target" | "sun" | "moon" | "info"
   | "warning" | "filter" | "sort" | "close" | "refresh" | "copy" | "sendWA"
-  | "print" | "lock" | "archive" | "chevron-left" | "chevron-right" | "link" | "mail";
+  | "print" | "lock" | "archive" | "chevron-left" | "chevron-right" | "link" | "mail"
+  | "instagram" | "tiktok" | "youtube";
 
 interface IconProps {
   name: IconName | string;
@@ -74,6 +75,9 @@ const PATHS: Record<string, React.ReactNode> = {
   "chevron-right": <path d="M9 6l6 6-6 6"/>,
   link:          <><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></>,
   mail:          <><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 6l9 7 9-7"/></>,
+  instagram:     <><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.2" cy="6.8" r="1" fill="currentColor" stroke="none"/></>,
+  tiktok:        <><path d="M14 4v10.5a3.5 3.5 0 11-3.5-3.5"/><path d="M14 4a5 5 0 005 5"/></>,
+  youtube:       <><rect x="3" y="6" width="18" height="12" rx="3"/><path d="M11 10l4 2-4 2z" fill="currentColor" stroke="none"/></>,
 };
 
 export default function Icon({ name, className = "w-5 h-5", strokeWidth = 1.75, fill = "none" }: IconProps) {

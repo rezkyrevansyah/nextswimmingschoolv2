@@ -14,6 +14,69 @@ export type Database = {
   }
   public: {
     Tables: {
+      activity_logs: {
+        Row: {
+          action: string
+          branch_id: string | null
+          branch_name: string | null
+          created_at: string
+          entity_id: string
+          entity_label: string | null
+          entity_type: string
+          id: string
+          label: string
+          meta: Json | null
+          user_id: string
+          user_name: string
+          user_role: string
+        }
+        Insert: {
+          action: string
+          branch_id?: string | null
+          branch_name?: string | null
+          created_at?: string
+          entity_id: string
+          entity_label?: string | null
+          entity_type: string
+          id?: string
+          label: string
+          meta?: Json | null
+          user_id: string
+          user_name: string
+          user_role: string
+        }
+        Update: {
+          action?: string
+          branch_id?: string | null
+          branch_name?: string | null
+          created_at?: string
+          entity_id?: string
+          entity_label?: string | null
+          entity_type?: string
+          id?: string
+          label?: string
+          meta?: Json | null
+          user_id?: string
+          user_name?: string
+          user_role?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_logs_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activity_logs_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "public_branches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       announcement_classes: {
         Row: {
           announcement_id: string
@@ -93,66 +156,17 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "announcements_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "public_branches"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "announcements_created_by_fkey"
             columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      activity_logs: {
-        Row: {
-          action: string
-          branch_id: string | null
-          branch_name: string | null
-          created_at: string
-          entity_id: string
-          entity_label: string | null
-          entity_type: string
-          id: string
-          label: string
-          meta: Record<string, unknown> | null
-          user_id: string
-          user_name: string
-          user_role: string
-        }
-        Insert: {
-          action: string
-          branch_id?: string | null
-          branch_name?: string | null
-          created_at?: string
-          entity_id: string
-          entity_label?: string | null
-          entity_type: string
-          id?: string
-          label: string
-          meta?: Record<string, unknown> | null
-          user_id: string
-          user_name: string
-          user_role: string
-        }
-        Update: {
-          action?: string
-          branch_id?: string | null
-          branch_name?: string | null
-          created_at?: string
-          entity_id?: string
-          entity_label?: string | null
-          entity_type?: string
-          id?: string
-          label?: string
-          meta?: Record<string, unknown> | null
-          user_id?: string
-          user_name?: string
-          user_role?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "activity_logs_branch_id_fkey"
-            columns: ["branch_id"]
-            isOneToOne: false
-            referencedRelation: "branches"
             referencedColumns: ["id"]
           },
         ]
@@ -227,6 +241,13 @@ export type Database = {
             columns: ["branch_id"]
             isOneToOne: false
             referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bills_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "public_branches"
             referencedColumns: ["id"]
           },
           {
@@ -376,41 +397,41 @@ export type Database = {
           },
         ]
       }
-      coach_branches: {
+      class_coach_spreadsheets: {
         Row: {
-          id: string
+          class_id: string
           coach_id: string
-          branch_id: string
-          joined_at: string
-          is_primary: boolean
+          id: string
+          spreadsheet_url: string
+          updated_at: string
         }
         Insert: {
-          id?: string
+          class_id: string
           coach_id: string
-          branch_id: string
-          joined_at?: string
-          is_primary?: boolean
+          id?: string
+          spreadsheet_url: string
+          updated_at?: string
         }
         Update: {
-          id?: string
+          class_id?: string
           coach_id?: string
-          branch_id?: string
-          joined_at?: string
-          is_primary?: boolean
+          id?: string
+          spreadsheet_url?: string
+          updated_at?: string
         }
         Relationships: [
           {
-            foreignKeyName: "coach_branches_coach_id_fkey"
-            columns: ["coach_id"]
+            foreignKeyName: "class_coach_spreadsheets_class_id_fkey"
+            columns: ["class_id"]
             isOneToOne: false
-            referencedRelation: "profiles"
+            referencedRelation: "classes"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "coach_branches_branch_id_fkey"
-            columns: ["branch_id"]
+            foreignKeyName: "class_coach_spreadsheets_coach_id_fkey"
+            columns: ["coach_id"]
             isOneToOne: false
-            referencedRelation: "branches"
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -529,6 +550,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "class_holidays_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "public_branches"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "class_holidays_class_id_fkey"
             columns: ["class_id"]
             isOneToOne: false
@@ -544,75 +572,36 @@ export type Database = {
           },
         ]
       }
-      class_coach_spreadsheets: {
-        Row: {
-          id: string
-          class_id: string
-          coach_id: string
-          spreadsheet_url: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          class_id: string
-          coach_id: string
-          spreadsheet_url: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          class_id?: string
-          coach_id?: string
-          spreadsheet_url?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "class_coach_spreadsheets_class_id_fkey"
-            columns: ["class_id"]
-            isOneToOne: false
-            referencedRelation: "classes"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "class_coach_spreadsheets_coach_id_fkey"
-            columns: ["coach_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       class_packages: {
         Row: {
-          id: string
-          class_id: string
-          name: string
-          sessions: number
-          price: number
-          sort_order: number
           active: boolean
+          class_id: string
           created_at: string
+          id: string
+          name: string
+          price: number
+          sessions: number
+          sort_order: number
         }
         Insert: {
-          id?: string
-          class_id: string
-          name: string
-          sessions: number
-          price: number
-          sort_order?: number
           active?: boolean
+          class_id: string
           created_at?: string
+          id?: string
+          name: string
+          price: number
+          sessions: number
+          sort_order?: number
         }
         Update: {
-          id?: string
-          class_id?: string
-          name?: string
-          sessions?: number
-          price?: number
-          sort_order?: number
           active?: boolean
+          class_id?: string
           created_at?: string
+          id?: string
+          name?: string
+          price?: number
+          sessions?: number
+          sort_order?: number
         }
         Relationships: [
           {
@@ -775,6 +764,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "classes_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "public_branches"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "classes_rapor_signer_coach_id_fkey"
             columns: ["rapor_signer_coach_id"]
             isOneToOne: false
@@ -800,7 +796,7 @@ export type Database = {
           manual_reason: string | null
           selfie_url: string | null
           session_date: string
-          status: "present" | "absent" | "late"
+          status: string
         }
         Insert: {
           branch_id: string
@@ -818,7 +814,7 @@ export type Database = {
           manual_reason?: string | null
           selfie_url?: string | null
           session_date: string
-          status?: "present" | "absent" | "late"
+          status?: string
         }
         Update: {
           branch_id?: string
@@ -836,7 +832,7 @@ export type Database = {
           manual_reason?: string | null
           selfie_url?: string | null
           session_date?: string
-          status?: "present" | "absent" | "late"
+          status?: string
         }
         Relationships: [
           {
@@ -844,6 +840,13 @@ export type Database = {
             columns: ["branch_id"]
             isOneToOne: false
             referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "coach_attendances_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "public_branches"
             referencedColumns: ["id"]
           },
           {
@@ -870,6 +873,94 @@ export type Database = {
           {
             foreignKeyName: "coach_attendances_manual_by_fkey"
             columns: ["manual_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      coach_branches: {
+        Row: {
+          branch_id: string
+          coach_id: string
+          id: string
+          is_primary: boolean
+          joined_at: string
+        }
+        Insert: {
+          branch_id: string
+          coach_id: string
+          id?: string
+          is_primary?: boolean
+          joined_at?: string
+        }
+        Update: {
+          branch_id?: string
+          coach_id?: string
+          id?: string
+          is_primary?: boolean
+          joined_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coach_branches_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "coach_branches_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "public_branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "coach_branches_coach_id_fkey"
+            columns: ["coach_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      coach_extra_rates: {
+        Row: {
+          coach_id: string
+          created_at: string
+          id: string
+          rate_per_session: number
+          set_by: string | null
+          updated_at: string
+        }
+        Insert: {
+          coach_id: string
+          created_at?: string
+          id?: string
+          rate_per_session: number
+          set_by?: string | null
+          updated_at?: string
+        }
+        Update: {
+          coach_id?: string
+          created_at?: string
+          id?: string
+          rate_per_session?: number
+          set_by?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coach_extra_rates_coach_id_fkey"
+            columns: ["coach_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "coach_extra_rates_set_by_fkey"
+            columns: ["set_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -939,8 +1030,10 @@ export type Database = {
       }
       coach_invoices: {
         Row: {
+          approved_at: string | null
           bank_info: string | null
           branch_id: string
+          cancelled_at: string | null
           coach_id: string
           created_at: string
           id: string
@@ -948,13 +1041,17 @@ export type Database = {
           paid_at: string | null
           pdf_url: string | null
           period_label: string
+          rejected_at: string | null
+          rejection_reason: string | null
           status: Database["public"]["Enums"]["invoice_status"]
           submitted_at: string
           total_amount: number
         }
         Insert: {
+          approved_at?: string | null
           bank_info?: string | null
           branch_id: string
+          cancelled_at?: string | null
           coach_id: string
           created_at?: string
           id?: string
@@ -962,13 +1059,17 @@ export type Database = {
           paid_at?: string | null
           pdf_url?: string | null
           period_label: string
+          rejected_at?: string | null
+          rejection_reason?: string | null
           status?: Database["public"]["Enums"]["invoice_status"]
           submitted_at?: string
           total_amount: number
         }
         Update: {
+          approved_at?: string | null
           bank_info?: string | null
           branch_id?: string
+          cancelled_at?: string | null
           coach_id?: string
           created_at?: string
           id?: string
@@ -976,6 +1077,8 @@ export type Database = {
           paid_at?: string | null
           pdf_url?: string | null
           period_label?: string
+          rejected_at?: string | null
+          rejection_reason?: string | null
           status?: Database["public"]["Enums"]["invoice_status"]
           submitted_at?: string
           total_amount?: number
@@ -986,6 +1089,13 @@ export type Database = {
             columns: ["branch_id"]
             isOneToOne: false
             referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "coach_invoices_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "public_branches"
             referencedColumns: ["id"]
           },
           {
@@ -1088,6 +1198,20 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "coach_leaves_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "coach_leaves_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "public_branches"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "coach_leaves_coach_id_fkey"
             columns: ["coach_id"]
             isOneToOne: false
@@ -1104,6 +1228,141 @@ export type Database = {
           {
             foreignKeyName: "coach_leaves_substitute_id_fkey"
             columns: ["substitute_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      coach_loan_payments: {
+        Row: {
+          amount: number
+          created_at: string
+          created_by: string | null
+          id: string
+          installment_number: number
+          kind: string
+          loan_id: string
+          payslip_id: string | null
+          period_label: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          installment_number: number
+          kind?: string
+          loan_id: string
+          payslip_id?: string | null
+          period_label: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          installment_number?: number
+          kind?: string
+          loan_id?: string
+          payslip_id?: string | null
+          period_label?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coach_loan_payments_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "coach_loan_payments_loan_id_fkey"
+            columns: ["loan_id"]
+            isOneToOne: false
+            referencedRelation: "coach_loans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "coach_loan_payments_payslip_id_fkey"
+            columns: ["payslip_id"]
+            isOneToOne: false
+            referencedRelation: "payslips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      coach_loans: {
+        Row: {
+          branch_id: string
+          closed_at: string | null
+          coach_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          installment_amount: number
+          notes: string | null
+          principal_amount: number
+          reason: string | null
+          started_period_label: string | null
+          status: string
+          tenor_months: number
+        }
+        Insert: {
+          branch_id: string
+          closed_at?: string | null
+          coach_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          installment_amount: number
+          notes?: string | null
+          principal_amount: number
+          reason?: string | null
+          started_period_label?: string | null
+          status?: string
+          tenor_months: number
+        }
+        Update: {
+          branch_id?: string
+          closed_at?: string | null
+          coach_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          installment_amount?: number
+          notes?: string | null
+          principal_amount?: number
+          reason?: string | null
+          started_period_label?: string | null
+          status?: string
+          tenor_months?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coach_loans_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "coach_loans_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "public_branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "coach_loans_coach_id_fkey"
+            columns: ["coach_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "coach_loans_created_by_fkey"
+            columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -1162,77 +1421,179 @@ export type Database = {
           },
         ]
       }
-      coach_extra_rates: {
+      landing_branches: {
         Row: {
-          coach_id: string
-          created_at: string
+          address: string | null
+          branch_id: string | null
+          city: string | null
           id: string
-          rate_per_session: number
-          set_by: string | null
+          lat: number | null
+          lng: number | null
+          name: string | null
+          phone: string | null
+          photo_url: string | null
+          sort_order: number
           updated_at: string
         }
         Insert: {
-          coach_id: string
-          created_at?: string
+          address?: string | null
+          branch_id?: string | null
+          city?: string | null
           id?: string
-          rate_per_session: number
-          set_by?: string | null
+          lat?: number | null
+          lng?: number | null
+          name?: string | null
+          phone?: string | null
+          photo_url?: string | null
+          sort_order?: number
           updated_at?: string
         }
         Update: {
-          coach_id?: string
-          created_at?: string
+          address?: string | null
+          branch_id?: string | null
+          city?: string | null
           id?: string
-          rate_per_session?: number
-          set_by?: string | null
+          lat?: number | null
+          lng?: number | null
+          name?: string | null
+          phone?: string | null
+          photo_url?: string | null
+          sort_order?: number
           updated_at?: string
         }
         Relationships: [
           {
-            foreignKeyName: "coach_extra_rates_coach_id_fkey"
-            columns: ["coach_id"]
-            isOneToOne: true
-            referencedRelation: "profiles"
+            foreignKeyName: "landing_branches_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "coach_extra_rates_set_by_fkey"
-            columns: ["set_by"]
+            foreignKeyName: "landing_branches_branch_id_fkey"
+            columns: ["branch_id"]
             isOneToOne: false
-            referencedRelation: "profiles"
+            referencedRelation: "public_branches"
             referencedColumns: ["id"]
           },
         ]
       }
+      landing_coaches: {
+        Row: {
+          id: string
+          name: string
+          photo_url: string | null
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name?: string
+          photo_url?: string | null
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          photo_url?: string | null
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       landing_config: {
         Row: {
           contact_email: string | null
+          copyright_text: string | null
           floating_wa_message: string
+          footer_address: string | null
           footer_tagline: string
           footer_wa_number: string
           id: number
           nav_cta_message: string
           nav_cta_text: string
+          social_instagram: string | null
+          social_tiktok: string | null
+          social_youtube: string | null
           updated_at: string
         }
         Insert: {
           contact_email?: string | null
+          copyright_text?: string | null
           floating_wa_message?: string
+          footer_address?: string | null
           footer_tagline?: string
           footer_wa_number?: string
           id?: number
           nav_cta_message?: string
           nav_cta_text?: string
+          social_instagram?: string | null
+          social_tiktok?: string | null
+          social_youtube?: string | null
           updated_at?: string
         }
         Update: {
           contact_email?: string | null
+          copyright_text?: string | null
           floating_wa_message?: string
+          footer_address?: string | null
           footer_tagline?: string
           footer_wa_number?: string
           id?: number
           nav_cta_message?: string
           nav_cta_text?: string
+          social_instagram?: string | null
+          social_tiktok?: string | null
+          social_youtube?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      landing_facilities: {
+        Row: {
+          headline: string
+          id: number
+          section_label: string
+          updated_at: string
+        }
+        Insert: {
+          headline?: string
+          id?: number
+          section_label?: string
+          updated_at?: string
+        }
+        Update: {
+          headline?: string
+          id?: number
+          section_label?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      landing_facility_items: {
+        Row: {
+          body_text: string
+          id: string
+          photo_url: string | null
+          sort_order: number
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          body_text?: string
+          id?: string
+          photo_url?: string | null
+          sort_order?: number
+          title?: string
+          updated_at?: string
+        }
+        Update: {
+          body_text?: string
+          id?: string
+          photo_url?: string | null
+          sort_order?: number
+          title?: string
           updated_at?: string
         }
         Relationships: []
@@ -1287,6 +1648,30 @@ export type Database = {
           cta_wa_text?: string
           headline?: string
           id?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      landing_gallery: {
+        Row: {
+          alt_text: string | null
+          id: string
+          photo_url: string | null
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          alt_text?: string | null
+          id?: string
+          photo_url?: string | null
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          alt_text?: string | null
+          id?: string
+          photo_url?: string | null
+          sort_order?: number
           updated_at?: string
         }
         Relationships: []
@@ -1408,85 +1793,134 @@ export type Database = {
         }
         Relationships: []
       }
-      landing_safety: {
-        Row: { id: number; section_label: string; headline: string; body_text: string; photo_url: string | null; updated_at: string }
-        Insert: { id?: number; section_label?: string; headline?: string; body_text?: string; photo_url?: string | null; updated_at?: string }
-        Update: { id?: number; section_label?: string; headline?: string; body_text?: string; photo_url?: string | null; updated_at?: string }
-        Relationships: []
-      }
-      landing_safety_points: {
-        Row: { id: string; sort_order: number; text: string; updated_at: string }
-        Insert: { id?: string; sort_order?: number; text?: string; updated_at?: string }
-        Update: { id?: string; sort_order?: number; text?: string; updated_at?: string }
-        Relationships: []
-      }
-      landing_facilities: {
-        Row: { id: number; section_label: string; headline: string; updated_at: string }
-        Insert: { id?: number; section_label?: string; headline?: string; updated_at?: string }
-        Update: { id?: number; section_label?: string; headline?: string; updated_at?: string }
-        Relationships: []
-      }
-      landing_facility_items: {
-        Row: { id: string; sort_order: number; title: string; body_text: string; photo_url: string | null; updated_at: string }
-        Insert: { id?: string; sort_order?: number; title?: string; body_text?: string; photo_url?: string | null; updated_at?: string }
-        Update: { id?: string; sort_order?: number; title?: string; body_text?: string; photo_url?: string | null; updated_at?: string }
+      landing_partners: {
+        Row: {
+          id: string
+          logo_url: string | null
+          name: string
+          sort_order: number
+          updated_at: string
+          website_url: string | null
+        }
+        Insert: {
+          id?: string
+          logo_url?: string | null
+          name?: string
+          sort_order?: number
+          updated_at?: string
+          website_url?: string | null
+        }
+        Update: {
+          id?: string
+          logo_url?: string | null
+          name?: string
+          sort_order?: number
+          updated_at?: string
+          website_url?: string | null
+        }
         Relationships: []
       }
       landing_process_steps: {
-        Row: { id: string; sort_order: number; title: string; description: string; updated_at: string }
-        Insert: { id?: string; sort_order?: number; title?: string; description?: string; updated_at?: string }
-        Update: { id?: string; sort_order?: number; title?: string; description?: string; updated_at?: string }
-        Relationships: []
-      }
-      landing_gallery: {
-        Row: { id: string; sort_order: number; photo_url: string | null; alt_text: string | null; updated_at: string }
-        Insert: { id?: string; sort_order?: number; photo_url?: string | null; alt_text?: string | null; updated_at?: string }
-        Update: { id?: string; sort_order?: number; photo_url?: string | null; alt_text?: string | null; updated_at?: string }
-        Relationships: []
-      }
-      landing_partners: {
-        Row: { id: string; sort_order: number; name: string; logo_url: string | null; website_url: string | null; updated_at: string }
-        Insert: { id?: string; sort_order?: number; name?: string; logo_url?: string | null; website_url?: string | null; updated_at?: string }
-        Update: { id?: string; sort_order?: number; name?: string; logo_url?: string | null; website_url?: string | null; updated_at?: string }
+        Row: {
+          description: string
+          id: string
+          sort_order: number
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          description?: string
+          id?: string
+          sort_order?: number
+          title?: string
+          updated_at?: string
+        }
+        Update: {
+          description?: string
+          id?: string
+          sort_order?: number
+          title?: string
+          updated_at?: string
+        }
         Relationships: []
       }
       landing_programs: {
-        Row: { id: string; sort_order: number; name: string; description: string | null; class_type: string; photo_url: string | null; updated_at: string }
-        Insert: { id?: string; sort_order?: number; name?: string; description?: string | null; class_type?: string; photo_url?: string | null; updated_at?: string }
-        Update: { id?: string; sort_order?: number; name?: string; description?: string | null; class_type?: string; photo_url?: string | null; updated_at?: string }
+        Row: {
+          class_type: string
+          description: string | null
+          id: string
+          name: string
+          photo_url: string | null
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          class_type?: string
+          description?: string | null
+          id?: string
+          name?: string
+          photo_url?: string | null
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          class_type?: string
+          description?: string | null
+          id?: string
+          name?: string
+          photo_url?: string | null
+          sort_order?: number
+          updated_at?: string
+        }
         Relationships: []
       }
-      landing_coaches: {
-        Row: { id: string; sort_order: number; name: string; photo_url: string | null; updated_at: string }
-        Insert: { id?: string; sort_order?: number; name?: string; photo_url?: string | null; updated_at?: string }
-        Update: { id?: string; sort_order?: number; name?: string; photo_url?: string | null; updated_at?: string }
+      landing_safety: {
+        Row: {
+          body_text: string
+          headline: string
+          id: number
+          photo_url: string | null
+          section_label: string
+          updated_at: string
+        }
+        Insert: {
+          body_text?: string
+          headline?: string
+          id?: number
+          photo_url?: string | null
+          section_label?: string
+          updated_at?: string
+        }
+        Update: {
+          body_text?: string
+          headline?: string
+          id?: number
+          photo_url?: string | null
+          section_label?: string
+          updated_at?: string
+        }
         Relationships: []
       }
-      landing_why_next: {
-        Row: { id: string; sort_order: number; icon: string; title: string; description: string | null; updated_at: string }
-        Insert: { id?: string; sort_order?: number; icon?: string; title?: string; description?: string | null; updated_at?: string }
-        Update: { id?: string; sort_order?: number; icon?: string; title?: string; description?: string | null; updated_at?: string }
+      landing_safety_points: {
+        Row: {
+          id: string
+          sort_order: number
+          text: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          sort_order?: number
+          text?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          sort_order?: number
+          text?: string
+          updated_at?: string
+        }
         Relationships: []
-      }
-      landing_testimonials_v2: {
-        Row: { id: string; sort_order: number; name: string; role: string | null; body_text: string; avatar_url: string | null; rating: number; updated_at: string }
-        Insert: { id?: string; sort_order?: number; name?: string; role?: string | null; body_text?: string; avatar_url?: string | null; rating?: number; updated_at?: string }
-        Update: { id?: string; sort_order?: number; name?: string; role?: string | null; body_text?: string; avatar_url?: string | null; rating?: number; updated_at?: string }
-        Relationships: []
-      }
-      trial_bookings: {
-        Row: { id: string; name: string; phone: string; age_group: string | null; branch_id: string | null; preferred_time: string | null; status: string; created_at: string }
-        Insert: { id?: string; name: string; phone: string; age_group?: string | null; branch_id?: string | null; preferred_time?: string | null; status?: string; created_at?: string }
-        Update: { id?: string; name?: string; phone?: string; age_group?: string | null; branch_id?: string | null; preferred_time?: string | null; status?: string; created_at?: string }
-        Relationships: [
-          {
-            foreignKeyName: "trial_bookings_branch_id_fkey"
-            columns: ["branch_id"]
-            isOneToOne: false
-            referencedRelation: "branches"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       landing_testimonials: {
         Row: {
@@ -1517,6 +1951,66 @@ export type Database = {
           rating?: number | null
           role?: string
           sort_order?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      landing_testimonials_v2: {
+        Row: {
+          avatar_url: string | null
+          body_text: string
+          id: string
+          name: string
+          rating: number
+          role: string | null
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          body_text?: string
+          id?: string
+          name?: string
+          rating?: number
+          role?: string | null
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          avatar_url?: string | null
+          body_text?: string
+          id?: string
+          name?: string
+          rating?: number
+          role?: string | null
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      landing_why_next: {
+        Row: {
+          description: string | null
+          icon: string
+          id: string
+          sort_order: number
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          description?: string | null
+          icon?: string
+          id?: string
+          sort_order?: number
+          title?: string
+          updated_at?: string
+        }
+        Update: {
+          description?: string | null
+          icon?: string
+          id?: string
+          sort_order?: number
+          title?: string
           updated_at?: string
         }
         Relationships: []
@@ -1657,6 +2151,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "manual_transactions_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "public_branches"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "manual_transactions_created_by_fkey"
             columns: ["created_by"]
             isOneToOne: false
@@ -1720,6 +2221,81 @@ export type Database = {
           },
           {
             foreignKeyName: "member_attendances_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      member_best_times: {
+        Row: {
+          branch_id: string
+          coach_id: string | null
+          created_at: string
+          distance: number
+          id: string
+          member_id: string
+          notes: string | null
+          recorded_at: string
+          stroke: string
+          time_seconds: number
+        }
+        Insert: {
+          branch_id: string
+          coach_id?: string | null
+          created_at?: string
+          distance: number
+          id?: string
+          member_id: string
+          notes?: string | null
+          recorded_at?: string
+          stroke: string
+          time_seconds: number
+        }
+        Update: {
+          branch_id?: string
+          coach_id?: string | null
+          created_at?: string
+          distance?: number
+          id?: string
+          member_id?: string
+          notes?: string | null
+          recorded_at?: string
+          stroke?: string
+          time_seconds?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "member_best_times_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "member_best_times_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "public_branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "member_best_times_coach_id_fkey"
+            columns: ["coach_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "member_best_times_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "member_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "member_best_times_member_id_fkey"
             columns: ["member_id"]
             isOneToOne: false
             referencedRelation: "members"
@@ -1923,67 +2499,6 @@ export type Database = {
           },
         ]
       }
-      member_best_times: {
-        Row: {
-          branch_id: string
-          coach_id: string | null
-          created_at: string
-          distance: number
-          id: string
-          member_id: string
-          notes: string | null
-          recorded_at: string
-          stroke: string
-          time_seconds: number
-        }
-        Insert: {
-          branch_id: string
-          coach_id?: string | null
-          created_at?: string
-          distance: number
-          id?: string
-          member_id: string
-          notes?: string | null
-          recorded_at?: string
-          stroke: string
-          time_seconds: number
-        }
-        Update: {
-          branch_id?: string
-          coach_id?: string | null
-          created_at?: string
-          distance?: number
-          id?: string
-          member_id?: string
-          notes?: string | null
-          recorded_at?: string
-          stroke?: string
-          time_seconds?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "member_best_times_branch_id_fkey"
-            columns: ["branch_id"]
-            isOneToOne: false
-            referencedRelation: "branches"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "member_best_times_coach_id_fkey"
-            columns: ["coach_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "member_best_times_member_id_fkey"
-            columns: ["member_id"]
-            isOneToOne: false
-            referencedRelation: "members"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       members: {
         Row: {
           admin_notes: string | null
@@ -2048,6 +2563,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "members_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "public_branches"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "members_profile_id_fkey"
             columns: ["profile_id"]
             isOneToOne: false
@@ -2104,106 +2626,60 @@ export type Database = {
           },
         ]
       }
-      profiles: {
+      payslip_deductions: {
         Row: {
-          address: string | null
-          avatar_url: string | null
-          bank_account: string | null
-          bank_holder: string | null
-          bank_name: string | null
-          bio: string | null
-          birth_date: string | null
-          branch_id: string | null
-          certifications: string[] | null
+          amount: number
           created_at: string
-          education_institution: string | null
-          education_level: string | null
-          email: string | null
-          full_name: string
-          gender: string | null
-          health_notes: string | null
           id: string
-          is_archived: boolean
-          is_profile_complete: boolean
-          locale: string
-          nick_name: string | null
-          phone: string | null
-          role: Database["public"]["Enums"]["user_role"]
-          show_on_landing: boolean
-          specialization: string | null
-          suspend_reason: string | null
-          suspend_until: string | null
-          updated_at: string
-          user_no: string | null
+          label: string
+          loan_id: string | null
+          loan_payment_id: string | null
+          meta: Json | null
+          payslip_id: string
+          type: string
         }
         Insert: {
-          address?: string | null
-          avatar_url?: string | null
-          bank_account?: string | null
-          bank_holder?: string | null
-          bank_name?: string | null
-          bio?: string | null
-          birth_date?: string | null
-          branch_id?: string | null
-          certifications?: string[] | null
+          amount: number
           created_at?: string
-          education_institution?: string | null
-          education_level?: string | null
-          email?: string | null
-          full_name?: string
-          gender?: string | null
-          health_notes?: string | null
-          id: string
-          is_archived?: boolean
-          is_profile_complete?: boolean
-          locale?: string
-          nick_name?: string | null
-          phone?: string | null
-          role?: Database["public"]["Enums"]["user_role"]
-          show_on_landing?: boolean
-          specialization?: string | null
-          suspend_reason?: string | null
-          suspend_until?: string | null
-          updated_at?: string
-          user_no?: string | null
+          id?: string
+          label: string
+          loan_id?: string | null
+          loan_payment_id?: string | null
+          meta?: Json | null
+          payslip_id: string
+          type: string
         }
         Update: {
-          address?: string | null
-          avatar_url?: string | null
-          bank_account?: string | null
-          bank_holder?: string | null
-          bank_name?: string | null
-          bio?: string | null
-          birth_date?: string | null
-          branch_id?: string | null
-          certifications?: string[] | null
+          amount?: number
           created_at?: string
-          education_institution?: string | null
-          education_level?: string | null
-          email?: string | null
-          full_name?: string
-          gender?: string | null
-          health_notes?: string | null
           id?: string
-          is_archived?: boolean
-          is_profile_complete?: boolean
-          locale?: string
-          nick_name?: string | null
-          phone?: string | null
-          role?: Database["public"]["Enums"]["user_role"]
-          show_on_landing?: boolean
-          specialization?: string | null
-          suspend_reason?: string | null
-          suspend_until?: string | null
-          updated_at?: string
-          user_no?: string | null
+          label?: string
+          loan_id?: string | null
+          loan_payment_id?: string | null
+          meta?: Json | null
+          payslip_id?: string
+          type?: string
         }
         Relationships: [
           {
-            foreignKeyName: "profiles_branch_id_fkey"
-            columns: ["branch_id"]
+            foreignKeyName: "payslip_deductions_loan_id_fkey"
+            columns: ["loan_id"]
             isOneToOne: false
-            referencedRelation: "branches"
+            referencedRelation: "coach_loans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payslip_deductions_loan_payment_id_fkey"
+            columns: ["loan_payment_id"]
+            isOneToOne: false
+            referencedRelation: "coach_loan_payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payslip_deductions_payslip_id_fkey"
+            columns: ["payslip_id"]
+            isOneToOne: false
+            referencedRelation: "payslips"
             referencedColumns: ["id"]
           },
         ]
@@ -2263,6 +2739,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "payslips_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "public_branches"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "payslips_coach_id_fkey"
             columns: ["coach_id"]
             isOneToOne: false
@@ -2285,239 +2768,116 @@ export type Database = {
           },
         ]
       }
-      tax_settings: {
+      profiles: {
         Row: {
-          coach_id: string | null
+          address: string | null
+          avatar_url: string | null
+          bank_account: string | null
+          bank_holder: string | null
+          bank_name: string | null
+          bio: string | null
+          birth_date: string | null
+          branch_id: string | null
+          certifications: string[] | null
           created_at: string
-          fixed_value: number | null
+          education_institution: string | null
+          education_level: string | null
+          email: string | null
+          full_name: string
+          gender: string | null
+          health_notes: string | null
           id: string
-          is_active: boolean
-          mode: string
-          percent_value: number | null
+          is_archived: boolean
+          is_profile_complete: boolean
+          locale: string
+          nick_name: string | null
+          phone: string | null
+          role: Database["public"]["Enums"]["user_role"]
+          show_on_landing: boolean
+          signature_url: string | null
+          specialization: string | null
+          suspend_reason: string | null
+          suspend_until: string | null
           updated_at: string
-          updated_by: string | null
+          user_no: string | null
         }
         Insert: {
-          coach_id?: string | null
+          address?: string | null
+          avatar_url?: string | null
+          bank_account?: string | null
+          bank_holder?: string | null
+          bank_name?: string | null
+          bio?: string | null
+          birth_date?: string | null
+          branch_id?: string | null
+          certifications?: string[] | null
           created_at?: string
-          fixed_value?: number | null
-          id?: string
-          is_active?: boolean
-          mode: string
-          percent_value?: number | null
-          updated_at?: string
-          updated_by?: string | null
-        }
-        Update: {
-          coach_id?: string | null
-          created_at?: string
-          fixed_value?: number | null
-          id?: string
-          is_active?: boolean
-          mode?: string
-          percent_value?: number | null
-          updated_at?: string
-          updated_by?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "tax_settings_coach_id_fkey"
-            columns: ["coach_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "tax_settings_updated_by_fkey"
-            columns: ["updated_by"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      coach_loans: {
-        Row: {
-          branch_id: string
-          closed_at: string | null
-          coach_id: string
-          created_at: string
-          created_by: string | null
+          education_institution?: string | null
+          education_level?: string | null
+          email?: string | null
+          full_name?: string
+          gender?: string | null
+          health_notes?: string | null
           id: string
-          installment_amount: number
-          notes: string | null
-          principal_amount: number
-          reason: string | null
-          started_period_label: string | null
-          status: string
-          tenor_months: number
-        }
-        Insert: {
-          branch_id: string
-          closed_at?: string | null
-          coach_id: string
-          created_at?: string
-          created_by?: string | null
-          id?: string
-          installment_amount: number
-          notes?: string | null
-          principal_amount: number
-          reason?: string | null
-          started_period_label?: string | null
-          status?: string
-          tenor_months: number
+          is_archived?: boolean
+          is_profile_complete?: boolean
+          locale?: string
+          nick_name?: string | null
+          phone?: string | null
+          role?: Database["public"]["Enums"]["user_role"]
+          show_on_landing?: boolean
+          signature_url?: string | null
+          specialization?: string | null
+          suspend_reason?: string | null
+          suspend_until?: string | null
+          updated_at?: string
+          user_no?: string | null
         }
         Update: {
-          branch_id?: string
-          closed_at?: string | null
-          coach_id?: string
+          address?: string | null
+          avatar_url?: string | null
+          bank_account?: string | null
+          bank_holder?: string | null
+          bank_name?: string | null
+          bio?: string | null
+          birth_date?: string | null
+          branch_id?: string | null
+          certifications?: string[] | null
           created_at?: string
-          created_by?: string | null
+          education_institution?: string | null
+          education_level?: string | null
+          email?: string | null
+          full_name?: string
+          gender?: string | null
+          health_notes?: string | null
           id?: string
-          installment_amount?: number
-          notes?: string | null
-          principal_amount?: number
-          reason?: string | null
-          started_period_label?: string | null
-          status?: string
-          tenor_months?: number
+          is_archived?: boolean
+          is_profile_complete?: boolean
+          locale?: string
+          nick_name?: string | null
+          phone?: string | null
+          role?: Database["public"]["Enums"]["user_role"]
+          show_on_landing?: boolean
+          signature_url?: string | null
+          specialization?: string | null
+          suspend_reason?: string | null
+          suspend_until?: string | null
+          updated_at?: string
+          user_no?: string | null
         }
         Relationships: [
           {
-            foreignKeyName: "coach_loans_branch_id_fkey"
+            foreignKeyName: "profiles_branch_id_fkey"
             columns: ["branch_id"]
             isOneToOne: false
             referencedRelation: "branches"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "coach_loans_coach_id_fkey"
-            columns: ["coach_id"]
+            foreignKeyName: "profiles_branch_id_fkey"
+            columns: ["branch_id"]
             isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "coach_loans_created_by_fkey"
-            columns: ["created_by"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      coach_loan_payments: {
-        Row: {
-          amount: number
-          created_at: string
-          created_by: string | null
-          id: string
-          installment_number: number
-          kind: string
-          loan_id: string
-          payslip_id: string | null
-          period_label: string
-        }
-        Insert: {
-          amount: number
-          created_at?: string
-          created_by?: string | null
-          id?: string
-          installment_number: number
-          kind?: string
-          loan_id: string
-          payslip_id?: string | null
-          period_label: string
-        }
-        Update: {
-          amount?: number
-          created_at?: string
-          created_by?: string | null
-          id?: string
-          installment_number?: number
-          kind?: string
-          loan_id?: string
-          payslip_id?: string | null
-          period_label?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "coach_loan_payments_loan_id_fkey"
-            columns: ["loan_id"]
-            isOneToOne: false
-            referencedRelation: "coach_loans"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "coach_loan_payments_payslip_id_fkey"
-            columns: ["payslip_id"]
-            isOneToOne: false
-            referencedRelation: "payslips"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "coach_loan_payments_created_by_fkey"
-            columns: ["created_by"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      payslip_deductions: {
-        Row: {
-          amount: number
-          created_at: string
-          id: string
-          label: string
-          loan_id: string | null
-          loan_payment_id: string | null
-          meta: Json | null
-          payslip_id: string
-          type: string
-        }
-        Insert: {
-          amount: number
-          created_at?: string
-          id?: string
-          label: string
-          loan_id?: string | null
-          loan_payment_id?: string | null
-          meta?: Json | null
-          payslip_id: string
-          type: string
-        }
-        Update: {
-          amount?: number
-          created_at?: string
-          id?: string
-          label?: string
-          loan_id?: string | null
-          loan_payment_id?: string | null
-          meta?: Json | null
-          payslip_id?: string
-          type?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "payslip_deductions_payslip_id_fkey"
-            columns: ["payslip_id"]
-            isOneToOne: false
-            referencedRelation: "payslips"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "payslip_deductions_loan_id_fkey"
-            columns: ["loan_id"]
-            isOneToOne: false
-            referencedRelation: "coach_loans"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "payslip_deductions_loan_payment_id_fkey"
-            columns: ["loan_payment_id"]
-            isOneToOne: false
-            referencedRelation: "coach_loan_payments"
+            referencedRelation: "public_branches"
             referencedColumns: ["id"]
           },
         ]
@@ -2759,6 +3119,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "rapor_periods_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "public_branches"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "rapor_periods_created_by_fkey"
             columns: ["created_by"]
             isOneToOne: false
@@ -2840,6 +3207,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "registrations_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "public_branches"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "registrations_member_id_fkey"
             columns: ["member_id"]
             isOneToOne: false
@@ -2902,10 +3276,116 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "schools_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "public_branches"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "schools_profile_id_fkey"
             columns: ["profile_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tax_settings: {
+        Row: {
+          coach_id: string | null
+          created_at: string
+          fixed_value: number | null
+          id: string
+          is_active: boolean
+          mode: string
+          percent_value: number | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          coach_id?: string | null
+          created_at?: string
+          fixed_value?: number | null
+          id?: string
+          is_active?: boolean
+          mode: string
+          percent_value?: number | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          coach_id?: string | null
+          created_at?: string
+          fixed_value?: number | null
+          id?: string
+          is_active?: boolean
+          mode?: string
+          percent_value?: number | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tax_settings_coach_id_fkey"
+            columns: ["coach_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tax_settings_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trial_bookings: {
+        Row: {
+          age_group: string | null
+          branch_id: string | null
+          created_at: string
+          id: string
+          name: string
+          phone: string
+          preferred_time: string | null
+          status: string
+        }
+        Insert: {
+          age_group?: string | null
+          branch_id?: string | null
+          created_at?: string
+          id?: string
+          name: string
+          phone: string
+          preferred_time?: string | null
+          status?: string
+        }
+        Update: {
+          age_group?: string | null
+          branch_id?: string | null
+          created_at?: string
+          id?: string
+          name?: string
+          phone?: string
+          preferred_time?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trial_bookings_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trial_bookings_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "public_branches"
             referencedColumns: ["id"]
           },
         ]
@@ -2947,6 +3427,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "members_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "public_branches"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "members_profile_id_fkey"
             columns: ["profile_id"]
             isOneToOne: false
@@ -2964,9 +3451,28 @@ export type Database = {
       }
       public_branches: {
         Row: {
-          id: string | null
-          name: string | null
+          address: string | null
           city: string | null
+          id: string | null
+          logo_url: string | null
+          name: string | null
+          phone: string | null
+        }
+        Insert: {
+          address?: string | null
+          city?: string | null
+          id?: string | null
+          logo_url?: string | null
+          name?: string | null
+          phone?: string | null
+        }
+        Update: {
+          address?: string | null
+          city?: string | null
+          id?: string | null
+          logo_url?: string | null
+          name?: string | null
+          phone?: string | null
         }
         Relationships: []
       }
@@ -2977,6 +3483,12 @@ export type Database = {
         Args: never
         Returns: Database["public"]["Enums"]["user_role"]
       }
+      cancel_coach_invoice: {
+        Args: { p_coach_id: string; p_invoice_id: string }
+        Returns: undefined
+      }
+      current_user_branch_id: { Args: never; Returns: string }
+      current_user_role: { Args: never; Returns: string }
       generate_user_no: { Args: { p_role: string }; Returns: string }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
@@ -2987,7 +3499,7 @@ export type Database = {
       bill_type: "monthly" | "package" | "custom" | "session_pack"
       cert_status: "pending" | "approved" | "rejected"
       coach_status: "active" | "suspended" | "archived"
-      invoice_status: "pending" | "paid"
+      invoice_status: "pending" | "paid" | "cancelled" | "rejected" | "approved"
       leave_status: "pending" | "approved" | "rejected"
       leave_type: "izin" | "sakit" | "ujian" | "lainnya"
       member_status: "active" | "suspended" | "archived"
@@ -3126,7 +3638,7 @@ export const Constants = {
       bill_type: ["monthly", "package", "custom", "session_pack"],
       cert_status: ["pending", "approved", "rejected"],
       coach_status: ["active", "suspended", "archived"],
-      invoice_status: ["pending", "paid"],
+      invoice_status: ["pending", "paid", "cancelled", "rejected", "approved"],
       leave_status: ["pending", "approved", "rejected"],
       leave_type: ["izin", "sakit", "ujian", "lainnya"],
       member_status: ["active", "suspended", "archived"],

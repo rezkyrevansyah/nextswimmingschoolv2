@@ -82,7 +82,7 @@ export function useUpload() {
     /** Landing page image (owner only). Row targets require the row id. */
     landingImage: (
       file: File,
-      target: "hero" | "safety" | "facility" | "testimonial" | "gallery" | "partner" | "program" | "coach" | "testimonial-v2",
+      target: "hero" | "safety" | "facility" | "testimonial" | "gallery" | "partner" | "program" | "coach" | "testimonial-v2" | "branch",
       id?: string,
     ) =>
       run(async () => {

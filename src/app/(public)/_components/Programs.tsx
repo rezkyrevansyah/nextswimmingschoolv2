@@ -2,6 +2,7 @@
 
 import BorderGlowCard from "@/components/BorderGlowCard";
 import Icon from "@/components/ui/Icon";
+import Btn from "@/components/ui/Btn";
 import { cn } from "@/lib/utils";
 import { useLocale } from "@/components/providers/LocaleProvider";
 
@@ -59,6 +60,11 @@ export default function Programs({ programs }: { programs: ProgramItem[] }) {
               </div>
             </BorderGlowCard>
           ))}
+        </div>
+
+        <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4 text-center sm:text-left">
+          <p className="text-sm text-ink-mute">{t("landing.programs.ctaText")}</p>
+          <Btn variant="primary" size="md" href="/register">{t("landing.programs.ctaButton")}</Btn>
         </div>
       </div>
     </section>

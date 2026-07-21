@@ -568,6 +568,11 @@ CREATE TABLE public.landing_config (
   nav_cta_message text NOT NULL DEFAULT 'Halo Admin Next Swimming School, saya ingin konsultasi program renang.'::text,
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
   contact_email text,
+  footer_address text,
+  social_instagram text,
+  social_tiktok text,
+  social_youtube text,
+  copyright_text text,
   CONSTRAINT landing_config_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.landing_nav_links (
@@ -890,4 +895,19 @@ CREATE TABLE public.landing_testimonials_v2 (
   rating smallint NOT NULL DEFAULT 5 CHECK (rating >= 1 AND rating <= 5),
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT landing_testimonials_v2_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.landing_branches (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  sort_order integer NOT NULL DEFAULT 0,
+  branch_id uuid,
+  name text,
+  address text,
+  city text,
+  phone text,
+  photo_url text,
+  lat double precision,
+  lng double precision,
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT landing_branches_pkey PRIMARY KEY (id),
+  CONSTRAINT landing_branches_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branches(id)
 );

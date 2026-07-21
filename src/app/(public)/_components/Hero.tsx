@@ -5,9 +5,10 @@ import { gsap } from "gsap";
 import Btn from "@/components/ui/Btn";
 import TextType from "@/components/TextType";
 import DotField from "@/components/DotField";
+import { waLink } from "@/lib/utils";
 import { useLocale } from "@/components/providers/LocaleProvider";
 
-export default function Hero() {
+export default function Hero({ waPhone, waMessage }: { waPhone: string | null; waMessage: string | null }) {
   const { t } = useLocale();
   const contentRef = useRef<HTMLDivElement>(null);
 
@@ -63,7 +64,7 @@ export default function Hero() {
         </p>
 
         <div data-hero-reveal className="mt-8 flex items-center justify-center gap-3">
-          <Btn variant="primary" size="lg" href="/register">
+          <Btn variant="primary" size="lg" href={waLink(waMessage ?? "", waPhone)} target="_blank" rel="noreferrer">
             {t("landing.hero.cta")}
           </Btn>
           <Btn variant="outline" size="lg" href="#programs">

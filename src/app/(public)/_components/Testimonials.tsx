@@ -1,6 +1,7 @@
 "use client";
 
 import StarDisplay from "@/components/ui/StarDisplay";
+import Btn from "@/components/ui/Btn";
 import { useLocale } from "@/components/providers/LocaleProvider";
 
 interface TestimonialItem {
@@ -50,6 +51,11 @@ export default function Testimonials({ testimonials }: { testimonials: Testimoni
               </div>
             </div>
           ))}
+        </div>
+
+        <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4 text-center sm:text-left">
+          <p className="text-sm text-ink-mute">{t("landing.testimonials.ctaText")}</p>
+          <Btn variant="primary" size="md" href="/register">{t("landing.testimonials.ctaButton")}</Btn>
         </div>
       </div>
     </section>
