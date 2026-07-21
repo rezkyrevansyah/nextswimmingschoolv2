@@ -310,7 +310,7 @@ export default function CoachLoans({ branches, userId, userName }: { branches: B
           </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label={t("owner.coachLoans.fieldPrincipal")}>
-              <Input type="number" inputMode="numeric" min={0} value={form.principal_amount}
+              <Input type="text" inputMode="numeric" value={form.principal_amount ? Number(form.principal_amount).toLocaleString("id-ID") : ""}
                 onChange={e => setForm(f => ({ ...f, principal_amount: e.target.value.replace(/\D/g, "") }))} />
             </Field>
             <Field label={t("owner.coachLoans.fieldTenor")}>

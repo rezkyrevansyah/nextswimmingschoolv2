@@ -1865,17 +1865,17 @@ function SettingsTarif({ branches }: { branches: Branch[] }) {
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t("owner.ratesTarif.searchPlaceholder")} className="w-full pl-9 pr-3 py-2 text-sm rounded-xl border border-line bg-white focus:outline-none focus:ring-1 focus:ring-ocean-400" />
         </div>
         {branches.length > 1 && (
-          <select value={filterBranch} onChange={e => setFilterBranch(e.target.value)} className="text-sm rounded-xl border border-line bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
+          <Select value={filterBranch} onChange={e => setFilterBranch(e.target.value)} className="w-auto min-h-0 text-sm py-2">
             <option value="all">{t("owner.ratesTarif.allBranches")}</option>
             {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-          </select>
+          </Select>
         )}
-        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="text-sm rounded-xl border border-line bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
+        <Select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="w-auto min-h-0 text-sm py-2">
           <option value="all">{t("owner.ratesTarif.allStatus")}</option>
           <option value="complete">{t("owner.ratesTarif.statusComplete")}</option>
           <option value="incomplete">{t("owner.ratesTarif.statusIncomplete")}</option>
           <option value="no_extra">{t("owner.ratesTarif.statusNoExtra")}</option>
-        </select>
+        </Select>
         <span className="text-xs text-ink-mute self-center ml-auto">{t("owner.ratesTarif.coachCount", { count: filteredCoaches.length })}</span>
       </div>
 

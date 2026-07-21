@@ -1159,20 +1159,15 @@ function CoachAbsensi({ setOverlay, coachId, branchId, classes, holidayClassIds,
   const openDetailSesi = async (classId: string, className: string, date: string) => {
     setDetailSesi({ classId, className, date });
     setLoadingDetail(true);
-    const { data } = await supabase
-      .from("member_attendances")
-      .select("member_id, status, method, member:members(profile:profiles(full_name))")
-      .eq("class_id", classId)
-      .eq("session_date", date)
-      .order("status");
-    setDetailRows(
-      (data ?? []).map(r => ({
-        member_id: r.member_id,
-        full_name: (r as unknown as { member: { profile: { full_name: string } | null } | null }).member?.profile?.full_name ?? "—",
-        status: r.status,
-        method: r.method ?? "",
-      }))
-    );
+    // Goes through a server route — see /api/coach/attendance-detail for why
+    // (member profile names are RLS-blocked from a direct browser query).
+    try {
+      const res = await fetch(`/api/coach/attendance-detail?classId=${classId}&date=${date}`);
+      const json = await res.json() as { rows?: { member_id: string; full_name: string; status: string; method: string }[] };
+      setDetailRows(json.rows ?? []);
+    } catch {
+      setDetailRows([]);
+    }
     setLoadingDetail(false);
   };
 
@@ -2452,11 +2447,17 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
         }
       }
 
-      // 4. Now fetch all entries for this coach + period
-      const { data: e } = await supabase.from("rapor_entries")
-        .select("id, member_id, class_id, locked, scores, notes, personality, motivation, learning_achievements, level, level_id, period_id, member:members(member_no, profile:profiles(full_name, avatar_url, birth_date)), class:classes(name, rapor_signer_coach_id, class_coaches(coach_id, role, profile:profiles(full_name, signature_url)))")
-        .eq("period_id", periodData.id).eq("coach_id", coachId);
-      if (e) { setEntries(e as unknown as RaporEntry[]); setPage(0); }
+      // 4. Now fetch all entries for this coach + period — via a server route,
+      // since the nested member/coach profile names are RLS-blocked from a
+      // direct browser query (see /api/coach/rapor-entries for why).
+      try {
+        const res = await fetch(`/api/coach/rapor-entries?periodId=${periodData.id}`);
+        const json = await res.json() as { entries?: unknown[] };
+        setEntries((json.entries ?? []) as unknown as RaporEntry[]);
+        setPage(0);
+      } catch {
+        setEntries([]);
+      }
       setLoading(false);
     })();
   }, [coachId, branchId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -3851,12 +3852,30 @@ export default function CoachPage() {
   }, [supabase]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadClasses = useCallback(async (profileId: string) => {
-    const { data, error } = await supabase.from("class_coaches").select("class:classes(id, name, branch_id, schedule_days, time_start, time_end, capacity, enrolled, goals, description, class_type, spreadsheet_filled, spreadsheet_url, branch:branches(name, city, address), member_classes(member:members(id, profile:profiles(full_name, avatar_url, birth_date, phone, gender, address, health_notes))))").eq("coach_id", profileId);
+    const { data, error } = await supabase.from("class_coaches").select("class:classes(id, name, branch_id, schedule_days, time_start, time_end, capacity, enrolled, goals, description, class_type, spreadsheet_filled, spreadsheet_url, branch:branches(name, city, address))").eq("coach_id", profileId);
     if (error || !data) return;
     const rows = data.map((d: Record<string, unknown>) => d.class as ClassRow).filter(Boolean);
-    setClasses(rows);
-    // Load today's holidays for these classes
     const classIds = rows.map((c) => c.id);
+
+    // Load class rosters via a server route — `profiles` RLS blocks a coach
+    // from reading other users' (members') profile rows directly from the
+    // browser, regardless of query shape, so this goes through a Route
+    // Handler using the service-role client instead (see route file).
+    if (classIds.length > 0) {
+      type MemberEntry = NonNullable<ClassRow["member_classes"]>[number];
+      try {
+        const res = await fetch(`/api/coach/class-members?classIds=${classIds.join(",")}`);
+        if (res.ok) {
+          const { membersByClass } = await res.json() as { membersByClass: Record<string, MemberEntry["member"][]> };
+          for (const c of rows) c.member_classes = (membersByClass[c.id] ?? []).map(member => ({ member }));
+        }
+      } catch {
+        // Roster stays empty on network failure — non-fatal for the rest of the page.
+      }
+    }
+    setClasses(rows);
+
+    // Load today's holidays for these classes
     if (classIds.length > 0) {
       const today = new Date().toISOString().slice(0, 10);
       const { data: hols } = await supabase.from("class_holidays").select("class_id").in("class_id", classIds).eq("holiday_date", today);
