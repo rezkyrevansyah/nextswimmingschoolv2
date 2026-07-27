@@ -2093,6 +2093,30 @@ export type Database = {
         }
         Relationships: []
       }
+      manual_transaction_categories: {
+        Row: {
+          created_at: string
+          id: string
+          kind: string
+          name: string
+          sort_order: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          kind: string
+          name: string
+          sort_order?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          kind?: string
+          name?: string
+          sort_order?: number
+        }
+        Relationships: []
+      }
       manual_transactions: {
         Row: {
           amount: number

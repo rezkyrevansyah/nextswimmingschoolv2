@@ -849,6 +849,14 @@ function CoachHome({ setOverlay, setActive, coachId, branchId, profile, classes,
   const supabase = createClient();
   const [monthStats, setMonthStats] = useState({ present: 0, leave: 0, sub: 0 });
   const [subClasses, setSubClasses] = useState<{ classId: string; className: string; originalCoach: string }[]>([]);
+  // School contact email (for the "Hubungi via Email" button)
+  const [contactEmail, setContactEmail] = useState<string | null>(null);
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from("landing_config").select("contact_email").single();
+      setContactEmail(data?.contact_email ?? null);
+    })();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   // Class IDs the coach is on leave for today (clock-in blocked)
   const [leaveClassIds, setLeaveClassIds] = useState<Set<string>>(new Set());
   const [latestAnnouncement, setLatestAnnouncement] = useState<{ title: string; body: string } | null>(null);
@@ -1090,6 +1098,22 @@ function CoachHome({ setOverlay, setActive, coachId, branchId, profile, classes,
             <div className="text-xs text-ink-mute mt-0.5">Status pengajuan izin</div>
           </button>
         </div>
+      </Card>
+
+      <Card>
+        <a
+          href={mailtoLink(
+            "Pertanyaan dari Coach - Next Swimming School",
+            `Halo Admin/Owner Next Swimming School,\n\nSaya ${profile?.full_name ?? "Coach"} ingin menanyakan...\n\n`,
+            contactEmail
+          )}
+          className="w-full flex items-center gap-3 py-1 group"
+        >
+          <span className="w-9 h-9 rounded-xl bg-ocean-50 text-ocean-600 flex items-center justify-center group-hover:bg-ocean-100 transition-colors">
+            <Icon name="mail" className="w-4 h-4" />
+          </span>
+          <span className="font-semibold text-ink group-hover:text-ocean-700">Hubungi via Email</span>
+        </a>
       </Card>
     </div>
   );
@@ -3011,7 +3035,9 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
         {viewing && (() => {
           const vScores   = (viewing as unknown as { scores?: Record<string, number | string> }).scores ?? {};
           const vNotes    = (viewing as unknown as { notes?: string | null }).notes ?? null;
-          const vCriteria = ((viewing as unknown as { class?: { class_criteria?: PrintCriterion[] } }).class?.class_criteria ?? []) as PrintCriterion[];
+          const vCriteria = [...(viewing.rapor_levels?.rapor_level_criteria ?? [])]
+            .sort((a, b) => a.sort_order - b.sort_order)
+            .map(c => ({ id: c.id, label: c.label, kind: c.kind as PrintCriterion["kind"] }));
           const critMap   = new Map(vCriteria.map(c => [c.id, c]));
           return (
             <div className="space-y-4">
@@ -3239,15 +3265,6 @@ function CoachProfile({ profile, onRefresh, onLogout, onAvatarChange }: { profil
   const [certFile, setCertFile] = useState<File | null>(null);
   const certFileInputRef = useRef<HTMLInputElement>(null);
   const [savingCert, setSavingCert] = useState(false);
-  // School contact email (for the "Hubungi via Email" button)
-  const [contactEmail, setContactEmail] = useState<string | null>(null);
-
-  useEffect(() => {
-    (async () => {
-      const { data } = await supabase.from("landing_config").select("contact_email").single();
-      setContactEmail(data?.contact_email ?? null);
-    })();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Populate inline form when profile loads
   /* eslint-disable react-hooks/set-state-in-effect -- sync form state from profile */
@@ -3620,22 +3637,6 @@ function CoachProfile({ profile, onRefresh, onLogout, onAvatarChange }: { profil
           <Field label="Atas nama" required><Input value={bankForm.bank_holder} onChange={e => setBankForm(f => ({ ...f, bank_holder: e.target.value }))} placeholder="Mis. Reza Fahlevi" /></Field>
         </div>
       </Modal>
-
-      <Card>
-        <a
-          href={mailtoLink(
-            "Pertanyaan dari Coach - Next Swimming School",
-            `Halo Admin/Owner Next Swimming School,\n\nSaya ${profile?.full_name ?? "Coach"} ingin menanyakan...\n\n`,
-            contactEmail
-          )}
-          className="w-full flex items-center gap-3 py-1 group"
-        >
-          <span className="w-9 h-9 rounded-xl bg-ocean-50 text-ocean-600 flex items-center justify-center group-hover:bg-ocean-100 transition-colors">
-            <Icon name="mail" className="w-4 h-4" />
-          </span>
-          <span className="font-semibold text-ink group-hover:text-ocean-700">Hubungi via Email</span>
-        </a>
-      </Card>
 
       <Card>
         <button onClick={onLogout} className="w-full flex items-center gap-3 py-1 text-left group">

@@ -48,7 +48,7 @@ export default function AdminClass({ branchId }: { branchId: string }) {
 
   const load = useCallback(async () => {
     const { data } = await supabase.from("classes")
-      .select("id, name, branch_id, status, capacity, enrolled, price_monthly, price_per_session, class_type, schedule_days, time_start, time_end, schedule_times, goals, description, photo_url, spreadsheet_url, spreadsheet_filled, class_coaches(role, profile:profiles(full_name, id)), coach_spreadsheets:class_coach_spreadsheets(coach_id, spreadsheet_url, updated_at, coach:profiles(full_name)), packages:class_packages(id, name, sessions, price, sort_order, active)")
+      .select("id, name, branch_id, status, capacity, enrolled, price_monthly, price_per_session, class_type, schedule_days, time_start, time_end, schedule_times, goals, description, photo_url, spreadsheet_url, spreadsheet_filled, class_coaches(coach_id, role, profile:profiles(full_name, id)), coach_spreadsheets:class_coach_spreadsheets(coach_id, spreadsheet_url, updated_at, coach:profiles(full_name)), packages:class_packages(id, name, sessions, price, sort_order, active)")
       .eq("branch_id", branchId).order("name");
     if (data) setClasses(data as unknown as ClassRow[]);
   }, [branchId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -60,6 +60,54 @@ export default function AdminClass({ branchId }: { branchId: string }) {
       .then(({ data }) => { if (data) setCoaches(data as unknown as CoachProfile[]); });
   }, [load]); // eslint-disable-line react-hooks/exhaustive-deps
   /* eslint-enable react-hooks/set-state-in-effect */
+
+  // Coach assign/role controls in class edit modal
+  const [addCoachId, setAddCoachId] = useState("");
+  const [coachMutating, setCoachMutating] = useState(false);
+
+  const patchClassCoaches = (classId: string, next: NonNullable<ClassRow["class_coaches"]>) => {
+    setEditTarget(prev => prev && prev.id === classId ? { ...prev, class_coaches: next } : prev);
+    setClasses(prev => prev.map(c => c.id === classId ? { ...c, class_coaches: next } : c));
+  };
+
+  const addClassCoach = async (classId: string, coachId: string) => {
+    if (!coachId) return;
+    setCoachMutating(true);
+    const { error } = await supabase.from("class_coaches").insert({ class_id: classId, coach_id: coachId, role: "assistant" });
+    setCoachMutating(false);
+    if (error) return toast.error("Gagal menambah coach", error.message);
+    const coach = coaches.find(c => c.id === coachId);
+    const current = editTarget?.class_coaches ?? [];
+    patchClassCoaches(classId, [...current, { coach_id: coachId, role: "assistant", profile: coach ? { id: coach.id, full_name: coach.full_name } : null }]);
+    setAddCoachId("");
+    toast.success("Coach ditambahkan ke kelas");
+  };
+
+  const removeClassCoach = async (classId: string, coachId: string) => {
+    const ok = await confirm({ title: "Hapus coach dari kelas?", body: "Coach akan berhenti dihandle kelas ini.", danger: true });
+    if (!ok) return;
+    setCoachMutating(true);
+    const { error } = await supabase.from("class_coaches").delete().eq("class_id", classId).eq("coach_id", coachId);
+    setCoachMutating(false);
+    if (error) return toast.error("Gagal menghapus coach", error.message);
+    const current = editTarget?.class_coaches ?? [];
+    patchClassCoaches(classId, current.filter(cc => cc.coach_id !== coachId));
+    toast.success("Coach dihapus dari kelas");
+  };
+
+  const setClassCoachRole = async (classId: string, coachId: string, role: "head" | "assistant") => {
+    setCoachMutating(true);
+    if (role === "head") {
+      await supabase.from("class_coaches").update({ role: "assistant" }).eq("class_id", classId).neq("coach_id", coachId);
+    }
+    const { error } = await supabase.from("class_coaches").update({ role }).eq("class_id", classId).eq("coach_id", coachId);
+    setCoachMutating(false);
+    if (error) return toast.error("Gagal mengubah peran coach", error.message);
+    const current = editTarget?.class_coaches ?? [];
+    patchClassCoaches(classId, current.map(cc => role === "head"
+      ? { ...cc, role: cc.coach_id === coachId ? "head" : "assistant" }
+      : (cc.coach_id === coachId ? { ...cc, role: "assistant" } : cc)));
+  };
 
   const openCreate = () => { setEditTarget(null); setForm(EMPTY_CLASS_FORM); setOpenForm(true); };
   const openEdit = (c: ClassRow) => {
@@ -231,7 +279,9 @@ export default function AdminClass({ branchId }: { branchId: string }) {
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
         {visibleClasses.map((c) => {
           const archived = c.status === "archived";
-          const coachNames = c.class_coaches?.map(cc => cc.profile?.full_name).filter(Boolean) ?? [];
+          const coachNames = [...(c.class_coaches ?? [])]
+            .sort((a, b) => (b.role === "head" ? 1 : 0) - (a.role === "head" ? 1 : 0))
+            .map(cc => cc.profile?.full_name).filter(Boolean) ?? [];
           const pct = c.enrolled / (c.capacity || 1);
           return (
             <Card key={c.id} padded={false} className={`overflow-hidden${archived ? " opacity-70" : ""}`}>
@@ -456,15 +506,43 @@ export default function AdminClass({ branchId }: { branchId: string }) {
           {editTarget && coaches.length > 0 && (
             <div>
               <div className="text-xs font-bold uppercase tracking-widest text-ink-faint mb-2">Coach yang mengajar</div>
-              <div className="flex flex-wrap gap-2">
-                {editTarget.class_coaches?.map(cc => cc.profile && (
-                  <span key={cc.profile.id} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-ocean-50 text-ocean-700 text-xs font-semibold">
-                    <Avatar name={cc.profile.full_name ?? ""} size={18} />{cc.profile.full_name}
-                    {cc.role === "head" && <span className="px-1.5 py-0.5 rounded-full bg-ocean-700 text-white text-[10px] font-bold uppercase tracking-wide">Head</span>}
-                  </span>
+              <div className="space-y-1.5">
+                {[...(editTarget.class_coaches ?? [])].sort((a, b) => (b.role === "head" ? 1 : 0) - (a.role === "head" ? 1 : 0)).map(cc => cc.profile && (
+                  <div key={cc.coach_id} className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-ocean-50 text-xs">
+                    <Avatar name={cc.profile.full_name ?? ""} size={22} />
+                    <span className="flex-1 font-semibold text-ocean-700 truncate">{cc.profile.full_name}</span>
+                    <button type="button" disabled={coachMutating} onClick={() => setClassCoachRole(editTarget.id, cc.coach_id, "head")}
+                      className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide transition-colors ${cc.role === "head" ? "bg-ocean-700 text-white" : "bg-white border border-line text-ink-mute"}`}>
+                      Head
+                    </button>
+                    <button type="button" disabled={coachMutating} onClick={() => setClassCoachRole(editTarget.id, cc.coach_id, "assistant")}
+                      className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide transition-colors ${cc.role === "assistant" ? "bg-ocean-700 text-white" : "bg-white border border-line text-ink-mute"}`}>
+                      Wakil
+                    </button>
+                    <button type="button" disabled={coachMutating} onClick={() => removeClassCoach(editTarget.id, cc.coach_id)}
+                      className="p-1 rounded-full text-danger-600 hover:bg-danger-50">
+                      <Icon name="trash" className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 ))}
                 {(editTarget.class_coaches?.length ?? 0) === 0 && <span className="text-xs text-warn-600 font-semibold">Belum ada coach assigned</span>}
               </div>
+              {(() => {
+                const assignedIds = new Set((editTarget.class_coaches ?? []).map(cc => cc.coach_id));
+                const available = coaches.filter(c => !assignedIds.has(c.id));
+                if (available.length === 0) return null;
+                return (
+                  <div className="flex items-center gap-2 mt-2">
+                    <select value={addCoachId} onChange={e => setAddCoachId(e.target.value)} disabled={coachMutating}
+                      className="flex-1 text-xs rounded-lg border border-line px-2 py-1.5 bg-paper-tint">
+                      <option value="">Pilih coach untuk ditambahkan…</option>
+                      {available.map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
+                    </select>
+                    <Btn variant="soft" size="sm" disabled={!addCoachId || coachMutating} onClick={() => addClassCoach(editTarget.id, addCoachId)}>Tambah</Btn>
+                  </div>
+                );
+              })()}
+              <p className="text-[11px] text-ink-faint mt-1.5">Maks 1 head per kelas — set head baru otomatis menurunkan head lama.</p>
             </div>
           )}
           {editTarget && (

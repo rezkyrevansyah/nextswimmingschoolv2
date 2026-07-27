@@ -429,6 +429,7 @@ function MemberSchedule({ memberId }: { memberId: string }) {
           if (!c) return null;
           const coaches = (c.class_coaches ?? [])
             .filter((cc): cc is { role: string; profile: { full_name: string; phone: string | null } } => cc.profile !== null)
+            .sort((a, b) => (b.role === "head" ? 1 : 0) - (a.role === "head" ? 1 : 0))
             .map((cc) => ({ name: cc.profile.full_name, phone: cc.profile.phone ?? null, role: cc.role }));
           return { id: c.id, name: c.name, schedule_days: c.schedule_days ?? [], time_start: c.time_start, time_end: c.time_end ?? null, schedule_times: c.schedule_times ?? null, location: c.location_name ?? "—", goals: c.goals ?? null, description: c.description ?? null, coaches };
         }).filter(Boolean) as typeof classes;
@@ -1080,7 +1081,7 @@ function MemberRapor({ memberId, memberName, branchId, avatarUrl, memberNo, birt
     if (!memberId) return;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data } = await (supabase as any).from("rapor_entries")
-      .select("id, scores, notes, personality, motivation, learning_achievements, level, level_id, coach_id, period_id, class_id, rapor_periods(label, is_open), classes(name, rapor_signer_coach_id, class_coaches(coach_id, role, profile:profiles(full_name, signature_url))), coach:profiles!rapor_entries_coach_id_fkey(full_name, signature_url)")
+      .select("id, scores, notes, personality, motivation, learning_achievements, level, level_id, coach_id, period_id, class_id, rapor_periods(label, is_open), classes(name, rapor_signer_coach_id, class_coaches(coach_id, role, profile:profiles(full_name, signature_url))), coach:profiles!rapor_entries_coach_id_fkey(full_name, signature_url), rapor_levels(rapor_level_criteria(id, label, kind, options, sort_order))")
       .eq("member_id", memberId)
       .order("created_at", { ascending: false }) as { data: any[] | null };
     if (!data) return;
@@ -1091,18 +1092,6 @@ function MemberRapor({ memberId, memberName, branchId, avatarUrl, memberNo, birt
       ? await supabase.from("member_reviews").select("id, rapor_id, coach_id, stars, message").in("rapor_id", entryIds).eq("member_id", memberId)
       : { data: [] };
     const reviewMap = new Map((reviews ?? []).map((r) => [`${r.rapor_id}:${r.coach_id}`, r]));
-
-    // Load class_criteria for all unique class_ids
-    const classIds = [...new Set(data.map((e) => e.class_id).filter(Boolean))];
-    const { data: criteriaRows } = classIds.length
-      ? await supabase.from("class_criteria").select("id, class_id, label, kind").in("class_id", classIds).order("sort_order")
-      : { data: [] };
-    const criteriaByClass = new Map<string, PrintCriterion[]>();
-    for (const c of (criteriaRows ?? [])) {
-      const list = criteriaByClass.get(c.class_id) ?? [];
-      list.push({ id: c.id, label: c.label, kind: c.kind as PrintCriterion["kind"] });
-      criteriaByClass.set(c.class_id, list);
-    }
 
     // Load best times for this member
     const { data: btRows } = await supabase
@@ -1137,17 +1126,23 @@ function MemberRapor({ memberId, memberName, branchId, avatarUrl, memberNo, birt
       const p = e.rapor_periods as unknown as { label: string; is_open: boolean } | null;
       const cls = e.classes as unknown as { name: string; rapor_signer_coach_id: string | null; class_coaches: { coach_id: string; role: string; profile: { full_name: string; signature_url: string | null } | null }[] } | null;
       const signer = resolveRaporSigner(cls?.class_coaches ?? [], cls?.rapor_signer_coach_id);
-      const coachReviews: CoachReviewSlot[] = (cls?.class_coaches ?? []).map(cc => {
-        const review = reviewMap.get(`${e.id}:${cc.coach_id}`);
-        return {
-          coach_id: cc.coach_id,
-          coach_name: cc.profile?.full_name ?? "—",
-          role: cc.role,
-          review_id: review?.id ?? null,
-          review_stars: review?.stars ?? null,
-          review_message: review?.message ?? null,
-        };
-      });
+      const rlCriteria = (e.rapor_levels as unknown as { rapor_level_criteria: { id: string; label: string; kind: string; sort_order: number }[] } | null)?.rapor_level_criteria ?? [];
+      const criteria: PrintCriterion[] = [...rlCriteria]
+        .sort((a, b) => a.sort_order - b.sort_order)
+        .map(c => ({ id: c.id, label: c.label, kind: c.kind as PrintCriterion["kind"] }));
+      const coachReviews: CoachReviewSlot[] = [...(cls?.class_coaches ?? [])]
+        .sort((a, b) => (b.role === "head" ? 1 : 0) - (a.role === "head" ? 1 : 0))
+        .map(cc => {
+          const review = reviewMap.get(`${e.id}:${cc.coach_id}`);
+          return {
+            coach_id: cc.coach_id,
+            coach_name: cc.profile?.full_name ?? "—",
+            role: cc.role,
+            review_id: review?.id ?? null,
+            review_stars: review?.stars ?? null,
+            review_message: review?.message ?? null,
+          };
+        });
       return {
         id: e.id,
         period: p?.label ?? "—",
@@ -1163,7 +1158,7 @@ function MemberRapor({ memberId, memberName, branchId, avatarUrl, memberNo, birt
         learning_achievements: (e as unknown as { learning_achievements: string | null }).learning_achievements ?? null,
         level: (e as unknown as { level: string | null }).level ?? null,
         coachReviews,
-        criteria: criteriaByClass.get(e.class_id) ?? [],
+        criteria,
         best_times: bestTimesArr,
         level_strokes: e.level_id ? (strokesByLevel.get(e.level_id) ?? []) : [],
         level_distances: e.level_id ? (distancesByLevel.get(e.level_id) ?? []) : [],
@@ -1314,7 +1309,12 @@ function MemberRapor({ memberId, memberName, branchId, avatarUrl, memberNo, birt
                                   ))}
                                   <span className="ml-2 text-sm font-semibold text-ink-soft">{["", "Kurang", "Cukup", "Baik", "Sangat Baik", "Luar Biasa"][draft.stars]}</span>
                                 </div>
-                                <Textarea rows={2} placeholder="Mis. Coach sangat sabar dan metodenya menyenangkan untuk anak-anak." value={draft.text} onChange={(e) => setDraft(entry, slot, { text: e.target.value })} />
+                                <div className="relative">
+                                  <Textarea rows={2} maxLength={300} className="pb-5" placeholder="Mis. Coach sangat sabar dan metodenya menyenangkan untuk anak-anak." value={draft.text} onChange={(e) => setDraft(entry, slot, { text: e.target.value })} />
+                                  <span className={`absolute bottom-2 right-3 text-[10px] font-mono tabular-nums pointer-events-none ${300 - draft.text.length <= 20 ? "text-danger-500 font-bold" : "text-ink-faint"}`}>
+                                    {draft.text.length}/300
+                                  </span>
+                                </div>
                                 <Btn variant="primary" size="sm" className="mt-3" disabled={isSaving} onClick={() => saveReview(entry, slot)}>
                                   {isSaving ? "Menyimpan…" : slot.review_id ? "Perbarui review" : "Simpan review"}
                                 </Btn>

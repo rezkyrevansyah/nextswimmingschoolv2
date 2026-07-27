@@ -34,7 +34,7 @@ interface CoachFull extends CoachProfile {
   suspend_until?: string | null;
   suspend_reason?: string | null;
   is_archived?: boolean | null;
-  class_coaches?: { class_id: string; class?: { id: string; name: string; branch_id: string; time_start: string | null; time_end: string | null; schedule_days: string[] | null; branches?: { name: string; city: string | null } | null } | null }[];
+  class_coaches?: { class_id: string; role?: string; class?: { id: string; name: string; branch_id: string; time_start: string | null; time_end: string | null; schedule_days: string[] | null; branches?: { name: string; city: string | null } | null } | null }[];
   coach_branches?: { branch_id: string; branches?: { name: string; city: string | null } | null; is_primary: boolean; joined_at: string }[] | null;
 }
 
@@ -99,6 +99,7 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
   const [openAssign, setOpenAssign] = useState(false);
   const [allClasses, setAllClasses] = useState<{ id: string; name: string; time_start: string | null; time_end: string | null; schedule_days: string[] | null }[]>([]);
   const [assignedClassIds, setAssignedClassIds] = useState<string[]>([]);
+  const [assignRoles, setAssignRoles] = useState<Record<string, string>>({});
   const [assignSaving, setAssignSaving] = useState(false);
 
   const load = useCallback(async () => {
@@ -109,7 +110,7 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
     const coachIds = (cbData ?? []).map((r: { coach_id: string }) => r.coach_id);
     if (coachIds.length === 0) { setCoaches([]); setLoading(false); return; }
     const { data, error } = await createClient().from("profiles")
-      .select("id, full_name, nick_name, email, phone, gender, birth_date, specialization, bio, address, education_level, education_institution, bank_name, bank_account, bank_holder, avatar_url, suspend_until, suspend_reason, is_archived, certifications!certifications_coach_id_fkey(id, name, title, status, valid_from, valid_until), class_coaches(class_id, class:classes(id, name, branch_id, time_start, time_end, schedule_days, branches(name, city))), coach_branches!coach_branches_coach_id_fkey(branch_id, branches(name, city), is_primary, joined_at)")
+      .select("id, full_name, nick_name, email, phone, gender, birth_date, specialization, bio, address, education_level, education_institution, bank_name, bank_account, bank_holder, avatar_url, suspend_until, suspend_reason, is_archived, certifications!certifications_coach_id_fkey(id, name, title, status, valid_from, valid_until), class_coaches(class_id, role, class:classes(id, name, branch_id, time_start, time_end, schedule_days, branches(name, city))), coach_branches!coach_branches_coach_id_fkey(branch_id, branches(name, city), is_primary, joined_at)")
       .eq("role", "coach").in("id", coachIds).order("full_name");
     if (error) return;
     if (data) setCoaches(data as unknown as CoachFull[]);
@@ -385,6 +386,7 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
       .select("id, name, time_start, time_end, schedule_days").eq("branch_id", branchId).eq("status", "active").order("name");
     if (data) setAllClasses(data as unknown as typeof allClasses);
     setAssignedClassIds(c.class_coaches?.map(cc => cc.class_id) ?? []);
+    setAssignRoles(Object.fromEntries((c.class_coaches ?? []).map(cc => [cc.class_id, cc.role ?? "assistant"])));
     setOpenAssign(true);
   };
 
@@ -394,11 +396,21 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
     const current = detail.class_coaches?.map(cc => cc.class_id) ?? [];
     const toAdd = assignedClassIds.filter(id => !current.includes(id));
     const toRemove = current.filter(id => !assignedClassIds.includes(id));
+    const toUpdate = assignedClassIds.filter(id => current.includes(id));
+    const supabase = createClient();
+    // Any class this coach is now "head" of: demote other coaches on that class to assistant first
+    const newHeadClassIds = assignedClassIds.filter(id => (assignRoles[id] ?? "assistant") === "head");
+    for (const class_id of newHeadClassIds) {
+      await supabase.from("class_coaches").update({ role: "assistant" }).eq("class_id", class_id).neq("coach_id", detail.id);
+    }
     if (toAdd.length > 0) {
-      await createClient().from("class_coaches").insert(toAdd.map(class_id => ({ class_id, coach_id: detail.id, role: "assistant" })));
+      await supabase.from("class_coaches").insert(toAdd.map(class_id => ({ class_id, coach_id: detail.id, role: assignRoles[class_id] ?? "assistant" })));
+    }
+    for (const class_id of toUpdate) {
+      await supabase.from("class_coaches").update({ role: assignRoles[class_id] ?? "assistant" }).eq("class_id", class_id).eq("coach_id", detail.id);
     }
     if (toRemove.length > 0) {
-      await createClient().from("class_coaches").delete().eq("coach_id", detail.id).in("class_id", toRemove);
+      await supabase.from("class_coaches").delete().eq("coach_id", detail.id).in("class_id", toRemove);
     }
     setAssignSaving(false);
     toast.success("Kelas berhasil diperbarui");
@@ -408,6 +420,7 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
       ...prev,
       class_coaches: assignedClassIds.map(class_id => ({
         class_id,
+        role: assignRoles[class_id] ?? "assistant",
         class: (allClasses.find(c => c.id === class_id) ?? null) as CoachFull["class_coaches"] extends (infer T)[] ? T extends { class?: infer C } ? C : never : never,
       })),
     } : prev);
@@ -691,7 +704,10 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
                                       <div key={cc.class_id} className="flex items-center gap-3 px-3 py-2.5">
                                         <div className="w-1.5 h-1.5 rounded-full bg-ocean-400 shrink-0" />
                                         <div className="flex-1 min-w-0">
-                                          <div className="font-semibold text-sm text-ink">{cc.class?.name}</div>
+                                          <div className="flex items-center gap-1.5">
+                                            <div className="font-semibold text-sm text-ink">{cc.class?.name}</div>
+                                            {cc.role === "head" && <span className="px-1.5 py-0.5 rounded-full bg-ocean-700 text-white text-[10px] font-bold uppercase tracking-wide shrink-0">Head</span>}
+                                          </div>
                                           {cc.class?.schedule_days && (
                                             <div className="text-xs text-ink-mute mt-0.5">
                                               {cc.class.schedule_days.join(", ")}{cc.class.time_start ? ` · ${cc.class.time_start.slice(0,5)}${cc.class.time_end ? `–${cc.class.time_end.slice(0,5)}` : ""}` : ""}
@@ -711,7 +727,10 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
                         <div className="space-y-2">
                           {allClasses.map(cc => (
                             <div key={cc.class_id} className="px-4 py-3 bg-paper-tint rounded-xl">
-                              <div className="font-semibold text-sm text-ink">{cc.class?.name}</div>
+                              <div className="flex items-center gap-1.5">
+                                <div className="font-semibold text-sm text-ink">{cc.class?.name}</div>
+                                {cc.role === "head" && <span className="px-1.5 py-0.5 rounded-full bg-ocean-700 text-white text-[10px] font-bold uppercase tracking-wide shrink-0">Head</span>}
+                              </div>
                               {cc.class?.schedule_days && (
                                 <div className="text-xs text-ink-mute mt-0.5">
                                   {cc.class.schedule_days.join(", ")}{cc.class.time_start ? ` · ${cc.class.time_start.slice(0,5)}${cc.class.time_end ? `–${cc.class.time_end.slice(0,5)}` : ""}` : ""}
@@ -1094,24 +1113,40 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
       <Modal open={openAssign} onClose={() => setOpenAssign(false)} title={`Assign Kelas — ${detail?.full_name ?? ""}`} size="sm"
         footer={<><Btn variant="ghost" onClick={() => setOpenAssign(false)}>Batal</Btn><Btn variant="primary" onClick={saveAssign} disabled={assignSaving}>{assignSaving ? "Menyimpan…" : "Simpan"}</Btn></>}>
         <div className="space-y-3">
-          <p className="text-sm text-ink-mute">Pilih kelas yang akan dihandle oleh coach ini.</p>
+          <p className="text-sm text-ink-mute">Pilih kelas yang akan dihandle oleh coach ini, lalu tentukan perannya (Head/Wakil). Maks 1 head per kelas — set head di sini otomatis menurunkan head lain di kelas yang sama.</p>
           {allClasses.length === 0 ? (
             <div className="text-sm text-ink-mute py-4 text-center">Belum ada kelas aktif di cabang ini.</div>
           ) : (
             <div className="space-y-2">
               {allClasses.map(cls => {
                 const checked = assignedClassIds.includes(cls.id);
+                const role = assignRoles[cls.id] ?? "assistant";
                 return (
-                  <button key={cls.id} onClick={() => setAssignedClassIds(ids => checked ? ids.filter(id => id !== cls.id) : [...ids, cls.id])}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border text-left transition-colors ${checked ? "bg-ocean-50 border-ocean-200" : "bg-paper-tint border-line hover:border-ocean-200"}`}>
-                    <div className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${checked ? "bg-ocean-600 border-ocean-600" : "border-line"}`}>
-                      {checked && <Icon name="check" className="w-3 h-3 text-white" />}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-semibold text-sm text-ink">{cls.name}</div>
-                      {cls.schedule_days && <div className="text-xs text-ink-mute">{cls.schedule_days.join(", ")}{cls.time_start ? ` · ${cls.time_start.slice(0,5)}${cls.time_end ? `–${cls.time_end.slice(0,5)}` : ""}` : ""}</div>}
-                    </div>
-                  </button>
+                  <div key={cls.id}
+                    className={`w-full rounded-xl border transition-colors ${checked ? "bg-ocean-50 border-ocean-200" : "bg-paper-tint border-line hover:border-ocean-200"}`}>
+                    <button type="button" onClick={() => setAssignedClassIds(ids => checked ? ids.filter(id => id !== cls.id) : [...ids, cls.id])}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-left">
+                      <div className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${checked ? "bg-ocean-600 border-ocean-600" : "border-line"}`}>
+                        {checked && <Icon name="check" className="w-3 h-3 text-white" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-sm text-ink">{cls.name}</div>
+                        {cls.schedule_days && <div className="text-xs text-ink-mute">{cls.schedule_days.join(", ")}{cls.time_start ? ` · ${cls.time_start.slice(0,5)}${cls.time_end ? `–${cls.time_end.slice(0,5)}` : ""}` : ""}</div>}
+                      </div>
+                    </button>
+                    {checked && (
+                      <div className="flex items-center gap-2 px-4 pb-3 pl-12">
+                        <button type="button" onClick={() => setAssignRoles(r => ({ ...r, [cls.id]: "head" }))}
+                          className={`px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wide transition-colors ${role === "head" ? "bg-ocean-700 text-white" : "bg-white border border-line text-ink-mute"}`}>
+                          Head
+                        </button>
+                        <button type="button" onClick={() => setAssignRoles(r => ({ ...r, [cls.id]: "assistant" }))}
+                          className={`px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wide transition-colors ${role === "assistant" ? "bg-ocean-700 text-white" : "bg-white border border-line text-ink-mute"}`}>
+                          Wakil
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 );
               })}
             </div>

@@ -478,12 +478,12 @@ export default function SchoolPage() {
         member_classes(
           classes(
             id, name, rapor_signer_coach_id,
-            class_coaches(coach_id, role, profile:profiles(full_name, signature_url)),
-            class_criteria(id, label, kind, options, sort_order)
+            class_coaches(coach_id, role, profile:profiles(full_name, signature_url))
           )
         ),
         rapor_entries(
-          id, scores, notes, personality, motivation, learning_achievements, level, level_id, period_id, locked
+          id, scores, notes, personality, motivation, learning_achievements, level, level_id, period_id, locked,
+          rapor_levels(rapor_level_criteria(id, label, kind, options, sort_order))
         )
       `)
       .eq("school_id", sId)
@@ -523,14 +523,14 @@ export default function SchoolPage() {
 
     const rows: Student[] = data.map((m) => {
       const profile = (m.profile as unknown as { full_name: string; avatar_url: string | null; birth_date: string | null } | null);
-      const mc = (m.member_classes as unknown as { classes: { id: string; name: string; rapor_signer_coach_id: string | null; class_coaches: { coach_id: string; role: string; profile: { full_name: string; signature_url: string | null } | null }[]; class_criteria: { id: string; label: string; kind: string; options: string[] | null; sort_order: number }[] } | null }[])?.[0];
+      const mc = (m.member_classes as unknown as { classes: { id: string; name: string; rapor_signer_coach_id: string | null; class_coaches: { coach_id: string; role: string; profile: { full_name: string; signature_url: string | null } | null }[] } | null }[])?.[0];
       const cls = mc?.classes;
       const signer = resolveRaporSigner(cls?.class_coaches ?? [], cls?.rapor_signer_coach_id);
       const entry = pid
-        ? (m.rapor_entries as unknown as { id: string; scores: Record<string, number | string>; notes: string | null; personality: string | null; motivation: string | null; learning_achievements: string | null; level: string | null; level_id: string | null; period_id: string; locked: boolean }[])
+        ? (m.rapor_entries as unknown as { id: string; scores: Record<string, number | string>; notes: string | null; personality: string | null; motivation: string | null; learning_achievements: string | null; level: string | null; level_id: string | null; period_id: string; locked: boolean; rapor_levels: { rapor_level_criteria: { id: string; label: string; kind: string; options: string[] | null; sort_order: number }[] } | null }[])
           ?.find((e) => e.period_id === pid)
         : undefined;
-      const criteria: Criterion[] = [...(cls?.class_criteria ?? [])]
+      const criteria: Criterion[] = [...(entry?.rapor_levels?.rapor_level_criteria ?? [])]
         .sort((a, b) => a.sort_order - b.sort_order)
         .map(c => ({ id: c.id, label: c.label, kind: c.kind as Criterion["kind"] }));
       return {

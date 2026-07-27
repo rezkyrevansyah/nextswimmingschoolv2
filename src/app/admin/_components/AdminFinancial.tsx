@@ -37,7 +37,7 @@ interface ManualTxnRow {
 
 type IncomeRow = (FinancialRow & { source: "bill" }) | (ManualTxnRow & { source: "manual" });
 
-const MANUAL_CATEGORY_OPTIONS = ["Sponsorship", "Sewa", "Listrik", "Perlengkapan", "Lainnya"];
+interface ManualTxnCategory { id: string; kind: "income" | "expense"; name: string; sort_order: number }
 
 type FinTab = "income" | "expenses";
 
@@ -84,12 +84,17 @@ export default function AdminFinancial({ branchId, userId, userName }: { branchI
     if (data) setManualTxns(data as unknown as ManualTxnRow[]);
   }, [branchId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const [categories, setCategories] = useState<ManualTxnCategory[]>([]);
+  const categoriesByKind = (kind: "income" | "expense") => categories.filter(c => c.kind === kind);
+
   /* eslint-disable react-hooks/set-state-in-effect -- async data loader */
   useEffect(() => {
     load();
     loadManualTxns();
     supabase.from("classes").select("id, name").eq("branch_id", branchId).order("name")
       .then(({ data }) => { if (data) setClassList(data as { id: string; name: string }[]); });
+    supabase.from("manual_transaction_categories").select("id, kind, name, sort_order").order("sort_order")
+      .then(({ data }) => { if (data) setCategories(data as unknown as ManualTxnCategory[]); });
   }, [load, loadManualTxns]); // eslint-disable-line react-hooks/exhaustive-deps
   /* eslint-enable react-hooks/set-state-in-effect */
 
@@ -160,16 +165,18 @@ export default function AdminFinancial({ branchId, userId, userName }: { branchI
 
   // ── Manual transaction CRUD ──────────────────────────────────────────────────
   const [showTxnModal, setShowTxnModal] = useState<{ kind: "income" | "expense"; edit: ManualTxnRow | null } | null>(null);
-  const [txnForm, setTxnForm] = useState({ category: MANUAL_CATEGORY_OPTIONS[0], categoryOther: "", description: "", amount: "", occurred_at: new Date().toISOString().slice(0, 10), notes: "", isReimburse: false, proofUrl: "" });
+  const [txnForm, setTxnForm] = useState({ category: "", categoryOther: "", description: "", amount: "", occurred_at: new Date().toISOString().slice(0, 10), notes: "", isReimburse: false, proofUrl: "" });
   const [savingTxn, setSavingTxn] = useState(false);
 
   const openAddTxn = (kind: "income" | "expense") => {
-    setTxnForm({ category: MANUAL_CATEGORY_OPTIONS[0], categoryOther: "", description: "", amount: "", occurred_at: new Date().toISOString().slice(0, 10), notes: "", isReimburse: false, proofUrl: "" });
+    const names = categoriesByKind(kind).map(c => c.name);
+    setTxnForm({ category: names[0] ?? "Lainnya", categoryOther: "", description: "", amount: "", occurred_at: new Date().toISOString().slice(0, 10), notes: "", isReimburse: false, proofUrl: "" });
     setShowTxnModal({ kind, edit: null });
   };
 
   const openEditTxn = (row: ManualTxnRow) => {
-    const knownCategory = MANUAL_CATEGORY_OPTIONS.includes(row.category ?? "") ? (row.category ?? MANUAL_CATEGORY_OPTIONS[0]) : "Lainnya";
+    const names = categoriesByKind(row.kind).map(c => c.name);
+    const knownCategory = names.includes(row.category ?? "") ? (row.category ?? names[0] ?? "Lainnya") : "Lainnya";
     setTxnForm({
       category: knownCategory, categoryOther: knownCategory === "Lainnya" ? (row.category ?? "") : "",
       description: row.description, amount: String(row.amount), occurred_at: row.occurred_at, notes: row.notes ?? "",
@@ -488,8 +495,11 @@ export default function AdminFinancial({ branchId, userId, userName }: { branchI
         <div className="space-y-4">
           <Field label="Kategori">
             <Select value={txnForm.category} onChange={e => setTxnForm(f => ({ ...f, category: e.target.value }))}>
-              {MANUAL_CATEGORY_OPTIONS.map(c => <option key={c} value={c}>{c}</option>)}
+              {categoriesByKind(showTxnModal?.kind ?? "income").map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
             </Select>
+            {categoriesByKind(showTxnModal?.kind ?? "income").length === 0 && (
+              <p className="text-xs text-warn-600 mt-1">Belum ada kategori — minta owner menambahkannya di panel Owner.</p>
+            )}
           </Field>
           {txnForm.category === "Lainnya" && (
             <Field label="Kategori Custom"><Input value={txnForm.categoryOther} onChange={e => setTxnForm(f => ({ ...f, categoryOther: e.target.value }))} placeholder="Contoh: Donasi alumni" /></Field>

@@ -2334,14 +2334,7 @@ interface ManualTxnRow {
 type IncomeRow = (OwnerFinancialBill & { source: "bill" }) | (ManualTxnRow & { source: "manual" });
 type ExpenseRow = (OwnerFinancialExpense & { source: "invoice" }) | (ManualTxnRow & { source: "manual" });
 
-const MANUAL_CATEGORY_OPTIONS = ["Sponsorship", "Sewa", "Listrik", "Perlengkapan", "Lainnya"];
-const MANUAL_CATEGORY_LABEL_KEYS: Record<string, string> = {
-  Sponsorship: "owner.financial.categorySponsorship",
-  Sewa: "owner.financial.categoryRent",
-  Listrik: "owner.financial.categoryElectricity",
-  Perlengkapan: "owner.financial.categorySupplies",
-  Lainnya: "owner.financial.categoryOther",
-};
+interface ManualTxnCategory { id: string; kind: "income" | "expense"; name: string; sort_order: number }
 
 type FinancialTab = "overview" | "income" | "expenses" | "moneyflow";
 
@@ -2411,18 +2404,32 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
   /* eslint-disable-next-line react-hooks/set-state-in-effect -- async data loader */
   useEffect(() => { loadManualTxns(); }, [loadManualTxns]);
 
+  // ── Manual transaction categories (owner CRUD) ──────────────────────────────
+  const [categories, setCategories] = useState<ManualTxnCategory[]>([]);
+  const loadCategories = useCallback(async () => {
+    const { data } = await supabase.from("manual_transaction_categories")
+      .select("id, kind, name, sort_order").order("sort_order");
+    if (data) setCategories(data as unknown as ManualTxnCategory[]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  /* eslint-disable-next-line react-hooks/set-state-in-effect -- async data loader */
+  useEffect(() => { loadCategories(); }, [loadCategories]);
+  const categoriesByKind = (kind: "income" | "expense") => categories.filter(c => c.kind === kind);
+  const [showCategoryManager, setShowCategoryManager] = useState<"income" | "expense" | null>(null);
+
   // ── Manual transaction CRUD ──────────────────────────────────────────────────
   const [showTxnModal, setShowTxnModal] = useState<{ kind: "income" | "expense"; edit: ManualTxnRow | null } | null>(null);
-  const [txnForm, setTxnForm] = useState({ branch_id: "", category: MANUAL_CATEGORY_OPTIONS[0], categoryOther: "", description: "", amount: "", occurred_at: new Date().toISOString().slice(0, 10), notes: "", isReimburse: false, proofUrl: "" });
+  const [txnForm, setTxnForm] = useState({ branch_id: "", category: "", categoryOther: "", description: "", amount: "", occurred_at: new Date().toISOString().slice(0, 10), notes: "", isReimburse: false, proofUrl: "" });
   const [savingTxn, setSavingTxn] = useState(false);
 
   const openAddTxn = (kind: "income" | "expense") => {
-    setTxnForm({ branch_id: branches[0]?.id ?? "", category: MANUAL_CATEGORY_OPTIONS[0], categoryOther: "", description: "", amount: "", occurred_at: new Date().toISOString().slice(0, 10), notes: "", isReimburse: false, proofUrl: "" });
+    const names = categoriesByKind(kind).map(c => c.name);
+    setTxnForm({ branch_id: branches[0]?.id ?? "", category: names[0] ?? "Lainnya", categoryOther: "", description: "", amount: "", occurred_at: new Date().toISOString().slice(0, 10), notes: "", isReimburse: false, proofUrl: "" });
     setShowTxnModal({ kind, edit: null });
   };
 
   const openEditTxn = (row: ManualTxnRow) => {
-    const knownCategory = MANUAL_CATEGORY_OPTIONS.includes(row.category ?? "") ? (row.category ?? MANUAL_CATEGORY_OPTIONS[0]) : "Lainnya";
+    const names = categoriesByKind(row.kind).map(c => c.name);
+    const knownCategory = names.includes(row.category ?? "") ? (row.category ?? names[0] ?? "Lainnya") : "Lainnya";
     setTxnForm({
       branch_id: row.branch_id, category: knownCategory, categoryOther: knownCategory === "Lainnya" ? (row.category ?? "") : "",
       description: row.description, amount: String(row.amount), occurred_at: row.occurred_at, notes: row.notes ?? "",
@@ -2779,7 +2786,8 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
       {/* ── INCOME ──────────────────────────────────────────────────────────── */}
       {tab === "income" && (
         <div className="space-y-4">
-          <div className="flex justify-end">
+          <div className="flex justify-end gap-2">
+            <Btn variant="soft" icon="settings" size="sm" onClick={() => setShowCategoryManager("income")}>{t("owner.financial.manageCategoriesBtn")}</Btn>
             <Btn variant="primary" icon="plus" size="sm" onClick={() => openAddTxn("income")}>{t("owner.financial.addIncomeBtn")}</Btn>
           </div>
           {/* Filters */}
@@ -2918,7 +2926,8 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
       {/* ── EXPENSES ────────────────────────────────────────────────────────── */}
       {tab === "expenses" && (
         <div className="space-y-4">
-          <div className="flex justify-end">
+          <div className="flex justify-end gap-2">
+            <Btn variant="soft" icon="settings" size="sm" onClick={() => setShowCategoryManager("expense")}>{t("owner.financial.manageCategoriesBtn")}</Btn>
             <Btn variant="primary" icon="plus" size="sm" onClick={() => openAddTxn("expense")}>{t("owner.financial.addExpenseBtn")}</Btn>
           </div>
           <div className="grid sm:grid-cols-2 gap-4">
@@ -3113,7 +3122,7 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
           </Field>
           <Field label={t("owner.financial.fieldCategory")}>
             <Select value={txnForm.category} onChange={e => setTxnForm(f => ({ ...f, category: e.target.value }))}>
-              {MANUAL_CATEGORY_OPTIONS.map(c => <option key={c} value={c}>{t(MANUAL_CATEGORY_LABEL_KEYS[c])}</option>)}
+              {categoriesByKind(showTxnModal?.kind ?? "income").map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
             </Select>
           </Field>
           {txnForm.category === "Lainnya" && (
@@ -3138,7 +3147,105 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
         </div>
       </Modal>
 
+      {/* ── Modal: Kelola Kategori ───────────────────────────────────────────── */}
+      <CategoryManagerModal
+        kind={showCategoryManager}
+        categories={showCategoryManager ? categoriesByKind(showCategoryManager) : []}
+        manualTxns={manualTxns}
+        onClose={() => setShowCategoryManager(null)}
+        onChanged={loadCategories}
+      />
     </div>
+  );
+}
+
+function CategoryManagerModal({ kind, categories, manualTxns, onClose, onChanged }: {
+  kind: "income" | "expense" | null;
+  categories: ManualTxnCategory[];
+  manualTxns: ManualTxnRow[];
+  onClose: () => void;
+  onChanged: () => void;
+}) {
+  const { t } = useLocale();
+  const supabase = createClient();
+  const toast = useToast();
+  const confirm = useConfirm();
+  const [newName, setNewName] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+
+  const add = async () => {
+    const name = newName.trim();
+    if (!name || !kind) return;
+    setSaving(true);
+    const { error } = await supabase.from("manual_transaction_categories")
+      .insert({ kind, name, sort_order: categories.length + 1 });
+    setSaving(false);
+    if (error) return toast.error(t("owner.financial.categorySaveFailed"), error.message);
+    setNewName("");
+    onChanged();
+  };
+
+  const startEdit = (c: ManualTxnCategory) => { setEditId(c.id); setEditName(c.name); };
+
+  const saveEdit = async () => {
+    const name = editName.trim();
+    if (!name || !editId) return;
+    setSaving(true);
+    const { error } = await supabase.from("manual_transaction_categories").update({ name }).eq("id", editId);
+    setSaving(false);
+    if (error) return toast.error(t("owner.financial.categorySaveFailed"), error.message);
+    setEditId(null);
+    onChanged();
+  };
+
+  const del = async (c: ManualTxnCategory) => {
+    const usageCount = manualTxns.filter(t => t.kind === c.kind && t.category === c.name).length;
+    if (usageCount > 0) {
+      toast.error(t("owner.financial.categoryInUseTitle"), t("owner.financial.categoryInUseBody", { count: usageCount }));
+      return;
+    }
+    const ok = await confirm({ title: t("owner.financial.categoryDeleteConfirmTitle"), body: c.name, danger: true });
+    if (!ok) return;
+    const { error } = await supabase.from("manual_transaction_categories").delete().eq("id", c.id);
+    if (error) return toast.error(t("owner.financial.categoryDeleteFailed"), error.message);
+    onChanged();
+  };
+
+  return (
+    <Modal open={!!kind} onClose={onClose}
+      title={kind === "income" ? t("owner.financial.manageCategoriesIncomeTitle") : t("owner.financial.manageCategoriesExpenseTitle")}
+      size="sm" footer={<Btn variant="ghost" onClick={onClose}>{t("common.actions.close")}</Btn>}>
+      <div className="space-y-3">
+        <div className="flex gap-2">
+          <Input value={newName} onChange={e => setNewName(e.target.value)} placeholder={t("owner.financial.categoryNamePlaceholder")}
+            onKeyDown={e => { if (e.key === "Enter") add(); }} />
+          <Btn variant="primary" size="sm" disabled={!newName.trim() || saving} onClick={add}>{t("common.actions.add")}</Btn>
+        </div>
+        <div className="space-y-1.5">
+          {categories.map(c => (
+            <div key={c.id} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-paper-tint">
+              {editId === c.id ? (
+                <>
+                  <Input value={editName} onChange={e => setEditName(e.target.value)} className="flex-1"
+                    onKeyDown={e => { if (e.key === "Enter") saveEdit(); }} autoFocus />
+                  <button onClick={saveEdit} disabled={saving} className="w-7 h-7 rounded-lg border border-line bg-white flex items-center justify-center hover:bg-paper-deep shrink-0"><Icon name="check" className="w-3.5 h-3.5 text-ok-600" /></button>
+                  <button onClick={() => setEditId(null)} className="w-7 h-7 rounded-lg border border-line bg-white flex items-center justify-center hover:bg-paper-deep shrink-0"><Icon name="x" className="w-3.5 h-3.5 text-ink-mute" /></button>
+                </>
+              ) : (
+                <>
+                  <span className="flex-1 text-sm font-semibold text-ink truncate">{c.name}</span>
+                  <button onClick={() => startEdit(c)} className="w-7 h-7 rounded-lg border border-line bg-white flex items-center justify-center hover:bg-paper-deep shrink-0"><Icon name="edit" className="w-3.5 h-3.5 text-ink-mute" /></button>
+                  <button onClick={() => del(c)} className="w-7 h-7 rounded-lg border border-danger-200 bg-danger-50 flex items-center justify-center hover:bg-danger-100 shrink-0"><Icon name="trash" className="w-3.5 h-3.5 text-danger-500" /></button>
+                </>
+              )}
+            </div>
+          ))}
+          {categories.length === 0 && <div className="py-6 text-center text-ink-mute text-sm">{t("owner.financial.categoryEmpty")}</div>}
+        </div>
+      </div>
+    </Modal>
   );
 }
 
