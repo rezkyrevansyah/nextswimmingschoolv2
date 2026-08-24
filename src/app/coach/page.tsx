@@ -265,11 +265,16 @@ function ClockInFlow({ back, coachId, branchId, classes, preselectedClassId, onS
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // Load branch coordinates
+  const selectedClass = classes.find(c => c.id === classId) ?? null;
+  const isExternalLocation = selectedClass?.location_type === "external";
+
+  // Load branch coordinates — skipped for external-location classes, since the
+  // session doesn't happen at the branch and there's no coordinate to compare against.
   useEffect(() => {
+    if (isExternalLocation) return;
     supabase.from("branches").select("lat, lng").eq("id", branchId).single()
       .then(({ data }) => { if (data?.lat && data?.lng) setBranchCoords({ lat: data.lat, lng: data.lng }); });
-  }, [branchId, supabase]);
+  }, [branchId, supabase, isExternalLocation]);
 
   // Get GPS
   useEffect(() => {
@@ -347,9 +352,9 @@ function ClockInFlow({ back, coachId, branchId, classes, preselectedClassId, onS
     setStep(3);
   };
 
-  const selectedClass = classes.find(c => c.id === classId) ?? null;
-
-  const distLabel = distanceMeters != null
+  const distLabel = isExternalLocation
+    ? t("coach.clockIn.externalLocationNote")
+    : distanceMeters != null
     ? distanceMeters < 1000
       ? t("coach.clockIn.distFromBranchMeters", { m: distanceMeters })
       : t("coach.clockIn.distFromBranchKm", { km: (distanceMeters / 1000).toFixed(1) })
@@ -357,7 +362,8 @@ function ClockInFlow({ back, coachId, branchId, classes, preselectedClassId, onS
       ? t("coach.clockIn.branchCoordsNotSet")
       : t("coach.clockIn.calculatingDistance");
 
-  const distColor = distanceMeters == null ? "text-ink-mute"
+  const distColor = isExternalLocation ? "text-ink-mute"
+    : distanceMeters == null ? "text-ink-mute"
     : distanceMeters <= 500 ? "text-ok-600"
     : distanceMeters <= 2000 ? "text-warn-600"
     : "text-danger-600";
@@ -401,7 +407,7 @@ function ClockInFlow({ back, coachId, branchId, classes, preselectedClassId, onS
                 </div>
               </div>
               <div>
-                <div className="text-ink-faint font-bold uppercase tracking-widest mb-0.5">{t("coach.clockIn.distToBranchLabel")}</div>
+                <div className="text-ink-faint font-bold uppercase tracking-widest mb-0.5">{isExternalLocation ? t("coach.clockIn.sessionLocationLabel") : t("coach.clockIn.distToBranchLabel")}</div>
                 <div className={`font-semibold ${distColor}`}>{distLabel}</div>
               </div>
             </div>
@@ -2013,11 +2019,11 @@ function CoachKelas({ classes, coachId, classSpreadsheets, ownSpreadsheets, onRe
               <Icon name="map-pin" className="w-4 h-4 text-ocean-500 shrink-0" />
               {det.location_type === "external" ? (
                 <div>
-                  <div className="font-semibold text-ink">🏡 {det.external_location_name || "Lokasi External"}</div>
+                  <div className="font-semibold text-ink">🏡 {det.external_location_name || t("coach.kelas.externalLocationFallback")}</div>
                   {det.external_location_address && <div className="text-xs text-ink-mute mt-0.5">{det.external_location_address}</div>}
                   {det.google_maps_url && (
                     <a href={det.google_maps_url} target="_blank" rel="noreferrer" className="text-xs font-bold text-wave-600 hover:underline mt-1 inline-block">
-                      Buka di Google Maps ↗
+                      {t("coach.kelas.openInGoogleMaps")}
                     </a>
                   )}
                 </div>

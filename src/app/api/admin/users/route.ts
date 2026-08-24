@@ -38,6 +38,7 @@ export async function POST(req: NextRequest) {
     school_id?: string;
     class_id?: string;
     total_sessions?: number | null;
+    custom_role_label?: string;
   };
 
   const { email, password, full_name, role, branch_id, phone } = body;
@@ -88,7 +89,7 @@ export async function POST(req: NextRequest) {
   // fall back to an explicit update so all fields (branch_id, role, etc.) are set.
   const profileData = {
     id: userId,
-    role: role as "owner" | "admin" | "coach" | "member" | "school",
+    role: role as "owner" | "admin" | "coach" | "member" | "school" | "staff",
     full_name,
     email,
     phone: phone || null,
@@ -99,6 +100,7 @@ export async function POST(req: NextRequest) {
     health_notes: body.health_notes || null,
     is_profile_complete: false,
     ...(role !== "member" ? { user_no: userNo } : {}),
+    ...(role === "staff" || role === "admin" ? { custom_role_label: body.custom_role_label || null } : {}),
   };
 
   const { error: insertError } = await db.from("profiles").insert(profileData);

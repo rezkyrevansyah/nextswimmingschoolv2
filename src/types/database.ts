@@ -2896,6 +2896,7 @@ export type Database = {
           branch_id: string | null
           certifications: string[] | null
           created_at: string
+          custom_role_label: string | null
           education_institution: string | null
           education_level: string | null
           email: string | null
@@ -2928,6 +2929,7 @@ export type Database = {
           branch_id?: string | null
           certifications?: string[] | null
           created_at?: string
+          custom_role_label?: string | null
           education_institution?: string | null
           education_level?: string | null
           email?: string | null
@@ -2960,6 +2962,7 @@ export type Database = {
           branch_id?: string | null
           certifications?: string[] | null
           created_at?: string
+          custom_role_label?: string | null
           education_institution?: string | null
           education_level?: string | null
           email?: string | null
@@ -3841,10 +3844,9 @@ export type Database = {
           clock_out_time: string | null
           created_at: string
           id: string
-          notes: string | null
+          note: string | null
           staff_id: string
           status: string
-          updated_at: string
         }
         Insert: {
           attendance_date?: string
@@ -3853,10 +3855,9 @@ export type Database = {
           clock_out_time?: string | null
           created_at?: string
           id?: string
-          notes?: string | null
+          note?: string | null
           staff_id: string
           status?: string
-          updated_at?: string
         }
         Update: {
           attendance_date?: string
@@ -3865,10 +3866,9 @@ export type Database = {
           clock_out_time?: string | null
           created_at?: string
           id?: string
-          notes?: string | null
+          note?: string | null
           staff_id?: string
           status?: string
-          updated_at?: string
         }
         Relationships: [
           {
@@ -3881,6 +3881,212 @@ export type Database = {
           {
             foreignKeyName: "staff_attendances_staff_id_fkey"
             columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      monthly_salaries: {
+        Row: {
+          amount: number
+          branch_id: string
+          created_at: string
+          id: string
+          period_key: string
+          period_label: string
+          profile_id: string
+          set_by: string | null
+        }
+        Insert: {
+          amount: number
+          branch_id: string
+          created_at?: string
+          id?: string
+          period_key: string
+          period_label: string
+          profile_id: string
+          set_by?: string | null
+        }
+        Update: {
+          amount?: number
+          branch_id?: string
+          created_at?: string
+          id?: string
+          period_key?: string
+          period_label?: string
+          profile_id?: string
+          set_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "monthly_salaries_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "monthly_salaries_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      staff_invoices: {
+        Row: {
+          amount: number
+          approved_at: string | null
+          bank_info: string | null
+          branch_id: string
+          created_at: string
+          id: string
+          invoice_number: string
+          paid_at: string | null
+          period_key: string
+          period_label: string
+          profile_id: string
+          rejected_at: string | null
+          rejection_reason: string | null
+          salary_id: string
+          status: string
+          submitted_at: string
+        }
+        Insert: {
+          amount: number
+          approved_at?: string | null
+          bank_info?: string | null
+          branch_id: string
+          created_at?: string
+          id?: string
+          invoice_number: string
+          paid_at?: string | null
+          period_key: string
+          period_label: string
+          profile_id: string
+          rejected_at?: string | null
+          rejection_reason?: string | null
+          salary_id: string
+          status?: string
+          submitted_at?: string
+        }
+        Update: {
+          amount?: number
+          approved_at?: string | null
+          bank_info?: string | null
+          branch_id?: string
+          created_at?: string
+          id?: string
+          invoice_number?: string
+          paid_at?: string | null
+          period_key?: string
+          period_label?: string
+          profile_id?: string
+          rejected_at?: string | null
+          rejection_reason?: string | null
+          salary_id?: string
+          status?: string
+          submitted_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_invoices_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_invoices_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_invoices_salary_id_fkey"
+            columns: ["salary_id"]
+            isOneToOne: false
+            referencedRelation: "monthly_salaries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      staff_reimbursements: {
+        Row: {
+          amount: number
+          approved_at: string | null
+          bank_info: string | null
+          branch_id: string
+          created_at: string
+          description: string
+          id: string
+          invoice_number: string
+          paid_at: string | null
+          period_id: string
+          profile_id: string
+          proof_url: string | null
+          rejected_at: string | null
+          rejection_reason: string | null
+          status: string
+          submitted_at: string
+        }
+        Insert: {
+          amount: number
+          approved_at?: string | null
+          bank_info?: string | null
+          branch_id: string
+          created_at?: string
+          description: string
+          id?: string
+          invoice_number: string
+          paid_at?: string | null
+          period_id: string
+          profile_id: string
+          proof_url?: string | null
+          rejected_at?: string | null
+          rejection_reason?: string | null
+          status?: string
+          submitted_at?: string
+        }
+        Update: {
+          amount?: number
+          approved_at?: string | null
+          bank_info?: string | null
+          branch_id?: string
+          created_at?: string
+          description?: string
+          id?: string
+          invoice_number?: string
+          paid_at?: string | null
+          period_id?: string
+          profile_id?: string
+          proof_url?: string | null
+          rejected_at?: string | null
+          rejection_reason?: string | null
+          status?: string
+          submitted_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_reimbursements_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_reimbursements_period_id_fkey"
+            columns: ["period_id"]
+            isOneToOne: false
+            referencedRelation: "invoice_periods"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_reimbursements_profile_id_fkey"
+            columns: ["profile_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -4082,7 +4288,7 @@ export const Constants = {
       member_status: ["active", "suspended", "archived"],
       member_type: ["reguler", "private", "school_affiliate"],
       payment_status: ["unpaid", "partial", "paid", "free", "school_covered"],
-      user_role: ["owner", "admin", "coach", "member", "school"],
+      user_role: ["owner", "admin", "coach", "member", "school", "staff"],
     },
   },
 } as const

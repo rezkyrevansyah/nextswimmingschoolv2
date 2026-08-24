@@ -31,7 +31,35 @@ export async function PATCH(
     password?: string;
     user_metadata?: Record<string, unknown>;
     profile?: Record<string, unknown>;
+    action?: "ban" | "unban";
   };
+
+  // Prevent self-ban
+  if (body.action && caller.id === userId) {
+    return NextResponse.json({ error: "Cannot ban/unban your own account" }, { status: 400 });
+  }
+
+  // Ban/unban: block or restore login via Supabase Auth, and mirror the
+  // status on profiles.is_archived (used for display/filtering elsewhere).
+  if (body.action === "ban" || body.action === "unban") {
+    if (caller.role !== "owner") {
+      const { data: targetProfile } = await getSupabaseAdmin().from("profiles").select("branch_id, role").eq("id", userId).maybeSingle();
+      if (!targetProfile || targetProfile.branch_id !== caller.branchId) {
+        return NextResponse.json({ error: "Anda hanya dapat mengelola akun di cabang Anda sendiri" }, { status: 403 });
+      }
+      if (targetProfile.role === "owner" || targetProfile.role === "admin") {
+        return NextResponse.json({ error: "Tidak dapat menonaktifkan akun admin/owner" }, { status: 403 });
+      }
+    }
+    const isBan = body.action === "ban";
+    const { error: authBanError } = await getSupabaseAdmin().auth.admin.updateUserById(userId, {
+      ban_duration: isBan ? "876000h" : "none",
+    });
+    if (authBanError) return NextResponse.json({ error: authBanError.message }, { status: 400 });
+    const { error: archiveError } = await getSupabaseAdmin().from("profiles").update({ is_archived: isBan }).eq("id", userId);
+    if (archiveError) return NextResponse.json({ error: archiveError.message }, { status: 400 });
+    return NextResponse.json({ ok: true });
+  }
 
   // Only owner may change a user's role — an admin changing role (including their own)
   // would otherwise be a privilege-escalation path (e.g. admin -> owner).

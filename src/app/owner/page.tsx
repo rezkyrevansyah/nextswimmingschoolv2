@@ -23,6 +23,7 @@ import { useLocale } from "@/components/providers/LocaleProvider";
 import LandingCMS from "./_components/LandingCMS";
 import OwnerSchools from "./_components/OwnerSchools";
 import OwnerMasterData from "./_components/OwnerMasterData";
+import OwnerAccountsMaster from "./_components/OwnerAccountsMaster";
 import PayslipGenerator from "./payroll/PayslipGenerator";
 import CoachLoans from "./payroll/CoachLoans";
 
@@ -43,15 +44,6 @@ interface Branch {
   member_count?: number;
   coach_count?: number;
   class_count?: number;
-}
-
-interface AdminProfile {
-  id: string;
-  full_name: string;
-  email: string;
-  phone: string | null;
-  branch_id: string | null;
-  branch?: { name: string } | null;
 }
 
 interface CoachSpreadsheetEntry {
@@ -401,234 +393,6 @@ function Branches({ branches, onRefresh, userId, userName }: { branches: Branch[
               <Input value={bankHolder} onChange={e => setBankHolder(e.target.value)} placeholder={t("owner.branches.fieldBankHolder")} />
             </div>
           </Field>
-        </div>
-      </Modal>
-    </div>
-  );
-}
-
-function Admins({ branches }: { branches: Branch[] }) {
-  const { t } = useLocale();
-  const toast = useToast();
-  const confirm = useConfirm();
-  const supabase = createClient();
-  const [roleTab, setRoleTab] = useState<"admin" | "staff">("admin");
-  const [admins, setAdmins] = useState<(AdminProfile & { role: string; bank_name?: string | null; bank_account?: string | null; bank_holder?: string | null })[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [showAdd, setShowAdd] = useState(false);
-  const [editTarget, setEditTarget] = useState<(AdminProfile & { role: string; bank_name?: string | null; bank_account?: string | null; bank_holder?: string | null }) | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ full_name: "", email: "", phone: "", branch_id: "", password: "", role: "admin" as "admin" | "staff" });
-  const [showAdminPwd, setShowAdminPwd] = useState(false);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    const { data } = await supabase
-      .from("profiles")
-      .select("id, full_name, email, phone, branch_id, role, bank_name, bank_account, bank_holder, branch:branches(name)")
-      .eq("role", roleTab)
-      .order("full_name");
-    if (data) setAdmins(data as any);
-    setLoading(false);
-  }, [supabase, roleTab]);
-
-  /* eslint-disable react-hooks/set-state-in-effect -- async data loader */
-  useEffect(() => { load(); }, [load]);
-  /* eslint-enable react-hooks/set-state-in-effect */
-
-  const copyToClipboard = (text: string, label: string) => {
-    navigator.clipboard.writeText(text);
-    toast.success(`${label} disalin!`, text);
-  };
-
-  const openEdit = (a: any) => {
-    setEditTarget(a);
-    setForm({ full_name: a.full_name, email: a.email, phone: a.phone ?? "", branch_id: a.branch_id ?? "", password: "", role: a.role });
-    setShowAdd(true);
-  };
-
-  const saveAdmin = async () => {
-    if (editTarget) {
-      // Edit mode — update via server route to bypass RLS
-      if (!form.branch_id) return toast.error(t("owner.admins.branchRequired"));
-      setSaving(true);
-      const res = await fetch(`/api/admin/users/${editTarget.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          profile: { full_name: form.full_name, phone: form.phone || null, branch_id: form.branch_id },
-        }),
-      });
-      setSaving(false);
-      const json = await res.json() as { error?: string };
-      if (!res.ok) return toast.error(t("owner.admins.saveFailed"), json.error);
-      toast.success(t("owner.admins.updated"));
-      setShowAdd(false);
-      setEditTarget(null);
-      load();
-    } else {
-      // Create mode
-      if (!form.full_name || !form.email || !form.password || !form.branch_id) {
-        return toast.error(t("owner.admins.allFieldsRequired"));
-      }
-      setSaving(true);
-      const res = await fetch("/api/admin/users", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, role: form.role }),
-      });
-      const json = await res.json() as { error?: string; code?: string };
-      if (!res.ok) {
-        const isEmailTaken = json.code === "EMAIL_TAKEN";
-        toast.error(
-          isEmailTaken ? t("owner.admins.emailTaken") : t("owner.admins.createFailed"),
-          json.error,
-          isEmailTaken ? 7000 : 4000
-        );
-        setSaving(false); return;
-      }
-      toast.success(form.role === "staff" ? "Akun Staff Berhasil Dibuat" : t("owner.admins.created"), t("owner.admins.createdSub"));
-      setSaving(false);
-      setShowAdd(false);
-      load();
-    }
-  };
-
-  const removeAdmin = async (a: any) => {
-    const yes = await confirm({ title: t("owner.admins.deleteConfirmTitle", { name: a.full_name }), body: t("owner.admins.deleteConfirmBody"), danger: true });
-    if (!yes) return;
-    const res = await fetch(`/api/admin/users/${a.id}`, { method: "DELETE" });
-    if (!res.ok) { const j = await res.json() as { error?: string }; return toast.error(t("owner.admins.deleteFailed"), j.error); }
-    toast.success(t("owner.admins.deleted"));
-    load();
-  };
-
-  return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h2 className="font-display font-bold text-2xl">Manajemen Admin & Staff</h2>
-          <p className="text-ink-mute text-sm mt-0.5">Kelola akun admin operasional cabang dan staff harian / resepsionis.</p>
-        </div>
-        <Btn variant="primary" icon="plus" onClick={() => { setForm({ full_name: "", email: "", phone: "", branch_id: "", password: "", role: roleTab }); setShowAdd(true); }}>
-          {roleTab === "staff" ? "Tambah Staff Baru" : t("owner.admins.addAdmin")}
-        </Btn>
-      </div>
-
-      {/* Role Tabs */}
-      <div className="flex gap-2 border-b border-line pb-2">
-        <button
-          onClick={() => setRoleTab("admin")}
-          className={`px-4 py-2 rounded-xl text-sm font-bold transition ${
-            roleTab === "admin" ? "bg-ocean-600 text-white shadow-card" : "bg-paper-tint text-ink-soft hover:bg-paper-deep"
-          }`}
-        >
-          Admin Cabang
-        </button>
-        <button
-          onClick={() => setRoleTab("staff")}
-          className={`px-4 py-2 rounded-xl text-sm font-bold transition ${
-            roleTab === "staff" ? "bg-ocean-600 text-white shadow-card" : "bg-paper-tint text-ink-soft hover:bg-paper-deep"
-          }`}
-        >
-          Staff Cabang (Pegawai)
-        </button>
-      </div>
-
-      <Card padded={false}>
-        {loading ? (
-          <div className="p-10 text-center text-ink-mute">{t("owner.admins.loading")}</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-[11px] uppercase tracking-widest text-ink-faint font-bold border-b border-line">
-                  <th className="text-left py-3 px-5 font-bold">{roleTab === "staff" ? "Staff" : t("owner.admins.colAdmin")}</th>
-                  <th className="text-left py-3 font-bold hidden sm:table-cell">{t("owner.admins.colEmail")}</th>
-                  <th className="text-left py-3 font-bold hidden md:table-cell">{t("owner.admins.colWhatsapp")}</th>
-                  <th className="text-left py-3 font-bold">Rekening Bank</th>
-                  <th className="text-left py-3 font-bold">{t("owner.admins.colBranch")}</th>
-                  <th className="text-left py-3 font-bold">{t("owner.admins.colStatus")}</th>
-                  <th className="text-right py-3 px-5" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-line">
-                {admins.map((a) => (
-                  <tr key={a.id} className="hover:bg-paper-tint">
-                    <td className="py-3.5 px-5">
-                      <div className="flex items-center gap-3">
-                        <Avatar name={a.full_name} size={36} />
-                        <div className="font-semibold truncate max-w-[120px] sm:max-w-none">{a.full_name}</div>
-                      </div>
-                    </td>
-                    <td className="text-ink-mute hidden sm:table-cell">{a.email}</td>
-                    <td className="text-ink-mute hidden md:table-cell">{a.phone ?? "—"}</td>
-                    <td className="text-xs">
-                      {a.bank_account ? (
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-semibold text-ink">{a.bank_name ?? "Bank"}</span>
-                          <span className="font-mono text-ocean-700 bg-ocean-50 px-1 py-0.5 rounded border border-ocean-200">{a.bank_account}</span>
-                          <button onClick={() => copyToClipboard(a.bank_account!, "Nomor Rekening")} className="p-0.5 text-ocean-700 hover:text-ocean-900" title="Salin">
-                            <Icon name="copy" className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      ) : (
-                        <span className="text-ink-mute italic">—</span>
-                      )}
-                    </td>
-                    <td className="text-ink-soft">{a.branch?.name ?? "—"}</td>
-                    <td><Status kind="active">{t("common.status.active")}</Status></td>
-                    <td className="text-right px-5">
-                      <div className="flex items-center justify-end gap-1">
-                        <button onClick={() => openEdit(a)} className="text-ink-mute hover:text-ocean-600 p-1.5"><Icon name="edit" className="w-4 h-4" /></button>
-                        <button onClick={() => removeAdmin(a)} className="text-ink-mute hover:text-danger-500 p-1.5"><Icon name="trash" className="w-4 h-4" /></button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-                {admins.length === 0 && (
-                  <tr><td colSpan={7} className="text-center py-10 text-ink-mute">{roleTab === "staff" ? "Belum ada staff terdaftar di cabang manapun." : t("owner.admins.empty")}</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
-
-      <Modal open={showAdd} onClose={() => { setShowAdd(false); setEditTarget(null); }} title={editTarget ? t("owner.admins.editModalTitle") : form.role === "staff" ? "Buat Akun Staff" : t("owner.admins.addModalTitle")} size="sm"
-        footer={
-          <>
-            <Btn variant="ghost" onClick={() => { setShowAdd(false); setEditTarget(null); }}>{t("common.actions.cancel")}</Btn>
-            <Btn variant="primary" onClick={saveAdmin} disabled={saving}>{saving ? t("common.actions.saving") : editTarget ? t("common.actions.save") : t("owner.admins.createAccount")}</Btn>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          {!editTarget && (
-            <Field label="Tipe Akun" required>
-              <Select value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value as "admin" | "staff" }))}>
-                <option value="admin">Admin Cabang</option>
-                <option value="staff">Staff Cabang</option>
-              </Select>
-            </Field>
-          )}
-          <Field label={t("owner.admins.fieldFullName")} required><Input value={form.full_name} onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))} disabled={!!editTarget} /></Field>
-          {!editTarget && <Field label={t("owner.admins.fieldEmail")} required><Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} /></Field>}
-          <Field label={t("owner.admins.fieldPhone")}><Input type="tel" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder={t("owner.admins.fieldPhonePlaceholder")} /></Field>
-          <Field label={t("owner.admins.fieldBranch")} required>
-            <Select value={form.branch_id} onChange={e => setForm(f => ({ ...f, branch_id: e.target.value }))}>
-              <option value="" disabled>{t("owner.admins.fieldBranchPlaceholder")}</option>
-              {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-            </Select>
-          </Field>
-          {!editTarget && <Field label={t("owner.admins.fieldPassword")} required hint={t("owner.admins.fieldPasswordHint")}>
-            <div className="relative">
-              <Input type={showAdminPwd ? "text" : "password"} value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder="••••••••" className="pr-10" />
-              <button type="button" tabIndex={-1} onClick={() => setShowAdminPwd(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-mute hover:text-ink transition-colors">
-                <Icon name={showAdminPwd ? "eye-off" : "eye"} className="w-4 h-4" />
-              </button>
-            </div>
-          </Field>}
         </div>
       </Modal>
     </div>
@@ -2793,6 +2557,32 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
   const [salaryForm, setSalaryForm] = useState({ base_salary: "", allowances: "", deductions: "", notes: "" });
   const [savingSalary, setSavingSalary] = useState(false);
   const [markingStaffSalaryId, setMarkingStaffSalaryId] = useState<string | null>(null);
+  // Attendance-based base salary helper — lets the owner compute the base
+  // salary from present-day count × a rate, instead of always typing a flat number.
+  const [staffPresentDays, setStaffPresentDays] = useState<number | null>(null);
+  const [ratePerDayInput, setRatePerDayInput] = useState("");
+
+  /* eslint-disable react-hooks/set-state-in-effect -- async data loader */
+  useEffect(() => {
+    if (!editSalaryModal) { setStaffPresentDays(null); return; }
+    const [y, m] = staffMonth.split("-");
+    const monthStart = `${y}-${m}-01`;
+    const monthEnd = new Date(Number(y), Number(m), 0).toISOString().split("T")[0];
+    supabase.from("staff_attendances")
+      .select("id", { count: "exact", head: true })
+      .eq("staff_id", editSalaryModal.staff.id)
+      .eq("status", "present")
+      .gte("attendance_date", monthStart)
+      .lte("attendance_date", monthEnd)
+      .then(({ count }) => setStaffPresentDays(count ?? 0));
+  }, [editSalaryModal, staffMonth, supabase]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  const applyAttendanceBasedSalary = () => {
+    const rate = Number(ratePerDayInput);
+    if (!rate || staffPresentDays == null) return;
+    setSalaryForm(f => ({ ...f, base_salary: String(rate * staffPresentDays) }));
+  };
 
   const loadStaffPayroll = useCallback(async () => {
     setLoadingStaff(true);
@@ -2812,11 +2602,31 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
     setLoadingStaff(false);
   }, [supabase, staffMonth]);
 
+  // ── Staff reimbursements (staff_reimbursements table) ────────────────────────
+  const [staffReimbursements, setStaffReimbursements] = useState<{
+    id: string; profile_id: string; branch_id: string; invoice_number: string;
+    description: string; amount: number; proof_url: string | null; status: string;
+    submitted_at: string; rejection_reason: string | null;
+  }[]>([]);
+  const [loadingReimbursements, setLoadingReimbursements] = useState(false);
+  const [processingReimburseId, setProcessingReimburseId] = useState<string | null>(null);
+
+  const loadStaffReimbursements = useCallback(async () => {
+    setLoadingReimbursements(true);
+    const { data } = await supabase
+      .from("staff_reimbursements")
+      .select("*")
+      .neq("status", "cancelled")
+      .order("submitted_at", { ascending: false });
+    setStaffReimbursements(data ?? []);
+    setLoadingReimbursements(false);
+  }, [supabase]);
+
   useEffect(() => {
     if (tab === "coach_payouts") loadDetailedInvoices();
     if (tab === "admin_accounts") loadAdmins();
-    if (tab === "staff_payroll") loadStaffPayroll();
-  }, [tab, loadDetailedInvoices, loadAdmins, loadStaffPayroll]);
+    if (tab === "staff_payroll") { loadStaffPayroll(); loadStaffReimbursements(); }
+  }, [tab, loadDetailedInvoices, loadAdmins, loadStaffPayroll, loadStaffReimbursements]);
 
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
@@ -2891,6 +2701,41 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
     if (error) return toast.error("Gagal mengubah status gaji staff", error.message);
     toast.success("Gaji staff berhasil ditandai Lunas!");
     loadStaffPayroll();
+  };
+
+  const approveReimburse = async (id: string) => {
+    setProcessingReimburseId(id);
+    const { error } = await supabase.from("staff_reimbursements").update({ status: "approved", approved_at: new Date().toISOString() }).eq("id", id);
+    setProcessingReimburseId(null);
+    if (error) return toast.error("Gagal menyetujui reimburse", error.message);
+    toast.success("Reimburse disetujui");
+    loadStaffReimbursements();
+  };
+
+  const rejectReimburse = async (id: string) => {
+    const reason = window.prompt("Alasan penolakan:");
+    if (reason == null) return;
+    setProcessingReimburseId(id);
+    const { error } = await supabase.from("staff_reimbursements").update({ status: "rejected", rejected_at: new Date().toISOString(), rejection_reason: reason || null }).eq("id", id);
+    setProcessingReimburseId(null);
+    if (error) return toast.error("Gagal menolak reimburse", error.message);
+    toast.success("Reimburse ditolak");
+    loadStaffReimbursements();
+  };
+
+  const markReimbursePaid = async (id: string, amount: number) => {
+    const ok = await confirm({
+      title: "Konfirmasi Pembayaran Reimburse",
+      body: `Tandai reimburse senilai ${fmtIDR(amount)} sebagai Lunas?`,
+      confirmLabel: "Ya, Tandai Lunas",
+    });
+    if (!ok) return;
+    setProcessingReimburseId(id);
+    const { error } = await supabase.from("staff_reimbursements").update({ status: "paid", paid_at: new Date().toISOString() }).eq("id", id);
+    setProcessingReimburseId(null);
+    if (error) return toast.error("Gagal mengubah status reimburse", error.message);
+    toast.success("Reimburse ditandai Lunas!");
+    loadStaffReimbursements();
   };
 
   // ── Income filters ──────────────────────────────────────────────────────────
@@ -3960,6 +3805,7 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
                                     deductions: sal ? String(sal.deductions) : "",
                                     notes: sal?.notes ?? "",
                                   });
+                                  setRatePerDayInput("");
                                   setEditSalaryModal({ staff: st, salary: sal ?? null });
                                 }}
                               >
@@ -3986,6 +3832,81 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
                       <tr>
                         <td colSpan={8} className="py-10 text-center text-ink-mute">
                           Belum ada akun staff terdaftar di sistem.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          <div className="bg-white border border-line rounded-2xl overflow-hidden shadow-card">
+            <div className="p-4 border-b border-line">
+              <SectionTitle sub="Pengajuan reimburse biaya operasional yang dikirim staff.">Reimburse Staff</SectionTitle>
+            </div>
+            {loadingReimbursements ? (
+              <div className="p-10 text-center text-ink-mute">Memuat data reimburse...</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-line bg-paper-tint text-[11px] uppercase tracking-wider text-ink-faint font-bold">
+                      <th className="text-left py-3 px-4">Staff</th>
+                      <th className="text-left py-3 px-4">Keterangan</th>
+                      <th className="text-right py-3 px-4">Nominal</th>
+                      <th className="text-center py-3 px-4">Bukti</th>
+                      <th className="text-center py-3 px-4">Status</th>
+                      <th className="text-right py-3 px-4">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-line">
+                    {staffReimbursements.map(rb => {
+                      const staffName = staffList.find(s => s.id === rb.profile_id)?.full_name ?? "—";
+                      return (
+                        <tr key={rb.id} className="hover:bg-paper-tint">
+                          <td className="py-3 px-4 font-semibold text-ink">{staffName}</td>
+                          <td className="py-3 px-4 text-ink-soft max-w-xs truncate">{rb.description}</td>
+                          <td className="py-3 px-4 text-right font-mono font-bold text-ink">{fmtIDR(rb.amount)}</td>
+                          <td className="py-3 px-4 text-center">
+                            {rb.proof_url ? (
+                              <a href={rb.proof_url} target="_blank" rel="noreferrer" className="text-xs font-bold text-ocean-600 hover:underline">
+                                <Icon name="link" className="w-3.5 h-3.5 inline" />
+                              </a>
+                            ) : <span className="text-xs text-ink-mute">—</span>}
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <span className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase ${
+                              rb.status === "paid" ? "bg-ok-50 text-ok-700" :
+                              rb.status === "approved" ? "bg-ocean-50 text-ocean-700" :
+                              rb.status === "rejected" ? "bg-danger-50 text-danger-700" : "bg-paper-deep text-ink-mute"
+                            }`}>
+                              {rb.status === "paid" ? "Lunas" : rb.status === "approved" ? "Disetujui" : rb.status === "rejected" ? "Ditolak" : "Menunggu"}
+                            </span>
+                            {rb.status === "rejected" && rb.rejection_reason && (
+                              <div className="text-[10px] text-danger-500 mt-0.5">{rb.rejection_reason}</div>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              {rb.status === "pending" && (
+                                <>
+                                  <Btn variant="outline" size="sm" onClick={() => approveReimburse(rb.id)} disabled={processingReimburseId === rb.id}>Setujui</Btn>
+                                  <Btn variant="ghost" size="sm" className="text-danger-600" onClick={() => rejectReimburse(rb.id)} disabled={processingReimburseId === rb.id}>Tolak</Btn>
+                                </>
+                              )}
+                              {rb.status === "approved" && (
+                                <Btn variant="primary" size="sm" onClick={() => markReimbursePaid(rb.id, rb.amount)} disabled={processingReimburseId === rb.id}>Tandai Lunas</Btn>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {staffReimbursements.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="py-10 text-center text-ink-mute">
+                          Belum ada pengajuan reimburse dari staff.
                         </td>
                       </tr>
                     )}
@@ -4191,6 +4112,24 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
         }
       >
         <div className="space-y-4">
+          <div className="rounded-xl border border-line bg-paper-tint p-3 space-y-2">
+            <div className="text-xs font-bold text-ink-mute uppercase tracking-widest">Hitung dari Absensi (Opsional)</div>
+            <div className="text-xs text-ink-soft">
+              {staffPresentDays == null ? "Memuat data absensi…" : `${staffPresentDays} hari hadir di bulan ${staffMonth}`}
+            </div>
+            <div className="flex gap-2">
+              <Input
+                type="number"
+                value={ratePerDayInput}
+                onChange={e => setRatePerDayInput(e.target.value)}
+                placeholder="Tarif per hari (Rp)"
+                className="font-mono flex-1"
+              />
+              <Btn variant="soft" size="sm" onClick={applyAttendanceBasedSalary} disabled={!ratePerDayInput || staffPresentDays == null}>
+                Hitung
+              </Btn>
+            </div>
+          </div>
           <Field label="Gaji Pokok Bulan Ini (Rp)" required hint="Nominal dapat diubah setiap bulannya oleh Owner">
             <Input
               type="number"
@@ -5197,7 +5136,7 @@ function buildNavItems(t: (key: string) => string): NavItem[] {
     { id: "master",    label: "Master Data",            icon: "user"    },
     { id: "branches",  label: t("owner.nav.branches"),  icon: "pin"     },
     { id: "schools",   label: "Schools",                icon: "book"    },
-    { id: "admins",    label: t("owner.nav.admins"),    icon: "users"   },
+    { id: "accounts",  label: t("owner.nav.accounts"),  icon: "users"   },
     { id: "classes",   label: t("owner.nav.classes"),   icon: "swim"    },
     { id: "levels",    label: t("owner.nav.levels"),    icon: "book"    },
     { section: t("owner.nav.sectionFinance") },
@@ -5219,7 +5158,7 @@ function buildTitles(t: (key: string) => string): Record<string, [string, string
     master:    ["Master Data Owner", "Kelola profil Head of NEXT & master kategori keuangan"],
     branches:  [t("owner.titles.branches.title"),  t("owner.titles.branches.sub")],
     schools:   ["Schools", "Manage school assets and signatures"],
-    admins:    [t("owner.titles.admins.title"),    t("owner.titles.admins.sub")],
+    accounts:  [t("owner.titles.accounts.title"),  t("owner.titles.accounts.sub")],
     classes:   [t("owner.titles.classes.title"),   t("owner.titles.classes.sub")],
     levels:    [t("owner.titles.levels.title"),    t("owner.titles.levels.sub")],
     rates:     [t("owner.titles.rates.title"),     t("owner.titles.rates.sub")],
@@ -5313,7 +5252,7 @@ export default function OwnerPage() {
     master:    <OwnerMasterData />,
     branches:  <Branches branches={branches} onRefresh={loadBranches} userId={userId} userName={ownerName} />,
     schools:   <OwnerSchools branches={branches} />,
-    admins:    <Admins branches={branches} />,
+    accounts:  <OwnerAccountsMaster branches={branches} />,
     classes:   <Classes branches={branches} />,
     levels:    <OwnerRaporLevels />,
     rates:     <SettingsTarif branches={branches} />,

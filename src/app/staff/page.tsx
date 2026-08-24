@@ -49,8 +49,8 @@ interface StaffAttendance {
   attendance_date: string;
   clock_in_time: string | null;
   clock_out_time: string | null;
-  status: "present" | "late" | "leave" | "sick" | "absent";
-  notes: string | null;
+  status: "present" | "absent" | "izin" | "sakit";
+  note: string | null;
   created_at: string;
 }
 
@@ -70,12 +70,13 @@ interface StaffSalary {
 
 interface ExpenseRow {
   id: string;
-  occurred_at: string;
+  invoice_number: string;
   description: string;
   amount: number;
-  category: string | null;
   proof_url: string | null;
-  is_reimburse: boolean;
+  status: string;
+  submitted_at: string;
+  rejection_reason: string | null;
   created_at: string;
 }
 
@@ -132,7 +133,7 @@ export default function StaffPage() {
   const [savingProfile, setSavingProfile] = useState(false);
 
   // Initial load
-  const loadData = useCallback(async (userId: string, branchId?: string | null) => {
+  const loadData = useCallback(async (userId: string) => {
     const today = new Date().toISOString().slice(0, 10);
 
     // 1. Today's attendance
@@ -160,16 +161,13 @@ export default function StaffPage() {
       .order("period_month", { ascending: false });
     setSalaries((salaryData as unknown as StaffSalary[]) ?? []);
 
-    // 4. Expenses / reimbursements submitted by this staff
-    if (branchId) {
-      const { data: expData } = await supabase
-        .from("manual_transactions")
-        .select("*")
-        .eq("branch_id", branchId)
-        .eq("created_by", userId)
-        .order("occurred_at", { ascending: false });
-      setExpenses((expData as unknown as ExpenseRow[]) ?? []);
-    }
+    // 4. Reimbursements submitted by this staff
+    const { data: expData } = await supabase
+      .from("staff_reimbursements")
+      .select("*")
+      .eq("profile_id", userId)
+      .order("submitted_at", { ascending: false });
+    setExpenses((expData as unknown as ExpenseRow[]) ?? []);
   }, [supabase]);
 
   useEffect(() => {
@@ -218,7 +216,7 @@ export default function StaffPage() {
           if (br) setBranch(br as BranchInfo);
         }
 
-        await loadData(authUser.id, prof.branch_id);
+        await loadData(authUser.id);
       }
       setLoading(false);
     }
@@ -241,7 +239,7 @@ export default function StaffPage() {
         attendance_date: today,
         clock_in_time: timeStr,
         status: "present",
-        notes: clockNotes.trim() || null,
+        note: clockNotes.trim() || null,
       })
       .select("*")
       .single();
@@ -255,7 +253,7 @@ export default function StaffPage() {
     setTodayAttendance(data as unknown as StaffAttendance);
     setClockNotes("");
     toast.success("Absen Masuk Berhasil!", `Tercatat pukul ${timeStr}`);
-    await loadData(user.id, profile.branch_id);
+    await loadData(user.id);
   };
 
   // Handle Clock-Out
@@ -269,7 +267,7 @@ export default function StaffPage() {
       .from("staff_attendances")
       .update({
         clock_out_time: timeStr,
-        notes: clockNotes.trim() ? `${todayAttendance.notes ? todayAttendance.notes + " | " : ""}${clockNotes.trim()}` : todayAttendance.notes,
+        note: clockNotes.trim() ? `${todayAttendance.note ? todayAttendance.note + " | " : ""}${clockNotes.trim()}` : todayAttendance.note,
       })
       .eq("id", todayAttendance.id);
 
@@ -282,13 +280,13 @@ export default function StaffPage() {
     setTodayAttendance(prev => prev ? { ...prev, clock_out_time: timeStr } : null);
     setClockNotes("");
     toast.success("Absen Pulang Berhasil!", `Tercatat pukul ${timeStr}. Selamat beristirahat!`);
-    if (user) await loadData(user.id, profile?.branch_id);
+    if (user) await loadData(user.id);
   };
 
   // Handle Leave / Sakit
-  const handleRecordLeave = async (status: "leave" | "sick") => {
+  const handleRecordLeave = async (status: "izin" | "sakit") => {
     if (!user || !profile) return;
-    const label = status === "leave" ? "Izin" : "Sakit";
+    const label = status === "izin" ? "Izin" : "Sakit";
     const yes = await confirm({
       title: `Catat Kehadiran: ${label}`,
       body: `Apakah Anda ingin mencatat status ${label} untuk hari ini?`,
@@ -305,7 +303,7 @@ export default function StaffPage() {
         branch_id: profile.branch_id ?? "",
         attendance_date: today,
         status: status,
-        notes: clockNotes.trim() || `Pengajuan ${label}`,
+        note: clockNotes.trim() || `Pengajuan ${label}`,
       })
       .select("*")
       .single();
@@ -315,7 +313,7 @@ export default function StaffPage() {
     setTodayAttendance(data as unknown as StaffAttendance);
     setClockNotes("");
     toast.success(`Status ${label} tercatat`);
-    await loadData(user.id, profile.branch_id);
+    await loadData(user.id);
   };
 
   // Handle Save Expense Reimburse
@@ -326,6 +324,19 @@ export default function StaffPage() {
     if (!amountNum || amountNum <= 0) return toast.error("Nominal pengeluaran tidak valid");
 
     setSavingExpense(true);
+
+    const { data: periodRows } = await supabase
+      .from("invoice_periods")
+      .select("id")
+      .eq("is_open", true)
+      .order("date_to", { ascending: true })
+      .limit(1);
+    const activePeriodId = periodRows?.[0]?.id;
+    if (!activePeriodId) {
+      setSavingExpense(false);
+      return toast.error("Pengiriman reimburse ditutup", "Saat ini tidak ada periode pengiriman yang dibuka oleh manajemen.");
+    }
+
     let proofUrl = expenseForm.proof_url;
     if (expenseProofFile) {
       try {
@@ -338,18 +349,18 @@ export default function StaffPage() {
       }
     }
 
-    const { error } = await supabase.from("manual_transactions").insert({
+    const invoiceNumber = `RB-${expenseForm.occurred_at.replace(/-/g, "").slice(0, 6)}-${user.id.slice(0, 6).toUpperCase()}-${Date.now().toString(36).toUpperCase()}`;
+    const bankInfo = profile.bank_name ? `${profile.bank_name} - ${profile.bank_account} a/n ${profile.bank_holder}` : null;
+
+    const { error } = await supabase.from("staff_reimbursements").insert({
+      profile_id: user.id,
       branch_id: profile.branch_id,
-      kind: "expense",
-      category: expenseForm.category || "Operasional",
-      description: `[Reimburse Staff: ${profile.full_name}] ${expenseForm.description.trim()}`,
+      period_id: activePeriodId,
+      invoice_number: invoiceNumber,
+      description: `[${expenseForm.category || "Operasional"}] ${expenseForm.description.trim()}`,
       amount: amountNum,
-      occurred_at: expenseForm.occurred_at || new Date().toISOString().slice(0, 10),
       proof_url: proofUrl || null,
-      is_reimburse: true,
-      created_by: user.id,
-      created_by_role: "staff",
-      notes: expenseForm.notes.trim() || null,
+      bank_info: bankInfo,
     });
 
     setSavingExpense(false);
@@ -369,7 +380,7 @@ export default function StaffPage() {
       notes: "",
     });
     setExpenseProofFile(null);
-    await loadData(user.id, profile.branch_id);
+    await loadData(user.id);
   };
 
   // Handle Save Profile
@@ -485,7 +496,7 @@ export default function StaffPage() {
   }, [attendances, selectedMonth]);
 
   const monthPresentCount = useMemo(() => {
-    return filteredAttendances.filter(a => a.status === "present" || a.status === "late").length;
+    return filteredAttendances.filter(a => a.status === "present").length;
   }, [filteredAttendances]);
 
   const latestSalary = salaries[0] ?? null;
@@ -573,10 +584,10 @@ export default function StaffPage() {
                           {clockLoading ? "Memproses..." : "Absen Masuk (Clock-In)"}
                         </Btn>
                         <div className="flex gap-2">
-                          <Btn variant="outline" size="sm" onClick={() => handleRecordLeave("sick")} disabled={clockLoading}>
+                          <Btn variant="outline" size="sm" onClick={() => handleRecordLeave("sakit")} disabled={clockLoading}>
                             Sakit
                           </Btn>
-                          <Btn variant="outline" size="sm" onClick={() => handleRecordLeave("leave")} disabled={clockLoading}>
+                          <Btn variant="outline" size="sm" onClick={() => handleRecordLeave("izin")} disabled={clockLoading}>
                             Izin
                           </Btn>
                         </div>
@@ -688,13 +699,13 @@ export default function StaffPage() {
                         <td className="py-3 px-4">
                           <span className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase ${
                             att.status === "present" ? "bg-ok-50 text-ok-700" :
-                            att.status === "late" ? "bg-warn-50 text-warn-700" :
-                            att.status === "sick" ? "bg-amber-50 text-amber-700" : "bg-danger-50 text-danger-700"
+                            att.status === "sakit" ? "bg-amber-50 text-amber-700" :
+                            att.status === "izin" ? "bg-warn-50 text-warn-700" : "bg-danger-50 text-danger-700"
                           }`}>
-                            {att.status === "present" ? "Hadir" : att.status === "late" ? "Terlambat" : att.status === "sick" ? "Sakit" : "Izin"}
+                            {att.status === "present" ? "Hadir" : att.status === "sakit" ? "Sakit" : att.status === "izin" ? "Izin" : "Absen"}
                           </span>
                         </td>
-                        <td className="py-3 px-4 text-xs text-ink-mute">{att.notes ?? "—"}</td>
+                        <td className="py-3 px-4 text-xs text-ink-mute">{att.note ?? "—"}</td>
                       </tr>
                     ))}
                     {filteredAttendances.length === 0 && (
@@ -784,22 +795,17 @@ export default function StaffPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="text-[11px] uppercase tracking-widest text-ink-faint font-bold border-b border-line">
-                      <th className="text-left py-3 px-4">Tanggal</th>
-                      <th className="text-left py-3 px-4">Kategori</th>
+                      <th className="text-left py-3 px-4">Tanggal Kirim</th>
                       <th className="text-left py-3 px-4">Keterangan</th>
                       <th className="text-right py-3 px-4">Nominal</th>
                       <th className="text-center py-3 px-4">Bukti Nota</th>
+                      <th className="text-center py-3 px-4">Status</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-line">
                     {expenses.map(exp => (
                       <tr key={exp.id} className="hover:bg-paper-tint">
-                        <td className="py-3.5 px-4 text-ink-soft">{fmtDate(exp.occurred_at)}</td>
-                        <td className="py-3.5 px-4">
-                          <span className="px-2 py-0.5 rounded-md bg-paper-deep text-xs font-semibold text-ink-soft">
-                            {exp.category ?? "Operasional"}
-                          </span>
-                        </td>
+                        <td className="py-3.5 px-4 text-ink-soft">{fmtDate(exp.submitted_at)}</td>
                         <td className="py-3.5 px-4 font-semibold text-ink max-w-xs truncate">{exp.description}</td>
                         <td className="py-3.5 px-4 text-right font-mono font-bold text-ink">{fmtIDR(exp.amount)}</td>
                         <td className="py-3.5 px-4 text-center">
@@ -814,6 +820,14 @@ export default function StaffPage() {
                             </a>
                           ) : (
                             <span className="text-xs text-ink-mute">—</span>
+                          )}
+                        </td>
+                        <td className="py-3.5 px-4 text-center">
+                          <Status kind={exp.status === "paid" ? "paid" : exp.status === "approved" ? "approved" : exp.status === "rejected" ? "rejected" : exp.status === "cancelled" ? "inactive" : "pending"}>
+                            {exp.status === "paid" ? "Lunas" : exp.status === "approved" ? "Disetujui" : exp.status === "rejected" ? "Ditolak" : exp.status === "cancelled" ? "Dibatalkan" : "Menunggu"}
+                          </Status>
+                          {exp.status === "rejected" && exp.rejection_reason && (
+                            <div className="text-[10px] text-danger-500 mt-0.5">{exp.rejection_reason}</div>
                           )}
                         </td>
                       </tr>

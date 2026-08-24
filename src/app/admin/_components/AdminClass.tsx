@@ -157,7 +157,7 @@ export default function AdminClass({ branchId }: { branchId: string }) {
     if (!form.name) return toast.error(t("admin.classes.classNameRequired"));
     if (!isPrivate && form.schedule_days.length === 0) return toast.error(t("admin.classes.scheduleDaysRequired"));
     if (isPrivate && form.location_type === "external" && !form.external_location_name.trim()) {
-      return toast.error("Nama lokasi luar (misal nama apartemen/kolam) wajib diisi untuk kelas private external.");
+      return toast.error(t("admin.classes.externalLocationNameRequired"));
     }
     setSaving(true);
     // Build schedule_times — use per-day slots; derive global time_start/time_end from first slot
@@ -359,7 +359,7 @@ export default function AdminClass({ branchId }: { branchId: string }) {
                     <span>🏡 {c.external_location_name}</span>
                     {c.google_maps_url && (
                       <a href={c.google_maps_url} target="_blank" rel="noreferrer" className="ml-auto text-[10px] font-bold text-wave-600 hover:underline">
-                        Maps ↗
+                        {t("admin.classes.mapsLinkShort")}
                       </a>
                     )}
                   </div>
@@ -452,43 +452,43 @@ export default function AdminClass({ branchId }: { branchId: string }) {
           )}
           {isPrivate && (
             <div className="space-y-3 bg-paper-tint/60 border border-line rounded-xl p-3.5">
-              <Field label="Lokasi Latihan Private">
+              <Field label={t("admin.classes.fieldPrivateLocation")}>
                 <div className="flex gap-2">
                   <button
                     type="button"
                     onClick={() => setForm(f => ({ ...f, location_type: "branch" }))}
                     className={`flex-1 p-2.5 rounded-lg border text-left text-xs font-bold transition-colors ${form.location_type === "branch" ? "border-ocean-500 bg-ocean-50 text-ocean-700" : "border-line bg-white text-ink-soft hover:bg-paper-tint"}`}
                   >
-                    📍 Cabang Resmi
+                    {t("admin.classes.locationOptBranch")}
                   </button>
                   <button
                     type="button"
                     onClick={() => setForm(f => ({ ...f, location_type: "external" }))}
                     className={`flex-1 p-2.5 rounded-lg border text-left text-xs font-bold transition-colors ${form.location_type === "external" ? "border-wave-500 bg-wave-50 text-wave-700" : "border-line bg-white text-ink-soft hover:bg-paper-tint"}`}
                   >
-                    🏡 Lokasi Luar / External Pool
+                    {t("admin.classes.locationOptExternal")}
                   </button>
                 </div>
               </Field>
 
               {form.location_type === "external" && (
                 <div className="space-y-3 pt-1">
-                  <Field label="Nama Lokasi Luar" required hint="Contoh: Apartemen Oakwood Pool, Hotel Hilton, Rumah Member">
+                  <Field label={t("admin.classes.fieldExternalLocationName")} required hint={t("admin.classes.externalLocationNameHint")}>
                     <Input
                       value={form.external_location_name}
                       onChange={e => setForm(f => ({ ...f, external_location_name: e.target.value }))}
-                      placeholder="Apartemen Oakwood Pool"
+                      placeholder={t("admin.classes.externalLocationNamePlaceholder")}
                     />
                   </Field>
-                  <Field label="Alamat Lengkap Lokasi">
+                  <Field label={t("admin.classes.fieldExternalLocationAddress")}>
                     <Textarea
                       value={form.external_location_address}
                       onChange={e => setForm(f => ({ ...f, external_location_address: e.target.value }))}
-                      placeholder="Jl. Mega Kuningan Barat No.3, Jakarta Selatan"
+                      placeholder={t("admin.classes.externalLocationAddressPlaceholder")}
                       rows={2}
                     />
                   </Field>
-                  <Field label="Link Google Maps (Opsional)">
+                  <Field label={t("admin.classes.fieldGoogleMapsLink")}>
                     <Input
                       value={form.google_maps_url}
                       onChange={e => setForm(f => ({ ...f, google_maps_url: e.target.value }))}
