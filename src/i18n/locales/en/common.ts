@@ -66,6 +66,7 @@ export const common = {
   },
   days: {
     short: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+    long: ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
   },
   languageSwitcher: {
     en: "EN",

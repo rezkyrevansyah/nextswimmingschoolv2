@@ -56,6 +56,18 @@ function calcAge(birthDate: string): number {
   return age;
 }
 
+const ID_DAY_NAMES = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
+function translateDayName(day: string, longDays: string[]): string {
+  const idx = ID_DAY_NAMES.indexOf(day);
+  if (idx !== -1 && longDays && longDays[idx]) return longDays[idx];
+  return day;
+}
+function translateDayShort(day: string, shortDays: string[]): string {
+  const idx = ID_DAY_NAMES.indexOf(day);
+  if (idx !== -1 && shortDays && shortDays[idx]) return shortDays[idx];
+  return day.slice(0, 2);
+}
+
 // ── Shell ──────────────────────────────────────────────────────────────────────
 
 function Shell({ children, active, setActive, name, branchName, userId, avatarUrl, isSchoolAffiliate }: {
@@ -102,7 +114,7 @@ function Shell({ children, active, setActive, name, branchName, userId, avatarUr
           </div>
           <LanguageSwitcher />
           <Bell userId={userId} />
-          <button onClick={() => setActive("profile")} title="Profile">
+          <button onClick={() => setActive("profile")} title={t("member.shell.profileTooltip")}>
             <Avatar name={name} src={avatarUrl ?? undefined} size={36} />
           </button>
         </div>
@@ -313,7 +325,7 @@ function MemberHome({
           </div>
           <div className="mt-3 grid grid-cols-2 gap-2">
             <Btn variant="outline" size="sm" onClick={() => setActive("bills")}>{t("member.home.viewBill")}</Btn>
-            <a href={waLink(`Halo Admin, saya ingin konfirmasi pembayaran ${pendingBill.period} untuk ${memberName}. Berikut bukti transfer:`)} target="_blank" rel="noreferrer">
+            <a href={waLink(t("member.home.waConfirmBill", { period: pendingBill.period, name: memberName }))} target="_blank" rel="noreferrer">
               <Btn variant="wa" size="sm" icon="whatsapp" className="w-full">{t("member.home.contactAdmin")}</Btn>
             </a>
           </div>
@@ -333,7 +345,7 @@ function MemberHome({
               </p>
             </div>
           </div>
-          <a href={waLink(`Halo Admin, saya ingin memperpanjang paket sesi private untuk ${memberName}. Sisa sesi saat ini: ${privateReminder.remaining}.`)} target="_blank" rel="noreferrer" className="mt-3 inline-flex w-full">
+          <a href={waLink(t("member.home.waRenewPrivate", { name: memberName, remaining: privateReminder.remaining }))} target="_blank" rel="noreferrer" className="mt-3 inline-flex w-full">
             <Btn variant="wa" size="sm" icon="whatsapp" className="w-full">{t("member.home.renewPackage")}</Btn>
           </a>
         </Card>
@@ -392,6 +404,7 @@ function MemberHome({
 // ── Jadwal ─────────────────────────────────────────────────────────────────────
 
 function MemberSchedule({ memberId }: { memberId: string }) {
+  const { t, tArray } = useLocale();
   const supabase = createClient();
   const [classes, setClasses] = useState<{ id: string; name: string; schedule_days: string[]; time_start: string | null; time_end: string | null; schedule_times?: { day: string; time_start: string; time_end: string }[] | null; location: string; goals: string | null; description: string | null; coaches: { name: string; phone: string | null; role: string }[] }[]>([]);
   const [sessions, setSessions] = useState<{ date: string; day: string; time: string; class_id: string; onLeave?: boolean }[]>([]);
@@ -401,6 +414,9 @@ function MemberSchedule({ memberId }: { memberId: string }) {
   const [sessionPage, setSessionPage] = useState(0);
   const PAGE_SIZE = 8;
 
+  const longDays = tArray("common.days.long");
+  const shortDays = tArray("common.days.short");
+  const monthNames = tArray("common.months.short");
 
   useEffect(() => {
     if (!memberId) return;
@@ -472,9 +488,6 @@ function MemberSchedule({ memberId }: { memberId: string }) {
   // Derive which sessions are on leave (runs whenever sessions or leaveIntervals change)
   const isOnLeave = (date: string, classId: string) =>
     leaveIntervals.some(l => date >= l.date_from && date <= l.date_to && (l.class_ids.size === 0 || l.class_ids.has(classId)));
-   
-
-  const monthNames = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agt", "Sep", "Okt", "Nov", "Des"];
 
   const totalSessions = sessions.length;
   const totalPages = Math.ceil(totalSessions / PAGE_SIZE);
@@ -484,7 +497,7 @@ function MemberSchedule({ memberId }: { memberId: string }) {
 
   return (
     <div className="space-y-5">
-      <SectionTitle sub="Kelas terdaftar">Kelas Anda</SectionTitle>
+      <SectionTitle sub={t("member.schedule.enrolledClassesSub")}>{t("member.schedule.enrolledClassesTitle")}</SectionTitle>
       {classes.map((c) => {
         const isHoliday = holidayClassIds.has(c.id);
         return (
@@ -492,25 +505,25 @@ function MemberSchedule({ memberId }: { memberId: string }) {
           <div className="p-5 bg-ocean-700 text-white">
             <div className="flex items-center gap-2.5 flex-wrap">
               <div className="font-display font-bold text-xl flex-1 min-w-0">{c.name}</div>
-              {isHoliday && <Status kind="holiday" className="border-white/30">Libur Hari Ini</Status>}
+              {isHoliday && <Status kind="holiday" className="border-white/30">{t("member.schedule.holidayToday")}</Status>}
             </div>
             <div className="mt-2 space-y-2">
               {c.coaches.length === 0 ? (
-                <span className="text-wave-200/60 text-sm">Belum ada coach</span>
+                <span className="text-wave-200/60 text-sm">{t("member.schedule.noCoach")}</span>
               ) : c.coaches.length === 1 ? (
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2 min-w-0">
                     <Avatar name={c.coaches[0].name} size={24} className="shrink-0" />
                     <span className="flex-1 min-w-0 text-wave-200 text-sm truncate">{c.coaches[0].name}</span>
                     <span className={`shrink-0 px-1.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide ${c.coaches[0].role === "head" ? "bg-wave-400/20 text-wave-200" : "bg-white/10 text-white/50"}`}>
-                      {c.coaches[0].role === "head" ? "Head Coach" : "Assistant Coach"}
+                      {c.coaches[0].role === "head" ? t("member.schedule.headCoach") : t("member.schedule.assistantCoach")}
                     </span>
                   </div>
                   {c.coaches[0].phone && (
-                    <a href={waLink(`Halo Coach, saya ingin bertanya mengenai kelas ${c.name}.`, c.coaches[0].phone)} target="_blank" rel="noreferrer"
+                    <a href={waLink(t("member.schedule.waCoachMessage", { className: c.name }), c.coaches[0].phone)} target="_blank" rel="noreferrer"
                       className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition-colors">
                       <Icon name="whatsapp" className="w-3.5 h-3.5" />
-                      Chat Coach
+                      {t("member.schedule.chatCoach")}
                     </a>
                   )}
                 </div>
@@ -521,14 +534,14 @@ function MemberSchedule({ memberId }: { memberId: string }) {
                       <Avatar name={coach.name} size={24} className="shrink-0" />
                       <span className="flex-1 min-w-0 text-wave-200 text-sm truncate">{coach.name}</span>
                       <span className={`shrink-0 px-1.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide ${coach.role === "head" ? "bg-wave-400/20 text-wave-200" : "bg-white/10 text-white/50"}`}>
-                        {coach.role === "head" ? "Head Coach" : "Assistant Coach"}
+                        {coach.role === "head" ? t("member.schedule.headCoach") : t("member.schedule.assistantCoach")}
                       </span>
                     </div>
                     {coach.phone && (
-                      <a href={waLink(`Halo Coach, saya ingin bertanya mengenai kelas ${c.name}.`, coach.phone)} target="_blank" rel="noreferrer"
+                      <a href={waLink(t("member.schedule.waCoachMessage", { className: c.name }), coach.phone)} target="_blank" rel="noreferrer"
                         className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition-colors">
                         <Icon name="whatsapp" className="w-3.5 h-3.5" />
-                        Chat Coach
+                        {t("member.schedule.chatCoach")}
                       </a>
                     )}
                   </div>
@@ -540,13 +553,13 @@ function MemberSchedule({ memberId }: { memberId: string }) {
             <div className="px-5 py-3 border-b border-line space-y-2">
               {c.goals && (
                 <div>
-                  <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Tujuan</div>
+                  <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("member.schedule.goals")}</div>
                   <p className="text-xs text-ink-soft mt-0.5">{c.goals}</p>
                 </div>
               )}
               {c.description && (
                 <div>
-                  <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Deskripsi</div>
+                  <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("member.schedule.description")}</div>
                   <p className="text-xs text-ink-soft mt-0.5">{c.description}</p>
                 </div>
               )}
@@ -555,9 +568,9 @@ function MemberSchedule({ memberId }: { memberId: string }) {
           <div className="divide-y divide-line">
             {c.schedule_days.map((d, i) => (
               <div key={i} className="px-5 py-3.5 flex items-center gap-3">
-                <span className="w-9 h-9 rounded-xl bg-ocean-50 text-ocean-700 flex items-center justify-center text-xs font-bold">{d.slice(0, 2)}</span>
+                <span className="w-9 h-9 rounded-xl bg-ocean-50 text-ocean-700 flex items-center justify-center text-xs font-bold">{translateDayShort(d, shortDays)}</span>
                 <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-ink text-sm">{d}</div>
+                  <div className="font-semibold text-ink text-sm">{translateDayName(d, longDays)}</div>
                   {(() => {
                     const slot = c.schedule_times?.find(s => s.day === d) ?? null;
                     const ts = slot?.time_start || c.time_start || "";
@@ -575,7 +588,7 @@ function MemberSchedule({ memberId }: { memberId: string }) {
       {sessions.length > 0 && (
         <Card padded={false}>
           <div className="p-5 border-b border-line">
-            <SectionTitle sub="4 minggu ke depan">Sesi yang akan datang</SectionTitle>
+            <SectionTitle sub={t("member.schedule.upcomingSub")}>{t("member.schedule.upcomingTitle")}</SectionTitle>
           </div>
           <div className="divide-y divide-line">
             {pagedSessions.map((s, i) => {
@@ -592,11 +605,11 @@ function MemberSchedule({ memberId }: { memberId: string }) {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-semibold text-ink leading-tight">{cls?.name ?? "—"}</div>
-                    <div className="text-xs text-ink-mute mt-0.5">{s.day} · {s.time}</div>
+                    <div className="text-xs text-ink-mute mt-0.5">{translateDayName(s.day, longDays)} · {s.time}</div>
                   </div>
                   {onLeave && (
                     <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide text-warn-600 bg-warn-50 px-1.5 py-0.5 rounded">
-                      Izin
+                      {t("member.schedule.onLeave")}
                     </span>
                   )}
                 </div>
@@ -611,17 +624,17 @@ function MemberSchedule({ memberId }: { memberId: string }) {
                 className="flex items-center gap-1 text-xs font-semibold text-ink-soft hover:text-ink disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
               >
                 <Icon name="chevron-left" className="w-4 h-4" />
-                Sebelumnya
+                {t("member.schedule.prev")}
               </button>
               <span className="text-xs text-ink-mute">
-                {sessionRangeStart}–{sessionRangeEnd} dari {totalSessions} sesi
+                {t("member.schedule.pageInfo", { start: sessionRangeStart, end: sessionRangeEnd, total: totalSessions })}
               </span>
               <button
                 onClick={() => setSessionPage((p) => Math.min(totalPages - 1, p + 1))}
                 disabled={sessionPage >= totalPages - 1}
                 className="flex items-center gap-1 text-xs font-semibold text-ink-soft hover:text-ink disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
               >
-                Selanjutnya
+                {t("member.schedule.next")}
                 <Icon name="chevron-right" className="w-4 h-4" />
               </button>
             </div>
@@ -630,7 +643,7 @@ function MemberSchedule({ memberId }: { memberId: string }) {
       )}
 
       {classes.length === 0 && (
-        <div className="text-center py-12 text-ink-mute text-sm">Belum terdaftar di kelas manapun.</div>
+        <div className="text-center py-12 text-ink-mute text-sm">{t("member.schedule.emptyClasses")}</div>
       )}
     </div>
   );
@@ -639,6 +652,7 @@ function MemberSchedule({ memberId }: { memberId: string }) {
 // ── Absensi ────────────────────────────────────────────────────────────────────
 
 function MemberAbsensi({ memberId }: { memberId: string }) {
+  const { t, tArray } = useLocale();
   const supabase = createClient();
   const now = new Date();
   const [filterMonth, setFilterMonth] = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`);
@@ -684,7 +698,15 @@ function MemberAbsensi({ memberId }: { memberId: string }) {
     absent: rows.filter((r) => r.status === "tidak_hadir" || r.status === "absent").length,
   };
 
-  const monthNames = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agt", "Sep", "Okt", "Nov", "Des"];
+  const monthNames = tArray("common.months.short");
+
+  const getStatusText = (status: string) => {
+    if (status === "hadir") return t("member.attendance.statusPresent");
+    if (status === "telat") return t("member.attendance.statusLate");
+    if (status === "tidak_hadir" || status === "absent") return t("member.attendance.statusAbsent");
+    if (status === "izin") return t("member.attendance.statusExcused");
+    return t("member.attendance.statusSick");
+  };
 
   return (
     <div className="space-y-5">
@@ -701,12 +723,12 @@ function MemberAbsensi({ memberId }: { memberId: string }) {
           onChange={(e) => setFilterClass(e.target.value)}
           className="flex-1 px-3 py-2 rounded-xl border border-line bg-white text-sm text-ink focus:outline-none focus:ring-2 focus:ring-ocean-300"
         >
-          <option value="all">Semua Kelas</option>
+          <option value="all">{t("member.attendance.allClasses")}</option>
           {myClasses.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-        {[["Hadir", stats.present, "ok"], ["Izin", stats.excused, "warn"], ["Sakit", stats.sick, "warn"], ["Absen", stats.absent, "danger"]].map(([l, v, t]) => (
+        {[[t("member.attendance.present"), stats.present, "ok"], [t("member.attendance.excused"), stats.excused, "warn"], [t("member.attendance.sick"), stats.sick, "warn"], [t("member.attendance.absent"), stats.absent, "danger"]].map(([l, v, t]) => (
           <Card key={l as string} className="!p-3 text-center">
             <div className={`font-display font-extrabold text-2xl text-${t}-500`}>{v}</div>
             <div className="text-[10px] uppercase tracking-widest font-bold text-ink-mute">{l}</div>
@@ -728,12 +750,12 @@ function MemberAbsensi({ memberId }: { memberId: string }) {
                   <div className="text-xs text-ink-mute font-mono">{dateStr} · {r.time}{r.notes ? ` · ${r.notes}` : ""}</div>
                 </div>
                 <Status kind={r.status === "hadir" ? "present" : r.status === "telat" ? "telat" : (r.status === "tidak_hadir" || r.status === "absent") ? "absent" : r.status === "izin" ? "excused" : "sick"}>
-                  {r.status === "hadir" ? "Hadir" : r.status === "telat" ? "Telat" : (r.status === "tidak_hadir" || r.status === "absent") ? "Absen" : r.status === "izin" ? "Izin" : "Sakit"}
+                  {getStatusText(r.status)}
                 </Status>
               </div>
             );
           })}
-          {rows.length === 0 && <div className="px-5 py-8 text-center text-sm text-ink-mute">Belum ada data absensi.</div>}
+          {rows.length === 0 && <div className="px-5 py-8 text-center text-sm text-ink-mute">{t("member.attendance.empty")}</div>}
         </div>
       </Card>
     </div>
@@ -743,6 +765,7 @@ function MemberAbsensi({ memberId }: { memberId: string }) {
 // ── Tagihan ────────────────────────────────────────────────────────────────────
 
 function MemberBills({ memberId, memberName, branchId }: { memberId: string; memberName: string; branchId: string }) {
+  const { t, tArray } = useLocale();
   const supabase = createClient();
   const [tab, setTab] = useState("active");
   const [activeBills, setActiveBills] = useState<{ id: string; period_label: string; amount: number; discount: number; discount_reason: string | null; total: number; class_name: string; type: string; sessions_total: number | null; sessions_used: number }[]>([]);
@@ -802,12 +825,12 @@ function MemberBills({ memberId, memberName, branchId }: { memberId: string; mem
   }, [load]); // eslint-disable-line react-hooks/exhaustive-deps
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  const monthNames = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agt", "Sep", "Okt", "Nov", "Des"];
+  const monthNames = tArray("common.months.short");
 
   return (
     <div className="space-y-5">
       <div className="flex gap-1.5 bg-paper-tint rounded-xl p-1 w-fit">
-        {[["active", "Tagihan Aktif"], ["history", "Histori"]].map(([id, l]) => (
+        {[["active", t("member.bills.tabActive")], ["history", t("member.bills.tabHistory")]].map(([id, l]) => (
           <button key={id} onClick={() => setTab(id)} className={`px-3 py-1.5 text-xs font-bold rounded-lg ${tab === id ? "bg-white text-ocean-700 shadow-sm" : "text-ink-mute hover:text-ink-soft"}`}>{l}</button>
         ))}
       </div>
@@ -815,48 +838,48 @@ function MemberBills({ memberId, memberName, branchId }: { memberId: string; mem
       {tab === "active" && (
         <>
           {activeBills.length === 0 && (
-            <div className="text-center py-12 text-ink-mute text-sm">Tidak ada tagihan aktif.</div>
+            <div className="text-center py-12 text-ink-mute text-sm">{t("member.bills.emptyActive")}</div>
           )}
           {activeBills.map((b) => (
             <Card key={b.id} className="bg-warn-50 border-warn-500/20">
               <div className="flex items-center gap-3">
                 <span className="w-12 h-12 rounded-2xl bg-white text-warn-600 flex items-center justify-center"><Icon name="wallet" className="w-6 h-6" /></span>
                 <div className="flex-1">
-                  <Status kind="unpaid" className="!text-[10px]">BELUM BAYAR</Status>
-                  <div className="font-display font-bold text-lg text-ink mt-1">Tagihan {b.period_label}</div>
+                  <Status kind="unpaid" className="!text-[10px]">{t("member.bills.unpaidBadge")}</Status>
+                  <div className="font-display font-bold text-lg text-ink mt-1">{t("member.bills.billTitle", { period: b.period_label })}</div>
                   <div className="text-xs text-ink-mute">{b.class_name}</div>
                 </div>
               </div>
               <div className="mt-4 pt-4 border-t border-warn-500/20 space-y-1.5 text-sm">
-                <div className="flex justify-between text-ink-mute"><span>Biaya kelas</span><span className="font-mono">{fmtIDR(b.amount)}</span></div>
+                <div className="flex justify-between text-ink-mute"><span>{t("member.bills.classFee")}</span><span className="font-mono">{fmtIDR(b.amount)}</span></div>
                 {b.discount > 0 && (
                   <div className="flex justify-between text-ok-600">
-                    <span>Diskon{b.discount_reason ? ` (${b.discount_reason})` : ""}</span>
+                    <span>{t("member.bills.discount")}{b.discount_reason ? ` (${b.discount_reason})` : ""}</span>
                     <span className="font-mono">−{fmtIDR(b.discount)}</span>
                   </div>
                 )}
-                <div className="flex justify-between font-display font-bold text-xl text-ink pt-2 border-t border-warn-500/20"><span>Total</span><span className="font-mono text-ocean-700">{fmtIDR(b.total)}</span></div>
+                <div className="flex justify-between font-display font-bold text-xl text-ink pt-2 border-t border-warn-500/20"><span>{t("member.bills.total")}</span><span className="font-mono text-ocean-700">{fmtIDR(b.total)}</span></div>
               </div>
               {b.type === "session_pack" && b.sessions_total != null && (
                 <div className={`mt-3 flex items-center gap-2 px-3 py-2 rounded-xl border text-sm font-semibold ${(b.sessions_total - b.sessions_used) <= 1 ? "bg-warn-50 border-warn-300 text-warn-800" : "bg-paper-tint border-line text-ink-soft"}`}>
                   <Icon name="calendar" className="w-4 h-4 shrink-0" />
-                  <span>Sisa sesi: <strong>{b.sessions_total - b.sessions_used}</strong> dari {b.sessions_total} sesi</span>
-                  {(b.sessions_total - b.sessions_used) <= 1 && <span className="ml-auto text-warn-700 font-bold text-xs">Hampir habis!</span>}
+                  <span>{t("member.bills.sessionPackInfo", { remaining: b.sessions_total - b.sessions_used, total: b.sessions_total })}</span>
+                  {(b.sessions_total - b.sessions_used) <= 1 && <span className="ml-auto text-warn-700 font-bold text-xs">{t("member.bills.almostOut")}</span>}
                 </div>
               )}
               {bankInfo?.bank_name && (
                 <div className="mt-3 rounded-xl bg-ocean-50 border border-ocean-500/20 p-3 space-y-1.5">
-                  <div className="text-[10px] uppercase tracking-widest font-bold text-ocean-600">Rekening Pembayaran</div>
+                  <div className="text-[10px] uppercase tracking-widest font-bold text-ocean-600">{t("member.bills.bankInfoTitle")}</div>
                   <div className="flex justify-between items-center text-sm">
-                    <span className="text-ink-soft">Bank</span>
+                    <span className="text-ink-soft">{t("member.bills.bankName")}</span>
                     <span className="font-bold text-ink">{bankInfo.bank_name}</span>
                   </div>
                   <div className="flex justify-between items-center text-sm">
-                    <span className="text-ink-soft">No. Rekening</span>
+                    <span className="text-ink-soft">{t("member.bills.bankAccount")}</span>
                     <span className="font-mono font-bold text-ink">{bankInfo.bank_account}</span>
                   </div>
                   <div className="flex justify-between items-center text-sm">
-                    <span className="text-ink-soft">Atas Nama</span>
+                    <span className="text-ink-soft">{t("member.bills.bankHolder")}</span>
                     <span className="font-bold text-ink">{bankInfo.bank_holder}</span>
                   </div>
                 </div>
@@ -864,17 +887,17 @@ function MemberBills({ memberId, memberName, branchId }: { memberId: string; mem
               {adminWa && (
                 <div className="mt-3 flex flex-wrap items-center gap-2 px-3 py-2 rounded-xl bg-white border border-warn-500/20">
                   <Icon name="whatsapp" className="w-4 h-4 text-ok-600 shrink-0" />
-                  <div className="text-xs text-ink-soft">Konfirmasi pembayaran ke admin:</div>
+                  <div className="text-xs text-ink-soft">{t("member.bills.confirmToAdmin")}</div>
                   <div className="font-mono font-bold text-sm text-ink ml-auto truncate">{adminWa}</div>
                 </div>
               )}
-              <a href={`https://wa.me/${adminWa?.replace(/\D/g, "") ?? ""}?text=${encodeURIComponent(`Halo Admin, saya ingin konfirmasi pembayaran tagihan ${b.period_label} untuk ${memberName}. Bukti transfer terlampir.`)}`} target="_blank" rel="noreferrer" className="mt-3 inline-flex w-full">
-                <Btn variant="wa" icon="whatsapp" size="lg" className="w-full">Hubungi Admin untuk konfirmasi</Btn>
+              <a href={waLink(t("member.bills.waMessage", { period: b.period_label, name: memberName }), adminWa)} target="_blank" rel="noreferrer" className="mt-3 inline-flex w-full">
+                <Btn variant="wa" icon="whatsapp" size="lg" className="w-full">{t("member.bills.contactAdminBtn")}</Btn>
               </a>
               <div className="mt-2 text-[11px] text-ink-mute text-center">
                 {bankInfo?.bank_name
-                  ? "Transfer ke rekening di atas lalu kirim bukti via WA ke admin."
-                  : "Hubungi admin via WhatsApp untuk mendapat info rekening dan konfirmasi pembayaran."}
+                  ? t("member.bills.transferHintWithBank")
+                  : t("member.bills.transferHintNoBank")}
               </div>
             </Card>
           ))}
@@ -892,13 +915,13 @@ function MemberBills({ memberId, memberName, branchId }: { memberId: string; mem
                   <span className="w-10 h-10 rounded-xl bg-ok-50 text-ok-600 flex items-center justify-center"><Icon name="check" className="w-4 h-4" strokeWidth={2.5} /></span>
                   <div className="flex-1 min-w-0">
                     <div className="font-semibold text-ink text-sm">{h.period_label}</div>
-                    <div className="text-xs text-ink-mute">Diverifikasi {dateStr}{h.payment_method ? ` · ${h.payment_method}` : ""}</div>
+                    <div className="text-xs text-ink-mute">{t("member.bills.verifiedOn", { date: dateStr })}{h.payment_method ? ` · ${h.payment_method}` : ""}</div>
                   </div>
                   <div className="font-mono font-bold text-sm">{fmtIDR(h.amount)}</div>
                 </div>
               );
             })}
-            {history.length === 0 && <div className="px-5 py-8 text-center text-sm text-ink-mute">Belum ada histori pembayaran.</div>}
+            {history.length === 0 && <div className="px-5 py-8 text-center text-sm text-ink-mute">{t("member.bills.emptyHistory")}</div>}
           </div>
         </Card>
       )}
@@ -909,6 +932,7 @@ function MemberBills({ memberId, memberName, branchId }: { memberId: string; mem
 // ── Izin ───────────────────────────────────────────────────────────────────────
 
 function MemberLeave({ memberId }: { memberId: string }) {
+  const { t, tArray } = useLocale();
   const supabase = createClient();
   const toast = useToast();
   const [openForm, setOpenForm] = useState(false);
@@ -966,17 +990,30 @@ function MemberLeave({ memberId }: { memberId: string }) {
     if (!error) {
       setOpenForm(false);
       setForm({ class_ids: [], start_date: "", end_date: "", type: "izin", notes: "" });
-      toast.success("Pengajuan izin berhasil dikirim", "Menunggu persetujuan admin.");
+      toast.success(t("member.leave.toastSuccessTitle"), t("member.leave.toastSuccessBody"));
       load();
     }
   };
 
-  const monthNames = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agt", "Sep", "Okt", "Nov", "Des"];
+  const monthNames = tArray("common.months.short");
+
+  const getTypeLabel = (type: string) => {
+    if (type === "izin") return t("member.leave.typeIzin");
+    if (type === "sakit") return t("member.leave.typeSakit");
+    if (type === "ujian") return t("member.leave.typeUjian");
+    return t("member.leave.typeLainnya");
+  };
+
+  const getStatusLabel = (status: string) => {
+    if (status === "approved") return t("member.leave.statusApproved");
+    if (status === "rejected") return t("member.leave.statusRejected");
+    return t("member.leave.statusPending");
+  };
 
   return (
     <div className="space-y-5">
-      <Btn variant="primary" size="lg" icon="plus" className="w-full" onClick={() => setOpenForm(true)}>Ajukan Izin Baru</Btn>
-      <SectionTitle sub="Pengajuan Anda">Riwayat Izin</SectionTitle>
+      <Btn variant="primary" size="lg" icon="plus" className="w-full" onClick={() => setOpenForm(true)}>{t("member.leave.newLeaveBtn")}</Btn>
+      <SectionTitle sub={t("member.leave.historySub")}>{t("member.leave.historyTitle")}</SectionTitle>
       <Card padded={false}>
         <div className="divide-y divide-line">
           {leaves.map((l) => {
@@ -986,7 +1023,7 @@ function MemberLeave({ memberId }: { memberId: string }) {
             const dateRange = endD
               ? `${dateStr}–${endD.getDate()} ${monthNames[endD.getMonth()]}`
               : dateStr;
-            const typeLabel = l.type === "izin" ? "Izin" : l.type === "sakit" ? "Sakit" : l.type === "ujian" ? "Ujian" : "Lainnya";
+            const typeLabel = getTypeLabel(l.type);
             return (
               <div key={l.id} className="px-5 py-3.5">
                 <div className="flex items-center gap-3">
@@ -995,22 +1032,22 @@ function MemberLeave({ memberId }: { memberId: string }) {
                   </span>
                   <div className="flex-1 min-w-0">
                     <div className="font-semibold text-ink text-sm">{typeLabel} · {dateRange}</div>
-                    <div className="text-xs text-ink-mute">Diajukan {dateStr}{l.reason ? ` · ${l.reason}` : ""}</div>
+                    <div className="text-xs text-ink-mute">{t("member.leave.appliedOn", { date: dateStr })}{l.reason ? ` · ${l.reason}` : ""}</div>
                   </div>
-                  <Status kind={l.status as "approved" | "rejected" | "pending"}>{l.status === "approved" ? "Disetujui" : l.status === "rejected" ? "Ditolak" : "Menunggu"}</Status>
+                  <Status kind={l.status as "approved" | "rejected" | "pending"}>{getStatusLabel(l.status)}</Status>
                 </div>
-                {l.reject_reason && <div className="mt-2 text-xs text-danger-600 bg-danger-50 rounded-lg p-2.5"><b>Alasan tolak:</b> {l.reject_reason}</div>}
+                {l.reject_reason && <div className="mt-2 text-xs text-danger-600 bg-danger-50 rounded-lg p-2.5"><b>{t("member.leave.rejectReasonLabel")}</b> {l.reject_reason}</div>}
               </div>
             );
           })}
-          {leaves.length === 0 && <div className="px-5 py-8 text-center text-sm text-ink-mute">Belum ada pengajuan izin.</div>}
+          {leaves.length === 0 && <div className="px-5 py-8 text-center text-sm text-ink-mute">{t("member.leave.emptyHistory")}</div>}
         </div>
       </Card>
 
-      <Modal open={openForm} onClose={() => setOpenForm(false)} title="Ajukan Izin"
-        footer={<><Btn variant="ghost" onClick={() => setOpenForm(false)}>Batal</Btn><Btn variant="primary" disabled={submitting} onClick={submit}>Submit</Btn></>}>
+      <Modal open={openForm} onClose={() => setOpenForm(false)} title={t("member.leave.modalTitle")}
+        footer={<><Btn variant="ghost" onClick={() => setOpenForm(false)}>{t("common.actions.cancel")}</Btn><Btn variant="primary" disabled={submitting} onClick={submit}>{t("common.actions.save")}</Btn></>}>
         <div className="space-y-4">
-          <Field label="Kelas" required hint="Bisa pilih lebih dari satu">
+          <Field label={t("member.leave.fieldClasses")} required hint={t("member.leave.fieldClassesHint")}>
             <div className="flex flex-wrap gap-2 mt-1">
               {myClasses.map((c) => (
                 <button key={c.id} type="button"
@@ -1019,24 +1056,24 @@ function MemberLeave({ memberId }: { memberId: string }) {
                   {c.name}
                 </button>
               ))}
-              {myClasses.length === 0 && <span className="text-sm text-ink-mute">Tidak ada kelas terdaftar</span>}
+              {myClasses.length === 0 && <span className="text-sm text-ink-mute">{t("member.leave.noClasses")}</span>}
             </div>
           </Field>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Field label="Tanggal mulai" required><Input type="date" value={form.start_date} onChange={(e) => setForm((f) => ({ ...f, start_date: e.target.value }))} /></Field>
-            <Field label="Tanggal selesai"><Input type="date" value={form.end_date} onChange={(e) => setForm((f) => ({ ...f, end_date: e.target.value }))} /></Field>
+            <Field label={t("member.leave.startDate")} required><Input type="date" value={form.start_date} onChange={(e) => setForm((f) => ({ ...f, start_date: e.target.value }))} /></Field>
+            <Field label={t("member.leave.endDate")}><Input type="date" value={form.end_date} onChange={(e) => setForm((f) => ({ ...f, end_date: e.target.value }))} /></Field>
           </div>
-          <Field label="Jenis izin" required>
+          <Field label={t("member.leave.fieldLeaveType")} required>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              {[["izin", "Izin"], ["sakit", "Sakit"], ["ujian", "Ujian"], ["lainnya", "Lainnya"]].map(([val, label]) => (
+              {[["izin", t("member.leave.typeIzin")], ["sakit", t("member.leave.typeSakit")], ["ujian", t("member.leave.typeUjian")], ["lainnya", t("member.leave.typeLainnya")]].map(([val, label]) => (
                 <label key={val} className={`px-2 py-2 rounded-xl border text-xs font-semibold text-center cursor-pointer ${form.type === val ? "border-ocean-500 bg-ocean-50 text-ocean-700" : "border-line text-ink-soft hover:bg-paper-tint"}`}>
                   <input type="radio" name="lt" className="sr-only" checked={form.type === val} onChange={() => setForm((f) => ({ ...f, type: val }))} />{label}
                 </label>
               ))}
             </div>
           </Field>
-          <Field label="Alasan tambahan"><Textarea rows={3} placeholder="Mis. Demam, tidak bisa hadir" value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} /></Field>
-          <div className="text-xs text-ink-mute bg-paper-tint rounded-lg p-3 flex items-start gap-2"><Icon name="info" className="w-4 h-4 mt-0.5 text-wave-600" />Pengajuan akan menunggu persetujuan admin.</div>
+          <Field label={t("member.leave.fieldReason")}><Textarea rows={3} placeholder={t("member.leave.reasonPlaceholder")} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} /></Field>
+          <div className="text-xs text-ink-mute bg-paper-tint rounded-lg p-3 flex items-start gap-2"><Icon name="info" className="w-4 h-4 mt-0.5 text-wave-600" />{t("member.leave.pendingApprovalHint")}</div>
         </div>
       </Modal>
     </div>
@@ -1068,6 +1105,7 @@ function MemberRapor({ memberId, memberName, branchId, avatarUrl, memberNo, birt
   memberId: string; memberName: string; branchId: string;
   avatarUrl?: string | null; memberNo?: string | null; birthDate?: string | null; location?: string;
 }) {
+  const { t, tArray } = useLocale();
   const supabase = createClient();
   const toast = useToast();
   const [raporTab, setRaporTab] = useState<"rapor" | "review">("rapor");
@@ -1190,7 +1228,7 @@ function MemberRapor({ memberId, memberName, branchId, avatarUrl, memberNo, birt
 
   const saveReview = async (entry: RaporEntryFull, slot: CoachReviewSlot) => {
     const { data: periodCheck } = await supabase.from("rapor_periods").select("is_open").eq("id", entry.period_id).single();
-    if (!periodCheck?.is_open) return toast.error("Periode rapor sudah ditutup", "Review tidak bisa diedit setelah periode berakhir.");
+    if (!periodCheck?.is_open) return toast.error(t("member.rapor.toastPeriodClosedTitle"), t("member.rapor.toastPeriodClosedBody"));
     const draft = getDraft(entry, slot);
     const key = draftKey(entry.id, slot.coach_id);
     setSavingSlot(key);
@@ -1206,15 +1244,16 @@ function MemberRapor({ memberId, memberName, branchId, avatarUrl, memberNo, birt
   // Separate open-period entries from closed-period (history)
   const openEntries = entries.filter((e) => e.period_is_open);
   const historyEntries = entries.filter((e) => !e.period_is_open);
+  const ratingLabels = tArray("member.rapor.ratingLabels");
 
   return (
     <div className="space-y-5">
       {/* Sub-tab toggle */}
       <div className="flex gap-1 bg-paper-tint border border-line rounded-xl p-1 w-fit">
-        {([{ id: "rapor", label: "Rapor" }, { id: "review", label: "Review Coach" }] as const).map(t => (
-          <button key={t.id} onClick={() => setRaporTab(t.id)}
-            className={`px-3.5 py-2 rounded-lg text-sm font-semibold transition-colors ${raporTab === t.id ? "bg-white text-ocean-700 shadow-card" : "text-ink-soft hover:bg-white/60"}`}>
-            {t.label}
+        {([{ id: "rapor", label: t("member.rapor.tabRapor") }, { id: "review", label: t("member.rapor.tabReview") }] as const).map(tab => (
+          <button key={tab.id} onClick={() => setRaporTab(tab.id)}
+            className={`px-3.5 py-2 rounded-lg text-sm font-semibold transition-colors ${raporTab === tab.id ? "bg-white text-ocean-700 shadow-card" : "text-ink-soft hover:bg-white/60"}`}>
+            {tab.label}
           </button>
         ))}
       </div>
@@ -1230,11 +1269,11 @@ function MemberRapor({ memberId, memberName, branchId, avatarUrl, memberNo, birt
               <div className="relative flex items-center gap-3">
                 <span className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center"><Icon name="book" className="w-7 h-7" /></span>
                 <div>
-                  <div className="text-wave-200 text-[10px] uppercase tracking-widest font-bold">Rapor aktif · {entry.period}</div>
+                  <div className="text-wave-200 text-[10px] uppercase tracking-widest font-bold">{t("member.rapor.activePeriod", { period: entry.period })}</div>
                   <div className="font-display font-bold text-xl mt-0.5">{entry.class_name}</div>
                   <div className="text-white/80 text-xs mt-0.5">{entry.coach_name}</div>
                 </div>
-                <Btn variant="accent" size="sm" className="ml-auto" onClick={() => openRapor(entry)}>Buka</Btn>
+                <Btn variant="accent" size="sm" className="ml-auto" onClick={() => openRapor(entry)}>{t("member.rapor.openBtn")}</Btn>
               </div>
             </div>
           ))}
@@ -1242,17 +1281,17 @@ function MemberRapor({ memberId, memberName, branchId, avatarUrl, memberNo, birt
       )}
 
       {openEntries.length === 0 && entries.length === 0 && (
-        <div className="text-center py-12 text-ink-mute text-sm">Belum ada rapor yang tersedia.</div>
+        <div className="text-center py-12 text-ink-mute text-sm">{t("member.rapor.emptyRapor")}</div>
       )}
 
       {openEntries.length === 0 && entries.length > 0 && (
-        <div className="rounded-xl border border-line bg-paper-tint p-4 text-sm text-ink-mute text-center">Tidak ada periode rapor yang sedang aktif.</div>
+        <div className="rounded-xl border border-line bg-paper-tint p-4 text-sm text-ink-mute text-center">{t("member.rapor.noActivePeriod")}</div>
       )}
 
       {/* History rapor (closed periods) */}
       {historyEntries.length > 0 && (
         <>
-          <SectionTitle sub="Periode sudah berakhir">History Rapor</SectionTitle>
+          <SectionTitle sub={t("member.rapor.historySub")}>{t("member.rapor.historyTitle")}</SectionTitle>
           <div className="space-y-2.5">
             {historyEntries.map((r) => (
               <Card key={r.id} className="!p-3">
@@ -1262,7 +1301,7 @@ function MemberRapor({ memberId, memberName, branchId, avatarUrl, memberNo, birt
                     <div className="font-semibold text-ink text-sm">{r.period}</div>
                     <div className="text-xs text-ink-mute">{r.coach_name} · {r.class_name}</div>
                   </div>
-                  <Btn variant="ghost" size="sm" onClick={() => openRapor(r)}>Buka</Btn>
+                  <Btn variant="ghost" size="sm" onClick={() => openRapor(r)}>{t("member.rapor.openBtn")}</Btn>
                 </div>
               </Card>
             ))}
@@ -1275,17 +1314,17 @@ function MemberRapor({ memberId, memberName, branchId, avatarUrl, memberNo, birt
       {raporTab === "review" && (
         <>
           {entries.length === 0 ? (
-            <div className="text-center py-12 text-ink-mute text-sm">Belum ada rapor yang tersedia untuk direview.</div>
+            <div className="text-center py-12 text-ink-mute text-sm">{t("member.rapor.emptyReview")}</div>
           ) : (
             <div className="space-y-4">
               {entries.map(entry => (
                 <Card key={entry.id} className="space-y-4">
                   <div>
                     <div className="font-display font-bold text-ink">{entry.class_name}</div>
-                    <div className="text-xs text-ink-mute mt-0.5">{entry.period}{!entry.period_is_open && " · periode berakhir"}</div>
+                    <div className="text-xs text-ink-mute mt-0.5">{entry.period}{!entry.period_is_open && t("member.rapor.periodEnded")}</div>
                   </div>
                   {entry.coachReviews.length === 0 ? (
-                    <p className="text-xs text-ink-faint italic">Belum ada coach terdaftar di kelas ini.</p>
+                    <p className="text-xs text-ink-faint italic">{t("member.rapor.noCoachesInClass")}</p>
                   ) : (
                     <div className="space-y-3">
                       {entry.coachReviews.map(slot => {
@@ -1297,7 +1336,7 @@ function MemberRapor({ memberId, memberName, branchId, avatarUrl, memberNo, birt
                             <div className="flex items-center gap-2 mb-2">
                               <Avatar name={slot.coach_name} size={28} />
                               <span className="font-semibold text-sm text-ink">{slot.coach_name}</span>
-                              {slot.role === "head" && <span className="px-1.5 py-0.5 rounded-full bg-ocean-700 text-white text-[10px] font-bold uppercase tracking-wide">Head</span>}
+                              {slot.role === "head" && <span className="px-1.5 py-0.5 rounded-full bg-ocean-700 text-white text-[10px] font-bold uppercase tracking-wide">{t("member.rapor.headBadge")}</span>}
                             </div>
                             {entry.period_is_open ? (
                               <div className="bg-wave-50 border border-wave-100 rounded-2xl p-4">
@@ -1307,16 +1346,16 @@ function MemberRapor({ memberId, memberName, branchId, avatarUrl, memberNo, birt
                                       <Icon name="star" className={`w-7 h-7 transition-colors ${k < draft.stars ? "text-amber-400" : "text-line"}`} strokeWidth={1.5} fill={k < draft.stars ? "currentColor" : "none"} />
                                     </button>
                                   ))}
-                                  <span className="ml-2 text-sm font-semibold text-ink-soft">{["", "Kurang", "Cukup", "Baik", "Sangat Baik", "Luar Biasa"][draft.stars]}</span>
+                                  <span className="ml-2 text-sm font-semibold text-ink-soft">{ratingLabels[draft.stars]}</span>
                                 </div>
                                 <div className="relative">
-                                  <Textarea rows={2} maxLength={300} className="pb-5" placeholder="Mis. Coach sangat sabar dan metodenya menyenangkan untuk anak-anak." value={draft.text} onChange={(e) => setDraft(entry, slot, { text: e.target.value })} />
+                                  <Textarea rows={2} maxLength={300} className="pb-5" placeholder={t("member.rapor.reviewPlaceholder")} value={draft.text} onChange={(e) => setDraft(entry, slot, { text: e.target.value })} />
                                   <span className={`absolute bottom-2 right-3 text-[10px] font-mono tabular-nums pointer-events-none ${300 - draft.text.length <= 20 ? "text-danger-500 font-bold" : "text-ink-faint"}`}>
                                     {draft.text.length}/300
                                   </span>
                                 </div>
                                 <Btn variant="primary" size="sm" className="mt-3" disabled={isSaving} onClick={() => saveReview(entry, slot)}>
-                                  {isSaving ? "Menyimpan…" : slot.review_id ? "Perbarui review" : "Simpan review"}
+                                  {isSaving ? t("common.actions.saving") : slot.review_id ? t("member.rapor.updateReviewBtn") : t("member.rapor.saveReviewBtn")}
                                 </Btn>
                               </div>
                             ) : (
@@ -1327,12 +1366,12 @@ function MemberRapor({ memberId, memberName, branchId, avatarUrl, memberNo, birt
                                       {Array.from({ length: 5 }).map((_, k) => (
                                         <Icon key={k} name="star" className={`w-5 h-5 ${k < (slot.review_stars ?? 0) ? "text-amber-400" : "text-line"}`} strokeWidth={1.5} fill={k < (slot.review_stars ?? 0) ? "currentColor" : "none"} />
                                       ))}
-                                      <span className="ml-2 text-xs font-semibold text-ink-soft">{["", "Kurang", "Cukup", "Baik", "Sangat Baik", "Luar Biasa"][slot.review_stars]}</span>
+                                      <span className="ml-2 text-xs font-semibold text-ink-soft">{ratingLabels[slot.review_stars]}</span>
                                     </div>
                                     {slot.review_message && <p className="text-sm text-ink-soft">{slot.review_message}</p>}
                                   </>
                                 ) : (
-                                  <p className="text-sm text-ink-mute">Periode sudah berakhir — review tidak diberikan.</p>
+                                  <p className="text-sm text-ink-mute">{t("member.rapor.periodEndedNoReview")}</p>
                                 )}
                               </div>
                             )}
@@ -1348,7 +1387,7 @@ function MemberRapor({ memberId, memberName, branchId, avatarUrl, memberNo, birt
         </>
       )}
 
-      <Modal open={open} onClose={() => setOpen(false)} title={`Rapor — ${selectedEntry?.period ?? ""}`} size="lg"
+      <Modal open={open} onClose={() => setOpen(false)} title={t("member.rapor.modalTitle", { period: selectedEntry?.period ?? "" })} size="lg"
         footer={
           <div className="flex gap-2 justify-end">
             {selectedEntry && (() => {
@@ -1376,15 +1415,15 @@ function MemberRapor({ memberId, memberName, branchId, avatarUrl, memberNo, birt
               return (<>
                 <Btn variant="outline" size="sm" icon="printer"
                   onClick={() => printSingleRaporPopup(raporData)}>
-                  Print
+                  {t("common.actions.print")}
                 </Btn>
                 <Btn variant="soft" size="sm" icon="download"
                   onClick={() => void downloadRaporPdf(raporData)}>
-                  Download PDF
+                  {t("member.rapor.downloadPdf")}
                 </Btn>
               </>);
             })()}
-            <Btn variant="primary" onClick={() => setOpen(false)}>Tutup</Btn>
+            <Btn variant="primary" onClick={() => setOpen(false)}>{t("common.actions.close")}</Btn>
           </div>
         }>
         {selectedEntry && (
@@ -1423,7 +1462,7 @@ function MemberRapor({ memberId, memberName, branchId, avatarUrl, memberNo, birt
               })()}
               {selectedEntry.notes && (
                 <div>
-                  <div className="font-semibold text-ink text-sm mb-1">Catatan coach</div>
+                  <div className="font-semibold text-ink text-sm mb-1">{t("member.rapor.coachNotes")}</div>
                   <p className="text-sm text-ink-soft bg-paper-tint p-3 rounded-xl leading-relaxed">{selectedEntry.notes}</p>
                 </div>
               )}
@@ -1438,6 +1477,7 @@ function MemberRapor({ memberId, memberName, branchId, avatarUrl, memberNo, birt
 // ── Profile ────────────────────────────────────────────────────────────────────
 
 function MemberProfile({ memberId, memberName, onLogout, onProfileComplete, onAvatarChange }: { memberId: string; memberName: string; onLogout: () => void; onProfileComplete?: () => void; onAvatarChange?: (url: string) => void }) {
+  const { t } = useLocale();
   const supabase = createClient();
   const { upload } = useUpload();
   const [profile, setProfile] = useState<{
@@ -1505,12 +1545,10 @@ function MemberProfile({ memberId, memberName, onLogout, onProfileComplete, onAv
     setSaving(false);
   };
 
-
-
   const changePwd = async () => {
     setPwdError("");
-    if (newPwd !== confirmPwd) { setPwdError("Password tidak cocok"); return; }
-    if (newPwd.length < 6) { setPwdError("Password minimal 6 karakter"); return; }
+    if (newPwd !== confirmPwd) { setPwdError(t("member.profile.errorPasswordMismatch")); return; }
+    if (newPwd.length < 6) { setPwdError(t("member.profile.errorPasswordMinLength")); return; }
     setPwdSaving(true);
     const { error } = await supabase.auth.updateUser({ password: newPwd });
     setPwdSaving(false);
@@ -1537,19 +1575,19 @@ function MemberProfile({ memberId, memberName, onLogout, onProfileComplete, onAv
           </button>
           <div className="flex-1 min-w-0">
             <div className="font-display font-bold text-xl text-ink">{profile?.full_name ?? memberName}</div>
-            <div className="text-sm text-ocean-700 font-semibold">{age != null ? `${age} thn · ` : ""}Member</div>
-            {profile?.date_start && <div className="text-xs text-ink-mute mt-1">Member sejak {fmtDate(profile.date_start)}</div>}
+            <div className="text-sm text-ocean-700 font-semibold">{age != null ? t("member.profile.ageMember", { age }) : t("member.profile.roleMember")}</div>
+            {profile?.date_start && <div className="text-xs text-ink-mute mt-1">{t("member.profile.memberSince", { date: fmtDate(profile.date_start) })}</div>}
             {profile?.member_no && <div className="text-xs text-ink-mute font-mono mt-0.5">{profile.member_no}</div>}
             {avatarSaving && (
-              <div className="mt-2 text-xs text-ink-mute font-semibold animate-pulse">Mengupload foto…</div>
+              <div className="mt-2 text-xs text-ink-mute font-semibold animate-pulse">{t("member.profile.uploadingPhoto")}</div>
             )}
           </div>
         </div>
         {(regInfo?.parent_name || regInfo?.parent_phone) && (
           <Card className="!p-3 mt-4 bg-paper-tint border-line">
             <div className="grid grid-cols-2 gap-3 text-sm">
-              {regInfo.parent_name && <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Wali</div><div className="font-semibold text-ink">{regInfo.parent_name}</div></div>}
-              {regInfo.parent_phone && <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">No HP wali</div><div className="font-semibold text-ink font-mono text-xs">{regInfo.parent_phone}</div></div>}
+              {regInfo.parent_name && <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("member.profile.guardianName")}</div><div className="font-semibold text-ink">{regInfo.parent_name}</div></div>}
+              {regInfo.parent_phone && <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("member.profile.guardianPhone")}</div><div className="font-semibold text-ink font-mono text-xs">{regInfo.parent_phone}</div></div>}
             </div>
           </Card>
         )}
@@ -1557,8 +1595,8 @@ function MemberProfile({ memberId, memberName, onLogout, onProfileComplete, onAv
 
       <Card className="text-center">
         <div className="mb-4">
-          <h2 className="font-display font-bold text-xl text-ink leading-tight">QR Code Absensi</h2>
-          <p className="text-sm text-ink-mute mt-0.5">Print sebagai kartu absensi — QR tidak pernah berubah</p>
+          <h2 className="font-display font-bold text-xl text-ink leading-tight">{t("member.profile.qrTitle")}</h2>
+          <p className="text-sm text-ink-mute mt-0.5">{t("member.profile.qrSub")}</p>
         </div>
         <div className="flex justify-center my-4">
           <QRBox
@@ -1569,30 +1607,30 @@ function MemberProfile({ memberId, memberName, onLogout, onProfileComplete, onAv
           />
         </div>
         <div className="flex justify-center gap-2">
-          <a href={waLink("Halo, kirimkan kartu QR absensi anak saya untuk diprint.")} target="_blank" rel="noreferrer">
-            <Btn variant="wa" size="md" icon="whatsapp">Minta cetak</Btn>
+          <a href={waLink(t("member.profile.waRequestPrint"))} target="_blank" rel="noreferrer">
+            <Btn variant="wa" size="md" icon="whatsapp">{t("member.profile.requestPrintBtn")}</Btn>
           </a>
         </div>
       </Card>
 
       <Card>
-        <SectionTitle sub="Yang bisa diubah sendiri">Data yang bisa diupdate</SectionTitle>
+        <SectionTitle sub={t("member.profile.editableSub")}>{t("member.profile.editableTitle")}</SectionTitle>
         <div className="space-y-3">
-          <Field label="No HP"><Input value={editPhone} onChange={(e) => setEditPhone(e.target.value)} /></Field>
-          <Field label="Alamat"><Textarea rows={2} value={editAddress} onChange={(e) => setEditAddress(e.target.value)} /></Field>
-          <Field label="Riwayat kesehatan / alergi"><Textarea rows={2} value={editHealth} onChange={(e) => setEditHealth(e.target.value)} /></Field>
-          <Btn variant="primary" disabled={saving} onClick={saveProfile}>Simpan perubahan</Btn>
+          <Field label={t("member.profile.fieldPhone")}><Input value={editPhone} onChange={(e) => setEditPhone(e.target.value)} /></Field>
+          <Field label={t("member.profile.fieldAddress")}><Textarea rows={2} value={editAddress} onChange={(e) => setEditAddress(e.target.value)} /></Field>
+          <Field label={t("member.profile.fieldHealth")}><Textarea rows={2} value={editHealth} onChange={(e) => setEditHealth(e.target.value)} /></Field>
+          <Btn variant="primary" disabled={saving} onClick={saveProfile}>{t("member.profile.saveBtn")}</Btn>
         </div>
         <div className="mt-4 pt-4 border-t border-line text-xs text-ink-mute flex items-start gap-2">
           <Icon name="info" className="w-4 h-4 mt-0.5 text-wave-600" />
-          Untuk mengubah nama, tanggal lahir, atau kelas — silakan hubungi admin cabang.
+          {t("member.profile.adminContactHint")}
         </div>
       </Card>
 
       <Card>
-        <SectionTitle>Ganti password</SectionTitle>
+        <SectionTitle>{t("member.profile.changePasswordTitle")}</SectionTitle>
         <div className="space-y-3">
-          <Field label="Password baru">
+          <Field label={t("member.profile.fieldNewPassword")}>
             <div className="relative">
               <Input type={showNewPwd ? "text" : "password"} value={newPwd} onChange={(e) => setNewPwd(e.target.value)} className="pr-10" />
               <button type="button" tabIndex={-1} onClick={() => setShowNewPwd(v => !v)}
@@ -1601,7 +1639,7 @@ function MemberProfile({ memberId, memberName, onLogout, onProfileComplete, onAv
               </button>
             </div>
           </Field>
-          <Field label="Konfirmasi password">
+          <Field label={t("member.profile.fieldConfirmPassword")}>
             <div className="relative">
               <Input type={showConfirmPwd ? "text" : "password"} value={confirmPwd} onChange={(e) => setConfirmPwd(e.target.value)} className="pr-10" />
               <button type="button" tabIndex={-1} onClick={() => setShowConfirmPwd(v => !v)}
@@ -1611,7 +1649,7 @@ function MemberProfile({ memberId, memberName, onLogout, onProfileComplete, onAv
             </div>
           </Field>
           {pwdError && <p className="text-xs text-danger-600">{pwdError}</p>}
-          <Btn variant="primary" disabled={pwdSaving} onClick={changePwd}>Simpan password baru</Btn>
+          <Btn variant="primary" disabled={pwdSaving} onClick={changePwd}>{t("member.profile.savePasswordBtn")}</Btn>
         </div>
       </Card>
 
@@ -1620,7 +1658,7 @@ function MemberProfile({ memberId, memberName, onLogout, onProfileComplete, onAv
           <span className="w-9 h-9 rounded-xl bg-danger-50 text-danger-500 flex items-center justify-center group-hover:bg-danger-100 transition-colors">
             <Icon name="logout" className="w-4 h-4" />
           </span>
-          <span className="font-semibold text-danger-600 group-hover:text-danger-700">Keluar dari akun</span>
+          <span className="font-semibold text-danger-600 group-hover:text-danger-700">{t("member.profile.logoutBtn")}</span>
         </button>
       </Card>
 
@@ -1656,19 +1694,20 @@ function MemberProfile({ memberId, memberName, onLogout, onProfileComplete, onAv
 // ── Profile Completion Gate ────────────────────────────────────────────────────
 
 function ProfileGate({ memberName, onComplete, onLogout }: { memberName: string; onComplete: () => void; onLogout: () => void }) {
+  const { t } = useLocale();
   const { upload, uploading } = useUpload();
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [error, setError] = useState("");
 
   const handleUpload = async () => {
-    if (!avatarFile) return setError("Pilih foto terlebih dahulu");
+    if (!avatarFile) return setError(t("member.profileGate.errorSelectPhoto"));
     setError("");
     try {
       await upload.avatar(avatarFile);
       onComplete();
     } catch {
-      setError("Gagal upload foto, coba lagi");
+      setError(t("member.profileGate.errorUploadFailed"));
     }
   };
 
@@ -1677,8 +1716,8 @@ function ProfileGate({ memberName, onComplete, onLogout }: { memberName: string;
       <Logo size={48} withWord />
       <div className="w-full max-w-xs mt-8 space-y-5">
         <div className="text-center space-y-1">
-          <h1 className="font-display font-bold text-2xl text-ink">Lengkapi Profil</h1>
-          <p className="text-sm text-ink-mute">Upload foto profil untuk mulai menggunakan aplikasi.</p>
+          <h1 className="font-display font-bold text-2xl text-ink">{t("member.profileGate.title")}</h1>
+          <p className="text-sm text-ink-mute">{t("member.profileGate.subtitle")}</p>
         </div>
         <Card className="flex flex-col items-center gap-4">
           <label className="cursor-pointer group relative inline-block">
@@ -1698,14 +1737,14 @@ function ProfileGate({ memberName, onComplete, onLogout }: { memberName: string;
             }} />
           </label>
           <div className="text-center">
-            <p className="text-sm text-ink-soft">Klik foto untuk memilih gambar</p>
-            <p className="text-xs text-ink-faint mt-0.5">Format: JPG / PNG · Maks. 5 MB</p>
+            <p className="text-sm text-ink-soft">{t("member.profileGate.clickToPick")}</p>
+            <p className="text-xs text-ink-faint mt-0.5">{t("member.profileGate.formatHint")}</p>
           </div>
           {error && <p className="text-xs text-danger-600 text-center">{error}</p>}
           <Btn variant="primary" className="w-full" disabled={uploading || !avatarFile} onClick={handleUpload}>
-            {uploading ? "Mengupload…" : "Simpan & Lanjutkan"}
+            {uploading ? t("common.actions.uploading") : t("member.profileGate.saveAndContinue")}
           </Btn>
-          <button onClick={onLogout} className="text-xs text-ink-mute hover:text-danger-600 transition-colors">Keluar dari akun</button>
+          <button onClick={onLogout} className="text-xs text-ink-mute hover:text-danger-600 transition-colors">{t("member.profile.logoutBtn")}</button>
         </Card>
       </div>
     </div>
@@ -1715,6 +1754,7 @@ function ProfileGate({ memberName, onComplete, onLogout }: { memberName: string;
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 export default function MemberPage() {
+  const { t, locale } = useLocale();
   const supabase = createClient();
   const [active, setActive] = useState<TabId>("home");
   const [memberId, setMemberId] = useState("");
@@ -1741,17 +1781,21 @@ export default function MemberPage() {
     if (!isSuspended || !suspendUntil) { setSuspendCountdown(""); return; }
     const tick = () => {
       const diff = new Date(suspendUntil).getTime() - Date.now();
-      if (diff <= 0) { setSuspendCountdown("Segera aktif kembali…"); return; }
+      if (diff <= 0) { setSuspendCountdown(t("member.suspend.reactivatingSoon")); return; }
       const days = Math.floor(diff / 86400000);
       const hrs  = Math.floor((diff % 86400000) / 3600000);
       const mins = Math.floor((diff % 3600000) / 60000);
       const secs = Math.floor((diff % 60000) / 1000);
-      setSuspendCountdown(`${days}h ${hrs}j ${mins}m ${secs}d`);
+      const dUnit = locale === "en" ? "d" : "h";
+      const hUnit = locale === "en" ? "h" : "j";
+      const mUnit = "m";
+      const sUnit = locale === "en" ? "s" : "d";
+      setSuspendCountdown(`${days}${dUnit} ${hrs}${hUnit} ${mins}${mUnit} ${secs}${sUnit}`);
     };
     tick();
-    const t = setInterval(tick, 1000);
-    return () => clearInterval(t);
-  }, [isSuspended, suspendUntil]);
+    const ticker = setInterval(tick, 1000);
+    return () => clearInterval(ticker);
+  }, [isSuspended, suspendUntil, locale, t]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const SuspendBanner = isSuspended ? (
@@ -1761,13 +1805,13 @@ export default function MemberPage() {
           <Icon name="warning" className="w-5 h-5" />
         </span>
         <div className="flex-1">
-          <div className="font-display font-bold text-danger-700 text-base">Akun Anda sedang disuspend</div>
-          {suspendReason && <p className="text-sm text-danger-600 mt-1">Alasan: {suspendReason}</p>}
+          <div className="font-display font-bold text-danger-700 text-base">{t("member.suspend.title")}</div>
+          {suspendReason && <p className="text-sm text-danger-600 mt-1">{t("member.suspend.reason", { reason: suspendReason })}</p>}
           <div className="mt-2 flex items-center gap-2">
-            <span className="text-xs text-danger-500 font-semibold">Aktif kembali dalam:</span>
+            <span className="text-xs text-danger-500 font-semibold">{t("member.suspend.reactivationIn")}</span>
             <span className="bg-danger-100 text-danger-700 font-mono text-xs font-bold px-2 py-0.5 rounded-lg">{suspendCountdown}</span>
           </div>
-          <p className="text-xs text-danger-500 mt-1">Semua fitur tidak dapat diakses selama masa suspend. Hubungi admin cabang jika ada pertanyaan.</p>
+          <p className="text-xs text-danger-500 mt-1">{t("member.suspend.notice")}</p>
         </div>
       </div>
     </div>
@@ -1789,7 +1833,7 @@ export default function MemberPage() {
         .single()
         .then(async ({ data: m }) => {
           if (!m) {
-            setInitError("Data akun tidak ditemukan di database. Kemungkinan data telah direset. Silakan hubungi admin untuk membuat ulang akun Anda.");
+            setInitError(t("member.errors.accountNotFoundMsg"));
             return;
           }
           if (m) {
@@ -1850,11 +1894,11 @@ export default function MemberPage() {
           <Icon name="warning" className="w-7 h-7" />
         </div>
         <div>
-          <h2 className="font-display font-bold text-xl text-ink">Data Tidak Ditemukan</h2>
+          <h2 className="font-display font-bold text-xl text-ink">{t("member.errors.notFoundTitle")}</h2>
           <p className="text-sm text-ink-mute mt-2 leading-relaxed">{initError}</p>
         </div>
         <Btn variant="primary" className="w-full" onClick={async () => { await supabase.auth.signOut(); window.location.href = "/login"; }}>
-          Kembali ke Login
+          {t("member.errors.backToLogin")}
         </Btn>
       </div>
     </div>
@@ -1863,7 +1907,7 @@ export default function MemberPage() {
   return (
     <>
       <Shell active={active} setActive={setActive} name={memberName} branchName={branchName} userId={userId} avatarUrl={memberAvatarUrl} isSchoolAffiliate={memberType === "school_affiliate"}>
-        {lockChecked ? pages[active] : <div className="p-10 text-center text-ink-mute">Memuat…</div>}
+        {lockChecked ? pages[active] : <div className="p-10 text-center text-ink-mute">{t("member.shell.loading")}</div>}
       </Shell>
       {BETA_FEEDBACK_ENABLED && <BetaFeedback role="member" />}
     </>

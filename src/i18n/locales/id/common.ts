@@ -68,6 +68,7 @@ export const common: typeof CommonEn = {
   },
   days: {
     short: ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"],
+    long: ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"],
   },
   languageSwitcher: {
     en: "EN",
