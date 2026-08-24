@@ -6,7 +6,7 @@ import { useConfirm } from "@/components/providers/ConfirmProvider";
 import { useLocale } from "@/components/providers/LocaleProvider";
 import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
-import { Field, Input, Textarea } from "@/components/ui/FormFields";
+import { Field, Input, Textarea, Select } from "@/components/ui/FormFields";
 import { Card } from "@/components/ui/Card";
 import Status from "@/components/ui/Status";
 import Avatar from "@/components/ui/Avatar";
@@ -18,7 +18,7 @@ import { getSlotTime } from "../_utils";
 import type { Database, Json } from "@/types/database";
 import { fmtIDR, fmtDate } from "@/lib/utils";
 
-const EMPTY_CLASS_FORM = { name: "", class_type: "reguler", schedule_days: [] as string[], schedule_times: [] as ScheduleSlot[], same_time_all: true, time_start: "", time_end: "", capacity: "", price_monthly: "", price_per_session: "", goals: "", description: "", photo_url: "" };
+const EMPTY_CLASS_FORM = { name: "", class_type: "reguler", location_type: "branch", external_location_name: "", external_location_address: "", google_maps_url: "", schedule_days: [] as string[], schedule_times: [] as ScheduleSlot[], same_time_all: true, time_start: "", time_end: "", capacity: "", price_monthly: "", price_per_session: "", goals: "", description: "", photo_url: "" };
 const DAY_OPTS = ["Senin","Selasa","Rabu","Kamis","Jumat","Sabtu","Minggu"];
 
 export default function AdminClass({ branchId }: { branchId: string }) {
@@ -55,7 +55,7 @@ export default function AdminClass({ branchId }: { branchId: string }) {
 
   const load = useCallback(async () => {
     const { data } = await supabase.from("classes")
-      .select("id, name, branch_id, status, capacity, enrolled, price_monthly, price_per_session, class_type, schedule_days, time_start, time_end, schedule_times, goals, description, photo_url, spreadsheet_url, spreadsheet_filled, class_coaches(coach_id, role, profile:profiles(full_name, id)), coach_spreadsheets:class_coach_spreadsheets(coach_id, spreadsheet_url, updated_at, coach:profiles(full_name)), packages:class_packages(id, name, sessions, price, sort_order, active)")
+      .select("id, name, branch_id, status, capacity, enrolled, price_monthly, price_per_session, class_type, location_type, external_location_name, external_location_address, google_maps_url, schedule_days, time_start, time_end, schedule_times, goals, description, photo_url, spreadsheet_url, spreadsheet_filled, class_coaches(coach_id, role, profile:profiles(full_name, id)), coach_spreadsheets:class_coach_spreadsheets(coach_id, spreadsheet_url, updated_at, coach:profiles(full_name)), packages:class_packages(id, name, sessions, price, sort_order, active)")
       .eq("branch_id", branchId).order("name");
     if (data) setClasses(data as unknown as ClassRow[]);
   }, [branchId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -71,6 +71,8 @@ export default function AdminClass({ branchId }: { branchId: string }) {
   // Coach assign/role controls in class edit modal
   const [addCoachId, setAddCoachId] = useState("");
   const [coachMutating, setCoachMutating] = useState(false);
+  const [newHeadCoachId, setNewHeadCoachId] = useState("");
+  const [newAssistantCoachIds, setNewAssistantCoachIds] = useState<string[]>([]);
 
   const patchClassCoaches = (classId: string, next: NonNullable<ClassRow["class_coaches"]>) => {
     setEditTarget(prev => prev && prev.id === classId ? { ...prev, class_coaches: next } : prev);
@@ -116,7 +118,13 @@ export default function AdminClass({ branchId }: { branchId: string }) {
       : (cc.coach_id === coachId ? { ...cc, role: "assistant" } : cc)));
   };
 
-  const openCreate = () => { setEditTarget(null); setForm(EMPTY_CLASS_FORM); setOpenForm(true); };
+  const openCreate = () => {
+    setEditTarget(null);
+    setForm(EMPTY_CLASS_FORM);
+    setNewHeadCoachId("");
+    setNewAssistantCoachIds([]);
+    setOpenForm(true);
+  };
   const openEdit = (c: ClassRow) => {
     setEditTarget(c);
     const slots = c.schedule_times ?? [];
@@ -125,6 +133,10 @@ export default function AdminClass({ branchId }: { branchId: string }) {
     const sameTime = slots.length === 0 || uniqueTimes.size === 1;
     setForm({
       name: c.name, class_type: c.class_type ?? "reguler",
+      location_type: c.location_type ?? "branch",
+      external_location_name: c.external_location_name ?? "",
+      external_location_address: c.external_location_address ?? "",
+      google_maps_url: c.google_maps_url ?? "",
       schedule_days: c.schedule_days ?? [],
       schedule_times: slots.length > 0 ? slots : (c.schedule_days ?? []).map(day => ({ day, time_start: c.time_start ?? "", time_end: c.time_end ?? "" })),
       same_time_all: sameTime,
@@ -144,6 +156,9 @@ export default function AdminClass({ branchId }: { branchId: string }) {
   const saveClass = async () => {
     if (!form.name) return toast.error(t("admin.classes.classNameRequired"));
     if (!isPrivate && form.schedule_days.length === 0) return toast.error(t("admin.classes.scheduleDaysRequired"));
+    if (isPrivate && form.location_type === "external" && !form.external_location_name.trim()) {
+      return toast.error("Nama lokasi luar (misal nama apartemen/kolam) wajib diisi untuk kelas private external.");
+    }
     setSaving(true);
     // Build schedule_times — use per-day slots; derive global time_start/time_end from first slot
     const days = isPrivate ? (form.schedule_days.length > 0 ? form.schedule_days : []) : form.schedule_days;
@@ -152,16 +167,52 @@ export default function AdminClass({ branchId }: { branchId: string }) {
       : form.schedule_times.filter(s => days.includes(s.day));
     const firstSlot = scheduleTimes[0];
 
+    const locType = isPrivate ? form.location_type : "branch";
+    const extName = locType === "external" ? (form.external_location_name.trim() || null) : null;
+    const extAddr = locType === "external" ? (form.external_location_address.trim() || null) : null;
+    const mapsUrl = locType === "external" ? (form.google_maps_url.trim() || null) : null;
+
     if (editTarget) {
-      const updatePayload: Database["public"]["Tables"]["classes"]["Update"] = { name: form.name, class_type: form.class_type, schedule_days: days, schedule_times: (scheduleTimes.length > 0 ? scheduleTimes : null) as Json | null, time_start: firstSlot?.time_start || form.time_start || undefined, time_end: firstSlot?.time_end || form.time_end || undefined, capacity: isPrivate ? 1 : (Number(form.capacity) || 0), price_monthly: isPrivate ? 0 : (Number(form.price_monthly) || 0), price_per_session: isPrivate ? (Number(form.price_per_session) || null) : null, goals: form.goals.trim() || null, description: form.description.trim() || null };
+      const updatePayload: Database["public"]["Tables"]["classes"]["Update"] = {
+        name: form.name, class_type: form.class_type,
+        location_type: locType, external_location_name: extName, external_location_address: extAddr, google_maps_url: mapsUrl,
+        schedule_days: days, schedule_times: (scheduleTimes.length > 0 ? scheduleTimes : null) as Json | null,
+        time_start: firstSlot?.time_start || form.time_start || undefined, time_end: firstSlot?.time_end || form.time_end || undefined,
+        capacity: isPrivate ? 1 : (Number(form.capacity) || 0), price_monthly: isPrivate ? 0 : (Number(form.price_monthly) || 0),
+        price_per_session: isPrivate ? (Number(form.price_per_session) || null) : null,
+        goals: form.goals.trim() || null, description: form.description.trim() || null
+      };
       const { error } = await supabase.from("classes").update(updatePayload).eq("id", editTarget.id);
       setSaving(false);
       if (error) return toast.error(t("admin.classes.updateClassFailed"), error.message);
       toast.success(t("admin.classes.classUpdatedToast"));
     } else {
-      const insertPayload: Database["public"]["Tables"]["classes"]["Insert"] = { name: form.name, class_type: form.class_type, schedule_days: days, schedule_times: (scheduleTimes.length > 0 ? scheduleTimes : null) as Json | null, time_start: firstSlot?.time_start || form.time_start || "", time_end: firstSlot?.time_end || form.time_end || "", capacity: isPrivate ? 1 : (Number(form.capacity) || 0), price_monthly: isPrivate ? 0 : (Number(form.price_monthly) || 0), price_per_session: isPrivate ? (Number(form.price_per_session) || null) : null, goals: form.goals.trim() || null, description: form.description.trim() || null, branch_id: branchId, status: "active", enrolled: 0 };
-      const { error } = await supabase.from("classes").insert(insertPayload).select("id").single();
+      const insertPayload: Database["public"]["Tables"]["classes"]["Insert"] = {
+        name: form.name, class_type: form.class_type,
+        location_type: locType, external_location_name: extName, external_location_address: extAddr, google_maps_url: mapsUrl,
+        schedule_days: days, schedule_times: (scheduleTimes.length > 0 ? scheduleTimes : null) as Json | null,
+        time_start: firstSlot?.time_start || form.time_start || "", time_end: firstSlot?.time_end || form.time_end || "",
+        capacity: isPrivate ? 1 : (Number(form.capacity) || 0), price_monthly: isPrivate ? 0 : (Number(form.price_monthly) || 0),
+        price_per_session: isPrivate ? (Number(form.price_per_session) || null) : null,
+        goals: form.goals.trim() || null, description: form.description.trim() || null, branch_id: branchId, status: "active", enrolled: 0
+      };
+      const { data: newClass, error } = await supabase.from("classes").insert(insertPayload).select("id").single();
       if (error) { setSaving(false); return toast.error(t("admin.classes.createClassFailed"), error.message); }
+
+      // Assign initial Head & Assistant coaches if selected
+      const coachRows: { class_id: string; coach_id: string; role: "head" | "assistant" }[] = [];
+      if (newHeadCoachId) {
+        coachRows.push({ class_id: newClass.id, coach_id: newHeadCoachId, role: "head" });
+      }
+      newAssistantCoachIds.forEach(id => {
+        if (id !== newHeadCoachId) {
+          coachRows.push({ class_id: newClass.id, coach_id: id, role: "assistant" });
+        }
+      });
+      if (coachRows.length > 0) {
+        await supabase.from("class_coaches").insert(coachRows);
+      }
+
       setSaving(false);
       toast.success(t("admin.classes.classCreatedToast"));
     }
@@ -303,6 +354,16 @@ export default function AdminClass({ branchId }: { branchId: string }) {
               </div>
               <div className="p-4">
                 <div className="font-display font-bold text-ink">{c.name}</div>
+                {c.location_type === "external" && c.external_location_name && (
+                  <div className="mt-1.5 text-xs font-semibold text-wave-700 bg-wave-50 border border-wave-100 px-2.5 py-1 rounded-lg flex items-center gap-1.5">
+                    <span>🏡 {c.external_location_name}</span>
+                    {c.google_maps_url && (
+                      <a href={c.google_maps_url} target="_blank" rel="noreferrer" className="ml-auto text-[10px] font-bold text-wave-600 hover:underline">
+                        Maps ↗
+                      </a>
+                    )}
+                  </div>
+                )}
                 <div className="text-xs text-ink-mute mt-0.5 space-y-0.5">
                   {(c.schedule_days ?? []).length > 0
                     ? (c.schedule_days ?? []).map(day => {
@@ -387,6 +448,55 @@ export default function AdminClass({ branchId }: { branchId: string }) {
             <div className="bg-wave-50 border border-wave-100 rounded-xl p-3 text-sm text-wave-800 flex gap-2">
               <Icon name="info" className="w-4 h-4 mt-0.5 shrink-0 text-wave-500" />
               <span>{t("admin.classes.privateNotice")}</span>
+            </div>
+          )}
+          {isPrivate && (
+            <div className="space-y-3 bg-paper-tint/60 border border-line rounded-xl p-3.5">
+              <Field label="Lokasi Latihan Private">
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setForm(f => ({ ...f, location_type: "branch" }))}
+                    className={`flex-1 p-2.5 rounded-lg border text-left text-xs font-bold transition-colors ${form.location_type === "branch" ? "border-ocean-500 bg-ocean-50 text-ocean-700" : "border-line bg-white text-ink-soft hover:bg-paper-tint"}`}
+                  >
+                    📍 Cabang Resmi
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setForm(f => ({ ...f, location_type: "external" }))}
+                    className={`flex-1 p-2.5 rounded-lg border text-left text-xs font-bold transition-colors ${form.location_type === "external" ? "border-wave-500 bg-wave-50 text-wave-700" : "border-line bg-white text-ink-soft hover:bg-paper-tint"}`}
+                  >
+                    🏡 Lokasi Luar / External Pool
+                  </button>
+                </div>
+              </Field>
+
+              {form.location_type === "external" && (
+                <div className="space-y-3 pt-1">
+                  <Field label="Nama Lokasi Luar" required hint="Contoh: Apartemen Oakwood Pool, Hotel Hilton, Rumah Member">
+                    <Input
+                      value={form.external_location_name}
+                      onChange={e => setForm(f => ({ ...f, external_location_name: e.target.value }))}
+                      placeholder="Apartemen Oakwood Pool"
+                    />
+                  </Field>
+                  <Field label="Alamat Lengkap Lokasi">
+                    <Textarea
+                      value={form.external_location_address}
+                      onChange={e => setForm(f => ({ ...f, external_location_address: e.target.value }))}
+                      placeholder="Jl. Mega Kuningan Barat No.3, Jakarta Selatan"
+                      rows={2}
+                    />
+                  </Field>
+                  <Field label="Link Google Maps (Opsional)">
+                    <Input
+                      value={form.google_maps_url}
+                      onChange={e => setForm(f => ({ ...f, google_maps_url: e.target.value }))}
+                      placeholder="https://maps.app.goo.gl/..."
+                    />
+                  </Field>
+                </div>
+              )}
             </div>
           )}
           <div className="grid sm:grid-cols-2 gap-4">
@@ -550,6 +660,44 @@ export default function AdminClass({ branchId }: { branchId: string }) {
                 );
               })()}
               <p className="text-[11px] text-ink-faint mt-1.5">{t("admin.classes.maxOneHeadHint")}</p>
+            </div>
+          )}
+          {!editTarget && coaches.length > 0 && (
+            <div className="border-t border-line pt-3 space-y-3">
+              <div className="text-xs font-bold uppercase tracking-widest text-ink-faint">{t("admin.classes.teachingCoachesLabel")}</div>
+              <Field label="Head Coach (Pelatih Utama)" hint="Maksimal 1 head coach per kelas">
+                <Select value={newHeadCoachId} onChange={e => setNewHeadCoachId(e.target.value)}>
+                  <option value="">-- Pilih Head Coach (Opsional) --</option>
+                  {coaches.map(c => (
+                    <option key={c.id} value={c.id}>{c.full_name}</option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="Assistant Coach (Pelatih Pendamping)" hint="Dapat memilih lebih dari satu coach">
+                <div className="space-y-1.5 max-h-36 overflow-y-auto border border-line rounded-xl p-2.5 bg-paper-tint">
+                  {coaches.filter(c => c.id !== newHeadCoachId).map(c => {
+                    const isSelected = newAssistantCoachIds.includes(c.id);
+                    return (
+                      <label key={c.id} className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-paper-deep cursor-pointer text-xs">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => {
+                            setNewAssistantCoachIds(prev =>
+                              isSelected ? prev.filter(id => id !== c.id) : [...prev, c.id]
+                            );
+                          }}
+                          className="rounded border-line-strong text-ocean-600 focus:ring-ocean-500"
+                        />
+                        <span className="font-semibold text-ink">{c.full_name}</span>
+                      </label>
+                    );
+                  })}
+                  {coaches.filter(c => c.id !== newHeadCoachId).length === 0 && (
+                    <div className="text-xs text-ink-mute p-1 text-center">Tidak ada coach lain</div>
+                  )}
+                </div>
+              </Field>
             </div>
           )}
           {editTarget && (

@@ -1,0 +1,6 @@
+nama_lengkap,email,password,tipe_member,tanggal_lahir,jenis_kelamin,no_hp,alamat,catatan_kesehatan,jumlah_sesi,nama_kelas,nama_sekolah
+Aditia Pratama,aditia.sman70@example.com,password123,afiliasi_sekolah,12/04/2008,L,081234567801,"Jl. Bulungan No. 1, Kebayoran Baru",Tidak ada,,Water Introduction,SMAN 70 Jakarta
+Bianca Putri,bianca.sman70@example.com,password123,afiliasi_sekolah,25/08/2008,P,081234567802,"Jl. Kyai Maja No. 15, Kebayoran Baru",Asma ringan,,Water Introduction,SMAN 70 Jakarta
+Dimas Ramadhan,dimas.sman70@example.com,password123,afiliasi_sekolah,03/11/2007,L,081234567803,"Jl. Mahakam No. 8, Jakarta Selatan",Tidak ada,,Swimming Intermediate,SMAN 70 Jakarta
+Farhan Alamsyah,farhan.sman70@example.com,password123,afiliasi_sekolah,19/01/2008,L,081234567804,"Jl. Panglima Polim No. 22, Kebayoran Baru",Tidak ada,,Swimming Intermediate,SMAN 70 Jakarta
+Keisha Anindya,keisha.sman70@example.com,password123,afiliasi_sekolah,14/07/2008,P,081234567805,"Jl. Barito II No. 5, Kebayoran Baru",Alergi kaporit ringan,,Water Introduction,SMAN 70 Jakarta

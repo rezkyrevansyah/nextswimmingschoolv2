@@ -9,9 +9,9 @@ import Avatar from "@/components/ui/Avatar";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import Status from "@/components/ui/Status";
 import Modal from "@/components/ui/Modal";
-import { downloadRaporPdf, type PrintCriterion, type PrintBestTime } from "@/lib/printRapor";
+import { downloadRaporPdf, type PrintCriterion, type PrintBestTime, type PrintSignatureItem } from "@/lib/printRapor";
 import { downloadRaporZip } from "@/lib/downloadRaporZip";
-import { resolveRaporSigner } from "@/lib/rapor";
+import { resolveRaporSigner, buildSchoolRaporSignatures } from "@/lib/rapor";
 
 interface RaporPeriod {
   id: string; label: string; date_from: string; date_to: string;
@@ -38,6 +38,8 @@ interface Student {
   best_times: PrintBestTime[];
   level_strokes: string[];
   level_distances: number[];
+  school_logo_url?: string | null;
+  signatures?: PrintSignatureItem[];
 }
 
 const PAGE_SIZE = 15;
@@ -69,23 +71,30 @@ export default function AdminRaporList({ branchId, periods }: { branchId: string
   const load = useCallback(async (periodId: string) => {
     if (!periodId) { setStudents([]); setLoading(false); return; }
     setLoading(true);
-    const { data } = await supabase
-      .from("members")
-      .select(`
-        id, member_no,
-        profile:profiles(full_name, avatar_url, birth_date),
-        member_classes(
-          classes(
-            id, name, rapor_signer_coach_id,
-            class_coaches(coach_id, role, profile:profiles(full_name, signature_url))
+    const [{ data }, { data: ownerSettings }] = await Promise.all([
+      supabase
+        .from("members")
+        .select(`
+          id, member_no, type, school_id,
+          profile:profiles(full_name, avatar_url, birth_date),
+          school:schools(
+            id, name, logo_url, show_coach_sig, show_head_sig, show_school_sig, coach_sig_title, head_sig_title,
+            school_signatures(id, name, title, image_url, is_active)
+          ),
+          member_classes(
+            classes(
+              id, name, rapor_signer_coach_id,
+              class_coaches(coach_id, role, profile:profiles(full_name, signature_url))
+            )
+          ),
+          rapor_entries(
+            id, scores, notes, personality, motivation, learning_achievements, level, level_id, period_id, locked,
+            rapor_levels(id, name, rapor_level_criteria(id, label, kind, options, sort_order), rapor_level_strokes(name, sort_order), rapor_level_distances(distance, sort_order))
           )
-        ),
-        rapor_entries(
-          id, scores, notes, personality, motivation, learning_achievements, level, level_id, period_id, locked,
-          rapor_levels(id, name, rapor_level_criteria(id, label, kind, options, sort_order), rapor_level_strokes(name, sort_order), rapor_level_distances(distance, sort_order))
-        )
-      `)
-      .eq("branch_id", branchId);
+        `)
+        .eq("branch_id", branchId),
+      supabase.from("owner_settings").select("*").eq("id", "default").maybeSingle(),
+    ]);
 
     if (!data) { setStudents([]); setLoading(false); return; }
 
@@ -112,6 +121,11 @@ export default function AdminRaporList({ branchId, periods }: { branchId: string
         .map(c => ({ id: c.id, label: c.label, kind: c.kind as PrintCriterion["kind"] }));
       const levelStrokes = [...(entry?.rapor_levels?.rapor_level_strokes ?? [])].sort((a, b) => a.sort_order - b.sort_order).map(s => s.name);
       const levelDistances = [...(entry?.rapor_levels?.rapor_level_distances ?? [])].sort((a, b) => a.sort_order - b.sort_order).map(d => d.distance);
+      
+      const school = (m.school as unknown as { id: string; name: string; logo_url: string | null; show_coach_sig?: boolean; show_head_sig?: boolean; show_school_sig?: boolean; coach_sig_title?: string; head_sig_title?: string; school_signatures?: { name: string; title: string; image_url: string; is_active: boolean }[] } | null);
+      const coachSig = signer?.signature_url ?? null;
+      const signatures = buildSchoolRaporSignatures(school, signer?.full_name ?? "—", coachSig, ownerSettings);
+
       return {
         id: m.id,
         full_name: profile?.full_name ?? "—",
@@ -120,7 +134,7 @@ export default function AdminRaporList({ branchId, periods }: { branchId: string
         avatar_url: profile?.avatar_url ?? null,
         class_name: cls?.name ?? "—",
         coach_name: signer?.full_name ?? "—",
-        coach_signature_url: signer?.signature_url ?? null,
+        coach_signature_url: coachSig,
         is_filled: entry?.locked === true,
         scores: entry?.scores ?? {},
         notes: entry?.notes ?? null,
@@ -132,6 +146,8 @@ export default function AdminRaporList({ branchId, periods }: { branchId: string
         best_times: btByMember.get(m.id) ?? [],
         level_strokes: levelStrokes,
         level_distances: levelDistances,
+        school_logo_url: school?.logo_url ?? null,
+        signatures,
       };
     });
     setStudents(rows);
@@ -175,6 +191,8 @@ export default function AdminRaporList({ branchId, periods }: { branchId: string
     level: s.level ?? undefined,
     class_name: s.class_name, coach_name: s.coach_name,
     coach_signature_url: s.coach_signature_url,
+    school_logo_url: s.school_logo_url,
+    signatures: s.signatures,
     period_label: selectedPeriod?.label ?? "—", scores: s.scores, notes: s.notes,
     personality: s.personality, motivation: s.motivation, learning_achievements: s.learning_achievements,
     criteria: s.criteria, best_times: s.best_times,

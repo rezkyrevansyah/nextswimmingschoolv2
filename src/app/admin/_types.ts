@@ -20,9 +20,13 @@ export interface ClassPackage {
 }
 
 export interface ClassRow {
-  id: string; name: string; branch_id: string; status: string;
+  id: string; name: string; branch_id: string | null; status: string;
   capacity: number; enrolled: number; price_monthly: number;
   price_per_session: number | null; class_type: string;
+  location_type?: string;
+  external_location_name?: string | null;
+  external_location_address?: string | null;
+  google_maps_url?: string | null;
   schedule_days: string[]; time_start: string | null; time_end: string | null;
   schedule_times?: ScheduleSlot[] | null;
   goals?: string | null;

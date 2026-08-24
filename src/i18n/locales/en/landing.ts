@@ -35,9 +35,9 @@ export const landing = {
     ariaLabel: "Partner logos",
   },
   branches: {
-    label: "Our Branches",
-    headline: "Visit us at a branch near you.",
-    subtitle: "Active branches ready to welcome new swimmers.",
+    label: "Our Centers",
+    headline: "Visit us at a center near you.",
+    subtitle: "Active centers ready to welcome new swimmers.",
     viewOnMap: "View on Map",
     chatOnWhatsapp: "Chat on WhatsApp",
   },
@@ -76,7 +76,7 @@ export const landing = {
       visit: {
         label: "Visit Us",
         links: {
-          branches: "Our Branches",
+          branches: "Our Centers",
           faq: "FAQ",
         },
       },

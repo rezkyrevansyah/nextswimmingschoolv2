@@ -16,7 +16,7 @@ import Bell from "@/components/layout/Bell";
 import BetaFeedback, { BETA_FEEDBACK_ENABLED } from "@/components/layout/BetaFeedback";
 import { fmtIDR, fmtDate, waLink } from "@/lib/utils";
 import { downloadRaporPdf, printSingleRaporPopup, type PrintCriterion, type PrintBestTime } from "@/lib/printRapor";
-import { resolveRaporSigner } from "@/lib/rapor";
+import { resolveRaporSigner, buildSchoolRaporSignatures, type SchoolForSignerConfig } from "@/lib/rapor";
 import { createClient } from "@/utils/supabase/client";
 import { useUpload } from "@/hooks/useUpload";
 import PhotoLightbox from "@/components/ui/PhotoLightbox";
@@ -436,18 +436,19 @@ function MemberSchedule({ memberId }: { memberId: string }) {
       });
 
     supabase.from("member_classes")
-      .select("classes(id, name, schedule_days, time_start, time_end, schedule_times, location_name, goals, description, class_coaches(role, profile:profiles(full_name, phone)))")
+      .select("classes(id, name, schedule_days, time_start, time_end, schedule_times, location_name, location_type, external_location_name, external_location_address, google_maps_url, goals, description, class_coaches(role, profile:profiles(full_name, phone)))")
       .eq("member_id", memberId)
       .then(async ({ data }) => {
         if (!data) return;
         const cls = data.map((mc) => {
-          const c = mc.classes as unknown as { id: string; name: string; schedule_days: string[]; time_start: string | null; time_end: string | null; schedule_times?: { day: string; time_start: string; time_end: string }[] | null; location_name: string | null; goals: string | null; description: string | null; class_coaches: { role: string; profile: { full_name: string; phone: string | null } | null }[] } | null;
+          const c = mc.classes as unknown as { id: string; name: string; schedule_days: string[]; time_start: string | null; time_end: string | null; schedule_times?: { day: string; time_start: string; time_end: string }[] | null; location_name: string | null; location_type?: string; external_location_name?: string | null; external_location_address?: string | null; google_maps_url?: string | null; goals: string | null; description: string | null; class_coaches: { role: string; profile: { full_name: string; phone: string | null } | null }[] } | null;
           if (!c) return null;
           const coaches = (c.class_coaches ?? [])
             .filter((cc): cc is { role: string; profile: { full_name: string; phone: string | null } } => cc.profile !== null)
             .sort((a, b) => (b.role === "head" ? 1 : 0) - (a.role === "head" ? 1 : 0))
             .map((cc) => ({ name: cc.profile.full_name, phone: cc.profile.phone ?? null, role: cc.role }));
-          return { id: c.id, name: c.name, schedule_days: c.schedule_days ?? [], time_start: c.time_start, time_end: c.time_end ?? null, schedule_times: c.schedule_times ?? null, location: c.location_name ?? "—", goals: c.goals ?? null, description: c.description ?? null, coaches };
+          const locStr = c.location_type === "external" ? (c.external_location_name || c.location_name || "Lokasi External") : (c.location_name || "—");
+          return { id: c.id, name: c.name, schedule_days: c.schedule_days ?? [], time_start: c.time_start, time_end: c.time_end ?? null, schedule_times: c.schedule_times ?? null, location: locStr, location_type: c.location_type ?? "branch", external_location_address: c.external_location_address ?? null, google_maps_url: c.google_maps_url ?? null, goals: c.goals ?? null, description: c.description ?? null, coaches };
         }).filter(Boolean) as typeof classes;
         setClasses(cls);
         setSessionPage(0);
@@ -1114,9 +1115,28 @@ function MemberRapor({ memberId, memberName, branchId, avatarUrl, memberNo, birt
   const [entries, setEntries] = useState<RaporEntryFull[]>([]);
   const [reviewDrafts, setReviewDrafts] = useState<Record<string, { stars: number; text: string }>>({});
   const [savingSlot, setSavingSlot] = useState<string | null>(null);
+  const [schoolInfo, setSchoolInfo] = useState<(SchoolForSignerConfig & { logo_url: string | null }) | null>(null);
+  const [ownerSettings, setOwnerSettings] = useState<{ head_name?: string | null; head_title?: string | null; head_signature_url?: string | null } | null>(null);
 
   const load = useCallback(async () => {
     if (!memberId) return;
+
+    // Load owner settings
+    supabase.from("owner_settings").select("*").eq("id", "default").maybeSingle().then(({ data: os }) => {
+      if (os) setOwnerSettings(os);
+    });
+
+    // Load school info if member belongs to a school
+    supabase.from("members")
+      .select("school:schools(id, name, logo_url, show_coach_sig, show_head_sig, show_school_sig, coach_sig_title, head_sig_title, school_signatures(name, title, image_url, is_active))")
+      .eq("id", memberId)
+      .single()
+      .then(({ data: mem }) => {
+        if (mem?.school) {
+          setSchoolInfo(mem.school as unknown as SchoolForSignerConfig & { logo_url: string | null });
+        }
+      });
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data } = await (supabase as any).from("rapor_entries")
       .select("id, scores, notes, personality, motivation, learning_achievements, level, level_id, coach_id, period_id, class_id, rapor_periods(label, is_open), classes(name, rapor_signer_coach_id, class_coaches(coach_id, role, profile:profiles(full_name, signature_url))), coach:profiles!rapor_entries_coach_id_fkey(full_name, signature_url), rapor_levels(rapor_level_criteria(id, label, kind, options, sort_order))")
@@ -1232,10 +1252,11 @@ function MemberRapor({ memberId, memberName, branchId, avatarUrl, memberNo, birt
     const draft = getDraft(entry, slot);
     const key = draftKey(entry.id, slot.coach_id);
     setSavingSlot(key);
+    const trimmedMsg = (draft.text ?? "").slice(0, 300);
     if (slot.review_id) {
-      await supabase.from("member_reviews").update({ stars: draft.stars, message: draft.text }).eq("id", slot.review_id);
+      await supabase.from("member_reviews").update({ stars: draft.stars, message: trimmedMsg }).eq("id", slot.review_id);
     } else {
-      await supabase.from("member_reviews").insert({ rapor_id: entry.id, member_id: memberId, coach_id: slot.coach_id, stars: draft.stars, message: draft.text });
+      await supabase.from("member_reviews").insert({ rapor_id: entry.id, member_id: memberId, coach_id: slot.coach_id, stars: draft.stars, message: trimmedMsg });
     }
     setSavingSlot(null);
     await load();
@@ -1391,6 +1412,7 @@ function MemberRapor({ memberId, memberName, branchId, avatarUrl, memberNo, birt
         footer={
           <div className="flex gap-2 justify-end">
             {selectedEntry && (() => {
+              const signatures = buildSchoolRaporSignatures(schoolInfo, selectedEntry.coach_name, selectedEntry.coach_signature_url, ownerSettings);
               const raporData = {
                 full_name: memberName,
                 member_no: memberNo ?? undefined,
@@ -1411,6 +1433,8 @@ function MemberRapor({ memberId, memberName, branchId, avatarUrl, memberNo, birt
                 level_strokes: selectedEntry.level_strokes,
                 level_distances: selectedEntry.level_distances,
                 coach_signature_url: selectedEntry.coach_signature_url,
+                school_logo_url: schoolInfo?.logo_url,
+                signatures,
               };
               return (<>
                 <Btn variant="outline" size="sm" icon="printer"

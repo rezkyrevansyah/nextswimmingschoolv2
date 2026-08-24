@@ -1,0 +1,43 @@
+import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@/utils/supabase/server";
+import { uploadToBucket, keys } from "@/utils/supabase-storage/upload";
+import { BUCKET_PUBLIC } from "@/utils/supabase-storage/client";
+
+export async function POST(req: NextRequest) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  if (!profile || !["admin", "owner"].includes(profile.role)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const form = await req.formData();
+  const file     = form.get("file")     as File | null;
+  const schoolId = form.get("schoolId") as string | null;
+  const sigId    = form.get("sigId")    as string | null;
+  if (!file || !schoolId || !sigId) return NextResponse.json({ error: "Missing fields" }, { status: 400 });
+
+  const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+  const MAX_SIZE_MB = 2;
+  if (!ALLOWED_TYPES.includes(file.type)) {
+    return NextResponse.json({ error: "Tipe file tidak diizinkan. Gunakan JPG, PNG, atau WebP." }, { status: 400 });
+  }
+  if (file.size / (1024 * 1024) > MAX_SIZE_MB) {
+    return NextResponse.json({ error: `Ukuran file terlalu besar. Maksimum ${MAX_SIZE_MB}MB.` }, { status: 400 });
+  }
+
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const key = keys.schoolSignature(schoolId, sigId);
+  const url = await uploadToBucket(BUCKET_PUBLIC, key, buffer, file.type || "image/png");
+
+  await supabase.from("school_signatures").update({ image_url: url }).eq("id", sigId);
+
+  return NextResponse.json({ url });
+}

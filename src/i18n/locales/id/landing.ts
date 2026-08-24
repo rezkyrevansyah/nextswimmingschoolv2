@@ -37,9 +37,9 @@ export const landing: typeof LandingEn = {
     ariaLabel: "Logo mitra",
   },
   branches: {
-    label: "Cabang Kami",
-    headline: "Kunjungi cabang terdekat dari Anda.",
-    subtitle: "Cabang aktif yang siap menyambut perenang baru.",
+    label: "Center Kami",
+    headline: "Kunjungi center terdekat dari Anda.",
+    subtitle: "Center aktif yang siap menyambut perenang baru.",
     viewOnMap: "Lihat di Maps",
     chatOnWhatsapp: "Chat via WhatsApp",
   },
@@ -78,7 +78,7 @@ export const landing: typeof LandingEn = {
       visit: {
         label: "Kunjungi Kami",
         links: {
-          branches: "Cabang Kami",
+          branches: "Center Kami",
           faq: "FAQ",
         },
       },

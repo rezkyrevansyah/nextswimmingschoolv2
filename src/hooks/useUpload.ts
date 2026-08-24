@@ -79,6 +79,18 @@ export function useUpload() {
     signature: (file: File) =>
       run(() => postForm("/api/upload/signature", { file })),
 
+    /** Owner / Head of NEXT signature (owner only — stored in owner_settings.head_signature_url). */
+    ownerSignature: (file: File) =>
+      run(() => postForm("/api/upload/owner-signature", { file })),
+
+    /** School logo (admin/owner) */
+    schoolLogo: (file: File, schoolId: string) =>
+      run(async () => postForm("/api/upload/school-logo", { file: await compressIfImage(file), schoolId })),
+
+    /** School signature image (admin/owner). Not compressed: small line art, quality-sensitive. */
+    schoolSignature: (file: File, schoolId: string, sigId: string) =>
+      run(() => postForm("/api/upload/school-signature", { file, schoolId, sigId })),
+
     /** Landing page image (owner only). Row targets require the row id. */
     landingImage: (
       file: File,

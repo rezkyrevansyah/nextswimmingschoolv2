@@ -27,6 +27,36 @@ export interface MatrixCell {
 }
 
 /**
+ * Formats seconds (e.g. 75.5 or 100) into string "1:15.50" or "1:40.00" for display/editing.
+ * If less than 60 seconds (e.g. 42.31), displays "42.31".
+ */
+export function fmtSwimTimeInput(secs: number): string {
+  if (!secs || isNaN(secs) || secs <= 0) return "";
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  const sPad = s < 10 ? `0${s.toFixed(2)}` : s.toFixed(2);
+  return m > 0 ? `${m}:${sPad}` : `${sPad}`;
+}
+
+/**
+ * Parses user input string into total seconds.
+ * Supports:
+ * - "1:40" or "1:40.00" -> 1*60 + 40 = 100 seconds
+ * - "100" -> 100 seconds
+ */
+export function parseSwimTimeInput(input: string): number {
+  if (!input) return 0;
+  const str = input.trim();
+  if (str.includes(":")) {
+    const parts = str.split(":");
+    const mins = parseFloat(parts[0]) || 0;
+    const secs = parseFloat(parts[1]) || 0;
+    return mins * 60 + secs;
+  }
+  return parseFloat(str) || 0;
+}
+
+/**
  * Builds the stroke x distance matrix a coach fills in: one cell per
  * (stroke, distance) pair defined by the level, ordered by each list's
  * sort_order, pre-filled from a matching recorded best time when one exists
@@ -52,7 +82,7 @@ export function buildBestTimeMatrix(
         stroke: stroke.name,
         distance: distance.distance,
         recordedId: hit?.id,
-        time: hit ? String(hit.time_seconds) : "",
+        time: hit ? fmtSwimTimeInput(hit.time_seconds) : "",
       });
     }
   }

@@ -25,8 +25,8 @@ import { useConfirm } from "@/components/providers/ConfirmProvider";
 import { useLocale } from "@/components/providers/LocaleProvider";
 import { fmtIDR, fmtDate, fmtDateLong, waLink, mailtoLink, countTextStats } from "@/lib/utils";
 import { downloadRaporPdf, printSingleRaporPopup, fmtSwimTime, type PrintCriterion, type PrintBestTime } from "@/lib/printRapor";
-import { buildBestTimeMatrix, findUnmatchedRecordedTimes, type LevelDistance, type LevelStroke, type MatrixCell, type RecordedBestTime } from "@/lib/raporLevels";
-import { resolveRaporSigner } from "@/lib/rapor";
+import { buildBestTimeMatrix, findUnmatchedRecordedTimes, parseSwimTimeInput, type LevelDistance, type LevelStroke, type MatrixCell, type RecordedBestTime } from "@/lib/raporLevels";
+import { resolveRaporSigner, buildSchoolRaporSignatures } from "@/lib/rapor";
 import { printPayslip } from "@/lib/printPayslip";
 import { createClient } from "@/utils/supabase/client";
 import { useUpload } from "@/hooks/useUpload";
@@ -63,6 +63,10 @@ interface ClassRow {
   capacity: number; enrolled: number;
   goals: string | null; description: string | null;
   class_type?: string;
+  location_type?: string;
+  external_location_name?: string | null;
+  external_location_address?: string | null;
+  google_maps_url?: string | null;
   spreadsheet_filled?: boolean;
   spreadsheet_url?: string | null;
   branch_id?: string;
@@ -869,6 +873,18 @@ function CoachHome({ setOverlay, setActive, coachId, branchId, profile, classes,
   // Class IDs the coach is on leave for today (clock-in blocked)
   const [leaveClassIds, setLeaveClassIds] = useState<Set<string>>(new Set());
   const [latestAnnouncement, setLatestAnnouncement] = useState<{ title: string; body: string } | null>(null);
+  const [activeInvoicePeriod, setActiveInvoicePeriod] = useState<{
+    id: string;
+    label: string;
+    date_from: string;
+    date_to: string;
+  } | null>(null);
+  const [existingInvoiceForPeriod, setExistingInvoiceForPeriod] = useState<{
+    id: string;
+    invoice_number: string | null;
+    status: string;
+    period_label: string;
+  } | null>(null);
 
   // Classes where THIS coach hasn't filled their own spreadsheet yet
   const unfilledClasses = classes.filter(c => !ownSpreadsheets.has(c.id));
@@ -894,6 +910,29 @@ function CoachHome({ setOverlay, setActive, coachId, branchId, profile, classes,
           setClockedInIds(todayClockedIn);
         }
       });
+
+    // Check for active invoice submission period
+    const invPeriodQuery = supabase
+      .from("invoice_periods")
+      .select("id, label, date_from, date_to")
+      .eq("is_open", true);
+    if (branchId) {
+      invPeriodQuery.or(`branch_id.eq.${branchId},branch_id.is.null`);
+    }
+    invPeriodQuery.order("date_to", { ascending: true }).limit(1).then(async ({ data: pData }) => {
+      const activeP = (pData && pData.length > 0 ? pData[0] : null) as { id: string; label: string; date_from: string; date_to: string } | null;
+      setActiveInvoicePeriod(activeP);
+      if (activeP) {
+        const { data: invData } = await supabase
+          .from("coach_invoices")
+          .select("id, invoice_number, status, period_label")
+          .eq("coach_id", coachId)
+          .or(`period_id.eq.${activeP.id},period_label.eq.${activeP.label}`)
+          .not("status", "eq", "cancelled")
+          .maybeSingle();
+        setExistingInvoiceForPeriod(invData as { id: string; invoice_number: string | null; status: string; period_label: string } | null);
+      }
+    });
 
     // Load substitute assignments for today
     supabase.from("coach_leaves")
@@ -960,6 +999,83 @@ function CoachHome({ setOverlay, setActive, coachId, branchId, profile, classes,
 
   return (
     <div className="space-y-5">
+      {/* ── Eye-Catching Invoice Submission Period Reminder Banner ──────── */}
+      {activeInvoicePeriod && (
+        !existingInvoiceForPeriod ? (
+          <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 rounded-2xl p-5 lg:p-6 text-white shadow-float relative overflow-hidden">
+            <div className="absolute -right-10 -bottom-10 w-56 h-56 rounded-full bg-white/10 blur-2xl pointer-events-none" />
+            <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="space-y-1.5 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/20 backdrop-blur-sm text-[10px] font-black tracking-wider uppercase text-amber-100 border border-white/30">
+                    <span className="w-2 h-2 rounded-full bg-white animate-ping" />
+                    {t("coach.home.invoiceBannerBadge")}
+                  </span>
+                  {(() => {
+                    const diffDays = Math.ceil((new Date(activeInvoicePeriod.date_to).getTime() - new Date().setHours(0, 0, 0, 0)) / (1000 * 60 * 60 * 24));
+                    return diffDays <= 0 ? (
+                      <span className="text-xs font-bold text-red-100 bg-red-600/70 px-2 py-0.5 rounded-full animate-pulse">
+                        {t("coach.home.invoiceBannerTodayDeadline")}
+                      </span>
+                    ) : (
+                      <span className="text-xs font-semibold text-amber-100">
+                        {t("coach.home.invoiceBannerDaysLeft", { days: diffDays })}
+                      </span>
+                    );
+                  })()}
+                </div>
+                <h3 className="font-display font-black text-xl lg:text-2xl text-white leading-snug">
+                  {activeInvoicePeriod.label}
+                </h3>
+                <p className="text-white/90 text-xs sm:text-sm max-w-xl leading-relaxed">
+                  {t("coach.home.invoiceBannerSub", { date: fmtDateLong(activeInvoicePeriod.date_to) })}
+                </p>
+              </div>
+
+              <div className="shrink-0 w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={() => setActive("invoice")}
+                  className="w-full sm:w-auto px-5 py-3 rounded-xl bg-white text-orange-700 font-display font-extrabold text-sm shadow-card hover:bg-amber-50 active:scale-95 transition-all flex items-center justify-center gap-2 group cursor-pointer"
+                >
+                  <Icon name="invoice" className="w-4 h-4 text-orange-600 group-hover:rotate-12 transition-transform" />
+                  <span>{t("coach.home.invoiceBannerCta")}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="bg-ocean-50 border border-ocean-200/80 rounded-2xl p-4 lg:p-5 flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-3">
+              <span className="w-10 h-10 rounded-xl bg-ocean-100 text-ocean-700 flex items-center justify-center shrink-0">
+                <Icon name="check" className="w-5 h-5 text-ok-600" />
+              </span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-ocean-700">{t("coach.home.invoiceBannerSubmittedBadge")}</span>
+                  <Status kind={existingInvoiceForPeriod.status === "paid" ? "paid" : existingInvoiceForPeriod.status === "approved" ? "approved" : "pending"}>
+                    {existingInvoiceForPeriod.status}
+                  </Status>
+                </div>
+                <div className="font-bold text-ink text-sm mt-0.5">
+                  {t("coach.home.invoiceBannerSubmittedTitle", { period: activeInvoicePeriod.label })}
+                </div>
+                <div className="text-xs text-ink-mute mt-0.5">
+                  {t("coach.home.invoiceBannerSubmittedSub", { status: existingInvoiceForPeriod.status })}
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setActive("invoice")}
+              className="text-xs font-bold text-ocean-700 hover:text-ocean-800 underline underline-offset-2 cursor-pointer"
+            >
+              {t("coach.home.invoiceBannerViewPast")} →
+            </button>
+          </div>
+        )
+      )}
+
       {latestAnnouncement && (
         <Card>
           <div className="flex items-start gap-3">
@@ -1892,14 +2008,26 @@ function CoachKelas({ classes, coachId, classSpreadsheets, ownSpreadsheets, onRe
         }>
         {det && (
           <div className="space-y-4">
-            {/* Branch info */}
+            {/* Branch info / External Location info */}
             <div className="flex items-center gap-2 p-3 rounded-xl bg-paper-tint border border-line text-sm">
               <Icon name="map-pin" className="w-4 h-4 text-ocean-500 shrink-0" />
-              <div>
-                <span className="font-semibold text-ink">{det.branch?.name ?? "—"}</span>
-                {det.branch?.city && <span className="text-ink-mute"> · {det.branch.city}</span>}
-                {det.branch?.address && <div className="text-xs text-ink-mute mt-0.5">{det.branch.address}</div>}
-              </div>
+              {det.location_type === "external" ? (
+                <div>
+                  <div className="font-semibold text-ink">🏡 {det.external_location_name || "Lokasi External"}</div>
+                  {det.external_location_address && <div className="text-xs text-ink-mute mt-0.5">{det.external_location_address}</div>}
+                  {det.google_maps_url && (
+                    <a href={det.google_maps_url} target="_blank" rel="noreferrer" className="text-xs font-bold text-wave-600 hover:underline mt-1 inline-block">
+                      Buka di Google Maps ↗
+                    </a>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  <span className="font-semibold text-ink">{det.branch?.name ?? "—"}</span>
+                  {det.branch?.city && <span className="text-ink-mute"> · {det.branch.city}</span>}
+                  {det.branch?.address && <div className="text-xs text-ink-mute mt-0.5">{det.branch.address}</div>}
+                </div>
+              )}
             </div>
             {det.goals && <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("coach.kelas.goalsLabel")}</div><p className="text-sm text-ink-soft mt-1">{det.goals}</p></div>}
             {det.description && <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("coach.kelas.descriptionLabel")}</div><p className="text-sm text-ink-soft mt-1">{det.description}</p></div>}
@@ -2034,6 +2162,14 @@ function CoachInvoice({ coachId, branchId, profile }: { coachId: string; branchI
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
   });
 
+  const [activePeriod, setActivePeriod] = useState<{
+    id: string;
+    label: string;
+    date_from: string;
+    date_to: string;
+  } | null>(null);
+  const [checkingPeriod, setCheckingPeriod] = useState(true);
+
   const [extraRatePerSession, setExtraRatePerSession] = useState<number | null>(null);
   const [extraSessionCount, setExtraSessionCount] = useState("");
   const [extraItems, setExtraItems] = useState<DraftExtraItem[]>([]);
@@ -2042,6 +2178,19 @@ function CoachInvoice({ coachId, branchId, profile }: { coachId: string; branchI
 
   const load = useCallback(async () => {
     setLoading(true);
+    // Check active invoice period
+    const pQuery = supabase
+      .from("invoice_periods")
+      .select("id, label, date_from, date_to")
+      .eq("is_open", true);
+    if (branchId) {
+      pQuery.or(`branch_id.eq.${branchId},branch_id.is.null`);
+    }
+    const { data: pData } = await pQuery.order("date_to", { ascending: true }).limit(1);
+    const activeP = (pData && pData.length > 0 ? pData[0] : null) as { id: string; label: string; date_from: string; date_to: string } | null;
+    setActivePeriod(activeP);
+    setCheckingPeriod(false);
+
     const [y, m] = monthFilter.split("-");
     const start = `${y}-${m}-01`;
     const end = new Date(parseInt(y), parseInt(m), 0).toISOString().split("T")[0];
@@ -2101,7 +2250,7 @@ function CoachInvoice({ coachId, branchId, profile }: { coachId: string; branchI
     setExtraRatePerSession(extraRate?.rate_per_session ?? null);
 
     setLoading(false);
-  }, [coachId, monthFilter, supabase]);
+  }, [coachId, monthFilter, branchId, supabase]);
 
   /* eslint-disable react-hooks/set-state-in-effect -- async data loader */
   useEffect(() => { load(); }, [load]);
@@ -2134,12 +2283,17 @@ function CoachInvoice({ coachId, branchId, profile }: { coachId: string; branchI
     if (noRate.length > 0) return toast.error(t("coach.invoice.rateNotSetTitle"), t("coach.invoice.rateNotSetBody", { classes: noRate.map(s => s.class?.name ?? s.class_id).join(", ") }));
     setGenerating(true);
     const [y, m] = monthFilter.split("-");
-    const periodLabel = new Date(parseInt(y), parseInt(m) - 1, 1).toLocaleDateString(localeTag, { month: "long", year: "numeric" });
+    const fallbackLabel = new Date(parseInt(y), parseInt(m) - 1, 1).toLocaleDateString(localeTag, { month: "long", year: "numeric" });
+    const periodLabel = activePeriod?.label ?? fallbackLabel;
     const num = `INV-${monthFilter.replace("-", "")}-${coachId.slice(0, 6).toUpperCase()}`;
 
     const { data: inv, error: invError } = await supabase.from("coach_invoices").insert({
-      coach_id: coachId, branch_id: branchId, invoice_number: num,
-      period_label: periodLabel, total_amount: total,
+      coach_id: coachId,
+      branch_id: branchId,
+      invoice_number: num,
+      period_label: periodLabel,
+      period_id: activePeriod?.id ?? null,
+      total_amount: total,
       bank_info: profile?.bank_name ? `${profile.bank_name} - ${profile.bank_account} a/n ${profile.bank_holder}` : null,
       status: "pending",
     }).select("id").single();
@@ -2202,21 +2356,49 @@ function CoachInvoice({ coachId, branchId, profile }: { coachId: string; branchI
 
   return (
     <div className="space-y-5">
-      <div className="bg-ocean-700 text-white rounded-2xl border border-ocean-700 shadow-card p-5 relative overflow-hidden">
-        <div className="caustics absolute inset-0 opacity-30" />
-        <div className="relative">
-          <div className="text-wave-200 text-[11px] uppercase tracking-widest font-bold">{t("coach.invoice.generateInvoiceHeader")}</div>
-          <h2 className="font-display font-bold text-2xl mt-0.5">{new Date(monthFilter + "-01").toLocaleDateString(localeTag, { month: "long", year: "numeric" })}</h2>
-          <p className="text-white/80 text-sm mt-1">{t("coach.invoice.selectSessionsHint")}</p>
+      {/* Active Period / Closed Header */}
+      {!checkingPeriod && !activePeriod ? (
+        <div className="bg-paper-tint border border-line rounded-2xl p-6 text-center space-y-2">
+          <div className="w-12 h-12 rounded-2xl bg-paper-deep text-ink-mute flex items-center justify-center mx-auto">
+            <Icon name="invoice" className="w-6 h-6 opacity-60" />
+          </div>
+          <h3 className="font-display font-bold text-lg text-ink">{t("coach.invoice.noActivePeriodTitle")}</h3>
+          <p className="text-ink-mute text-sm max-w-md mx-auto">{t("coach.invoice.noActivePeriodBody")}</p>
         </div>
-      </div>
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <Input type="month" value={monthFilter} onChange={e => setMonthFilter(e.target.value)} className="!w-36 sm:!w-44 font-mono" />
-        <div className="flex items-center gap-3">
-          <Btn variant="outline" size="sm" icon="plus" onClick={() => setShowReimburseModal(true)}>{t("coach.invoice.expensesBtn")}</Btn>
-          <button onClick={() => setSelected(new Set(sessions.map(s => s.id)))} className="text-sm font-bold text-ocean-600 hover:text-ocean-700">{t("coach.invoice.selectAllBtn")}</button>
+      ) : activePeriod ? (
+        <div className="bg-ocean-700 text-white rounded-2xl border border-ocean-700 shadow-card p-5 relative overflow-hidden">
+          <div className="caustics absolute inset-0 opacity-30" />
+          <div className="relative">
+            <div className="flex items-center gap-2 text-wave-200 text-[11px] uppercase tracking-widest font-bold">
+              <span className="w-2 h-2 rounded-full bg-ok-400 animate-pulse" />
+              {t("coach.invoice.activePeriodLabel", { label: activePeriod.label })}
+            </div>
+            <h2 className="font-display font-bold text-2xl mt-0.5">{activePeriod.label}</h2>
+            <p className="text-white/80 text-sm mt-1">
+              {t("coach.invoice.deadlineNotice", { date: fmtDateLong(activePeriod.date_to) })} · {t("coach.invoice.selectSessionsHint")}
+            </p>
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="bg-ocean-700 text-white rounded-2xl border border-ocean-700 shadow-card p-5 relative overflow-hidden">
+          <div className="caustics absolute inset-0 opacity-30" />
+          <div className="relative">
+            <div className="text-wave-200 text-[11px] uppercase tracking-widest font-bold">{t("coach.invoice.generateInvoiceHeader")}</div>
+            <h2 className="font-display font-bold text-2xl mt-0.5">{new Date(monthFilter + "-01").toLocaleDateString(localeTag, { month: "long", year: "numeric" })}</h2>
+            <p className="text-white/80 text-sm mt-1">{t("coach.invoice.selectSessionsHint")}</p>
+          </div>
+        </div>
+      )}
+
+      {activePeriod && (
+        <>
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <Input type="month" value={monthFilter} onChange={e => setMonthFilter(e.target.value)} className="!w-36 sm:!w-44 font-mono" />
+            <div className="flex items-center gap-3">
+              <Btn variant="outline" size="sm" icon="plus" onClick={() => setShowReimburseModal(true)}>{t("coach.invoice.expensesBtn")}</Btn>
+              <button onClick={() => setSelected(new Set(sessions.map(s => s.id)))} className="text-sm font-bold text-ocean-600 hover:text-ocean-700">{t("coach.invoice.selectAllBtn")}</button>
+            </div>
+          </div>
       {loading ? <div className="text-center text-ink-mute p-6">{t("coach.invoice.loadingSessions")}</div> : (
         <>
           <Card padded={false}>
@@ -2303,6 +2485,8 @@ function CoachInvoice({ coachId, branchId, profile }: { coachId: string; branchI
             </Btn>
           </Card>
         </>
+      )}
+      </>
       )}
       {pastInvoices.length > 0 && (
         <Card padded={false}>
@@ -2400,6 +2584,7 @@ interface Criterion {
   id: string; label: string;
   kind: "score_10" | "score_100" | "choice" | "text";
   options: string[] | null;
+  sort_order?: number;
 }
 
 function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: string; branchId: string; coachName: string; branchName: string }) {
@@ -2431,6 +2616,7 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
   const [page, setPage] = useState(0);
   const [signatureUrl, setSignatureUrl] = useState<string | null>(null);
   const [sigUploading, setSigUploading] = useState(false);
+  const [ownerSettings, setOwnerSettings] = useState<{ head_name?: string | null; head_title?: string | null; head_signature_url?: string | null } | null>(null);
   const { upload, uploading: fileUploading } = useUpload();
   const PAGE_SIZE = 10;
 
@@ -2438,11 +2624,14 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
   useEffect(() => {
     if (!branchId || !coachId) return;
     (async () => {
-      // Load coach signature (for rapor print)
+      // Load coach signature (for rapor print) & owner settings
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: prof } = await (supabase as any)
-        .from("profiles").select("signature_url").eq("id", coachId).single();
+      const [{ data: prof }, { data: oSet }] = await Promise.all([
+        (supabase as any).from("profiles").select("signature_url").eq("id", coachId).single(),
+        supabase.from("owner_settings").select("*").eq("id", "default").maybeSingle(),
+      ]);
       if (prof?.signature_url) setSignatureUrl(prof.signature_url as string);
+      if (oSet) setOwnerSettings(oSet);
 
       // Load active rapor levels (owner-managed), with their class scope
       const { data: levelRows } = await supabase
@@ -2565,7 +2754,7 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
     const found = levelOptions.find(l => l.id === newLevelId);
     setLevel(found?.name ?? "");
     const existingBestTimes: RecordedBestTime[] = [
-      ...bestTimeMatrix.filter(c => c.time.trim()).map(c => ({ id: c.recordedId ?? "", stroke: c.stroke, distance: c.distance, time_seconds: parseFloat(c.time) || 0 })),
+      ...bestTimeMatrix.filter(c => c.time.trim()).map(c => ({ id: c.recordedId ?? "", stroke: c.stroke, distance: c.distance, time_seconds: parseSwimTimeInput(c.time) })),
       ...otherRecorded,
     ];
     await loadLevelTemplate(newLevelId, existingBestTimes);
@@ -2585,7 +2774,27 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
         time_seconds: r.time_seconds,
       }))
     );
-    setViewing(e);
+
+    // If e doesn't have criteria loaded, fetch them from DB
+    let entryToView = e;
+    if (e.level_id && (!e.rapor_levels?.rapor_level_criteria || e.rapor_levels.rapor_level_criteria.length === 0)) {
+      const { data: critData } = await supabase
+        .from("rapor_level_criteria")
+        .select("id, label, kind, options, sort_order")
+        .eq("level_id", e.level_id)
+        .order("sort_order");
+      if (critData) {
+        entryToView = {
+          ...e,
+          rapor_levels: {
+            id: e.level_id,
+            name: e.level || "",
+            rapor_level_criteria: critData,
+          } as unknown as typeof e.rapor_levels,
+        };
+      }
+    }
+    setViewing(entryToView);
   };
 
   const saveRapor = async () => {
@@ -2620,7 +2829,7 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
     const savedCells: MatrixCell[] = [...bestTimeMatrix];
     for (let i = 0; i < savedCells.length; i++) {
       const cell = savedCells[i];
-      const timeSec = parseFloat(cell.time);
+      const timeSec = parseSwimTimeInput(cell.time);
       if (!cell.time.trim() || isNaN(timeSec) || timeSec <= 0) continue;
       if (cell.recordedId) {
         await supabase.from("member_best_times")
@@ -2660,6 +2869,17 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
       learning_achievements: learningAchievements || null,
       level: level || null,
       level_id: levelId || null,
+      rapor_levels: levelId ? {
+        id: levelId,
+        name: level || "",
+        rapor_level_criteria: criteria.map(c => ({
+          id: c.id,
+          label: c.label,
+          kind: c.kind,
+          options: c.options ?? null,
+          sort_order: c.sort_order ?? 0,
+        })),
+      } as unknown as typeof e.rapor_levels : e.rapor_levels,
     } : e));
   };
 
@@ -2944,10 +3164,10 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
                             return (
                               <td key={d.id} className="p-1.5 border-b border-line">
                                 <input
-                                  type="number" min="0" step="0.01"
+                                  type="text"
                                   value={cell?.time ?? ""}
                                   onChange={e => setBestTimeMatrix(prev => prev.map((c, i) => i === idx ? { ...c, time: e.target.value } : c))}
-                                  placeholder={t("coach.bestTime.timePlaceholder")}
+                                  placeholder="1:30 atau 45"
                                   className="w-full border border-line rounded-lg px-2 py-1.5 text-xs text-center font-mono focus:outline-none focus:ring-2 focus:ring-ocean-500 bg-white placeholder:text-ink-faint"
                                 />
                               </td>
@@ -3017,6 +3237,9 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
                 .sort((a, b) => a.sort_order - b.sort_order)
                 .map(c => ({ id: c.id, label: c.label, kind: c.kind as PrintCriterion["kind"] }));
               const signer  = resolveRaporSigner(vClass?.class_coaches ?? [], vClass?.rapor_signer_coach_id);
+              const memSchool = (viewing.member as unknown as { school?: { id: string; name: string; logo_url: string | null; show_coach_sig?: boolean; show_head_sig?: boolean; show_school_sig?: boolean; coach_sig_title?: string; head_sig_title?: string; school_signatures?: { name: string; title: string; image_url: string; is_active: boolean }[] } | null })?.school;
+              const coachSig = signer?.signature_url ?? signatureUrl;
+              const signatures = buildSchoolRaporSignatures(memSchool, signer?.full_name ?? coachName, coachSig, ownerSettings);
               const raporData = {
                 full_name: viewing.member?.profile?.full_name ?? "",
                 member_no: viewing.member?.member_no ?? undefined,
@@ -3034,7 +3257,9 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
                 learning_achievements: viewing.learning_achievements ?? undefined,
                 criteria: vCrit,
                 best_times: viewBestTimes,
-                coach_signature_url: signer?.signature_url ?? signatureUrl,
+                coach_signature_url: coachSig,
+                school_logo_url: memSchool?.logo_url,
+                signatures: signatures,
               };
               return (<>
                 <Btn variant="outline" size="sm" icon="printer"
@@ -3881,7 +4106,7 @@ export default function CoachPage() {
   }, [supabase]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadClasses = useCallback(async (profileId: string) => {
-    const { data, error } = await supabase.from("class_coaches").select("class:classes(id, name, branch_id, schedule_days, time_start, time_end, capacity, enrolled, goals, description, class_type, spreadsheet_filled, spreadsheet_url, branch:branches(name, city, address))").eq("coach_id", profileId);
+    const { data, error } = await supabase.from("class_coaches").select("class:classes(id, name, branch_id, schedule_days, time_start, time_end, capacity, enrolled, goals, description, class_type, location_type, external_location_name, external_location_address, google_maps_url, spreadsheet_filled, spreadsheet_url, branch:branches(name, city, address))").eq("coach_id", profileId);
     if (error || !data) return;
     const rows = data.map((d: Record<string, unknown>) => d.class as ClassRow).filter(Boolean);
     const classIds = rows.map((c) => c.id);

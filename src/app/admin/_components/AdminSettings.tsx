@@ -33,12 +33,23 @@ export default function AdminSettings({ branch, onRefresh, userId }: { branch: B
   // Admin profile state
   const [myPhone, setMyPhone] = useState("");
   const [myName, setMyName] = useState("");
+  const [bankName, setBankName] = useState("");
+  const [bankAccount, setBankAccount] = useState("");
+  const [bankHolder, setBankHolder] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
 
   useEffect(() => {
     if (!userId) return;
-    supabase.from("profiles").select("full_name, phone").eq("id", userId).single()
-      .then(({ data }) => { if (data) { setMyName(data.full_name ?? ""); setMyPhone(data.phone ?? ""); } });
+    supabase.from("profiles").select("full_name, phone, bank_name, bank_account, bank_holder").eq("id", userId).single()
+      .then(({ data }) => {
+        if (data) {
+          setMyName(data.full_name ?? "");
+          setMyPhone(data.phone ?? "");
+          setBankName(data.bank_name ?? "");
+          setBankAccount(data.bank_account ?? "");
+          setBankHolder(data.bank_holder ?? "");
+        }
+      });
   }, [userId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const saveProfile = async () => {
@@ -47,7 +58,15 @@ export default function AdminSettings({ branch, onRefresh, userId }: { branch: B
     const res = await fetch(`/api/admin/users/${userId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ profile: { full_name: myName, phone: myPhone || null } }),
+      body: JSON.stringify({
+        profile: {
+          full_name: myName,
+          phone: myPhone || null,
+          bank_name: bankName.trim() || null,
+          bank_account: bankAccount.trim() || null,
+          bank_holder: bankHolder.trim() || null,
+        }
+      }),
     });
     setSavingProfile(false);
     const json = await res.json() as { error?: string };
@@ -121,13 +140,32 @@ export default function AdminSettings({ branch, onRefresh, userId }: { branch: B
           </div>
         </Card>
 
-        {/* Profil Saya */}
+        {/* Profil Saya & Rekening Bank */}
         <Card className="space-y-4">
           <SectionTitle sub={t("admin.settings.myProfileSub")}>{t("admin.settings.myProfileTitle")}</SectionTitle>
           <Field label={t("admin.settings.fieldFullName")}><Input value={myName} onChange={e => setMyName(e.target.value)} /></Field>
           <Field label={t("admin.settings.fieldPersonalPhone")} hint={t("admin.settings.fieldPersonalPhoneHint")}>
             <Input type="tel" value={myPhone} onChange={e => setMyPhone(e.target.value)} placeholder={t("admin.settings.phonePlaceholder")} className="font-mono" />
           </Field>
+
+          {/* Rekening Bank Admin untuk Transfer Owner */}
+          <div className="pt-3 border-t border-line space-y-3">
+            <div className="text-xs font-bold uppercase tracking-widest text-ink-faint">
+              Rekening Bank Admin (Untuk Transfer Owner)
+            </div>
+            <div className="grid sm:grid-cols-3 gap-3">
+              <Field label="Nama Bank">
+                <Input value={bankName} onChange={e => setBankName(e.target.value)} placeholder="BCA / Mandiri / BSI" />
+              </Field>
+              <Field label="Nomor Rekening">
+                <Input value={bankAccount} onChange={e => setBankAccount(e.target.value)} placeholder="1234567890" className="font-mono" />
+              </Field>
+              <Field label="Atas Nama (Pemilik)">
+                <Input value={bankHolder} onChange={e => setBankHolder(e.target.value)} placeholder="Nama Sesuai Rekening" />
+              </Field>
+            </div>
+          </div>
+
           <div className="pt-2">
             <Btn variant="primary" onClick={saveProfile} disabled={savingProfile}>{savingProfile ? t("common.actions.saving") : t("admin.settings.saveProfileBtn")}</Btn>
           </div>

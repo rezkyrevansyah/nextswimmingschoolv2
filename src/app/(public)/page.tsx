@@ -4,6 +4,7 @@ import Navbar from "./_components/Navbar";
 import Hero from "./_components/Hero";
 import Programs from "./_components/Programs";
 import WhyNext from "./_components/WhyNext";
+import VideoSection from "./_components/VideoSection";
 import Coaches from "./_components/Coaches";
 import Testimonials from "./_components/Testimonials";
 import Partners from "./_components/Partners";
@@ -48,7 +49,7 @@ export default async function LandingPage() {
     .order("sort_order");
   const { data: footerConfig } = await supabase
     .from("landing_config")
-    .select("footer_tagline, footer_address, footer_wa_number, contact_email, copyright_text, social_instagram, social_tiktok, social_youtube, floating_wa_message")
+    .select("footer_tagline, footer_address, footer_wa_number, contact_email, copyright_text, social_instagram, social_tiktok, social_youtube, floating_wa_message, youtube_video_url, youtube_section_title, youtube_section_subtitle")
     .eq("id", 1)
     .single();
 
@@ -66,6 +67,11 @@ export default async function LandingPage() {
       <Partners partners={partners ?? []} />
       <Programs programs={programs ?? []} />
       <WhyNext items={whyNextItems ?? []} />
+      <VideoSection
+        videoUrl={footerConfig?.youtube_video_url}
+        title={footerConfig?.youtube_section_title}
+        subtitle={footerConfig?.youtube_section_subtitle}
+      />
       <Coaches coaches={coaches ?? []} />
       <Testimonials testimonials={testimonials ?? []} />
       <Branches branches={branches} />

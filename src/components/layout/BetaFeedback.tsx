@@ -7,7 +7,7 @@ import Modal from "@/components/ui/Modal";
 // ── BETA FLAG — set false atau hapus file ini untuk menonaktifkan ─────────────
 export const BETA_FEEDBACK_ENABLED = true;
 
-type Role = "owner" | "admin" | "coach" | "member" | "school";
+type Role = "owner" | "admin" | "coach" | "member" | "school" | "staff";
 
 const ROLE_LABELS: Record<Role, string> = {
   owner:  "Owner Panel",
@@ -15,6 +15,7 @@ const ROLE_LABELS: Record<Role, string> = {
   coach:  "Coach Panel",
   member: "Member Panel",
   school: "School Panel",
+  staff:  "Staff Panel",
 };
 
 // Nomor developer — sengaja hardcode di sini, bukan dari data.ts

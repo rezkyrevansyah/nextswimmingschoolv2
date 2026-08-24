@@ -45,9 +45,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Missing required fields: email, password, full_name, role" }, { status: 400 });
   }
 
-  // Admins can only create coach/member/school — not admin/owner
-  if (callerRole === "admin" && !["coach", "member", "school"].includes(role)) {
-    return NextResponse.json({ error: "Admin can only create coach, member, or school accounts" }, { status: 403 });
+  // Admins can only create coach/member/school/staff — not admin/owner
+  if (callerRole === "admin" && !["coach", "member", "school", "staff"].includes(role)) {
+    return NextResponse.json({ error: "Admin can only create coach, member, school, or staff accounts" }, { status: 403 });
   }
 
   // Admins may only create accounts in their own branch

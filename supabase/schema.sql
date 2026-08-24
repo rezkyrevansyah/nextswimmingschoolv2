@@ -95,6 +95,10 @@ CREATE TABLE public.classes (
   spreadsheet_url text,
   show_on_landing boolean NOT NULL DEFAULT false,
   rapor_signer_coach_id uuid,
+  custom_location_name text,
+  custom_location_address text,
+  custom_location_lat double precision,
+  custom_location_lng double precision,
   CONSTRAINT classes_pkey PRIMARY KEY (id),
   CONSTRAINT classes_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branches(id),
   CONSTRAINT classes_rapor_signer_coach_id_fkey FOREIGN KEY (rapor_signer_coach_id) REFERENCES public.profiles(id)
@@ -573,6 +577,7 @@ CREATE TABLE public.landing_config (
   social_tiktok text,
   social_youtube text,
   copyright_text text,
+  video_youtube_url text,
   CONSTRAINT landing_config_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.landing_nav_links (
@@ -950,4 +955,131 @@ CREATE TABLE public.rapor_level_classes (
   CONSTRAINT rapor_level_classes_pkey PRIMARY KEY (level_id, class_id),
   CONSTRAINT rapor_level_classes_level_id_fkey FOREIGN KEY (level_id) REFERENCES public.rapor_levels(id),
   CONSTRAINT rapor_level_classes_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.classes(id)
+);
+CREATE TABLE public.manual_transaction_categories (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  kind text NOT NULL CHECK (kind = ANY (ARRAY['income'::text, 'expense'::text])),
+  name text NOT NULL,
+  sort_order integer NOT NULL DEFAULT 0,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT manual_transaction_categories_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.monthly_salaries (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  profile_id uuid NOT NULL,
+  branch_id uuid NOT NULL,
+  period_label text NOT NULL,
+  period_key text NOT NULL,
+  amount integer NOT NULL CHECK (amount > 0),
+  set_by uuid,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT monthly_salaries_pkey PRIMARY KEY (id),
+  CONSTRAINT monthly_salaries_profile_id_fkey FOREIGN KEY (profile_id) REFERENCES public.profiles(id),
+  CONSTRAINT monthly_salaries_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branches(id),
+  CONSTRAINT monthly_salaries_set_by_fkey FOREIGN KEY (set_by) REFERENCES public.profiles(id)
+);
+CREATE TABLE public.staff_invoices (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  profile_id uuid NOT NULL,
+  branch_id uuid NOT NULL,
+  salary_id uuid NOT NULL,
+  period_label text NOT NULL,
+  period_key text NOT NULL,
+  amount integer NOT NULL,
+  status text NOT NULL DEFAULT 'pending'::text CHECK (status = ANY (ARRAY['pending'::text, 'approved'::text, 'paid'::text, 'rejected'::text, 'cancelled'::text])),
+  bank_info text,
+  invoice_number text NOT NULL,
+  submitted_at timestamp with time zone NOT NULL DEFAULT now(),
+  approved_at timestamp with time zone,
+  paid_at timestamp with time zone,
+  rejected_at timestamp with time zone,
+  rejection_reason text,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT staff_invoices_pkey PRIMARY KEY (id),
+  CONSTRAINT staff_invoices_profile_id_fkey FOREIGN KEY (profile_id) REFERENCES public.profiles(id),
+  CONSTRAINT staff_invoices_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branches(id),
+  CONSTRAINT staff_invoices_salary_id_fkey FOREIGN KEY (salary_id) REFERENCES public.monthly_salaries(id)
+);
+CREATE TABLE public.staff_attendances (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  staff_id uuid NOT NULL,
+  branch_id uuid NOT NULL,
+  attendance_date date NOT NULL DEFAULT CURRENT_DATE,
+  clock_in_time timestamp with time zone,
+  clock_out_time timestamp with time zone,
+  status text NOT NULL DEFAULT 'present'::text CHECK (status = ANY (ARRAY['present'::text, 'absent'::text, 'izin'::text, 'sakit'::text])),
+  note text,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT staff_attendances_pkey PRIMARY KEY (id),
+  CONSTRAINT staff_attendances_staff_id_fkey FOREIGN KEY (staff_id) REFERENCES public.profiles(id),
+  CONSTRAINT staff_attendances_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branches(id)
+);
+CREATE TABLE public.landing_videos (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  sort_order integer NOT NULL DEFAULT 0,
+  youtube_url text NOT NULL,
+  title text,
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT landing_videos_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.invoice_periods (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  label text NOT NULL,
+  date_from date NOT NULL,
+  date_to date NOT NULL,
+  is_open boolean NOT NULL DEFAULT true,
+  created_by uuid NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT invoice_periods_pkey PRIMARY KEY (id),
+  CONSTRAINT invoice_periods_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id)
+);
+CREATE TABLE public.staff_reimbursements (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  profile_id uuid NOT NULL,
+  branch_id uuid NOT NULL,
+  period_id uuid NOT NULL,
+  invoice_number text NOT NULL,
+  description text NOT NULL,
+  amount integer NOT NULL CHECK (amount > 0),
+  proof_url text,
+  bank_info text,
+  status text NOT NULL DEFAULT 'pending'::text CHECK (status = ANY (ARRAY['pending'::text, 'approved'::text, 'paid'::text, 'rejected'::text, 'cancelled'::text])),
+  submitted_at timestamp with time zone NOT NULL DEFAULT now(),
+  approved_at timestamp with time zone,
+  paid_at timestamp with time zone,
+  rejected_at timestamp with time zone,
+  rejection_reason text,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT staff_reimbursements_pkey PRIMARY KEY (id),
+  CONSTRAINT staff_reimbursements_profile_id_fkey FOREIGN KEY (profile_id) REFERENCES public.profiles(id),
+  CONSTRAINT staff_reimbursements_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branches(id),
+  CONSTRAINT staff_reimbursements_period_id_fkey FOREIGN KEY (period_id) REFERENCES public.invoice_periods(id)
+);
+CREATE TABLE public.rapor_signatures (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  name text NOT NULL,
+  title text NOT NULL,
+  image_url text NOT NULL,
+  is_active boolean NOT NULL DEFAULT true,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT rapor_signatures_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.rapor_signature_assignments (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  context text NOT NULL CHECK (context = ANY (ARRAY['reguler'::text, 'private'::text, 'school'::text])),
+  school_id uuid,
+  signature_id uuid NOT NULL,
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_by uuid NOT NULL,
+  CONSTRAINT rapor_signature_assignments_pkey PRIMARY KEY (id),
+  CONSTRAINT rapor_signature_assignments_school_id_fkey FOREIGN KEY (school_id) REFERENCES public.schools(id),
+  CONSTRAINT rapor_signature_assignments_signature_id_fkey FOREIGN KEY (signature_id) REFERENCES public.rapor_signatures(id),
+  CONSTRAINT rapor_signature_assignments_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.profiles(id)
+);
+CREATE TABLE public.drizzle_test_notes (
+  id integer NOT NULL DEFAULT nextval('drizzle_test_notes_id_seq'::regclass),
+  title text NOT NULL,
+  content text,
+  created_at timestamp without time zone DEFAULT now(),
+  CONSTRAINT drizzle_test_notes_pkey PRIMARY KEY (id)
 );

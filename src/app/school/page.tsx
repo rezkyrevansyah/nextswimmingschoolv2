@@ -19,10 +19,10 @@ import Status from "@/components/ui/Status";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import Modal from "@/components/ui/Modal";
 import Bell from "@/components/layout/Bell";
-import { resolveRaporSigner } from "@/lib/rapor";
+import { resolveRaporSigner, buildSchoolRaporSignatures, type SchoolForSignerConfig } from "@/lib/rapor";
 import BetaFeedback, { BETA_FEEDBACK_ENABLED } from "@/components/layout/BetaFeedback";
 import { fmtDate, waLink } from "@/lib/utils";
-import { downloadRaporPdf, printSingleRaporPopup, type PrintCriterion, type PrintBestTime } from "@/lib/printRapor";
+import { downloadRaporPdf, printSingleRaporPopup, type PrintCriterion, type PrintBestTime, type PrintSignatureItem } from "@/lib/printRapor";
 import { downloadRaporZip } from "@/lib/downloadRaporZip";
 import { useToast } from "@/components/providers/ToastProvider";
 import { createClient } from "@/utils/supabase/client";
@@ -425,6 +425,8 @@ interface Student {
   best_times: PrintBestTime[];
   level_strokes: string[];
   level_distances: number[];
+  school_logo_url?: string | null;
+  signatures?: PrintSignatureItem[];
 }
 
 type SchoolTab = "rapor" | "absensi";
@@ -468,26 +470,29 @@ export default function SchoolPage() {
     window.location.href = "/login";
   };
 
-  const load = useCallback(async (sId: string, pid: string | null, periodLabel: string | null, bId: string) => {
+  const load = useCallback(async (sId: string, pid: string | null, periodLabel: string | null, bId: string, schoolConfig: (SchoolForSignerConfig & { logo_url: string | null }) | null) => {
     if (!sId) return;
-    const { data } = await supabase
-      .from("members")
-      .select(`
-        id, member_no,
-        profile:profiles(full_name, avatar_url, birth_date),
-        member_classes(
-          classes(
-            id, name, rapor_signer_coach_id,
-            class_coaches(coach_id, role, profile:profiles(full_name, signature_url))
+    const [{ data }, { data: ownerSettings }] = await Promise.all([
+      supabase
+        .from("members")
+        .select(`
+          id, member_no,
+          profile:profiles(full_name, avatar_url, birth_date),
+          member_classes(
+            classes(
+              id, name, rapor_signer_coach_id,
+              class_coaches(coach_id, role, profile:profiles(full_name, signature_url))
+            )
+          ),
+          rapor_entries(
+            id, scores, notes, personality, motivation, learning_achievements, level, level_id, period_id, locked,
+            rapor_levels(rapor_level_criteria(id, label, kind, options, sort_order))
           )
-        ),
-        rapor_entries(
-          id, scores, notes, personality, motivation, learning_achievements, level, level_id, period_id, locked,
-          rapor_levels(rapor_level_criteria(id, label, kind, options, sort_order))
-        )
-      `)
-      .eq("school_id", sId)
-      .eq("type", "school_affiliate");
+        `)
+        .eq("school_id", sId)
+        .eq("type", "school_affiliate"),
+      supabase.from("owner_settings").select("*").eq("id", "default").maybeSingle(),
+    ]);
 
     if (!data) { setLoading(false); return; }
 
@@ -533,6 +538,10 @@ export default function SchoolPage() {
       const criteria: Criterion[] = [...(entry?.rapor_levels?.rapor_level_criteria ?? [])]
         .sort((a, b) => a.sort_order - b.sort_order)
         .map(c => ({ id: c.id, label: c.label, kind: c.kind as Criterion["kind"] }));
+      
+      const coachSig = signer?.signature_url ?? null;
+      const signatures = buildSchoolRaporSignatures(schoolConfig, signer?.full_name ?? "—", coachSig, ownerSettings);
+
       return {
         id: m.id,
         full_name: profile?.full_name ?? "—",
@@ -541,7 +550,7 @@ export default function SchoolPage() {
         avatar_url: profile?.avatar_url ?? null,
         class_name: cls?.name ?? "—",
         coach_name: signer?.full_name ?? "—",
-        coach_signature_url: signer?.signature_url ?? null,
+        coach_signature_url: coachSig,
         period_id: pid,
         period_label: periodLabel,
         entry_id: entry?.id ?? null,
@@ -556,6 +565,8 @@ export default function SchoolPage() {
         best_times: btByMember.get(m.id) ?? [],
         level_strokes: entry?.level_id ? (strokesByLevel.get(entry.level_id) ?? []) : [],
         level_distances: entry?.level_id ? (distancesByLevel.get(entry.level_id) ?? []) : [],
+        school_logo_url: schoolConfig?.logo_url ?? null,
+        signatures,
       };
     });
     setStudents(rows);
@@ -570,7 +581,7 @@ export default function SchoolPage() {
 
       const { data: school } = await supabase
         .from("schools")
-        .select("id, name, branch_id")
+        .select("id, name, branch_id, logo_url, show_coach_sig, show_head_sig, show_school_sig, coach_sig_title, head_sig_title, school_signatures(name, title, image_url, is_active)")
         .eq("profile_id", u.id)
         .single();
 
@@ -578,6 +589,7 @@ export default function SchoolPage() {
       setSchoolName(school.name);
       setSchoolId(school.id);
       setBranchId(school.branch_id);
+      const schoolConfig = school as unknown as (SchoolForSignerConfig & { logo_url: string | null });
 
       const { data: branch } = await supabase.from("branches").select("name, wa_numbers").eq("id", school.branch_id).single();
       const branchRow = branch as unknown as { name: string; wa_numbers: string[] } | null;
@@ -596,9 +608,9 @@ export default function SchoolPage() {
 
       if (period) {
         setActivePeriod(period);
-        await load(school.id, period.id, period.label, school.branch_id);
+        await load(school.id, period.id, period.label, school.branch_id, schoolConfig);
       } else {
-        await load(school.id, null, null, school.branch_id);
+        await load(school.id, null, null, school.branch_id, schoolConfig);
       }
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -667,6 +679,8 @@ export default function SchoolPage() {
     level: s.level ?? undefined,
     class_name: s.class_name, coach_name: s.coach_name,
     coach_signature_url: s.coach_signature_url,
+    school_logo_url: s.school_logo_url,
+    signatures: s.signatures,
     period_label: s.period_label ?? "—", scores: s.scores, notes: s.notes,
     personality: s.personality, motivation: s.motivation, learning_achievements: s.learning_achievements,
     criteria: s.criteria, best_times: s.best_times,

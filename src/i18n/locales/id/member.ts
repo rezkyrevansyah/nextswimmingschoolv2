@@ -163,7 +163,7 @@ export const member: typeof MemberEn = {
     fieldAddress: "Alamat",
     fieldHealth: "Riwayat kesehatan / alergi",
     saveBtn: "Simpan perubahan",
-    adminContactHint: "Untuk mengubah nama, tanggal lahir, atau kelas — silakan hubungi admin cabang.",
+    adminContactHint: "Untuk mengubah nama, tanggal lahir, atau kelas — silakan hubungi admin center.",
     changePasswordTitle: "Ganti password",
     fieldNewPassword: "Password baru",
     fieldConfirmPassword: "Konfirmasi password",
@@ -186,7 +186,7 @@ export const member: typeof MemberEn = {
     reason: "Alasan: {reason}",
     reactivationIn: "Aktif kembali dalam:",
     reactivatingSoon: "Segera aktif kembali…",
-    notice: "Semua fitur tidak dapat diakses selama masa suspend. Hubungi admin cabang jika ada pertanyaan.",
+    notice: "Semua fitur tidak dapat diakses selama masa suspend. Hubungi admin center jika ada pertanyaan.",
   },
   errors: {
     notFoundTitle: "Data Tidak Ditemukan",

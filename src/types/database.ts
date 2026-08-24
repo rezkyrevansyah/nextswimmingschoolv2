@@ -668,16 +668,20 @@ export type Database = {
         Row: {
           age_max: number | null
           age_min: number | null
-          branch_id: string
+          branch_id: string | null
           capacity: number
           class_type: string
           created_at: string
           description: string | null
           enrolled: number
+          external_location_address: string | null
+          external_location_name: string | null
           goal: string | null
           goals: string | null
+          google_maps_url: string | null
           id: string
           location_name: string | null
+          location_type: string
           name: string
           photo_url: string | null
           price_monthly: number
@@ -698,16 +702,20 @@ export type Database = {
         Insert: {
           age_max?: number | null
           age_min?: number | null
-          branch_id: string
+          branch_id?: string | null
           capacity?: number
           class_type?: string
           created_at?: string
           description?: string | null
           enrolled?: number
+          external_location_address?: string | null
+          external_location_name?: string | null
           goal?: string | null
           goals?: string | null
+          google_maps_url?: string | null
           id?: string
           location_name?: string | null
+          location_type?: string
           name: string
           photo_url?: string | null
           price_monthly?: number
@@ -728,16 +736,20 @@ export type Database = {
         Update: {
           age_max?: number | null
           age_min?: number | null
-          branch_id?: string
+          branch_id?: string | null
           capacity?: number
           class_type?: string
           created_at?: string
           description?: string | null
           enrolled?: number
+          external_location_address?: string | null
+          external_location_name?: string | null
           goal?: string | null
           goals?: string | null
+          google_maps_url?: string | null
           id?: string
           location_name?: string | null
+          location_type?: string
           name?: string
           photo_url?: string | null
           price_monthly?: number
@@ -1041,6 +1053,7 @@ export type Database = {
           paid_at: string | null
           pdf_url: string | null
           period_label: string
+          period_id: string | null
           rejected_at: string | null
           rejection_reason: string | null
           status: Database["public"]["Enums"]["invoice_status"]
@@ -1059,6 +1072,7 @@ export type Database = {
           paid_at?: string | null
           pdf_url?: string | null
           period_label: string
+          period_id?: string | null
           rejected_at?: string | null
           rejection_reason?: string | null
           status?: Database["public"]["Enums"]["invoice_status"]
@@ -1077,6 +1091,7 @@ export type Database = {
           paid_at?: string | null
           pdf_url?: string | null
           period_label?: string
+          period_id?: string | null
           rejected_at?: string | null
           rejection_reason?: string | null
           status?: Database["public"]["Enums"]["invoice_status"]
@@ -1103,6 +1118,50 @@ export type Database = {
             columns: ["coach_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      invoice_periods: {
+        Row: {
+          branch_id: string | null
+          created_at: string
+          created_by: string | null
+          date_from: string
+          date_to: string
+          id: string
+          is_open: boolean
+          label: string
+          updated_at: string
+        }
+        Insert: {
+          branch_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          date_from: string
+          date_to: string
+          id?: string
+          is_open?: boolean
+          label: string
+          updated_at?: string
+        }
+        Update: {
+          branch_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          date_from?: string
+          date_to?: string
+          id?: string
+          is_open?: boolean
+          label?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_periods_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
             referencedColumns: ["id"]
           },
         ]
@@ -1516,6 +1575,9 @@ export type Database = {
           social_instagram: string | null
           social_tiktok: string | null
           social_youtube: string | null
+          youtube_video_url: string | null
+          youtube_section_title: string | null
+          youtube_section_subtitle: string | null
           updated_at: string
         }
         Insert: {
@@ -1531,6 +1593,9 @@ export type Database = {
           social_instagram?: string | null
           social_tiktok?: string | null
           social_youtube?: string | null
+          youtube_video_url?: string | null
+          youtube_section_title?: string | null
+          youtube_section_subtitle?: string | null
           updated_at?: string
         }
         Update: {
@@ -1546,6 +1611,9 @@ export type Database = {
           social_instagram?: string | null
           social_tiktok?: string | null
           social_youtube?: string | null
+          youtube_video_url?: string | null
+          youtube_section_title?: string | null
+          youtube_section_subtitle?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -2650,6 +2718,30 @@ export type Database = {
           },
         ]
       }
+      owner_settings: {
+        Row: {
+          head_name: string
+          head_signature_url: string | null
+          head_title: string
+          id: string
+          updated_at: string | null
+        }
+        Insert: {
+          head_name?: string
+          head_signature_url?: string | null
+          head_title?: string
+          id?: string
+          updated_at?: string | null
+        }
+        Update: {
+          head_name?: string
+          head_signature_url?: string | null
+          head_title?: string
+          id?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       payslip_deductions: {
         Row: {
           amount: number
@@ -3406,36 +3498,92 @@ export type Database = {
           },
         ]
       }
+      school_signatures: {
+        Row: {
+          created_at: string
+          id: string
+          image_url: string
+          is_active: boolean
+          name: string
+          school_id: string
+          title: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          image_url: string
+          is_active?: boolean
+          name: string
+          school_id: string
+          title: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          image_url?: string
+          is_active?: boolean
+          name?: string
+          school_id?: string
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "school_signatures_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       schools: {
         Row: {
           branch_id: string
           created_at: string
           email: string | null
           id: string
+          logo_url: string | null
           name: string
           pic_name: string | null
           pic_phone: string | null
           profile_id: string | null
+          show_coach_sig: boolean
+          show_head_sig: boolean
+          show_school_sig: boolean
+          coach_sig_title: string
+          head_sig_title: string
         }
         Insert: {
           branch_id: string
           created_at?: string
           email?: string | null
           id?: string
+          logo_url?: string | null
           name: string
           pic_name?: string | null
           pic_phone?: string | null
           profile_id?: string | null
+          show_coach_sig?: boolean
+          show_head_sig?: boolean
+          show_school_sig?: boolean
+          coach_sig_title?: string
+          head_sig_title?: string
         }
         Update: {
           branch_id?: string
           created_at?: string
           email?: string | null
           id?: string
+          logo_url?: string | null
           name?: string
           pic_name?: string | null
           pic_phone?: string | null
           profile_id?: string | null
+          show_coach_sig?: boolean
+          show_head_sig?: boolean
+          show_school_sig?: boolean
+          coach_sig_title?: string
+          head_sig_title?: string
         }
         Relationships: [
           {
@@ -3619,6 +3767,126 @@ export type Database = {
           },
         ]
       }
+      staff_salaries: {
+        Row: {
+          allowances: number
+          base_salary: number
+          branch_id: string
+          created_at: string
+          deductions: number
+          id: string
+          notes: string | null
+          paid_at: string | null
+          period_month: string
+          reimburse_amount: number
+          staff_id: string
+          status: string
+          total_salary: number
+          updated_at: string
+        }
+        Insert: {
+          allowances?: number
+          base_salary?: number
+          branch_id: string
+          created_at?: string
+          deductions?: number
+          id?: string
+          notes?: string | null
+          paid_at?: string | null
+          period_month: string
+          reimburse_amount?: number
+          staff_id: string
+          status?: string
+          total_salary?: number
+          updated_at?: string
+        }
+        Update: {
+          allowances?: number
+          base_salary?: number
+          branch_id?: string
+          created_at?: string
+          deductions?: number
+          id?: string
+          notes?: string | null
+          paid_at?: string | null
+          period_month?: string
+          reimburse_amount?: number
+          staff_id?: string
+          status?: string
+          total_salary?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_salaries_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_salaries_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      staff_attendances: {
+        Row: {
+          attendance_date: string
+          branch_id: string
+          clock_in_time: string | null
+          clock_out_time: string | null
+          created_at: string
+          id: string
+          notes: string | null
+          staff_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          attendance_date?: string
+          branch_id: string
+          clock_in_time?: string | null
+          clock_out_time?: string | null
+          created_at?: string
+          id?: string
+          notes?: string | null
+          staff_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          attendance_date?: string
+          branch_id?: string
+          clock_in_time?: string | null
+          clock_out_time?: string | null
+          created_at?: string
+          id?: string
+          notes?: string | null
+          staff_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_attendances_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_attendances_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       public_branches: {
         Row: {
           address: string | null
@@ -3675,7 +3943,7 @@ export type Database = {
       member_status: "active" | "suspended" | "archived"
       member_type: "reguler" | "private" | "school_affiliate"
       payment_status: "unpaid" | "partial" | "paid" | "free" | "school_covered"
-      user_role: "owner" | "admin" | "coach" | "member" | "school"
+      user_role: "owner" | "admin" | "coach" | "member" | "school" | "staff"
     }
     CompositeTypes: {
       [_ in never]: never

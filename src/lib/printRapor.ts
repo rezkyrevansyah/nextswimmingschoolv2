@@ -23,6 +23,12 @@ export interface PrintBestTime {
   time_seconds: number;
 }
 
+export interface PrintSignatureItem {
+  name: string;
+  title: string;
+  image_url?: string | null;
+}
+
 export interface PrintStudent {
   full_name: string;
   member_no?: string | null;
@@ -45,6 +51,9 @@ export interface PrintStudent {
   level_distances?: number[]; // ordered distances from the member's level (rapor_level_distances), sort_order-sorted
   criteria?: PrintCriterion[];
   coach_signature_url?: string | null; // uploaded coach signature from Supabase Storage
+  school_logo_url?: string | null;
+  school_signature?: { name: string; title: string; image_url: string } | null;
+  signatures?: PrintSignatureItem[]; // Custom list of signatures to display (1, 2, or 3)
 }
 
 /** All asset URIs — can be URL paths or data URIs (for server-side headless rendering) */
@@ -186,10 +195,10 @@ const STYLES = `
   .char-val{font-size:12px;font-weight:500;font-style:italic;color:#000;word-wrap:break-word;overflow-wrap:break-word}
 
   /* ── Signatures — margin-top:auto pushes to bottom of flex container ── */
-  .sign-section{display:grid;grid-template-columns:1fr 1fr;gap:0;margin-top:auto;padding-top:14px;padding-bottom:6px}
-  .sign-col{text-align:center}
+  .sign-section{display:flex;justify-content:space-around;align-items:flex-end;width:100%;gap:12px;margin-top:auto;padding-top:14px;padding-bottom:6px}
+  .sign-col{text-align:center;flex:1;max-width:220px}
   .sign-img{height:80px;display:flex;align-items:flex-end;justify-content:center}
-  .sign-img img{max-height:76px;max-width:180px;object-fit:contain}
+  .sign-img img{max-height:76px;max-width:160px;object-fit:contain}
   .sign-line{border-top:1px solid #000;padding-top:3px;width:160px;margin:0 auto}
   .sign-name{font-size:12px;font-style:italic;font-weight:500;color:#000}
   .sign-title{font-size:12px;font-style:italic;font-weight:600;color:#000;text-transform:uppercase;letter-spacing:0.12px;white-space:nowrap}
@@ -279,10 +288,41 @@ function buildRaporHtml(s: PrintStudent, assets: RaporAssets): string {
   const motivation  = escapeHtml(s.motivation  || "—");
   const learningAch = escapeHtml(s.learning_achievements || "—");
 
-  // Signature: coach (left) — uploaded or placeholder
+  // Signatures resolution
   const coachSigSrc = s.coach_signature_url
     ? escapeHtml(s.coach_signature_url)
     : assets.coachSigPh;
+
+  const resolvedSignatures: { name: string; title: string; imageSrc: string }[] = [];
+  if (s.signatures && s.signatures.length > 0) {
+    for (const sig of s.signatures) {
+      resolvedSignatures.push({
+        name: sig.name,
+        title: sig.title,
+        imageSrc: sig.image_url ? escapeHtml(sig.image_url) : assets.coachSigPh,
+      });
+    }
+  } else {
+    // Default 2-column signature fallback
+    resolvedSignatures.push({
+      name: s.coach_name,
+      title: "HEAD COACH",
+      imageSrc: coachSigSrc,
+    });
+    if (s.school_signature) {
+      resolvedSignatures.push({
+        name: s.school_signature.name,
+        title: s.school_signature.title,
+        imageSrc: s.school_signature.image_url ? escapeHtml(s.school_signature.image_url) : assets.coachSigPh,
+      });
+    } else {
+      resolvedSignatures.push({
+        name: "Syahril Sidik",
+        title: "HEAD OF NEXT SWIMMING",
+        imageSrc: assets.syahrilSig,
+      });
+    }
+  }
 
   return `
   <div class="page">
@@ -301,9 +341,9 @@ function buildRaporHtml(s: PrintStudent, assets: RaporAssets): string {
           <div class="hd-title">REPORT CARD</div>
           <div class="hd-periode">PERIODE : ${escapeHtml(s.period_label.toUpperCase())}</div>
         </div>
-        <div class="hd-logo">
-          <img src="${assets.logoHeader}" alt="NEXT Swimming School"
-               onerror="this.style.display='none'" />
+        <div class="hd-logo" style="display:flex;align-items:center;gap:12px;justify-content:flex-end">
+          <img src="${assets.logoHeader}" alt="NEXT Swimming School" onerror="this.style.display='none'" />
+          ${s.school_logo_url ? `<img src="${s.school_logo_url}" alt="School Logo" style="height:60px" onerror="this.style.display='none'" />` : ""}
         </div>
       </div>
 
@@ -368,25 +408,18 @@ function buildRaporHtml(s: PrintStudent, assets: RaporAssets): string {
       </div>
 
       <!-- SIGNATURES -->
-      <div class="sign-section">
+      <div class="sign-section" style="${resolvedSignatures.length === 1 ? 'justify-content:center;' : ''}">
+        ${resolvedSignatures.map(sig => `
         <div class="sign-col">
           <div class="sign-img">
-            <img src="${coachSigSrc}" alt="Coach signature" />
+            <img src="${sig.imageSrc}" alt="${escapeHtml(sig.name)}" onerror="this.src='${assets.coachSigPh}'" />
           </div>
           <div class="sign-line">
-            <div class="sign-name">${escapeHtml(s.coach_name)}</div>
-            <div class="sign-title">HEAD COACH</div>
+            <div class="sign-name">${escapeHtml(sig.name)}</div>
+            <div class="sign-title">${escapeHtml(sig.title)}</div>
           </div>
         </div>
-        <div class="sign-col">
-          <div class="sign-img">
-            <img src="${assets.syahrilSig}" alt="Syahril Sidik" />
-          </div>
-          <div class="sign-line">
-            <div class="sign-name">Syahril Sidik</div>
-            <div class="sign-title">HEAD OF NEXT SWIMMING</div>
-          </div>
-        </div>
+        `).join("")}
       </div>
 
       <!-- FOOTER -->

@@ -29,7 +29,7 @@ interface BranchEntryItem {
 interface CoreBranchOption { id: string; name: string; city: string | null; }
 interface FaqItem { id: string; sort_order: number; question: string; answer: string; }
 
-type Tab = "programs" | "coaches" | "whynext" | "testimonials" | "partners" | "branches" | "faq" | "footer";
+type Tab = "programs" | "coaches" | "video" | "whynext" | "testimonials" | "partners" | "branches" | "faq" | "footer";
 
 const WHY_NEXT_ICONS = ["shield", "star", "check", "users", "target", "book", "swim", "clipboard", "sparkle"];
 
@@ -37,6 +37,7 @@ function buildTabs(t: (key: string) => string): { id: Tab; label: string; icon: 
   return [
     { id: "programs",     label: t("owner.landingCms.tabPrograms"),     icon: "book"   },
     { id: "coaches",      label: t("owner.landingCms.tabCoaches"),      icon: "swim"   },
+    { id: "video",        label: t("owner.landingCms.tabVideo"),        icon: "video"  },
     { id: "whynext",      label: t("owner.landingCms.tabWhyNext"),      icon: "shield" },
     { id: "testimonials", label: t("owner.landingCms.tabTestimonials"), icon: "users"  },
     { id: "partners",     label: t("owner.landingCms.tabPartners"),     icon: "link"   },
@@ -173,6 +174,7 @@ export default function LandingCMS() {
 
       {tab === "programs"     && <ProgramsTab />}
       {tab === "coaches"      && <CoachesTab />}
+      {tab === "video"        && <VideoTab />}
       {tab === "whynext"      && <WhyNextTab />}
       {tab === "testimonials" && <TestimonialsTab />}
       {tab === "partners"     && <PartnersTab />}
@@ -893,6 +895,145 @@ function FooterTab() {
             <Field label={t("owner.landingCms.footer.fieldFloatingWaMessage")} hint={t("owner.landingCms.footer.fieldFloatingWaMessageHint")}>
               <Textarea rows={2} value={form.floating_wa_message} onChange={(e) => setForm({ ...form, floating_wa_message: e.target.value })} placeholder={t("owner.landingCms.footer.fieldFloatingWaMessagePlaceholder")} />
             </Field>
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+// ── Video Tab ─────────────────────────────────────────────────────────────────
+function getYouTubeEmbedUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  const str = url.trim();
+  const regExp = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/|youtube\.com\/shorts\/)([^"&?\/\s]{11})/;
+  const match = str.match(regExp);
+  if (match && match[1]) {
+    return `https://www.youtube.com/embed/${match[1]}?autoplay=0&rel=0`;
+  }
+  if (str.startsWith("https://www.youtube.com/embed/")) {
+    return str;
+  }
+  return null;
+}
+
+function VideoTab() {
+  const { t } = useLocale();
+  const toast = useToast();
+  const supabase = createClient();
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({
+    youtube_video_url: "",
+    youtube_section_title: "",
+    youtube_section_subtitle: "",
+  });
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const { data } = await supabase
+      .from("landing_config")
+      .select("youtube_video_url, youtube_section_title, youtube_section_subtitle")
+      .eq("id", 1)
+      .single();
+    if (data) {
+      setForm({
+        youtube_video_url: data.youtube_video_url ?? "",
+        youtube_section_title: data.youtube_section_title ?? "",
+        youtube_section_subtitle: data.youtube_section_subtitle ?? "",
+      });
+    }
+    setLoading(false);
+  }, [supabase]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const save = async () => {
+    setSaving(true);
+    const { error } = await supabase
+      .from("landing_config")
+      .update({
+        youtube_video_url: form.youtube_video_url.trim() || null,
+        youtube_section_title: form.youtube_section_title.trim() || null,
+        youtube_section_subtitle: form.youtube_section_subtitle.trim() || null,
+      })
+      .eq("id", 1);
+    setSaving(false);
+    if (error) return toast.error("Gagal menyimpan video YouTube", error.message);
+    await revalidate();
+    toast.success("Pengaturan video YouTube berhasil disimpan");
+  };
+
+  const embedPreviewUrl = getYouTubeEmbedUrl(form.youtube_video_url);
+
+  return (
+    <Card>
+      <div className="flex items-center justify-between">
+        <SectionTitle sub="Atur tautan video YouTube profil atau kegiatan yang akan ditampilkan pada section khusus di landing page.">
+          Video YouTube / Profil
+        </SectionTitle>
+        <Btn variant="primary" size="sm" onClick={save} disabled={loading || saving}>
+          {saving ? t("common.actions.saving") : t("common.actions.save")}
+        </Btn>
+      </div>
+
+      {loading ? (
+        <div className="py-10 text-center text-ink-mute text-sm">{t("owner.landingCms.loading")}</div>
+      ) : (
+        <div className="mt-4 space-y-5">
+          <Field
+            label="Tautan Video YouTube"
+            hint="Mendukung URL youtube biasa (https://www.youtube.com/watch?v=...), tautan pendek (https://youtu.be/...), maupun Shorts."
+          >
+            <Input
+              type="url"
+              value={form.youtube_video_url}
+              onChange={(e) => setForm({ ...form, youtube_video_url: e.target.value })}
+              placeholder="Contoh: https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+            />
+          </Field>
+
+          <Field label="Judul Section Video (Opsional)" hint="Default: 'Lihat Aktivitas & Suasana Belajar Kami'">
+            <Input
+              value={form.youtube_section_title}
+              onChange={(e) => setForm({ ...form, youtube_section_title: e.target.value })}
+              placeholder="Lihat Aktivitas & Suasana Belajar Kami"
+            />
+          </Field>
+
+          <Field label="Deskripsi / Subtitle Section (Opsional)">
+            <Textarea
+              rows={2}
+              value={form.youtube_section_subtitle}
+              onChange={(e) => setForm({ ...form, youtube_section_subtitle: e.target.value })}
+              placeholder="Kenali lebih dekat metode pengajaran, fasilitas, dan keseruan belajar renang bersama pelatih profesional di Next Swimming School."
+            />
+          </Field>
+
+          {/* Live Preview */}
+          <div className="border-t border-line pt-4 space-y-2">
+            <div className="text-xs font-bold uppercase tracking-widest text-ink-faint">Pratinjau Video (Live Preview)</div>
+            {embedPreviewUrl ? (
+              <div className="rounded-2xl overflow-hidden shadow-card border border-line bg-black aspect-video max-w-2xl">
+                <iframe
+                  src={embedPreviewUrl}
+                  title="YouTube Preview"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  allowFullScreen
+                  className="w-full h-full border-0"
+                />
+              </div>
+            ) : form.youtube_video_url.trim() ? (
+              <div className="p-4 rounded-xl bg-warn-50 border border-warn-200 text-xs text-warn-700 font-semibold">
+                Format link YouTube tidak dikenali. Pastikan memasukkan tautan YouTube yang valid (contoh: https://www.youtube.com/watch?v=xxx atau https://youtu.be/xxx).
+              </div>
+            ) : (
+              <div className="p-6 rounded-2xl bg-paper-tint border border-dashed border-line text-center text-xs text-ink-mute">
+                Masukkan link YouTube di atas untuk melihat pratinjau video. Jika dikosongkan, section video di landing page tidak akan ditampilkan.
+              </div>
+            )}
           </div>
         </div>
       )}

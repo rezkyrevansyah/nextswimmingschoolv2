@@ -14,15 +14,18 @@ import Sidebar, { type NavItem } from "@/components/layout/Sidebar";
 import Topbar from "@/components/layout/Topbar";
 import Bell from "@/components/layout/Bell";
 import BetaFeedback, { BETA_FEEDBACK_ENABLED } from "@/components/layout/BetaFeedback";
-import { fmtIDR, clampPercent } from "@/lib/utils";
+import { fmtIDR, clampPercent, fmtDate, fmtDateLong, waLink } from "@/lib/utils";
 import { logActivity } from "@/lib/activityLog";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
 import { useLocale } from "@/components/providers/LocaleProvider";
 import LandingCMS from "./_components/LandingCMS";
+import OwnerSchools from "./_components/OwnerSchools";
+import OwnerMasterData from "./_components/OwnerMasterData";
 import PayslipGenerator from "./payroll/PayslipGenerator";
 import CoachLoans from "./payroll/CoachLoans";
+
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -105,8 +108,42 @@ interface Invoice {
   rejection_reason?: string | null;
   branch_id?: string | null;
   branch?: { name: string } | null;
-  coach?: { id: string; full_name: string } | null;
+  coach?: { id: string; full_name: string; phone?: string | null; bank_name?: string | null; bank_account?: string | null; bank_holder?: string | null } | null;
   coach_invoice_items?: InvoiceItem[];
+}
+
+interface StaffSalaryRow {
+  id: string;
+  staff_id: string;
+  branch_id: string;
+  period_month: string;
+  base_salary: number;
+  allowances: number;
+  deductions: number;
+  reimburse_amount: number;
+  total_salary: number;
+  status: string;
+  notes: string | null;
+  paid_at: string | null;
+  created_at: string;
+}
+
+interface StaffAttendanceSummary {
+  staff_id: string;
+  present_count: number;
+  late_count: number;
+  leave_count: number;
+  sick_count: number;
+}
+
+interface InvoicePeriod {
+  id: string;
+  branch_id: string | null;
+  label: string;
+  date_from: string;
+  date_to: string;
+  is_open: boolean;
+  branch?: { name: string } | null;
 }
 
 // ── Sub-pages ──────────────────────────────────────────────────────────────────
@@ -375,32 +412,38 @@ function Admins({ branches }: { branches: Branch[] }) {
   const toast = useToast();
   const confirm = useConfirm();
   const supabase = createClient();
-  const [admins, setAdmins] = useState<AdminProfile[]>([]);
+  const [roleTab, setRoleTab] = useState<"admin" | "staff">("admin");
+  const [admins, setAdmins] = useState<(AdminProfile & { role: string; bank_name?: string | null; bank_account?: string | null; bank_holder?: string | null })[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
-  const [editTarget, setEditTarget] = useState<AdminProfile | null>(null);
+  const [editTarget, setEditTarget] = useState<(AdminProfile & { role: string; bank_name?: string | null; bank_account?: string | null; bank_holder?: string | null }) | null>(null);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ full_name: "", email: "", phone: "", branch_id: "", password: "" });
+  const [form, setForm] = useState({ full_name: "", email: "", phone: "", branch_id: "", password: "", role: "admin" as "admin" | "staff" });
   const [showAdminPwd, setShowAdminPwd] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     const { data } = await supabase
       .from("profiles")
-      .select("id, full_name, email, phone, branch_id, branch:branches(name)")
-      .eq("role", "admin")
+      .select("id, full_name, email, phone, branch_id, role, bank_name, bank_account, bank_holder, branch:branches(name)")
+      .eq("role", roleTab)
       .order("full_name");
-    if (data) setAdmins(data as unknown as AdminProfile[]);
+    if (data) setAdmins(data as any);
     setLoading(false);
-  }, [supabase]);
+  }, [supabase, roleTab]);
 
   /* eslint-disable react-hooks/set-state-in-effect -- async data loader */
   useEffect(() => { load(); }, [load]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  const openEdit = (a: AdminProfile) => {
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success(`${label} disalin!`, text);
+  };
+
+  const openEdit = (a: any) => {
     setEditTarget(a);
-    setForm({ full_name: a.full_name, email: a.email, phone: a.phone ?? "", branch_id: a.branch_id ?? "", password: "" });
+    setForm({ full_name: a.full_name, email: a.email, phone: a.phone ?? "", branch_id: a.branch_id ?? "", password: "", role: a.role });
     setShowAdd(true);
   };
 
@@ -432,7 +475,7 @@ function Admins({ branches }: { branches: Branch[] }) {
       const res = await fetch("/api/admin/users", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, role: "admin" }),
+        body: JSON.stringify({ ...form, role: form.role }),
       });
       const json = await res.json() as { error?: string; code?: string };
       if (!res.ok) {
@@ -444,14 +487,14 @@ function Admins({ branches }: { branches: Branch[] }) {
         );
         setSaving(false); return;
       }
-      toast.success(t("owner.admins.created"), t("owner.admins.createdSub"));
+      toast.success(form.role === "staff" ? "Akun Staff Berhasil Dibuat" : t("owner.admins.created"), t("owner.admins.createdSub"));
       setSaving(false);
       setShowAdd(false);
       load();
     }
   };
 
-  const removeAdmin = async (a: AdminProfile) => {
+  const removeAdmin = async (a: any) => {
     const yes = await confirm({ title: t("owner.admins.deleteConfirmTitle", { name: a.full_name }), body: t("owner.admins.deleteConfirmBody"), danger: true });
     if (!yes) return;
     const res = await fetch(`/api/admin/users/${a.id}`, { method: "DELETE" });
@@ -464,11 +507,34 @@ function Admins({ branches }: { branches: Branch[] }) {
     <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h2 className="font-display font-bold text-2xl">{t("owner.admins.pageTitle")}</h2>
-          <p className="text-ink-mute text-sm mt-0.5">{t("owner.admins.pageSub")}</p>
+          <h2 className="font-display font-bold text-2xl">Manajemen Admin & Staff</h2>
+          <p className="text-ink-mute text-sm mt-0.5">Kelola akun admin operasional cabang dan staff harian / resepsionis.</p>
         </div>
-        <Btn variant="primary" icon="plus" onClick={() => { setForm({ full_name: "", email: "", phone: "", branch_id: "", password: "" }); setShowAdd(true); }}>{t("owner.admins.addAdmin")}</Btn>
+        <Btn variant="primary" icon="plus" onClick={() => { setForm({ full_name: "", email: "", phone: "", branch_id: "", password: "", role: roleTab }); setShowAdd(true); }}>
+          {roleTab === "staff" ? "Tambah Staff Baru" : t("owner.admins.addAdmin")}
+        </Btn>
       </div>
+
+      {/* Role Tabs */}
+      <div className="flex gap-2 border-b border-line pb-2">
+        <button
+          onClick={() => setRoleTab("admin")}
+          className={`px-4 py-2 rounded-xl text-sm font-bold transition ${
+            roleTab === "admin" ? "bg-ocean-600 text-white shadow-card" : "bg-paper-tint text-ink-soft hover:bg-paper-deep"
+          }`}
+        >
+          Admin Cabang
+        </button>
+        <button
+          onClick={() => setRoleTab("staff")}
+          className={`px-4 py-2 rounded-xl text-sm font-bold transition ${
+            roleTab === "staff" ? "bg-ocean-600 text-white shadow-card" : "bg-paper-tint text-ink-soft hover:bg-paper-deep"
+          }`}
+        >
+          Staff Cabang (Pegawai)
+        </button>
+      </div>
+
       <Card padded={false}>
         {loading ? (
           <div className="p-10 text-center text-ink-mute">{t("owner.admins.loading")}</div>
@@ -477,9 +543,10 @@ function Admins({ branches }: { branches: Branch[] }) {
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-[11px] uppercase tracking-widest text-ink-faint font-bold border-b border-line">
-                  <th className="text-left py-3 px-5 font-bold">{t("owner.admins.colAdmin")}</th>
+                  <th className="text-left py-3 px-5 font-bold">{roleTab === "staff" ? "Staff" : t("owner.admins.colAdmin")}</th>
                   <th className="text-left py-3 font-bold hidden sm:table-cell">{t("owner.admins.colEmail")}</th>
                   <th className="text-left py-3 font-bold hidden md:table-cell">{t("owner.admins.colWhatsapp")}</th>
+                  <th className="text-left py-3 font-bold">Rekening Bank</th>
                   <th className="text-left py-3 font-bold">{t("owner.admins.colBranch")}</th>
                   <th className="text-left py-3 font-bold">{t("owner.admins.colStatus")}</th>
                   <th className="text-right py-3 px-5" />
@@ -496,6 +563,19 @@ function Admins({ branches }: { branches: Branch[] }) {
                     </td>
                     <td className="text-ink-mute hidden sm:table-cell">{a.email}</td>
                     <td className="text-ink-mute hidden md:table-cell">{a.phone ?? "—"}</td>
+                    <td className="text-xs">
+                      {a.bank_account ? (
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-semibold text-ink">{a.bank_name ?? "Bank"}</span>
+                          <span className="font-mono text-ocean-700 bg-ocean-50 px-1 py-0.5 rounded border border-ocean-200">{a.bank_account}</span>
+                          <button onClick={() => copyToClipboard(a.bank_account!, "Nomor Rekening")} className="p-0.5 text-ocean-700 hover:text-ocean-900" title="Salin">
+                            <Icon name="copy" className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-ink-mute italic">—</span>
+                      )}
+                    </td>
                     <td className="text-ink-soft">{a.branch?.name ?? "—"}</td>
                     <td><Status kind="active">{t("common.status.active")}</Status></td>
                     <td className="text-right px-5">
@@ -507,7 +587,7 @@ function Admins({ branches }: { branches: Branch[] }) {
                   </tr>
                 ))}
                 {admins.length === 0 && (
-                  <tr><td colSpan={6} className="text-center py-10 text-ink-mute">{t("owner.admins.empty")}</td></tr>
+                  <tr><td colSpan={7} className="text-center py-10 text-ink-mute">{roleTab === "staff" ? "Belum ada staff terdaftar di cabang manapun." : t("owner.admins.empty")}</td></tr>
                 )}
               </tbody>
             </table>
@@ -515,7 +595,7 @@ function Admins({ branches }: { branches: Branch[] }) {
         )}
       </Card>
 
-      <Modal open={showAdd} onClose={() => { setShowAdd(false); setEditTarget(null); }} title={editTarget ? t("owner.admins.editModalTitle") : t("owner.admins.addModalTitle")} size="sm"
+      <Modal open={showAdd} onClose={() => { setShowAdd(false); setEditTarget(null); }} title={editTarget ? t("owner.admins.editModalTitle") : form.role === "staff" ? "Buat Akun Staff" : t("owner.admins.addModalTitle")} size="sm"
         footer={
           <>
             <Btn variant="ghost" onClick={() => { setShowAdd(false); setEditTarget(null); }}>{t("common.actions.cancel")}</Btn>
@@ -524,6 +604,14 @@ function Admins({ branches }: { branches: Branch[] }) {
         }
       >
         <div className="space-y-4">
+          {!editTarget && (
+            <Field label="Tipe Akun" required>
+              <Select value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value as "admin" | "staff" }))}>
+                <option value="admin">Admin Cabang</option>
+                <option value="staff">Staff Cabang</option>
+              </Select>
+            </Field>
+          )}
           <Field label={t("owner.admins.fieldFullName")} required><Input value={form.full_name} onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))} disabled={!!editTarget} /></Field>
           {!editTarget && <Field label={t("owner.admins.fieldEmail")} required><Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} /></Field>}
           <Field label={t("owner.admins.fieldPhone")}><Input type="tel" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder={t("owner.admins.fieldPhonePlaceholder")} /></Field>
@@ -1045,7 +1133,7 @@ interface RaporLevel {
   all_classes: boolean;
 }
 
-interface ClassOption { id: string; name: string; branch_id: string; branch_name: string | null; }
+interface ClassOption { id: string; name: string; branch_id: string | null; branch_name: string | null; }
 
 interface LevelCriterion {
   id: string; label: string; kind: string; options: string[] | null; sort_order: number;
@@ -2006,6 +2094,8 @@ function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: 
   const { t } = useLocale();
   const supabase = createClient();
   const toast = useToast();
+  const confirm = useConfirm();
+  const [subTab, setSubTab] = useState<"invoices" | "periods">("invoices");
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [branchFilter, setBranchFilter] = useState("all");
@@ -2015,6 +2105,16 @@ function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: 
   const [rejectModal, setRejectModal] = useState<Invoice | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [detail, setDetail] = useState<Invoice | null>(null);
+
+  // Periods state
+  const [periods, setPeriods] = useState<InvoicePeriod[]>([]);
+  const [periodsLoading, setPeriodsLoading] = useState(false);
+  const [openAddPeriod, setOpenAddPeriod] = useState(false);
+  const [periodForm, setPeriodForm] = useState({ label: "", branch_id: "", date_from: "", date_to: "" });
+  const [savingPeriod, setSavingPeriod] = useState(false);
+  const [editPeriodTarget, setEditPeriodTarget] = useState<InvoicePeriod | null>(null);
+  const [editPeriodForm, setEditPeriodForm] = useState({ label: "", branch_id: "", date_from: "", date_to: "" });
+  const [savingEditPeriod, setSavingEditPeriod] = useState(false);
 
   const totPending  = invoices.filter(i => i.status === "pending");
   const totApproved = invoices.filter(i => i.status === "approved");
@@ -2035,6 +2135,95 @@ function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: 
     });
   }, [branchFilter]); // eslint-disable-line react-hooks/exhaustive-deps
   /* eslint-enable react-hooks/set-state-in-effect */
+
+  const loadPeriods = useCallback(async () => {
+    setPeriodsLoading(true);
+    const q = supabase
+      .from("invoice_periods")
+      .select("id, branch_id, label, date_from, date_to, is_open, branch:branches(name)")
+      .order("date_from", { ascending: false });
+    if (branchFilter !== "all") {
+      q.or(`branch_id.eq.${branchFilter},branch_id.is.null`);
+    }
+    const { data } = await q;
+    if (data) setPeriods(data as unknown as InvoicePeriod[]);
+    setPeriodsLoading(false);
+  }, [branchFilter, supabase]);
+
+  useEffect(() => {
+    if (subTab === "periods") {
+      loadPeriods();
+    }
+  }, [subTab, loadPeriods]);
+
+  const createPeriod = async () => {
+    if (!periodForm.label.trim() || !periodForm.date_from || !periodForm.date_to) {
+      return toast.error("Semua field periode wajib diisi");
+    }
+    setSavingPeriod(true);
+    const { error } = await supabase.from("invoice_periods").insert({
+      label: periodForm.label.trim(),
+      branch_id: periodForm.branch_id || null,
+      date_from: periodForm.date_from,
+      date_to: periodForm.date_to,
+      is_open: true,
+      created_by: userId || null,
+    });
+    setSavingPeriod(false);
+    if (error) return toast.error(t("owner.invoices.saveFailed"), error.message);
+    toast.success(t("owner.invoices.periodCreatedToast"));
+    setOpenAddPeriod(false);
+    loadPeriods();
+  };
+
+  const closePeriod = async (id: string) => {
+    const ok = await confirm({
+      title: t("owner.invoices.closePeriodConfirmTitle"),
+      body: t("owner.invoices.closePeriodConfirmBody"),
+      confirmLabel: t("owner.invoices.closePeriodConfirmLabel"),
+      danger: true,
+    });
+    if (!ok) return;
+    await supabase.from("invoice_periods").update({ is_open: false }).eq("id", id);
+    toast.success(t("owner.invoices.periodClosedToast"));
+    loadPeriods();
+  };
+
+  const reopenPeriod = async (id: string) => {
+    await supabase.from("invoice_periods").update({ is_open: true }).eq("id", id);
+    toast.success(t("owner.invoices.periodReopenedToast"));
+    loadPeriods();
+  };
+
+  const openEditPeriodModal = (p: InvoicePeriod) => {
+    setEditPeriodTarget(p);
+    setEditPeriodForm({
+      label: p.label,
+      branch_id: p.branch_id ?? "",
+      date_from: p.date_from,
+      date_to: p.date_to,
+    });
+  };
+
+  const saveEditPeriod = async () => {
+    if (!editPeriodTarget) return;
+    if (!editPeriodForm.label.trim() || !editPeriodForm.date_from || !editPeriodForm.date_to) {
+      return toast.error("Semua field periode wajib diisi");
+    }
+    setSavingEditPeriod(true);
+    const { error } = await supabase.from("invoice_periods").update({
+      label: editPeriodForm.label.trim(),
+      branch_id: editPeriodForm.branch_id || null,
+      date_from: editPeriodForm.date_from,
+      date_to: editPeriodForm.date_to,
+      updated_at: new Date().toISOString(),
+    }).eq("id", editPeriodTarget.id);
+    setSavingEditPeriod(false);
+    if (error) return toast.error(t("owner.invoices.saveFailed"), error.message);
+    toast.success(t("owner.invoices.periodUpdatedToast"));
+    setEditPeriodTarget(null);
+    loadPeriods();
+  };
 
   const invoicesWithoutSlip = useMemo(() => {
     return invoices.filter(i => i.status === "paid");
@@ -2125,6 +2314,8 @@ function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: 
     w.document.close(); w.focus(); w.print();
   };
 
+  const activePeriod = periods.find(p => p.is_open);
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -2132,67 +2323,270 @@ function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: 
           <h2 className="font-display font-bold text-2xl">{t("owner.invoices.pageTitle")}</h2>
           <p className="text-ink-mute text-sm mt-0.5">{t("owner.invoices.pageSub")}</p>
         </div>
-        <Select value={branchFilter} onChange={e => setBranchFilter(e.target.value)} className="!w-44">
-          <option value="all">{t("owner.invoices.allBranches")}</option>
-          {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-        </Select>
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <div className="flex gap-1 bg-paper-deep p-1 rounded-xl">
+            <button
+              type="button"
+              onClick={() => setSubTab("invoices")}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                subTab === "invoices" ? "bg-white text-ocean-700 shadow-sm" : "text-ink-mute hover:text-ink"
+              }`}
+            >
+              {t("owner.invoices.tabInvoicesList")}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setSubTab("periods"); loadPeriods(); }}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                subTab === "periods" ? "bg-white text-ocean-700 shadow-sm" : "text-ink-mute hover:text-ink"
+              }`}
+            >
+              {t("owner.invoices.tabPeriods")}
+            </button>
+          </div>
+          <Select value={branchFilter} onChange={e => setBranchFilter(e.target.value)} className="!w-44">
+            <option value="all">{t("owner.invoices.allBranches")}</option>
+            {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+          </Select>
+        </div>
       </div>
 
-      <div className="grid sm:grid-cols-3 gap-4">
-        <Stat label={t("owner.invoices.statPending")}        value={totPending.length}                                                   icon="invoice" tone="warn"  sub={totPending.length > 0 ? t("owner.invoices.statPendingSub") : t("owner.invoices.statPendingSubNone")} />
-        <Stat label={t("owner.invoices.statApproved")} value={fmtIDR(totApproved.reduce((a, i) => a + i.total_amount, 0))}      icon="check"   tone="ocean" sub={t("owner.invoices.statApprovedSub", { count: totApproved.length })} />
-        <Stat label={t("owner.invoices.statPaid")}          value={fmtIDR(totPaid.reduce((a, i) => a + i.total_amount, 0))}            icon="wallet"  tone="ok"    sub={t("owner.invoices.statPaidSub", { count: totPaid.length })} />
-      </div>
+      {subTab === "invoices" ? (
+        <>
+          <div className="grid sm:grid-cols-3 gap-4">
+            <Stat label={t("owner.invoices.statPending")}        value={totPending.length}                                                   icon="invoice" tone="warn"  sub={totPending.length > 0 ? t("owner.invoices.statPendingSub") : t("owner.invoices.statPendingSubNone")} />
+            <Stat label={t("owner.invoices.statApproved")} value={fmtIDR(totApproved.reduce((a, i) => a + i.total_amount, 0))}      icon="check"   tone="ocean" sub={t("owner.invoices.statApprovedSub", { count: totApproved.length })} />
+            <Stat label={t("owner.invoices.statPaid")}          value={fmtIDR(totPaid.reduce((a, i) => a + i.total_amount, 0))}            icon="wallet"  tone="ok"    sub={t("owner.invoices.statPaidSub", { count: totPaid.length })} />
+          </div>
 
-      <Card padded={false}>
-        {loading ? (
-          <div className="p-10 text-center text-ink-mute">{t("owner.invoices.loading")}</div>
-        ) : invoices.length === 0 ? (
-          <div className="p-10 text-center text-ink-mute">{t("owner.invoices.empty")}</div>
-        ) : (
-          <div className="divide-y divide-line">
-            {invoices.map((iv) => (
-              <div key={iv.id} className="flex items-center gap-3 px-5 py-3.5 hover:bg-paper-tint">
-                <span className="w-9 h-9 rounded-xl bg-ocean-50 text-ocean-700 flex items-center justify-center shrink-0">
-                  <Icon name="invoice" className="w-5 h-5" />
-                </span>
-                <div className="flex-1 min-w-0 cursor-pointer" onClick={() => setDetail(iv)}>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-mono text-xs font-bold text-ocean-700">{iv.invoice_number}</span>
-                    <Status kind={iv.status === "paid" ? "paid" : iv.status === "approved" ? "approved" : iv.status === "rejected" ? "rejected" : "pending"}>
-                      {iv.status === "paid" ? t("owner.invoices.statusPaid") : iv.status === "approved" ? t("owner.invoices.statusApproved") : iv.status === "rejected" ? t("owner.invoices.statusRejected") : t("owner.invoices.statusPending")}
-                    </Status>
+          <Card padded={false}>
+            {loading ? (
+              <div className="p-10 text-center text-ink-mute">{t("owner.invoices.loading")}</div>
+            ) : invoices.length === 0 ? (
+              <div className="p-10 text-center text-ink-mute">{t("owner.invoices.empty")}</div>
+            ) : (
+              <div className="divide-y divide-line">
+                {invoices.map((iv) => (
+                  <div key={iv.id} className="flex items-center gap-3 px-5 py-3.5 hover:bg-paper-tint">
+                    <span className="w-9 h-9 rounded-xl bg-ocean-50 text-ocean-700 flex items-center justify-center shrink-0">
+                      <Icon name="invoice" className="w-5 h-5" />
+                    </span>
+                    <div className="flex-1 min-w-0 cursor-pointer" onClick={() => setDetail(iv)}>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-mono text-xs font-bold text-ocean-700">{iv.invoice_number}</span>
+                        <Status kind={iv.status === "paid" ? "paid" : iv.status === "approved" ? "approved" : iv.status === "rejected" ? "rejected" : "pending"}>
+                          {iv.status === "paid" ? t("owner.invoices.statusPaid") : iv.status === "approved" ? t("owner.invoices.statusApproved") : iv.status === "rejected" ? t("owner.invoices.statusRejected") : t("owner.invoices.statusPending")}
+                        </Status>
+                      </div>
+                      <div className="text-xs text-ink-mute mt-0.5">
+                        {iv.coach?.full_name ?? "—"} · {iv.branch?.name ?? "—"} · {iv.period_label}
+                      </div>
+                    </div>
+                    <div className="font-mono font-bold text-sm shrink-0">{fmtIDR(iv.total_amount)}</div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button onClick={() => printInvoice(iv)} className="w-8 h-8 rounded-lg border border-line hover:bg-paper-tint flex items-center justify-center text-ink-mute hover:text-ocean-600" title={t("owner.invoices.printTitle")}>
+                        <Icon name="print" className="w-4 h-4" />
+                      </button>
+                      {iv.status === "pending" && (
+                        <>
+                          <Btn variant="soft" size="sm" onClick={() => approveInvoice(iv.id)} disabled={approving === iv.id}>
+                            {approving === iv.id ? "…" : t("owner.invoices.approveBtn")}
+                          </Btn>
+                          <Btn variant="ghost" size="sm" onClick={() => { setRejectModal(iv); setRejectReason(""); }}>
+                            {t("owner.invoices.rejectBtn")}
+                          </Btn>
+                        </>
+                      )}
+                      {iv.status === "approved" && (
+                        <Btn variant="primary" size="sm" onClick={() => markPaid(iv.id)} disabled={marking === iv.id}>
+                          {marking === iv.id ? "…" : t("owner.invoices.paidBtn")}
+                        </Btn>
+                      )}
+                    </div>
                   </div>
-                  <div className="text-xs text-ink-mute mt-0.5">
-                    {iv.coach?.full_name ?? "—"} · {iv.branch?.name ?? "—"} · {iv.period_label}
-                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+        </>
+      ) : (
+        /* Periods Tab */
+        <div className="space-y-6">
+          <div className="flex items-center justify-between gap-3">
+            <SectionTitle sub="Kelola jadwal dan batas waktu (deadline) pengiriman invoice untuk para coach.">
+              Periode Pengiriman Invoice
+            </SectionTitle>
+            <Btn
+              variant="primary"
+              icon="plus"
+              onClick={() => {
+                setPeriodForm({ label: "", branch_id: branchFilter === "all" ? "" : branchFilter, date_from: "", date_to: "" });
+                setOpenAddPeriod(true);
+              }}
+            >
+              {t("owner.invoices.newPeriodBtn")}
+            </Btn>
+          </div>
+
+          {/* Active Period Highlight */}
+          {activePeriod && (
+            <div className="bg-ocean-700 text-white rounded-2xl border border-ocean-700 shadow-card p-6 relative overflow-hidden">
+              <div className="absolute -right-20 -bottom-20 w-72 h-72 rounded-full bg-wave-500/30 blur-3xl" />
+              <div className="relative">
+                <div className="flex items-center gap-2 text-wave-200 text-xs font-bold uppercase tracking-widest">
+                  <span className="w-2.5 h-2.5 rounded-full bg-ok-400 animate-pulse" /> {t("owner.invoices.periodStatusOpen")}
                 </div>
-                <div className="font-mono font-bold text-sm shrink-0">{fmtIDR(iv.total_amount)}</div>
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <button onClick={() => printInvoice(iv)} className="w-8 h-8 rounded-lg border border-line hover:bg-paper-tint flex items-center justify-center text-ink-mute hover:text-ocean-600" title={t("owner.invoices.printTitle")}>
-                    <Icon name="print" className="w-4 h-4" />
+                <div className="mt-2 font-display font-extrabold text-2xl lg:text-3xl">{activePeriod.label}</div>
+                <div className="text-white/80 text-sm mt-1">
+                  Mulai: {fmtDate(activePeriod.date_from)} · Batas Akhir: {fmtDate(activePeriod.date_to)}
+                  {activePeriod.branch?.name ? ` (Center: ${activePeriod.branch.name})` : " (Berlaku Semua Center)"}
+                </div>
+                <div className="mt-5 flex items-center gap-2.5">
+                  <button
+                    onClick={() => openEditPeriodModal(activePeriod)}
+                    className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-white/15 hover:bg-white/25 text-white border border-white/30 transition-colors"
+                  >
+                    Edit Periode
                   </button>
-                  {iv.status === "pending" && (
-                    <>
-                      <Btn variant="soft" size="sm" onClick={() => approveInvoice(iv.id)} disabled={approving === iv.id}>
-                        {approving === iv.id ? "…" : t("owner.invoices.approveBtn")}
-                      </Btn>
-                      <Btn variant="ghost" size="sm" onClick={() => { setRejectModal(iv); setRejectReason(""); }}>
-                        {t("owner.invoices.rejectBtn")}
-                      </Btn>
-                    </>
-                  )}
-                  {iv.status === "approved" && (
-                    <Btn variant="primary" size="sm" onClick={() => markPaid(iv.id)} disabled={marking === iv.id}>
-                      {marking === iv.id ? "…" : t("owner.invoices.paidBtn")}
-                    </Btn>
-                  )}
+                  <button
+                    onClick={() => closePeriod(activePeriod.id)}
+                    className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-white/10 hover:bg-white/20 text-white/80 hover:text-white border border-white/20 transition-colors"
+                  >
+                    {t("owner.invoices.closePeriodBtn")}
+                  </button>
                 </div>
               </div>
-            ))}
-          </div>
-        )}
-      </Card>
+            </div>
+          )}
+
+          {/* Periods Table / List */}
+          <Card padded={false}>
+            {periodsLoading ? (
+              <div className="p-10 text-center text-ink-mute">{t("owner.invoices.loading")}</div>
+            ) : periods.length === 0 ? (
+              <div className="p-10 text-center text-ink-mute">{t("owner.invoices.noPeriodsYet")}</div>
+            ) : (
+              <div className="divide-y divide-line">
+                {periods.map((p) => (
+                  <div key={p.id} className="flex items-center justify-between gap-4 p-4 hover:bg-paper-tint transition-colors">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-semibold text-ink">{p.label}</span>
+                        <Status kind={p.is_open ? "active" : "archived"}>
+                          {p.is_open ? t("owner.invoices.periodStatusOpen") : t("owner.invoices.periodStatusClosed")}
+                        </Status>
+                      </div>
+                      <div className="text-xs text-ink-mute mt-1">
+                        Rentang: {fmtDate(p.date_from)} – {fmtDate(p.date_to)} · Scope: {p.branch?.name ?? t("owner.invoices.allCentersOption")}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        onClick={() => openEditPeriodModal(p)}
+                        className="w-8 h-8 rounded-lg border border-line bg-white hover:bg-paper-deep flex items-center justify-center text-ink-mute hover:text-ink transition-colors"
+                        title="Edit"
+                      >
+                        <Icon name="edit" className="w-4 h-4" />
+                      </button>
+                      {p.is_open ? (
+                        <button
+                          onClick={() => closePeriod(p.id)}
+                          className="px-2.5 py-1.5 rounded-lg border border-warn-200 bg-warn-50 text-warn-700 hover:bg-warn-100 text-xs font-semibold transition-colors"
+                        >
+                          {t("owner.invoices.closePeriodBtn")}
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => reopenPeriod(p.id)}
+                          className="px-2.5 py-1.5 rounded-lg border border-ok-200 bg-ok-50 text-ok-700 hover:bg-ok-100 text-xs font-semibold transition-colors"
+                        >
+                          {t("owner.invoices.reopenPeriodBtn")}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+
+          {/* Modal Add Period */}
+          <Modal
+            open={openAddPeriod}
+            onClose={() => setOpenAddPeriod(false)}
+            title={t("owner.invoices.openPeriodModalTitle")}
+            size="sm"
+            footer={
+              <>
+                <Btn variant="ghost" onClick={() => setOpenAddPeriod(false)}>{t("common.actions.cancel")}</Btn>
+                <Btn variant="primary" onClick={createPeriod} disabled={savingPeriod}>
+                  {savingPeriod ? "Menyimpan..." : t("owner.invoices.newPeriodBtn")}
+                </Btn>
+              </>
+            }
+          >
+            <div className="space-y-4">
+              <Field label={t("owner.invoices.fieldPeriodLabel")} required>
+                <Input
+                  value={periodForm.label}
+                  onChange={e => setPeriodForm(f => ({ ...f, label: e.target.value }))}
+                  placeholder={t("owner.invoices.fieldPeriodLabelPlaceholder")}
+                />
+              </Field>
+              <Field label={t("owner.invoices.fieldCenter")}>
+                <Select value={periodForm.branch_id} onChange={e => setPeriodForm(f => ({ ...f, branch_id: e.target.value }))}>
+                  <option value="">{t("owner.invoices.allCentersOption")}</option>
+                  {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                </Select>
+              </Field>
+              <Field label={t("owner.invoices.fieldDateFrom")} required>
+                <Input type="date" value={periodForm.date_from} onChange={e => setPeriodForm(f => ({ ...f, date_from: e.target.value }))} />
+              </Field>
+              <Field label={t("owner.invoices.fieldDateTo")} required>
+                <Input type="date" value={periodForm.date_to} onChange={e => setPeriodForm(f => ({ ...f, date_to: e.target.value }))} />
+              </Field>
+            </div>
+          </Modal>
+
+          {/* Modal Edit Period */}
+          <Modal
+            open={!!editPeriodTarget}
+            onClose={() => setEditPeriodTarget(null)}
+            title={t("owner.invoices.editPeriodModalTitle")}
+            size="sm"
+            footer={
+              <>
+                <Btn variant="ghost" onClick={() => setEditPeriodTarget(null)}>{t("common.actions.cancel")}</Btn>
+                <Btn variant="primary" onClick={saveEditPeriod} disabled={savingEditPeriod}>
+                  {savingEditPeriod ? "Menyimpan..." : "Simpan Perubahan"}
+                </Btn>
+              </>
+            }
+          >
+            <div className="space-y-4">
+              <Field label={t("owner.invoices.fieldPeriodLabel")} required>
+                <Input
+                  value={editPeriodForm.label}
+                  onChange={e => setEditPeriodForm(f => ({ ...f, label: e.target.value }))}
+                  placeholder={t("owner.invoices.fieldPeriodLabelPlaceholder")}
+                />
+              </Field>
+              <Field label={t("owner.invoices.fieldCenter")}>
+                <Select value={editPeriodForm.branch_id} onChange={e => setEditPeriodForm(f => ({ ...f, branch_id: e.target.value }))}>
+                  <option value="">{t("owner.invoices.allCentersOption")}</option>
+                  {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                </Select>
+              </Field>
+              <Field label={t("owner.invoices.fieldDateFrom")} required>
+                <Input type="date" value={editPeriodForm.date_from} onChange={e => setEditPeriodForm(f => ({ ...f, date_from: e.target.value }))} />
+              </Field>
+              <Field label={t("owner.invoices.fieldDateTo")} required>
+                <Input type="date" value={editPeriodForm.date_to} onChange={e => setEditPeriodForm(f => ({ ...f, date_to: e.target.value }))} />
+              </Field>
+            </div>
+          </Modal>
+        </div>
+      )}
 
       {/* Detail modal */}
       <Modal open={!!detail} onClose={() => setDetail(null)} title={detail?.invoice_number ?? t("owner.invoices.detailModalTitle")} size="md"
@@ -2336,7 +2730,7 @@ type ExpenseRow = (OwnerFinancialExpense & { source: "invoice" }) | (ManualTxnRo
 
 interface ManualTxnCategory { id: string; kind: "income" | "expense"; name: string; sort_order: number }
 
-type FinancialTab = "overview" | "income" | "expenses" | "moneyflow";
+type FinancialTab = "overview" | "income" | "expenses" | "coach_payouts" | "staff_payroll" | "admin_accounts" | "moneyflow";
 
 function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; userId: string; userName: string }) {
   const { t } = useLocale();
@@ -2351,6 +2745,153 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
   const [manualTxns, setManualTxns] = useState<ManualTxnRow[]>([]);
   const [loadingBills, setLoadingBills] = useState(true);
   const [loadingExpenses, setLoadingExpenses] = useState(true);
+
+  // ── Coach Payouts / Reimbursements state ──────────────────────────────────
+  const [detailedInvoices, setDetailedInvoices] = useState<Invoice[]>([]);
+  const [loadingDetailedInvoices, setLoadingDetailedInvoices] = useState(false);
+  const [payoutBranchFilter, setPayoutBranchFilter] = useState("all");
+  const [payoutStatusFilter, setPayoutStatusFilter] = useState("all");
+  const [payoutSearch, setPayoutSearch] = useState("");
+  const [markingPaidId, setMarkingPaidId] = useState<string | null>(null);
+  const [selectedInvoiceDetail, setSelectedInvoiceDetail] = useState<Invoice | null>(null);
+
+  const loadDetailedInvoices = useCallback(async () => {
+    setLoadingDetailedInvoices(true);
+    const { data } = await supabase
+      .from("coach_invoices")
+      .select("id, invoice_number, period_label, total_amount, status, bank_info, branch_id, submitted_at, paid_at, approved_at, rejection_reason, branch:branches(name), coach:profiles!coach_invoices_coach_id_fkey(id, full_name, phone, bank_name, bank_account, bank_holder), coach_invoice_items(id, item_type, class_id, session_count, rate, description, proof_url, class:classes(name))")
+      .not("status", "eq", "cancelled")
+      .order("submitted_at", { ascending: false });
+    if (data) setDetailedInvoices(data as unknown as Invoice[]);
+    setLoadingDetailedInvoices(false);
+  }, [supabase]);
+
+  // ── Admin Accounts state ──────────────────────────────────────────────────
+  const [adminList, setAdminList] = useState<{ id: string; full_name: string; email: string; phone: string | null; bank_name: string | null; bank_account: string | null; bank_holder: string | null; branch_id: string | null; branch?: { name: string; city: string | null } | null }[]>([]);
+  const [loadingAdmins, setLoadingAdmins] = useState(false);
+
+  const loadAdmins = useCallback(async () => {
+    setLoadingAdmins(true);
+    const { data } = await supabase
+      .from("profiles")
+      .select("id, full_name, email, phone, bank_name, bank_account, bank_holder, branch_id, branch:branches(name, city)")
+      .eq("role", "admin")
+      .order("full_name");
+    if (data) setAdminList(data as any);
+    setLoadingAdmins(false);
+  }, [supabase]);
+
+  // ── Staff Payroll state ───────────────────────────────────────────────────
+  const [staffList, setStaffList] = useState<{ id: string; full_name: string; email: string; phone: string | null; bank_name: string | null; bank_account: string | null; bank_holder: string | null; branch_id: string | null; branch?: { name: string } | null }[]>([]);
+  const [staffSalaries, setStaffSalaries] = useState<StaffSalaryRow[]>([]);
+  const [loadingStaff, setLoadingStaff] = useState(false);
+  const [staffMonth, setStaffMonth] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  });
+  const [editSalaryModal, setEditSalaryModal] = useState<{ staff: any; salary: StaffSalaryRow | null } | null>(null);
+  const [salaryForm, setSalaryForm] = useState({ base_salary: "", allowances: "", deductions: "", notes: "" });
+  const [savingSalary, setSavingSalary] = useState(false);
+  const [markingStaffSalaryId, setMarkingStaffSalaryId] = useState<string | null>(null);
+
+  const loadStaffPayroll = useCallback(async () => {
+    setLoadingStaff(true);
+    const { data: staffs } = await supabase
+      .from("profiles")
+      .select("id, full_name, email, phone, bank_name, bank_account, bank_holder, branch_id, branch:branches(name)")
+      .eq("role", "staff")
+      .order("full_name");
+    if (staffs) setStaffList(staffs as any);
+
+    const { data: sals } = await supabase
+      .from("staff_salaries")
+      .select("*")
+      .eq("period_month", staffMonth);
+    if (sals) setStaffSalaries(sals as unknown as StaffSalaryRow[]);
+
+    setLoadingStaff(false);
+  }, [supabase, staffMonth]);
+
+  useEffect(() => {
+    if (tab === "coach_payouts") loadDetailedInvoices();
+    if (tab === "admin_accounts") loadAdmins();
+    if (tab === "staff_payroll") loadStaffPayroll();
+  }, [tab, loadDetailedInvoices, loadAdmins, loadStaffPayroll]);
+
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success(`${label} disalin!`, text);
+  };
+
+  const markInvoicePaid = async (inv: Invoice) => {
+    const ok = await confirm({
+      title: "Konfirmasi Pembayaran Coach",
+      body: `Tandai invoice ${inv.invoice_number} senilai ${fmtIDR(inv.total_amount)} untuk ${inv.coach?.full_name} sebagai Lunas?`,
+      confirmLabel: "Ya, Tandai Lunas",
+    });
+    if (!ok) return;
+    setMarkingPaidId(inv.id);
+    const now = new Date().toISOString();
+    const { error } = await supabase
+      .from("coach_invoices")
+      .update({ status: "paid", paid_at: now })
+      .eq("id", inv.id);
+    setMarkingPaidId(null);
+    if (error) return toast.error("Gagal mengubah status invoice", error.message);
+    toast.success("Invoice berhasil ditandai Lunas!");
+    loadDetailedInvoices();
+  };
+
+  const saveStaffSalary = async () => {
+    if (!editSalaryModal) return;
+    setSavingSalary(true);
+    const base = Number(salaryForm.base_salary || 0);
+    const allowances = Number(salaryForm.allowances || 0);
+    const deductions = Number(salaryForm.deductions || 0);
+    const total = base + allowances - deductions;
+
+    const payload = {
+      staff_id: editSalaryModal.staff.id,
+      branch_id: editSalaryModal.staff.branch_id,
+      period_month: staffMonth,
+      base_salary: base,
+      allowances: allowances,
+      deductions: deductions,
+      reimburse_amount: 0,
+      total_salary: total,
+      notes: salaryForm.notes.trim() || null,
+      status: editSalaryModal.salary?.status ?? "approved",
+    };
+
+    const { error } = editSalaryModal.salary
+      ? await supabase.from("staff_salaries").update(payload).eq("id", editSalaryModal.salary.id)
+      : await supabase.from("staff_salaries").insert(payload);
+
+    setSavingSalary(false);
+    if (error) return toast.error("Gagal menyimpan gaji staff", error.message);
+    toast.success("Gaji staff berhasil disimpan");
+    setEditSalaryModal(null);
+    loadStaffPayroll();
+  };
+
+  const markStaffSalaryPaid = async (sal: StaffSalaryRow, staffName: string) => {
+    const ok = await confirm({
+      title: "Konfirmasi Pembayaran Gaji Staff",
+      body: `Tandai gaji periode ${sal.period_month} senilai ${fmtIDR(sal.total_salary)} untuk ${staffName} sebagai Lunas?`,
+      confirmLabel: "Ya, Tandai Lunas",
+    });
+    if (!ok) return;
+    setMarkingStaffSalaryId(sal.id);
+    const now = new Date().toISOString();
+    const { error } = await supabase
+      .from("staff_salaries")
+      .update({ status: "paid", paid_at: now })
+      .eq("id", sal.id);
+    setMarkingStaffSalaryId(null);
+    if (error) return toast.error("Gagal mengubah status gaji staff", error.message);
+    toast.success("Gaji staff berhasil ditandai Lunas!");
+    loadStaffPayroll();
+  };
 
   // ── Income filters ──────────────────────────────────────────────────────────
   const [incomeSearch, setIncomeSearch] = useState("");
@@ -2609,10 +3150,13 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
 
   // ── Sub-tab nav ──────────────────────────────────────────────────────────────
   const FTABS: { id: FinancialTab; label: string; icon: string }[] = [
-    { id: "overview",  label: t("owner.financial.tabOverview"),    icon: "grid"    },
-    { id: "income",    label: t("owner.financial.tabIncome"),      icon: "wallet"  },
-    { id: "expenses",  label: t("owner.financial.tabExpenses"),    icon: "invoice" },
-    { id: "moneyflow", label: t("owner.financial.tabMoneyFlow"),  icon: "chart"   },
+    { id: "overview",       label: t("owner.financial.tabOverview"),         icon: "grid"    },
+    { id: "income",         label: t("owner.financial.tabIncome"),           icon: "wallet"  },
+    { id: "expenses",       label: t("owner.financial.tabExpenses"),         icon: "invoice" },
+    { id: "coach_payouts",  label: "Honor & Reimburse Coach",               icon: "swim"    },
+    { id: "staff_payroll",  label: "Gaji & Payroll Staff",                   icon: "users"   },
+    { id: "admin_accounts", label: "Rekening Admin & Transfer",              icon: "card"    },
+    { id: "moneyflow",      label: t("owner.financial.tabMoneyFlow"),       icon: "chart"   },
   ];
 
   return (
@@ -3049,6 +3593,410 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
         </div>
       )}
 
+      {/* ── HONOR & REIMBURSE COACH ────────────────────────────────────────── */}
+      {tab === "coach_payouts" && (
+        <div className="space-y-4">
+          {/* Metrics */}
+          <div className="grid sm:grid-cols-3 gap-4">
+            <Stat
+              label="Total Siap Ditransfer (Approved)"
+              value={fmtIDR(detailedInvoices.filter(i => i.status === "approved").reduce((s, i) => s + i.total_amount, 0))}
+              icon="wallet"
+              tone="warn"
+              sub={`${detailedInvoices.filter(i => i.status === "approved").length} invoice siap bayar`}
+            />
+            <Stat
+              label="Total Sudah Dibayar (Paid)"
+              value={fmtIDR(detailedInvoices.filter(i => i.status === "paid").reduce((s, i) => s + i.total_amount, 0))}
+              icon="invoice"
+              tone="ok"
+              sub={`${detailedInvoices.filter(i => i.status === "paid").length} invoice terbayar`}
+            />
+            <Stat
+              label="Total Klaim Reimburse Terverifikasi"
+              value={fmtIDR(detailedInvoices.flatMap(i => i.coach_invoice_items ?? []).filter(it => it.item_type === "reimburse").reduce((s, it) => s + (it.rate || 0), 0))}
+              icon="check"
+              tone="ocean"
+              sub="Dari seluruh invoice diajukan"
+            />
+          </div>
+
+          {/* Filters & Table */}
+          <div className="bg-white border border-line rounded-2xl overflow-hidden shadow-card">
+            <div className="p-4 border-b border-line flex flex-col sm:flex-row gap-3 items-center justify-between">
+              <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+                <input
+                  value={payoutSearch}
+                  onChange={e => setPayoutSearch(e.target.value)}
+                  placeholder="Cari nama coach / no invoice..."
+                  className="px-3 py-1.5 text-xs rounded-lg border border-line bg-paper-tint w-full sm:w-56"
+                />
+                <select
+                  value={payoutBranchFilter}
+                  onChange={e => setPayoutBranchFilter(e.target.value)}
+                  className="text-xs rounded-lg border border-line px-2.5 py-1.5 bg-paper-tint"
+                >
+                  <option value="all">Semua Center</option>
+                  {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                </select>
+                <select
+                  value={payoutStatusFilter}
+                  onChange={e => setPayoutStatusFilter(e.target.value)}
+                  className="text-xs rounded-lg border border-line px-2.5 py-1.5 bg-paper-tint"
+                >
+                  <option value="all">Semua Status</option>
+                  <option value="approved">Siap Bayar (Approved)</option>
+                  <option value="paid">Lunas (Paid)</option>
+                  <option value="pending">Menunggu Review (Pending)</option>
+                </select>
+              </div>
+              <Btn variant="soft" size="sm" icon="refresh" onClick={loadDetailedInvoices} disabled={loadingDetailedInvoices}>
+                Refresh Data
+              </Btn>
+            </div>
+
+            {loadingDetailedInvoices ? (
+              <div className="p-10 text-center text-ink-mute text-sm">Memuat data pembayaran coach...</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-line bg-paper-tint text-[11px] uppercase tracking-wider text-ink-faint font-bold">
+                      <th className="text-left py-3 px-4">Coach & Center</th>
+                      <th className="text-left py-3 px-4">Rekening Bank Transfer</th>
+                      <th className="text-left py-3 px-4">Periode</th>
+                      <th className="text-right py-3 px-4">Honor Sesi</th>
+                      <th className="text-right py-3 px-4">Reimburse</th>
+                      <th className="text-right py-3 px-4">Total Transfer</th>
+                      <th className="text-center py-3 px-4">Status</th>
+                      <th className="text-right py-3 px-4">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-line">
+                    {detailedInvoices
+                      .filter(inv => {
+                        if (payoutBranchFilter !== "all" && inv.branch_id !== payoutBranchFilter) return false;
+                        if (payoutStatusFilter !== "all" && inv.status !== payoutStatusFilter) return false;
+                        if (payoutSearch.trim()) {
+                          const q = payoutSearch.toLowerCase();
+                          const coachName = inv.coach?.full_name?.toLowerCase() ?? "";
+                          const invNum = inv.invoice_number.toLowerCase();
+                          if (!coachName.includes(q) && !invNum.includes(q)) return false;
+                        }
+                        return true;
+                      })
+                      .map(inv => {
+                        const items = inv.coach_invoice_items ?? [];
+                        const sessionHonor = items.filter(it => it.item_type === "session" || it.item_type === "extra").reduce((s, it) => s + (it.session_count * it.rate), 0);
+                        const reimburseTotal = items.filter(it => it.item_type === "reimburse").reduce((s, it) => s + it.rate, 0);
+
+                        let bName = inv.coach?.bank_name;
+                        let bAcc = inv.coach?.bank_account;
+                        let bHolder = inv.coach?.bank_holder;
+                        if ((!bAcc || !bName) && inv.bank_info) {
+                          try {
+                            const parsed = JSON.parse(inv.bank_info);
+                            if (parsed.bank_name) bName = parsed.bank_name;
+                            if (parsed.bank_account) bAcc = parsed.bank_account;
+                            if (parsed.bank_holder) bHolder = parsed.bank_holder;
+                          } catch {}
+                        }
+
+                        return (
+                          <tr key={inv.id} className="hover:bg-paper-tint">
+                            <td className="py-3 px-4">
+                              <div className="font-semibold text-ink">{inv.coach?.full_name ?? "Coach"}</div>
+                              <div className="text-xs text-ink-mute font-mono">{inv.branch?.name ?? "Center"} · {inv.invoice_number}</div>
+                            </td>
+                            <td className="py-3 px-4">
+                              {bAcc ? (
+                                <div className="space-y-1">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="font-bold text-xs text-ink">{bName ?? "Bank"}</span>
+                                    <span className="font-mono text-xs font-semibold text-ocean-700 bg-ocean-50 px-1.5 py-0.5 rounded border border-ocean-200">{bAcc}</span>
+                                    <button
+                                      onClick={() => copyToClipboard(bAcc!, "Nomor Rekening")}
+                                      className="p-1 rounded hover:bg-ocean-100 text-ocean-700 transition"
+                                      title="Salin No Rekening"
+                                    >
+                                      <Icon name="copy" className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                  <div className="text-[11px] text-ink-mute">a/n {bHolder ?? inv.coach?.full_name}</div>
+                                </div>
+                              ) : (
+                                <span className="text-xs text-ink-mute italic">Belum ada rekening</span>
+                              )}
+                            </td>
+                            <td className="py-3 px-4 text-xs font-medium text-ink-soft">{inv.period_label}</td>
+                            <td className="py-3 px-4 text-right font-mono text-xs text-ink">{fmtIDR(sessionHonor)}</td>
+                            <td className="py-3 px-4 text-right font-mono text-xs text-ok-600 font-semibold">
+                              {reimburseTotal > 0 ? fmtIDR(reimburseTotal) : "—"}
+                            </td>
+                            <td className="py-3 px-4 text-right font-mono font-bold text-ocean-700 text-sm">
+                              {fmtIDR(inv.total_amount)}
+                            </td>
+                            <td className="py-3 px-4 text-center">
+                              <span className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase ${
+                                inv.status === "paid" ? "bg-ok-50 text-ok-700" :
+                                inv.status === "approved" ? "bg-ocean-50 text-ocean-700" : "bg-warn-50 text-warn-700"
+                              }`}>
+                                {inv.status === "paid" ? "Lunas" : inv.status === "approved" ? "Siap Bayar" : "Pending"}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  onClick={() => setSelectedInvoiceDetail(inv)}
+                                  className="px-2.5 py-1 rounded-lg text-xs font-semibold border border-line bg-white hover:bg-paper-deep text-ink-soft"
+                                >
+                                  Rincian
+                                </button>
+                                {inv.status !== "paid" && (
+                                  <Btn
+                                    variant="primary"
+                                    size="sm"
+                                    icon="check"
+                                    onClick={() => markInvoicePaid(inv)}
+                                    disabled={markingPaidId === inv.id}
+                                    className="bg-ok-600 hover:bg-ok-700 text-white"
+                                  >
+                                    {markingPaidId === inv.id ? "Memproses..." : "Tandai Lunas"}
+                                  </Btn>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── REKENING ADMIN & TRANSFER ────────────────────────────────────────── */}
+      {tab === "admin_accounts" && (
+        <div className="space-y-4">
+          <SectionTitle sub="Daftar rekening bank Admin di setiap cabang untuk kemudahan transfer operasional atau gaji oleh Owner.">
+            Rekening Bank Admin Cabang
+          </SectionTitle>
+
+          {loadingAdmins ? (
+            <div className="p-10 text-center text-ink-mute">Memuat data rekening admin...</div>
+          ) : (
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {adminList.map(a => (
+                <Card key={a.id} className="space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-3">
+                      <Avatar name={a.full_name} size={40} />
+                      <div>
+                        <div className="font-bold text-ink text-sm">{a.full_name}</div>
+                        <div className="text-xs text-ocean-700 font-semibold">{a.branch?.name ?? "Center"}</div>
+                      </div>
+                    </div>
+                    {a.phone && (
+                      <a
+                        href={waLink(a.phone)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="p-1.5 rounded-lg bg-ok-50 text-ok-600 hover:bg-ok-100 transition"
+                        title="Hubungi WhatsApp Admin"
+                      >
+                        <Icon name="whatsapp" className="w-4 h-4" />
+                      </a>
+                    )}
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-paper-tint border border-line space-y-1.5">
+                    <div className="text-[10px] uppercase font-bold text-ink-faint tracking-wider">Detail Rekening Transfer</div>
+                    {a.bank_account ? (
+                      <div>
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-ink text-sm">{a.bank_name ?? "Bank"}</span>
+                          <button
+                            onClick={() => copyToClipboard(a.bank_account!, "Nomor Rekening")}
+                            className="inline-flex items-center gap-1 text-xs font-bold text-ocean-700 hover:underline"
+                          >
+                            <Icon name="copy" className="w-3.5 h-3.5" /> Salin No. Rekening
+                          </button>
+                        </div>
+                        <div className="font-mono font-extrabold text-base text-ocean-800 tracking-wide mt-0.5">
+                          {a.bank_account}
+                        </div>
+                        <div className="text-xs text-ink-mute mt-0.5">
+                          a/n {a.bank_holder || a.full_name}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-xs text-ink-mute italic py-1">
+                        Admin belum melengkapi data rekening bank di profilnya.
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="pt-1 flex items-center justify-between">
+                    <span className="text-xs text-ink-mute">{a.email}</span>
+                    <Btn
+                      variant="soft"
+                      size="sm"
+                      icon="plus"
+                      onClick={() => {
+                        openAddTxn("expense");
+                        setTxnForm(f => ({
+                          ...f,
+                          branch_id: a.branch_id ?? f.branch_id,
+                          description: `Transfer Operasional/Gaji ke Admin ${a.full_name}`,
+                        }));
+                      }}
+                    >
+                      Catat Transfer
+                    </Btn>
+                  </div>
+                </Card>
+              ))}
+              {adminList.length === 0 && (
+                <div className="col-span-full py-12 text-center text-ink-mute">
+                  Belum ada data admin terdaftar.
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── GAJI & PAYROLL STAFF ────────────────────────────────────────────── */}
+      {tab === "staff_payroll" && (
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <SectionTitle sub="Atur nominal gaji pokok staff per bulan (nominal fleksibel), tambahkan tunjangan/potongan, dan terbitkan slip gaji.">
+              Penggajian Staff Bulanan
+            </SectionTitle>
+            <div className="w-48">
+              <input
+                type="month"
+                value={staffMonth}
+                onChange={e => setStaffMonth(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl border border-line bg-paper-tint text-sm font-semibold text-ink focus:outline-none focus:ring-2 focus:ring-wave-400"
+              />
+            </div>
+          </div>
+
+          <div className="bg-white border border-line rounded-2xl overflow-hidden shadow-card">
+            {loadingStaff ? (
+              <div className="p-10 text-center text-ink-mute">Memuat data payroll staff...</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-line bg-paper-tint text-[11px] uppercase tracking-wider text-ink-faint font-bold">
+                      <th className="text-left py-3 px-4">Nama Staff & Center</th>
+                      <th className="text-left py-3 px-4">Rekening Bank</th>
+                      <th className="text-right py-3 px-4">Gaji Pokok ({staffMonth})</th>
+                      <th className="text-right py-3 px-4">Tunjangan</th>
+                      <th className="text-right py-3 px-4">Potongan</th>
+                      <th className="text-right py-3 px-4">Total Gaji Bersih</th>
+                      <th className="text-center py-3 px-4">Status</th>
+                      <th className="text-right py-3 px-4">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-line">
+                    {staffList.map(st => {
+                      const sal = staffSalaries.find(s => s.staff_id === st.id);
+                      const base = sal?.base_salary ?? 0;
+                      const allowances = sal?.allowances ?? 0;
+                      const deductions = sal?.deductions ?? 0;
+                      const total = sal?.total_salary ?? 0;
+                      const status = sal?.status ?? "draft";
+
+                      return (
+                        <tr key={st.id} className="hover:bg-paper-tint">
+                          <td className="py-3 px-4">
+                            <div className="font-semibold text-ink">{st.full_name}</div>
+                            <div className="text-xs text-ink-mute">{st.branch?.name ?? "Center"} · {st.phone ?? st.email}</div>
+                          </td>
+                          <td className="py-3 px-4">
+                            {st.bank_account ? (
+                              <div className="flex items-center gap-1.5 text-xs">
+                                <span className="font-semibold text-ink">{st.bank_name}</span>
+                                <span className="font-mono text-ocean-700 bg-ocean-50 px-1 py-0.5 rounded">{st.bank_account}</span>
+                                <button onClick={() => copyToClipboard(st.bank_account!, "Rekening Staff")} className="text-ocean-700 hover:text-ocean-900" title="Salin">
+                                  <Icon name="copy" className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            ) : (
+                              <span className="text-xs text-ink-mute italic">—</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-right font-mono text-sm font-semibold text-ink">
+                            {base > 0 ? fmtIDR(base) : <span className="text-warn-600 font-normal italic">Belum diatur</span>}
+                          </td>
+                          <td className="py-3 px-4 text-right font-mono text-xs text-ok-600">{allowances > 0 ? `+${fmtIDR(allowances)}` : "—"}</td>
+                          <td className="py-3 px-4 text-right font-mono text-xs text-danger-600">{deductions > 0 ? `-${fmtIDR(deductions)}` : "—"}</td>
+                          <td className="py-3 px-4 text-right font-mono font-bold text-ocean-700 text-sm">
+                            {total > 0 ? fmtIDR(total) : "—"}
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <span className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase ${
+                              status === "paid" ? "bg-ok-50 text-ok-700" :
+                              status === "approved" ? "bg-ocean-50 text-ocean-700" : "bg-paper-deep text-ink-mute"
+                            }`}>
+                              {status === "paid" ? "Lunas" : status === "approved" ? "Siap Bayar" : "Draft"}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <Btn
+                                variant="outline"
+                                size="sm"
+                                icon="edit"
+                                onClick={() => {
+                                  setSalaryForm({
+                                    base_salary: sal ? String(sal.base_salary) : "",
+                                    allowances: sal ? String(sal.allowances) : "",
+                                    deductions: sal ? String(sal.deductions) : "",
+                                    notes: sal?.notes ?? "",
+                                  });
+                                  setEditSalaryModal({ staff: st, salary: sal ?? null });
+                                }}
+                              >
+                                Atur Gaji
+                              </Btn>
+                              {sal && sal.status !== "paid" && (
+                                <Btn
+                                  variant="primary"
+                                  size="sm"
+                                  icon="check"
+                                  onClick={() => markStaffSalaryPaid(sal, st.full_name)}
+                                  disabled={markingStaffSalaryId === sal.id}
+                                  className="bg-ok-600 hover:bg-ok-700 text-white"
+                                >
+                                  Tandai Lunas
+                                </Btn>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {staffList.length === 0 && (
+                      <tr>
+                        <td colSpan={8} className="py-10 text-center text-ink-mute">
+                          Belum ada akun staff terdaftar di sistem.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ── MONEY FLOW ──────────────────────────────────────────────────────── */}
       {tab === "moneyflow" && (
         <div className="space-y-3">
@@ -3150,6 +4098,146 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
             <Field label={t("owner.financial.fieldDate")}><Input type="date" value={txnForm.occurred_at} onChange={e => setTxnForm(f => ({ ...f, occurred_at: e.target.value }))} className="font-mono" /></Field>
           </div>
           <Field label={t("owner.financial.fieldNotes")}><Textarea value={txnForm.notes} onChange={e => setTxnForm(f => ({ ...f, notes: e.target.value }))} rows={2} /></Field>
+        </div>
+      </Modal>
+
+      {/* ── Modal: Detail Invoice & Bukti Reimburse Coach ─────────────────── */}
+      <Modal
+        open={!!selectedInvoiceDetail}
+        onClose={() => setSelectedInvoiceDetail(null)}
+        title={`Rincian Invoice: ${selectedInvoiceDetail?.invoice_number ?? ""}`}
+        size="lg"
+        footer={<Btn variant="ghost" onClick={() => setSelectedInvoiceDetail(null)}>Tutup</Btn>}
+      >
+        {selectedInvoiceDetail && (
+          <div className="space-y-4 text-sm">
+            <div className="p-3 rounded-xl bg-paper-tint border border-line grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <div>
+                <span className="text-xs text-ink-mute block">Coach</span>
+                <span className="font-bold text-ink">{selectedInvoiceDetail.coach?.full_name}</span>
+              </div>
+              <div>
+                <span className="text-xs text-ink-mute block">Center</span>
+                <span className="font-bold text-ink">{selectedInvoiceDetail.branch?.name}</span>
+              </div>
+              <div>
+                <span className="text-xs text-ink-mute block">Periode</span>
+                <span className="font-bold text-ink">{selectedInvoiceDetail.period_label}</span>
+              </div>
+            </div>
+
+            {/* Items */}
+            <div className="border border-line rounded-xl overflow-hidden">
+              <table className="w-full text-xs">
+                <thead className="bg-paper-tint border-b border-line text-ink-faint uppercase font-bold">
+                  <tr>
+                    <th className="text-left py-2 px-3">Tipe / Keterangan</th>
+                    <th className="text-left py-2 px-3">Kelas / Detail</th>
+                    <th className="text-right py-2 px-3">Sesi</th>
+                    <th className="text-right py-2 px-3">Tarif / Nilai</th>
+                    <th className="text-right py-2 px-3">Subtotal</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line">
+                  {(selectedInvoiceDetail.coach_invoice_items ?? []).map(it => (
+                    <tr key={it.id}>
+                      <td className="py-2.5 px-3">
+                        <span className={`px-1.5 py-0.5 rounded font-bold uppercase text-[10px] ${
+                          it.item_type === "reimburse" ? "bg-warn-100 text-warn-800" :
+                          it.item_type === "extra" ? "bg-ocean-100 text-ocean-800" : "bg-paper-deep text-ink"
+                        }`}>
+                          {it.item_type}
+                        </span>
+                        {it.description && <div className="text-ink-mute text-[11px] mt-0.5">{it.description}</div>}
+                        {it.proof_url && (
+                          <a href={it.proof_url} target="_blank" rel="noreferrer" className="text-ocean-600 hover:underline font-bold text-[11px] block mt-0.5">
+                            <Icon name="link" className="w-3 h-3 inline mr-0.5" /> Buka Bukti Struk/Kwitansi
+                          </a>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-3 text-ink-soft">{it.class?.name ?? "—"}</td>
+                      <td className="py-2.5 px-3 text-right font-mono">{it.session_count || "—"}</td>
+                      <td className="py-2.5 px-3 text-right font-mono">{fmtIDR(it.rate)}</td>
+                      <td className="py-2.5 px-3 text-right font-mono font-bold">
+                        {fmtIDR(it.item_type === "reimburse" ? it.rate : it.session_count * it.rate)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex justify-between items-center p-3 rounded-xl bg-ocean-50 border border-ocean-200">
+              <span className="font-bold text-ocean-900">Total Nominal Pembayaran</span>
+              <span className="font-display font-extrabold text-xl text-ocean-900">{fmtIDR(selectedInvoiceDetail.total_amount)}</span>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* ── Modal: Atur Gaji Bulanan Staff ─────────────────────────────────── */}
+      <Modal
+        open={!!editSalaryModal}
+        onClose={() => setEditSalaryModal(null)}
+        title={`Atur Gaji Staff: ${editSalaryModal?.staff?.full_name ?? ""} (${staffMonth})`}
+        size="sm"
+        footer={
+          <div className="flex gap-2 justify-end w-full">
+            <Btn variant="ghost" onClick={() => setEditSalaryModal(null)}>Batal</Btn>
+            <Btn variant="primary" onClick={saveStaffSalary} disabled={savingSalary}>
+              {savingSalary ? "Menyimpan..." : "Simpan Gaji"}
+            </Btn>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <Field label="Gaji Pokok Bulan Ini (Rp)" required hint="Nominal dapat diubah setiap bulannya oleh Owner">
+            <Input
+              type="number"
+              value={salaryForm.base_salary}
+              onChange={e => setSalaryForm(f => ({ ...f, base_salary: e.target.value }))}
+              placeholder="Contoh: 3000000"
+              className="font-mono"
+            />
+          </Field>
+
+          <Field label="Tunjangan / Bonus Tambahan (Rp)">
+            <Input
+              type="number"
+              value={salaryForm.allowances}
+              onChange={e => setSalaryForm(f => ({ ...f, allowances: e.target.value }))}
+              placeholder="0"
+              className="font-mono"
+            />
+          </Field>
+
+          <Field label="Potongan (Rp)">
+            <Input
+              type="number"
+              value={salaryForm.deductions}
+              onChange={e => setSalaryForm(f => ({ ...f, deductions: e.target.value }))}
+              placeholder="0"
+              className="font-mono"
+            />
+          </Field>
+
+          <Field label="Catatan Gaji (Opsional)">
+            <Textarea
+              rows={2}
+              value={salaryForm.notes}
+              onChange={e => setSalaryForm(f => ({ ...f, notes: e.target.value }))}
+              placeholder="Catatan bonus atau potongan..."
+            />
+          </Field>
+
+          <div className="p-3 rounded-xl bg-paper-tint border border-line flex justify-between items-center text-xs">
+            <span className="font-semibold text-ink-mute">Estimasi Total Bersih:</span>
+            <span className="font-mono font-bold text-ocean-700 text-sm">
+              {fmtIDR(
+                Math.max(0, (Number(salaryForm.base_salary) || 0) + (Number(salaryForm.allowances) || 0) - (Number(salaryForm.deductions) || 0))
+              )}
+            </span>
+          </div>
         </div>
       </Modal>
 
@@ -4106,7 +5194,9 @@ function buildNavItems(t: (key: string) => string): NavItem[] {
     { section: t("owner.nav.sectionOverview") },
     { id: "dashboard", label: t("owner.nav.dashboard"), icon: "grid"    },
     { section: t("owner.nav.sectionManagement") },
+    { id: "master",    label: "Master Data",            icon: "user"    },
     { id: "branches",  label: t("owner.nav.branches"),  icon: "pin"     },
+    { id: "schools",   label: "Schools",                icon: "book"    },
     { id: "admins",    label: t("owner.nav.admins"),    icon: "users"   },
     { id: "classes",   label: t("owner.nav.classes"),   icon: "swim"    },
     { id: "levels",    label: t("owner.nav.levels"),    icon: "book"    },
@@ -4126,7 +5216,9 @@ function buildNavItems(t: (key: string) => string): NavItem[] {
 function buildTitles(t: (key: string) => string): Record<string, [string, string]> {
   return {
     dashboard: [t("owner.titles.dashboard.title"), t("owner.titles.dashboard.sub")],
+    master:    ["Master Data Owner", "Kelola profil Head of NEXT & master kategori keuangan"],
     branches:  [t("owner.titles.branches.title"),  t("owner.titles.branches.sub")],
+    schools:   ["Schools", "Manage school assets and signatures"],
     admins:    [t("owner.titles.admins.title"),    t("owner.titles.admins.sub")],
     classes:   [t("owner.titles.classes.title"),   t("owner.titles.classes.sub")],
     levels:    [t("owner.titles.levels.title"),    t("owner.titles.levels.sub")],
@@ -4218,7 +5310,9 @@ export default function OwnerPage() {
   const ownerName = profile?.full_name ?? "Owner";
   const pages: Record<string, React.ReactNode> = {
     dashboard: <Dashboard branches={branches} />,
+    master:    <OwnerMasterData />,
     branches:  <Branches branches={branches} onRefresh={loadBranches} userId={userId} userName={ownerName} />,
+    schools:   <OwnerSchools branches={branches} />,
     admins:    <Admins branches={branches} />,
     classes:   <Classes branches={branches} />,
     levels:    <OwnerRaporLevels />,

@@ -161,7 +161,7 @@ export const member = {
     fieldAddress: "Address",
     fieldHealth: "Medical history / allergies",
     saveBtn: "Save changes",
-    adminContactHint: "To change name, date of birth, or class — please contact branch admin.",
+    adminContactHint: "To change name, date of birth, or class — please contact center admin.",
     changePasswordTitle: "Change Password",
     fieldNewPassword: "New password",
     fieldConfirmPassword: "Confirm password",
@@ -184,7 +184,7 @@ export const member = {
     reason: "Reason: {reason}",
     reactivationIn: "Reactivates in:",
     reactivatingSoon: "Reactivating soon…",
-    notice: "All features are inaccessible during suspension. Contact the branch admin if you have questions.",
+    notice: "All features are inaccessible during suspension. Contact the center admin if you have questions.",
   },
   errors: {
     notFoundTitle: "Account Not Found",
