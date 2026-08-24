@@ -26,6 +26,7 @@ import OwnerMasterData from "./_components/OwnerMasterData";
 import OwnerAccountsMaster from "./_components/OwnerAccountsMaster";
 import PayslipGenerator from "./payroll/PayslipGenerator";
 import CoachLoans from "./payroll/CoachLoans";
+import AdminCompetition from "../admin/_components/AdminCompetition";
 
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -5138,6 +5139,7 @@ function buildNavItems(t: (key: string) => string): NavItem[] {
     { id: "schools",   label: "Schools",                icon: "book"    },
     { id: "accounts",  label: t("owner.nav.accounts"),  icon: "users"   },
     { id: "classes",   label: t("owner.nav.classes"),   icon: "swim"    },
+    { id: "competitions", label: "Competitions",        icon: "flag"    },
     { id: "levels",    label: t("owner.nav.levels"),    icon: "book"    },
     { section: t("owner.nav.sectionFinance") },
     { id: "rates",     label: t("owner.nav.rates"),     icon: "settings"},
@@ -5160,6 +5162,7 @@ function buildTitles(t: (key: string) => string): Record<string, [string, string
     schools:   ["Schools", "Manage school assets and signatures"],
     accounts:  [t("owner.titles.accounts.title"),  t("owner.titles.accounts.sub")],
     classes:   [t("owner.titles.classes.title"),   t("owner.titles.classes.sub")],
+    competitions: ["Competitions & Achievements", "Kelola perlombaan & prestasi member seluruh cabang"],
     levels:    [t("owner.titles.levels.title"),    t("owner.titles.levels.sub")],
     rates:     [t("owner.titles.rates.title"),     t("owner.titles.rates.sub")],
     invoices:  [t("owner.titles.invoices.title"),  t("owner.titles.invoices.sub")],
@@ -5254,6 +5257,7 @@ export default function OwnerPage() {
     schools:   <OwnerSchools branches={branches} />,
     accounts:  <OwnerAccountsMaster branches={branches} />,
     classes:   <Classes branches={branches} />,
+    competitions: <AdminCompetition branchId="" />,
     levels:    <OwnerRaporLevels />,
     rates:     <SettingsTarif branches={branches} />,
     invoices:  <Invoices branches={branches} userId={userId} userName={ownerName} />,

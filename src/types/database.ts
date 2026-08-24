@@ -104,7 +104,150 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "classes"
             referencedColumns: ["id"]
+          }
+        ]
+      }
+      competitions: {
+        Row: {
+          id: string
+          name: string
+          organizer: string | null
+          location: string | null
+          city: string | null
+          start_date: string
+          end_date: string | null
+          level: string
+          description: string | null
+          created_by_id: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          organizer?: string | null
+          location?: string | null
+          city?: string | null
+          start_date: string
+          end_date?: string | null
+          level?: string
+          description?: string | null
+          created_by_id?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          organizer?: string | null
+          location?: string | null
+          city?: string | null
+          start_date?: string
+          end_date?: string | null
+          level?: string
+          description?: string | null
+          created_by_id?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      competition_participations: {
+        Row: {
+          id: string
+          competition_id: string
+          member_id: string
+          branch_id: string
+          coach_id: string | null
+          category: string
+          stroke: string | null
+          distance_meters: number | null
+          age_group: string | null
+          time_seconds: number | null
+          time_formatted: string | null
+          rank: number | null
+          result_status: string
+          award: string
+          custom_award_label: string | null
+          certificate_url: string | null
+          photo_url: string | null
+          notes: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          competition_id: string
+          member_id: string
+          branch_id: string
+          coach_id?: string | null
+          category: string
+          stroke?: string | null
+          distance_meters?: number | null
+          age_group?: string | null
+          time_seconds?: number | null
+          time_formatted?: string | null
+          rank?: number | null
+          result_status?: string
+          award?: string
+          custom_award_label?: string | null
+          certificate_url?: string | null
+          photo_url?: string | null
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          competition_id?: string
+          member_id?: string
+          branch_id?: string
+          coach_id?: string | null
+          category?: string
+          stroke?: string | null
+          distance_meters?: number | null
+          age_group?: string | null
+          time_seconds?: number | null
+          time_formatted?: string | null
+          rank?: number | null
+          result_status?: string
+          award?: string
+          custom_award_label?: string | null
+          certificate_url?: string | null
+          photo_url?: string | null
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "competition_participations_competition_id_fkey"
+            columns: ["competition_id"]
+            isOneToOne: false
+            referencedRelation: "competitions"
+            referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "competition_participations_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "competition_participations_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "competition_participations_coach_id_fkey"
+            columns: ["coach_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
         ]
       }
       announcements: {

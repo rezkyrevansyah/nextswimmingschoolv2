@@ -351,7 +351,7 @@ export default function AdminMember({ branchId }: { branchId: string }) {
   const [showCreatePwd, setShowCreatePwd] = useState(false);
   const [photoView, setPhotoView] = useState<string | null>(null);
 
-  const [detailTab, setDetailTab] = useState<"info" | "absensi" | "pembayaran">("info");
+  const [detailTab, setDetailTab] = useState<"info" | "absensi" | "pembayaran" | "lomba">("info");
   const [attendances, setAttendances] = useState<{ id: string; session_date: string; status: string; method: string; class: { name: string } | null }[]>([]);
   const [loadingAtt, setLoadingAtt] = useState(false);
   const [attLoaded, setAttLoaded] = useState(false);
@@ -360,6 +360,9 @@ export default function AdminMember({ branchId }: { branchId: string }) {
   const [loadingBills, setLoadingBills] = useState(false);
   const [billsLoaded, setBillsLoaded] = useState(false);
   const [regProofUrl, setRegProofUrl] = useState<string | null>(null);
+  const [memberComps, setMemberComps] = useState<any[]>([]);
+  const [loadingMemberComps, setLoadingMemberComps] = useState(false);
+  const [memberCompsLoaded, setMemberCompsLoaded] = useState(false);
 
   // Import Excel state
   const [openImport, setOpenImport] = useState(false);
@@ -712,6 +715,22 @@ export default function AdminMember({ branchId }: { branchId: string }) {
       .eq("id", detail.id).single();
     if (data) setDetail(data as unknown as MemberRow);
     load();
+  };
+
+  const loadMemberComps = async (memberId: string) => {
+    setLoadingMemberComps(true);
+    const { data } = await supabase
+      .from("competition_participations")
+      .select(`
+        id, category, age_group, time_seconds, time_formatted, rank, award, custom_award_label, certificate_url, notes, created_at,
+        competition:competitions(name, start_date, location, organizer)
+      `)
+      .eq("member_id", memberId)
+      .order("created_at", { ascending: false });
+
+    setMemberComps((data as any[]) ?? []);
+    setLoadingMemberComps(false);
+    setMemberCompsLoaded(true);
   };
 
   const stats = {
@@ -1133,12 +1152,13 @@ export default function AdminMember({ branchId }: { branchId: string }) {
               <div className="md:col-span-2 space-y-4 text-sm">
                 {/* Tab bar */}
                 <div className="flex gap-1 bg-paper-tint rounded-xl p-1">
-                  {([["info", t("admin.members.tabInfo")], ["absensi", t("admin.members.tabAttendance2")], ["pembayaran", t("admin.members.tabPayment2")]] as const).map(([id, label]) => (
+                  {([["info", t("admin.members.tabInfo")], ["absensi", t("admin.members.tabAttendance2")], ["pembayaran", t("admin.members.tabPayment2")], ["lomba", "Prestasi & Lomba"]] as const).map(([id, label]) => (
                     <button key={id} type="button"
                       onClick={() => {
                         setDetailTab(id);
                         if (id === "absensi" && !attLoaded) loadAttendances(detail.id);
                         if (id === "pembayaran" && !billsLoaded) loadBills(detail.id);
+                        if (id === "lomba" && !memberCompsLoaded) loadMemberComps(detail.id);
                       }}
                       className={`flex-1 px-3 py-1.5 text-xs font-bold rounded-lg transition-colors ${detailTab === id ? "bg-white text-ocean-700 shadow-sm" : "text-ink-mute hover:text-ink-soft"}`}>
                       {label}
@@ -1291,6 +1311,67 @@ export default function AdminMember({ branchId }: { branchId: string }) {
                             ))}
                           </tbody>
                         </table>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {/* Tab: Prestasi & Lomba */}
+                {detailTab === "lomba" && (
+                  <div className="space-y-3">
+                    {loadingMemberComps ? (
+                      <div className="py-8 text-center text-ink-mute text-sm">Memuat riwayat perlombaan...</div>
+                    ) : memberComps.length === 0 ? (
+                      <div className="py-8 text-center text-ink-mute text-sm border border-dashed border-line rounded-xl">
+                        Belum ada riwayat perlombaan tercatat untuk member ini.
+                      </div>
+                    ) : (
+                      <div className="space-y-2.5 max-h-[380px] overflow-y-auto pr-1">
+                        {memberComps.map((item) => {
+                          const compName = item.competition?.name || "Perlombaan";
+                          const compDate = item.competition?.start_date ? fmtDate(item.competition.start_date) : "—";
+                          const compLoc = item.competition?.location || item.competition?.city || "";
+                          const medalBadge =
+                            item.award === "gold" ? "🥇 Medali Emas" :
+                            item.award === "silver" ? "🥈 Medali Perak" :
+                            item.award === "bronze" ? "🥉 Medali Perunggu" :
+                            item.award === "custom" && item.custom_award_label ? `🏆 ${item.custom_award_label}` :
+                            item.rank ? `Juara ${item.rank}` : "🏊 Peserta";
+
+                          return (
+                            <div key={item.id} className="p-3 bg-paper-tint/70 rounded-xl border border-line flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                              <div>
+                                <div className="font-bold text-ink-strong text-sm">{compName}</div>
+                                <div className="text-ink-mute mt-0.5">
+                                  <span>{compDate}</span>
+                                  {compLoc && <span> · {compLoc}</span>}
+                                </div>
+                                <div className="mt-1 font-semibold text-ocean-700">
+                                  {item.category} {item.age_group ? `(${item.age_group})` : ""}
+                                </div>
+                              </div>
+
+                              <div className="flex sm:flex-col items-end justify-between sm:justify-center gap-1 shrink-0 text-right">
+                                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-white text-ocean-800 border border-line shadow-xs">
+                                  {medalBadge}
+                                </span>
+                                {item.time_formatted && (
+                                  <div className="font-mono font-bold text-ocean-700 text-xs">
+                                    ⏱️ {item.time_formatted}
+                                  </div>
+                                )}
+                                {item.certificate_url && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setPhotoView(item.certificate_url)}
+                                    className="text-[11px] font-semibold text-ocean-600 hover:underline inline-flex items-center gap-0.5"
+                                  >
+                                    <Icon name="eye" className="w-3 h-3" /> Sertifikat
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </div>

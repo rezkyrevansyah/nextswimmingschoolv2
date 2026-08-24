@@ -23,6 +23,7 @@ import AdminApprovement from "./_components/AdminApprovement";
 import AdminRapor from "./_components/AdminRapor";
 import AdminSchoolPanel from "./_components/AdminSchoolPanel";
 import AdminFinancial from "./_components/AdminFinancial";
+import AdminCompetition from "./_components/AdminCompetition";
 import type { Branch } from "./_types";
 import Sidebar, { type NavItem } from "@/components/layout/Sidebar";
 import Topbar from "@/components/layout/Topbar";
@@ -42,6 +43,7 @@ function buildNavItems(t: (key: string) => string): NavItem[] {
     { id: "classes",    label: t("admin.nav.classes"),   icon: "swim"      },
     { id: "members",    label: t("admin.nav.members"),   icon: "users"     },
     { id: "coaches",    label: t("admin.nav.coaches"),   icon: "shield"    },
+    { id: "competitions", label: t("admin.nav.competitions"), icon: "flag" },
     { id: "absensi",    label: t("admin.nav.absensi"),   icon: "check"     },
     { id: "announce",   label: t("admin.nav.announce"),  icon: "bell"      },
     { section: t("admin.nav.sectionPersetujuan") },
@@ -64,6 +66,7 @@ function buildTitles(t: (key: string) => string): Record<string, [string, string
     classes:   [t("admin.titles.classes.title"),   t("admin.titles.classes.sub")],
     members:   [t("admin.titles.members.title"),   t("admin.titles.members.sub")],
     coaches:   [t("admin.titles.coaches.title"),   t("admin.titles.coaches.sub")],
+    competitions: [t("admin.titles.competitions.title"), t("admin.titles.competitions.sub")],
     absensi:   [t("admin.titles.absensi.title"),   t("admin.titles.absensi.sub")],
     announce:  [t("admin.titles.announce.title"),  t("admin.titles.announce.sub")],
     izin:      [t("admin.titles.izin.title"),      t("admin.titles.izin.sub")],
@@ -197,6 +200,7 @@ export default function AdminPage() {
       case "classes":   return <AdminClass branchId={branchId} />;
       case "members":   return <AdminMember branchId={branchId} />;
       case "coaches":   return <AdminCoach branchId={branchId} />;
+      case "competitions": return <AdminCompetition branchId={branchId} />;
       case "absensi":   return <AdminAbsensi branchId={branchId} />;
       case "announce":  return <AdminPengumuman branchId={branchId} />;
       case "izin":      return <AdminIzin branchId={branchId} />;

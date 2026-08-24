@@ -1117,6 +1117,7 @@ function MemberRapor({ memberId, memberName, branchId, avatarUrl, memberNo, birt
   const [savingSlot, setSavingSlot] = useState<string | null>(null);
   const [schoolInfo, setSchoolInfo] = useState<(SchoolForSignerConfig & { logo_url: string | null }) | null>(null);
   const [ownerSettings, setOwnerSettings] = useState<{ head_name?: string | null; head_title?: string | null; head_signature_url?: string | null } | null>(null);
+  const [competitionsHistory, setCompetitionsHistory] = useState<any[]>([]);
 
   const load = useCallback(async () => {
     if (!memberId) return;
@@ -1162,6 +1163,17 @@ function MemberRapor({ memberId, memberName, branchId, avatarUrl, memberNo, birt
       distance: (r as { distance: number }).distance,
       time_seconds: (r as { time_seconds: number }).time_seconds,
     }));
+
+    // Load competition achievements for this member
+    const { data: compRows } = await supabase
+      .from("competition_participations")
+      .select(`
+        id, category, age_group, time_formatted, time_seconds, rank, award, custom_award_label, certificate_url, notes,
+        competition:competitions(name, start_date, location, organizer)
+      `)
+      .eq("member_id", memberId)
+      .order("created_at", { ascending: false });
+    setCompetitionsHistory((compRows as any[]) ?? []);
 
     // Load each distinct level's ordered strokes/distances in one batch pair of queries
     const levelIds = [...new Set(data.map((e) => e.level_id).filter(Boolean))];
@@ -1307,6 +1319,64 @@ function MemberRapor({ memberId, memberName, branchId, avatarUrl, memberNo, birt
 
       {openEntries.length === 0 && entries.length > 0 && (
         <div className="rounded-xl border border-line bg-paper-tint p-4 text-sm text-ink-mute text-center">{t("member.rapor.noActivePeriod")}</div>
+      )}
+
+      {/* Competitions & Achievements Showcase */}
+      {competitionsHistory.length > 0 && (
+        <>
+          <SectionTitle sub="Prestasi & riwayat keikutsertaan perlombaan renang">
+            🏆 Riwayat Perlombaan & Medali ({competitionsHistory.length})
+          </SectionTitle>
+          <div className="space-y-2.5">
+            {competitionsHistory.map((item) => {
+              const compName = item.competition?.name || "Perlombaan";
+              const compDate = item.competition?.start_date ? fmtDate(item.competition.start_date) : "—";
+              const compLoc = item.competition?.location || item.competition?.city || "";
+              const medalBadge =
+                item.award === "gold" ? "🥇 Medali Emas" :
+                item.award === "silver" ? "🥈 Medali Perak" :
+                item.award === "bronze" ? "🥉 Medali Perunggu" :
+                item.award === "custom" && item.custom_award_label ? `🏆 ${item.custom_award_label}` :
+                item.rank ? `Juara ${item.rank}` : "🏊 Peserta";
+
+              return (
+                <Card key={item.id} className="!p-4 bg-white hover:border-ocean-300 transition-colors">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-sm">
+                    <div>
+                      <div className="font-bold text-ocean-900 text-base">{compName}</div>
+                      <div className="text-xs text-ink-mute mt-0.5">
+                        📅 {compDate} {compLoc ? `· 📍 ${compLoc}` : ""}
+                      </div>
+                      <div className="mt-1 font-semibold text-ocean-700 text-xs">
+                        {item.category} {item.age_group ? `(${item.age_group})` : ""}
+                      </div>
+                    </div>
+                    <div className="flex sm:flex-col items-start sm:items-end justify-between gap-1 shrink-0">
+                      <span className="px-3 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-900 border border-amber-200 shadow-2xs">
+                        {medalBadge}
+                      </span>
+                      {item.time_formatted && (
+                        <div className="font-mono font-bold text-ocean-700 text-xs mt-0.5">
+                          ⏱️ {item.time_formatted}
+                        </div>
+                      )}
+                      {item.certificate_url && (
+                        <a
+                          href={item.certificate_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs font-semibold text-ocean-600 hover:underline inline-flex items-center gap-1 mt-1"
+                        >
+                          <Icon name="eye" className="w-3.5 h-3.5" /> Lihat Sertifikat
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+        </>
       )}
 
       {/* History rapor (closed periods) */}

@@ -68,4 +68,45 @@ export const drizzleTestNotes = pgTable('drizzle_test_notes', {
   createdAt: timestamp('created_at').defaultNow(),
 });
 
+// Competitions table
+export const competitions = pgTable('competitions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: text('name').notNull(),
+  organizer: text('organizer'),
+  location: text('location'),
+  city: text('city'),
+  startDate: text('start_date').notNull(),
+  endDate: text('end_date'),
+  level: text('level').default('local'),
+  description: text('description'),
+  createdById: uuid('created_by_id'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+// Competition Participations table
+export const competitionParticipations = pgTable('competition_participations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  competitionId: uuid('competition_id').notNull(),
+  memberId: uuid('member_id').notNull(),
+  branchId: uuid('branch_id').notNull(),
+  coachId: uuid('coach_id'),
+  category: text('category').notNull(),
+  stroke: text('stroke'),
+  distanceMeters: integer('distance_meters'),
+  ageGroup: text('age_group'),
+  timeSeconds: text('time_seconds'),
+  timeFormatted: text('time_formatted'),
+  rank: integer('rank'),
+  resultStatus: text('result_status').default('finished'),
+  award: text('award').default('participant'),
+  customAwardLabel: text('custom_award_label'),
+  certificateUrl: text('certificate_url'),
+  photoUrl: text('photo_url'),
+  notes: text('notes'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+
 

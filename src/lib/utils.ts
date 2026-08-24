@@ -79,3 +79,32 @@ export function countTextStats(text: string): {
   const hasNewline = /\n/.test(text);
   return { chars, words, sentences, hasNewline };
 }
+
+/**
+ * Parse swim time string (e.g. "32.41" or "1:12.20") into seconds numeric & clean formatted display
+ */
+export function parseSwimTime(input: string): { seconds: number | null; formatted: string } {
+  const trimmed = input.trim();
+  if (!trimmed) return { seconds: null, formatted: "" };
+  
+  // Format MM:SS.ms (e.g. 1:12.20)
+  if (trimmed.includes(":")) {
+    const parts = trimmed.split(":");
+    const mins = parseFloat(parts[0]) || 0;
+    const secs = parseFloat(parts[1]) || 0;
+    const totalSecs = Math.round((mins * 60 + secs) * 100) / 100;
+    return {
+      seconds: totalSecs,
+      formatted: `${mins}:${secs < 10 ? "0" : ""}${secs.toFixed(2)}`,
+    };
+  }
+
+  // Format SS.ms (e.g. 32.41)
+  const secs = parseFloat(trimmed);
+  if (isNaN(secs)) return { seconds: null, formatted: trimmed };
+  return {
+    seconds: Math.round(secs * 100) / 100,
+    formatted: `${secs.toFixed(2)}s`,
+  };
+}
+
