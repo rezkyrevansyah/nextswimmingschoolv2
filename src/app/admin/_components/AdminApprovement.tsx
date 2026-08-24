@@ -308,11 +308,15 @@ export default function AdminApprovement({ branchId }: { branchId: string }) {
           <div className="relative flex-1 max-w-xs">
             <Icon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-faint pointer-events-none" />
             <input
-              type="text"
+              type="search"
+              name="approvement_search"
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder={tab === "reg" ? t("admin.approvement.searchRegPlaceholder") : t("admin.approvement.searchCertPlaceholder")}
               className="w-full pl-9 pr-3 py-2 text-sm bg-paper-tint border border-line rounded-lg text-ink placeholder:text-ink-faint focus:outline-none focus:border-ocean-400 focus:ring-2 focus:ring-ocean-500/20 transition-all"
+              autoComplete="off"
+              data-lpignore="true"
+              data-1p-ignore="true"
             />
             {search && (
               <button type="button" onClick={() => setSearch("")}

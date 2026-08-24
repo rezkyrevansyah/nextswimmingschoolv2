@@ -199,6 +199,8 @@ export default function AdminMember({ branchId }: { branchId: string }) {
     setOpenCreate(false);
     setCreateAvatarFile(null);
     setCreateAvatarPreview(null);
+    setForm({ full_name: "", birth_date: "", gender: "", type: "reguler", phone: "", phone_owner: "self", parent_name: "", parent_phone: "", address: "", health_notes: "", class_id: "", school_id: "", email: "", password: "", jumlah_sesi: "" });
+    setSearch("");
     load();
   };
 
@@ -819,11 +821,16 @@ export default function AdminMember({ branchId }: { branchId: string }) {
           <div className="flex items-center gap-2 bg-paper-tint border border-line rounded-xl px-3 py-2 focus-within:border-ocean-400 focus-within:ring-2 focus-within:ring-ocean-500/10 transition">
             <Icon name="search" className="w-4 h-4 text-ink-faint shrink-0" />
             <input
+              type="search"
+              name="member_search"
+              id="member_search_input"
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder={t("admin.members.searchPlaceholder2")}
               className="flex-1 text-sm outline-none bg-transparent"
               autoComplete="off"
+              data-lpignore="true"
+              data-1p-ignore="true"
             />
             {search && (
               <button type="button" onClick={() => setSearch("")} className="text-ink-mute hover:text-ink transition">
