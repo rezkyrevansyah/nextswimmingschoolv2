@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
+import { useLocale } from "@/components/providers/LocaleProvider";
 import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
 import { Field, Input } from "@/components/ui/FormFields";
@@ -30,6 +31,7 @@ interface RaporPeriod {
 }
 
 function AdminCoachReviews({ branchId }: { branchId: string }) {
+  const { t } = useLocale();
   const [reviews, setReviews] = useState<CoachReviewRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterCoach, setFilterCoach] = useState<string>("all");
@@ -58,9 +60,9 @@ function AdminCoachReviews({ branchId }: { branchId: string }) {
     return { ...c, avg, count: cReviews.length };
   }).sort((a, b) => b.avg - a.avg);
 
-  if (loading) return <div className="text-ink-mute text-sm py-4">Memuat ulasan…</div>;
+  if (loading) return <div className="text-ink-mute text-sm py-4">{t("admin.rapor.loadingReviews")}</div>;
   if (reviews.length === 0) return (
-    <div className="text-center py-8 text-ink-mute text-sm bg-paper-tint rounded-2xl">Belum ada ulasan dari member.</div>
+    <div className="text-center py-8 text-ink-mute text-sm bg-paper-tint rounded-2xl">{t("admin.rapor.noReviewsYet")}</div>
   );
 
   return (
@@ -71,7 +73,7 @@ function AdminCoachReviews({ branchId }: { branchId: string }) {
           {coachAvg.map(c => (
             <button key={c.id} onClick={() => setFilterCoach(filterCoach === c.id ? "all" : c.id)}
               className={`text-left rounded-2xl border p-4 transition-all ${filterCoach === c.id ? "bg-ocean-700 text-white border-ocean-700" : "bg-white border-line hover:border-ocean-300"}`}>
-              <div className={`text-xs font-bold uppercase tracking-wide mb-1 ${filterCoach === c.id ? "text-wave-200" : "text-ink-mute"}`}>Coach</div>
+              <div className={`text-xs font-bold uppercase tracking-wide mb-1 ${filterCoach === c.id ? "text-wave-200" : "text-ink-mute"}`}>{t("admin.rapor.coachLabel")}</div>
               <div className={`font-semibold text-sm truncate ${filterCoach === c.id ? "text-white" : "text-ink"}`}>{c.name}</div>
               <div className="flex items-center gap-1.5 mt-2">
                 <span className={`text-lg font-bold ${filterCoach === c.id ? "text-amber-300" : "text-amber-500"}`}>{c.avg.toFixed(1)}</span>
@@ -101,7 +103,7 @@ function AdminCoachReviews({ branchId }: { branchId: string }) {
             {r.message && <p className="text-sm text-ink-soft bg-paper-tint rounded-xl px-3 py-2">{r.message}</p>}
           </div>
         ))}
-        {filtered.length === 0 && <p className="text-ink-mute text-sm text-center py-4">Tidak ada ulasan untuk coach ini.</p>}
+        {filtered.length === 0 && <p className="text-ink-mute text-sm text-center py-4">{t("admin.rapor.noReviewsForCoach")}</p>}
       </div>
     </div>
   );
@@ -111,6 +113,7 @@ export default function AdminRapor({ branchId }: { branchId: string }) {
   const supabase = createClient();
   const toast = useToast();
   const confirm = useConfirm();
+  const { t } = useLocale();
   const [periods, setPeriods] = useState<RaporPeriod[]>([]);
   const [loading, setLoading] = useState(true);
   const [openAdd, setOpenAdd] = useState(false);
@@ -133,22 +136,22 @@ export default function AdminRapor({ branchId }: { branchId: string }) {
   const activePeriod = periods.find(p => p.is_open);
 
   const create = async () => {
-    if (!form.label || !form.date_from || !form.date_to) return toast.error("Semua field wajib diisi");
+    if (!form.label || !form.date_from || !form.date_to) return toast.error(t("admin.rapor.allFieldsRequired"));
     setSaving(true);
     const user = (await supabase.auth.getUser()).data.user;
     const { error } = await supabase.from("rapor_periods").insert({ branch_id: branchId, label: form.label, date_from: form.date_from, date_to: form.date_to, is_open: true, created_by: user?.id ?? "" });
     setSaving(false);
-    if (error) return toast.error("Gagal membuat periode", error.message);
-    toast.success("Periode rapor dibuka");
+    if (error) return toast.error(t("admin.rapor.createPeriodFailed"), error.message);
+    toast.success(t("admin.rapor.periodOpenedToast"));
     setOpenAdd(false);
     load();
   };
 
   const closePeriod = async (id: string) => {
-    const ok = await confirm({ title: "Tutup periode?", body: "Coach tidak bisa lagi mengisi rapor setelah periode ditutup.", confirmLabel: "Tutup", danger: true });
+    const ok = await confirm({ title: t("admin.rapor.closePeriodConfirmTitle"), body: t("admin.rapor.closePeriodConfirmBody"), confirmLabel: t("admin.rapor.closePeriodConfirmLabel"), danger: true });
     if (!ok) return;
     await supabase.from("rapor_periods").update({ is_open: false }).eq("id", id);
-    toast.success("Periode ditutup");
+    toast.success(t("admin.rapor.periodClosedToast"));
     load();
   };
 
@@ -159,53 +162,53 @@ export default function AdminRapor({ branchId }: { branchId: string }) {
 
   const saveEdit = async () => {
     if (!editTarget) return;
-    if (!editForm.label || !editForm.date_from || !editForm.date_to) return toast.error("Semua field wajib diisi");
+    if (!editForm.label || !editForm.date_from || !editForm.date_to) return toast.error(t("admin.rapor.allFieldsRequired"));
     setSavingEdit(true);
     const { error } = await supabase.from("rapor_periods").update({ label: editForm.label, date_from: editForm.date_from, date_to: editForm.date_to }).eq("id", editTarget.id);
     setSavingEdit(false);
-    if (error) return toast.error("Gagal menyimpan", error.message);
-    toast.success("Periode diperbarui");
+    if (error) return toast.error(t("admin.rapor.saveFailed"), error.message);
+    toast.success(t("admin.rapor.periodUpdatedToast"));
     setEditTarget(null);
     load();
   };
 
   const reopenPeriod = async (id: string) => {
     await supabase.from("rapor_periods").update({ is_open: true }).eq("id", id);
-    toast.success("Periode dibuka kembali");
+    toast.success(t("admin.rapor.periodReopenedToast"));
     load();
   };
 
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <div><h2 className="font-display font-bold text-2xl">Periode Rapor</h2><p className="text-ink-mute text-sm mt-0.5">Buka & kelola periode pengisian rapor.</p></div>
-        <Btn variant="primary" icon="plus" onClick={() => { setForm({ label: "", date_from: "", date_to: "" }); setOpenAdd(true); }}>Buka Periode Baru</Btn>
+        <div><h2 className="font-display font-bold text-2xl">{t("admin.rapor.pageTitle")}</h2><p className="text-ink-mute text-sm mt-0.5">{t("admin.rapor.pageSub")}</p></div>
+        <Btn variant="primary" icon="plus" onClick={() => { setForm({ label: "", date_from: "", date_to: "" }); setOpenAdd(true); }}>{t("admin.rapor.openNewPeriodBtn")}</Btn>
       </div>
       {activePeriod && (
         <div className="bg-ocean-700 text-white rounded-2xl border border-ocean-700 shadow-card p-5 relative overflow-hidden">
           <div className="absolute -right-20 -bottom-20 w-72 h-72 rounded-full bg-wave-500/30 blur-3xl" />
           <div className="relative">
-            <div className="flex items-center gap-2 text-wave-200 text-xs font-bold uppercase tracking-widest"><span className="w-2 h-2 rounded-full bg-wave-300 animate-pulse" /> Periode aktif</div>
+            <div className="flex items-center gap-2 text-wave-200 text-xs font-bold uppercase tracking-widest"><span className="w-2 h-2 rounded-full bg-wave-300 animate-pulse" /> {t("admin.rapor.activePeriodBadge")}</div>
             <div className="mt-2 font-display font-extrabold text-3xl">{activePeriod.label}</div>
             <div className="text-white/80 mt-1">{fmtDate(activePeriod.date_from)} – {fmtDate(activePeriod.date_to)}</div>
             <div className="mt-4 flex items-center gap-2">
-              <button onClick={() => openEditModal(activePeriod)} className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-white/15 hover:bg-white/25 text-white border border-white/30 transition-colors">Edit periode</button>
-              <button onClick={() => closePeriod(activePeriod.id)} className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-white/10 hover:bg-white/20 text-white/80 hover:text-white border border-white/20 transition-colors">Tutup periode</button>
+              <button onClick={() => openEditModal(activePeriod)} className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-white/15 hover:bg-white/25 text-white border border-white/30 transition-colors">{t("admin.rapor.editPeriodBtn")}</button>
+              <button onClick={() => closePeriod(activePeriod.id)} className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-white/10 hover:bg-white/20 text-white/80 hover:text-white border border-white/20 transition-colors">{t("admin.rapor.closePeriodBtn")}</button>
             </div>
           </div>
         </div>
       )}
-      {!loading && periods.length === 0 && <p className="text-ink-mute">Belum ada periode rapor.</p>}
+      {!loading && periods.length === 0 && <p className="text-ink-mute">{t("admin.rapor.noPeriodsYet")}</p>}
       {periods.filter(p => !p.is_open).length > 0 && (
         <Card>
-          <SectionTitle sub="Riwayat periode">Periode lalu</SectionTitle>
+          <SectionTitle sub={t("admin.rapor.pastPeriodsSub")}>{t("admin.rapor.pastPeriodsTitle")}</SectionTitle>
           <div className="space-y-2">
             {periods.filter(p => !p.is_open).map(p => (
               <div key={p.id} className="flex items-center gap-3 p-3 rounded-xl bg-paper-tint">
                 <div className="flex-1"><div className="font-semibold text-ink">{p.label}</div><div className="text-xs text-ink-mute">{fmtDate(p.date_from)} – {fmtDate(p.date_to)}</div></div>
-                <Status kind="archived">Ditutup</Status>
-                <button onClick={() => openEditModal(p)} className="p-1.5 rounded hover:bg-paper-deep text-ink-mute hover:text-ink" title="Edit"><Icon name="edit" className="w-4 h-4" /></button>
-                <button onClick={() => reopenPeriod(p.id)} className="p-1.5 rounded hover:bg-ok-50 text-ink-mute hover:text-ok-600" title="Buka kembali"><Icon name="check" className="w-4 h-4" /></button>
+                <Status kind="archived">{t("admin.rapor.closedStatus")}</Status>
+                <button onClick={() => openEditModal(p)} className="p-1.5 rounded hover:bg-paper-deep text-ink-mute hover:text-ink" title={t("common.actions.edit")}><Icon name="edit" className="w-4 h-4" /></button>
+                <button onClick={() => reopenPeriod(p.id)} className="p-1.5 rounded hover:bg-ok-50 text-ink-mute hover:text-ok-600" title={t("admin.rapor.reopenTitleAttr")}><Icon name="check" className="w-4 h-4" /></button>
               </div>
             ))}
           </div>
@@ -214,25 +217,25 @@ export default function AdminRapor({ branchId }: { branchId: string }) {
       <AdminRaporList branchId={branchId} periods={periods} />
 
       <div>
-        <SectionTitle sub="Ulasan member terhadap coach" action={null}>Ulasan Coach</SectionTitle>
+        <SectionTitle sub={t("admin.rapor.coachReviewsSub")} action={null}>{t("admin.rapor.coachReviewsTitle")}</SectionTitle>
         <AdminCoachReviews branchId={branchId} />
       </div>
 
-      <Modal open={openAdd} onClose={() => setOpenAdd(false)} title="Buka Periode Rapor Baru" size="sm"
-        footer={<><Btn variant="ghost" onClick={() => setOpenAdd(false)}>Batal</Btn><Btn variant="primary" onClick={create} disabled={saving}>{saving ? "Membuat…" : "Buka Periode"}</Btn></>}>
+      <Modal open={openAdd} onClose={() => setOpenAdd(false)} title={t("admin.rapor.addModalTitle")} size="sm"
+        footer={<><Btn variant="ghost" onClick={() => setOpenAdd(false)}>{t("common.actions.cancel")}</Btn><Btn variant="primary" onClick={create} disabled={saving}>{saving ? t("admin.rapor.creatingBtn") : t("admin.rapor.openPeriodBtn")}</Btn></>}>
         <div className="space-y-4">
-          <Field label="Label periode" required><Input value={form.label} onChange={e => setForm(f => ({ ...f, label: e.target.value }))} placeholder="Mis. Semester 1 — 2026" /></Field>
-          <Field label="Tanggal mulai" required><Input type="date" value={form.date_from} onChange={e => setForm(f => ({ ...f, date_from: e.target.value }))} /></Field>
-          <Field label="Tanggal selesai" required><Input type="date" value={form.date_to} onChange={e => setForm(f => ({ ...f, date_to: e.target.value }))} /></Field>
+          <Field label={t("admin.rapor.fieldPeriodLabel")} required><Input value={form.label} onChange={e => setForm(f => ({ ...f, label: e.target.value }))} placeholder={t("admin.rapor.periodLabelPlaceholder")} /></Field>
+          <Field label={t("admin.rapor.fieldStartDate")} required><Input type="date" value={form.date_from} onChange={e => setForm(f => ({ ...f, date_from: e.target.value }))} /></Field>
+          <Field label={t("admin.rapor.fieldEndDate")} required><Input type="date" value={form.date_to} onChange={e => setForm(f => ({ ...f, date_to: e.target.value }))} /></Field>
         </div>
       </Modal>
 
-      <Modal open={!!editTarget} onClose={() => setEditTarget(null)} title="Edit Periode Rapor" size="sm"
-        footer={<><Btn variant="ghost" onClick={() => setEditTarget(null)}>Batal</Btn><Btn variant="primary" onClick={saveEdit} disabled={savingEdit}>{savingEdit ? "Menyimpan…" : "Simpan"}</Btn></>}>
+      <Modal open={!!editTarget} onClose={() => setEditTarget(null)} title={t("admin.rapor.editModalTitle")} size="sm"
+        footer={<><Btn variant="ghost" onClick={() => setEditTarget(null)}>{t("common.actions.cancel")}</Btn><Btn variant="primary" onClick={saveEdit} disabled={savingEdit}>{savingEdit ? t("common.actions.saving") : t("common.actions.save")}</Btn></>}>
         <div className="space-y-4">
-          <Field label="Label periode" required><Input value={editForm.label} onChange={e => setEditForm(f => ({ ...f, label: e.target.value }))} placeholder="Mis. Semester 1 — 2026" /></Field>
-          <Field label="Tanggal mulai" required><Input type="date" value={editForm.date_from} onChange={e => setEditForm(f => ({ ...f, date_from: e.target.value }))} /></Field>
-          <Field label="Tanggal selesai" required><Input type="date" value={editForm.date_to} onChange={e => setEditForm(f => ({ ...f, date_to: e.target.value }))} /></Field>
+          <Field label={t("admin.rapor.fieldPeriodLabel")} required><Input value={editForm.label} onChange={e => setEditForm(f => ({ ...f, label: e.target.value }))} placeholder={t("admin.rapor.periodLabelPlaceholder")} /></Field>
+          <Field label={t("admin.rapor.fieldStartDate")} required><Input type="date" value={editForm.date_from} onChange={e => setEditForm(f => ({ ...f, date_from: e.target.value }))} /></Field>
+          <Field label={t("admin.rapor.fieldEndDate")} required><Input type="date" value={editForm.date_to} onChange={e => setEditForm(f => ({ ...f, date_to: e.target.value }))} /></Field>
         </div>
       </Modal>
     </div>

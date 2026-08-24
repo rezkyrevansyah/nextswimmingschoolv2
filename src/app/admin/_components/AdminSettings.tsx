@@ -2,18 +2,25 @@
 import { useState, useEffect } from "react";
 import Image from "next/image";
 import dynamic from "next/dynamic";
-const MapPicker = dynamic(() => import("@/components/ui/MapPicker"), { ssr: false, loading: () => <div className="rounded-xl border border-line bg-paper-tint h-[260px] flex items-center justify-center text-ink-mute text-sm">Memuat peta…</div> });
 import Logo from "@/components/ui/Logo";
 import Btn from "@/components/ui/Btn";
 import { Field, Input } from "@/components/ui/FormFields";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
+import { useLocale } from "@/components/providers/LocaleProvider";
 import { useUpload } from "@/hooks/useUpload";
 import type { Branch } from "../_types";
 
+function MapLoading() {
+  const { t } = useLocale();
+  return <div className="rounded-xl border border-line bg-paper-tint h-[260px] flex items-center justify-center text-ink-mute text-sm">{t("admin.settings.mapLoading")}</div>;
+}
+const MapPicker = dynamic(() => import("@/components/ui/MapPicker"), { ssr: false, loading: MapLoading });
+
 export default function AdminSettings({ branch, onRefresh, userId }: { branch: Branch | null; onRefresh: () => void; userId: string }) {
   const toast = useToast();
+  const { t } = useLocale();
   const supabase = createClient();
   const { upload, uploading } = useUpload();
   const [lat, setLat] = useState(branch?.lat?.toString() ?? "");
@@ -44,8 +51,8 @@ export default function AdminSettings({ branch, onRefresh, userId }: { branch: B
     });
     setSavingProfile(false);
     const json = await res.json() as { error?: string };
-    if (!res.ok) return toast.error("Gagal menyimpan profil", json.error);
-    toast.success("Profil diperbarui");
+    if (!res.ok) return toast.error(t("admin.settings.toastSaveProfileFailed"), json.error);
+    toast.success(t("admin.settings.toastProfileUpdated"));
   };
 
   // Sync state when branch prop changes
@@ -67,8 +74,8 @@ export default function AdminSettings({ branch, onRefresh, userId }: { branch: B
     const clean = waPhone.trim() ? [waPhone.trim()] : [];
     const { error } = await supabase.from("branches").update({ name, address, lat: lat ? parseFloat(lat) : null, lng: lng ? parseFloat(lng) : null, wa_numbers: clean }).eq("id", branch.id);
     setSaving(false);
-    if (error) return toast.error("Gagal menyimpan", error.message);
-    toast.success("Settings disimpan");
+    if (error) return toast.error(t("admin.settings.toastSaveFailed"), error.message);
+    toast.success(t("admin.settings.toastSettingsSaved"));
     onRefresh();
   };
 
@@ -77,9 +84,9 @@ export default function AdminSettings({ branch, onRefresh, userId }: { branch: B
     if (!file || !branch) return;
     try {
       const url = await upload.logo(file, branch.id);
-      if (url) { toast.success("Logo diperbarui"); onRefresh(); }
+      if (url) { toast.success(t("admin.settings.toastLogoUpdated")); onRefresh(); }
     } catch (err) {
-      toast.error("Gagal upload logo", err instanceof Error ? err.message : undefined);
+      toast.error(t("admin.settings.toastLogoUploadFailed"), err instanceof Error ? err.message : undefined);
     }
   };
 
@@ -89,55 +96,55 @@ export default function AdminSettings({ branch, onRefresh, userId }: { branch: B
       <div className="grid lg:grid-cols-2 gap-5">
         {/* Identitas Cabang */}
         <Card className="space-y-5">
-          <SectionTitle sub="Informasi dasar cabang">Identitas Cabang</SectionTitle>
+          <SectionTitle sub={t("admin.settings.branchIdentitySub")}>{t("admin.settings.branchIdentityTitle")}</SectionTitle>
           <div className="flex items-center gap-4">
             <div className="w-20 h-20 rounded-2xl bg-paper-tint flex items-center justify-center border border-line overflow-hidden shrink-0">
               {branch?.logo_url ? <Image src={branch.logo_url} alt="logo" width={80} height={80} className="w-full h-full object-cover" /> : <Logo size={52} />}
             </div>
             <div>
-              <div className="font-semibold text-ink text-sm">Logo Cabang</div>
-              <p className="text-xs text-ink-mute mt-0.5">Rasio 1:1, max 2MB.</p>
+              <div className="font-semibold text-ink text-sm">{t("admin.settings.logoLabel")}</div>
+              <p className="text-xs text-ink-mute mt-0.5">{t("admin.settings.logoHint")}</p>
               <label className="mt-2 inline-flex cursor-pointer">
-                <Btn variant="outline" size="sm" icon="upload" disabled={uploading}>Ganti logo</Btn>
+                <Btn variant="outline" size="sm" icon="upload" disabled={uploading}>{t("admin.settings.changeLogoBtn")}</Btn>
                 <input type="file" accept="image/*" className="sr-only" onChange={handleLogo} />
               </label>
             </div>
           </div>
           <div className="grid sm:grid-cols-2 gap-4 pt-4 border-t border-line">
-            <Field label="Nama cabang" required><Input value={name} onChange={e => setName(e.target.value)} /></Field>
-            <Field label="Alamat lengkap" required><Input value={address} onChange={e => setAddress(e.target.value)} /></Field>
+            <Field label={t("admin.settings.fieldBranchName")} required><Input value={name} onChange={e => setName(e.target.value)} /></Field>
+            <Field label={t("admin.settings.fieldFullAddress")} required><Input value={address} onChange={e => setAddress(e.target.value)} /></Field>
           </div>
           <div className="pt-4 border-t border-line">
-            <Field label="Nomor WhatsApp Cabang" hint="Muncul di tombol 'Hubungi Admin' pada panel member dan panel coach.">
-              <Input type="tel" value={waPhone} onChange={e => setWaPhone(e.target.value)} placeholder="Mis. 081234567890" className="font-mono" />
+            <Field label={t("admin.settings.fieldBranchWhatsapp")} hint={t("admin.settings.fieldBranchWhatsappHint")}>
+              <Input type="tel" value={waPhone} onChange={e => setWaPhone(e.target.value)} placeholder={t("admin.settings.phonePlaceholder")} className="font-mono" />
             </Field>
           </div>
         </Card>
 
         {/* Profil Saya */}
         <Card className="space-y-4">
-          <SectionTitle sub="Data akun Anda">Profil Saya</SectionTitle>
-          <Field label="Nama lengkap"><Input value={myName} onChange={e => setMyName(e.target.value)} /></Field>
-          <Field label="No. HP Pribadi" hint="Nomor pribadi Anda sebagai admin — tidak dipakai untuk tombol kontak cabang">
-            <Input type="tel" value={myPhone} onChange={e => setMyPhone(e.target.value)} placeholder="Mis. 081234567890" className="font-mono" />
+          <SectionTitle sub={t("admin.settings.myProfileSub")}>{t("admin.settings.myProfileTitle")}</SectionTitle>
+          <Field label={t("admin.settings.fieldFullName")}><Input value={myName} onChange={e => setMyName(e.target.value)} /></Field>
+          <Field label={t("admin.settings.fieldPersonalPhone")} hint={t("admin.settings.fieldPersonalPhoneHint")}>
+            <Input type="tel" value={myPhone} onChange={e => setMyPhone(e.target.value)} placeholder={t("admin.settings.phonePlaceholder")} className="font-mono" />
           </Field>
           <div className="pt-2">
-            <Btn variant="primary" onClick={saveProfile} disabled={savingProfile}>{savingProfile ? "Menyimpan…" : "Simpan profil"}</Btn>
+            <Btn variant="primary" onClick={saveProfile} disabled={savingProfile}>{savingProfile ? t("common.actions.saving") : t("admin.settings.saveProfileBtn")}</Btn>
           </div>
         </Card>
       </div>
 
       {/* Row 2: Koordinat Lokasi — full width karena peta butuh ruang */}
       <Card>
-        <SectionTitle sub="Digunakan untuk validasi radius absensi coach">Koordinat Lokasi Cabang</SectionTitle>
+        <SectionTitle sub={t("admin.settings.locationCoordSub")}>{t("admin.settings.locationCoordTitle")}</SectionTitle>
         <div className="mt-4">
           <MapPicker lat={lat} lng={lng} onChange={(newLat, newLng) => { setLat(newLat); setLng(newLng); }} />
           <div className="mt-3 grid sm:grid-cols-2 gap-3 max-w-sm">
-            <Field label="Latitude"><Input value={lat} onChange={e => setLat(e.target.value)} className="font-mono" placeholder="-6.2615" /></Field>
-            <Field label="Longitude"><Input value={lng} onChange={e => setLng(e.target.value)} className="font-mono" placeholder="106.8106" /></Field>
+            <Field label={t("admin.settings.fieldLatitude")}><Input value={lat} onChange={e => setLat(e.target.value)} className="font-mono" placeholder="-6.2615" /></Field>
+            <Field label={t("admin.settings.fieldLongitude")}><Input value={lng} onChange={e => setLng(e.target.value)} className="font-mono" placeholder="106.8106" /></Field>
           </div>
           <div className="mt-4 pt-4 border-t border-line">
-            <Btn variant="primary" onClick={save} disabled={saving}>{saving ? "Menyimpan…" : "Simpan identitas & lokasi"}</Btn>
+            <Btn variant="primary" onClick={save} disabled={saving}>{saving ? t("common.actions.saving") : t("admin.settings.saveIdentityLocationBtn")}</Btn>
           </div>
         </div>
       </Card>

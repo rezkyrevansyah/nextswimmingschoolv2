@@ -16,11 +16,11 @@ export function calcAge(birthDate: string): number {
  * Handle error responses from /api/admin/users endpoints.
  * Returns [title, subtitle, duration] for toast.error().
  */
-export function parseUserApiError(json: { error?: string; code?: string }): [string, string, number] {
+export function parseUserApiError(json: { error?: string; code?: string }, t: (key: string) => string): [string, string, number] {
   if (json.code === "EMAIL_TAKEN") {
-    return ["Email sudah terdaftar", json.error ?? "Gunakan email lain.", 7000];
+    return [t("common.apiErrors.emailTaken"), json.error ?? t("common.apiErrors.emailTakenHint"), 7000];
   }
-  return ["Gagal", json.error ?? "Terjadi kesalahan.", 4000];
+  return [t("common.apiErrors.genericTitle"), json.error ?? t("common.apiErrors.genericBody"), 4000];
 }
 
 /** Get time for a specific day — falls back to global time_start/time_end. */

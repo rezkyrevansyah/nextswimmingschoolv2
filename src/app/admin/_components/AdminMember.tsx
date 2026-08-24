@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
+import { useLocale } from "@/components/providers/LocaleProvider";
 import { Field, Input, Select, Textarea, Switch } from "@/components/ui/FormFields";
 import { Card, Stat } from "@/components/ui/Card";
 import Status from "@/components/ui/Status";
@@ -110,6 +111,8 @@ export default function AdminMember({ branchId }: { branchId: string }) {
   const supabase = createClient();
   const toast = useToast();
   const confirm = useConfirm();
+  const { t } = useLocale();
+  const genderLabel = (g: string | null | undefined) => g === "male" ? t("admin.approvement.genderMale") : g === "female" ? t("admin.approvement.genderFemale") : null;
   const [tab, setTab] = useState("all");
   const [members, setMembers] = useState<MemberRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -153,13 +156,13 @@ export default function AdminMember({ branchId }: { branchId: string }) {
   }, [branchId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const createMember = async () => {
-    if (!form.full_name || !form.email || !form.password) return toast.error("Nama, email, dan password wajib diisi");
-    if (form.type === "private" && !form.jumlah_sesi) return toast.error("Jumlah sesi wajib diisi untuk member private");
+    if (!form.full_name || !form.email || !form.password) return toast.error(t("admin.coaches.nameEmailPasswordRequired"));
+    if (form.type === "private" && !form.jumlah_sesi) return toast.error(t("admin.members.sessionsRequiredPrivate"));
     // Capacity check
     if (form.class_id) {
       const cls = classes.find(c => c.id === form.class_id);
       if (cls && cls.enrolled >= cls.capacity) {
-        const ok = await confirm({ body: `Kelas "${cls.name}" sudah penuh (${cls.enrolled}/${cls.capacity} member). Tetap lanjutkan?` });
+        const ok = await confirm({ body: t("admin.members.classFullConfirmBody", { name: cls.name, enrolled: cls.enrolled, capacity: cls.capacity }) });
         if (!ok) return;
       }
     }
@@ -179,7 +182,7 @@ export default function AdminMember({ branchId }: { branchId: string }) {
       }),
     });
     const json = await res.json() as { user_id?: string; error?: string; code?: string };
-    if (!res.ok) { const [t, s, d] = parseUserApiError(json); toast.error(t, s, d); setSaving(false); return; }
+    if (!res.ok) { const [errT, errS, errD] = parseUserApiError(json, t); toast.error(errT, errS, errD); setSaving(false); return; }
 
     // Upload avatar if selected
     if (createAvatarFile && json.user_id) {
@@ -191,7 +194,7 @@ export default function AdminMember({ branchId }: { branchId: string }) {
       } catch { /* non-fatal */ }
     }
 
-    toast.success("Member dibuat", "Akun langsung aktif");
+    toast.success(t("admin.members.memberCreatedToast"), t("admin.members.accountActiveImmediatelySub"));
     setSaving(false);
     setOpenCreate(false);
     setCreateAvatarFile(null);
@@ -223,7 +226,7 @@ export default function AdminMember({ branchId }: { branchId: string }) {
 
   const saveMemberEdit = async () => {
     if (!detail) return;
-    if (!editMemberForm.full_name) return toast.error("Nama lengkap wajib diisi");
+    if (!editMemberForm.full_name) return toast.error(t("admin.members.fullNameRequired2"));
     setSavingEdit(true);
 
     // Update email di auth jika berubah
@@ -236,9 +239,9 @@ export default function AdminMember({ branchId }: { branchId: string }) {
       });
       if (!emailRes.ok) {
         const j = await emailRes.json() as { error?: string; code?: string };
-        const [t, s, d] = parseUserApiError(j);
+        const [errT, errS, errD] = parseUserApiError(j, t);
         setSavingEdit(false);
-        return toast.error(t, s, d);
+        return toast.error(errT, errS, errD);
       }
     }
 
@@ -251,7 +254,7 @@ export default function AdminMember({ branchId }: { branchId: string }) {
       address: editMemberForm.address || null,
       health_notes: editMemberForm.health_notes || null,
     }).eq("id", detail.profile_id);
-    if (profileErr) { setSavingEdit(false); return toast.error("Gagal update profil", profileErr.message); }
+    if (profileErr) { setSavingEdit(false); return toast.error(t("admin.members.updateProfileFailed"), profileErr.message); }
 
     // Update members row (type, school_id) — member_no is auto-generated at creation, not editable
     await createClient().from("members").update({
@@ -269,7 +272,7 @@ export default function AdminMember({ branchId }: { branchId: string }) {
       for (const cid of toAdd) {
         const cls = classes.find(c => c.id === cid);
         if (cls && cls.enrolled >= cls.capacity) {
-          const ok = await confirm({ body: `Kelas "${cls.name}" sudah penuh (${cls.enrolled}/${cls.capacity}). Tetap tambahkan?` });
+          const ok = await confirm({ body: t("admin.members.classFullConfirmBodyAdd", { name: cls.name, enrolled: cls.enrolled, capacity: cls.capacity }) });
           if (!ok) { setSavingEdit(false); return; }
         }
       }
@@ -295,7 +298,7 @@ export default function AdminMember({ branchId }: { branchId: string }) {
     }
 
     setSavingEdit(false);
-    toast.success("Data member diperbarui");
+    toast.success(t("admin.members.memberDataUpdatedToast"));
     setOpenEditMember(false);
     setEditAvatarFile(null);
     setEditAvatarPreview(null);
@@ -321,13 +324,13 @@ export default function AdminMember({ branchId }: { branchId: string }) {
 
   const resetPassword = async () => {
     if (!detail) return;
-    if (!newPwd || newPwd.length < 6) return toast.error("Password minimal 6 karakter");
+    if (!newPwd || newPwd.length < 6) return toast.error(t("admin.schoolPanel.passwordMinLength"));
     const res = await fetch(`/api/admin/users/${detail.profile_id}`, {
       method: "PATCH", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ password: newPwd }),
     });
-    if (res.ok) { toast.success("Password direset"); setOpenResetPwd(false); setNewPwd(""); setShowNewPwd(false); }
-    else toast.error("Gagal reset password");
+    if (res.ok) { toast.success(t("admin.members.passwordResetToast2")); setOpenResetPwd(false); setNewPwd(""); setShowNewPwd(false); }
+    else toast.error(t("admin.coaches.resetPasswordFailed"));
   };
 
   const [suspendMemberTarget, setSuspendMemberTarget] = useState<MemberRow | null>(null);
@@ -437,15 +440,15 @@ export default function AdminMember({ branchId }: { branchId: string }) {
       const nama_kelas_raw = r.nama_kelas ? String(r.nama_kelas).trim() : "";
       const nama_sekolah_raw = r.nama_sekolah ? String(r.nama_sekolah).trim() : "";
 
-      if (!full_name) errors.push("Nama lengkap wajib diisi");
-      if (!email) errors.push("Email wajib diisi");
-      else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.push("Format email tidak valid");
-      if (!password) errors.push("Password wajib diisi");
-      else if (password.length < 6) errors.push("Password minimal 6 karakter");
-      if (memberTypeRaw && !normalizeMemberType(memberTypeRaw)) errors.push(`Tipe member tidak valid: "${String(memberTypeRaw)}". Gunakan: reguler, private, atau afiliasi_sekolah`);
-      if (r.tanggal_lahir && !birth_date) errors.push(`Format tanggal lahir tidak valid: "${String(r.tanggal_lahir)}". Gunakan DD/MM/YYYY`);
-      if (r.jenis_kelamin && !gender) errors.push(`Jenis kelamin tidak valid: "${String(r.jenis_kelamin)}". Gunakan L atau P`);
-      if (member_type === "private" && (total_sessions === null || isNaN(total_sessions))) errors.push("Jumlah sesi wajib diisi (angka) untuk tipe private");
+      if (!full_name) errors.push(t("admin.members.fullNameRequired2"));
+      if (!email) errors.push(t("admin.members.emailRequiredImport"));
+      else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.push(t("admin.members.invalidEmailFormat"));
+      if (!password) errors.push(t("admin.members.passwordRequiredImport"));
+      else if (password.length < 6) errors.push(t("admin.schoolPanel.passwordMinLength"));
+      if (memberTypeRaw && !normalizeMemberType(memberTypeRaw)) errors.push(t("admin.members.invalidMemberType", { value: String(memberTypeRaw) }));
+      if (r.tanggal_lahir && !birth_date) errors.push(t("admin.members.invalidBirthDateFormat", { value: String(r.tanggal_lahir) }));
+      if (r.jenis_kelamin && !gender) errors.push(t("admin.members.invalidGenderFormat", { value: String(r.jenis_kelamin) }));
+      if (member_type === "private" && (total_sessions === null || isNaN(total_sessions))) errors.push(t("admin.members.sessionCountRequiredForPrivate"));
 
       let class_id: string | null | undefined = undefined;
       if (nama_kelas_raw) {
@@ -453,7 +456,7 @@ export default function AdminMember({ branchId }: { branchId: string }) {
         if (found) {
           class_id = found.id;
         } else {
-          warnings.push(`Kelas "${nama_kelas_raw}" tidak ditemukan. Member akan dibuat tanpa kelas.`);
+          warnings.push(t("admin.members.classNotFoundWarning", { name: nama_kelas_raw }));
           class_id = null;
         }
       }
@@ -461,13 +464,13 @@ export default function AdminMember({ branchId }: { branchId: string }) {
       let school_id: string | null | undefined = undefined;
       if (member_type === "school_affiliate") {
         if (!nama_sekolah_raw) {
-          errors.push("Nama sekolah wajib diisi untuk tipe afiliasi sekolah");
+          errors.push(t("admin.members.schoolNameRequiredImport"));
         } else {
           const found = schools.find(s => s.name.trim().toLowerCase() === nama_sekolah_raw.toLowerCase());
           if (found) {
             school_id = found.id;
           } else {
-            errors.push(`Sekolah "${nama_sekolah_raw}" tidak ditemukan di sistem. Pastikan nama sekolah sama persis.`);
+            errors.push(t("admin.members.schoolNotFoundError", { name: nama_sekolah_raw }));
             school_id = null;
           }
         }
@@ -490,14 +493,14 @@ export default function AdminMember({ branchId }: { branchId: string }) {
       const wb = XLSX.read(buf, { type: "array", cellDates: false, raw: true });
       const ws = wb.Sheets[wb.SheetNames[0]];
       const raw = XLSX.utils.sheet_to_json<ImportRow>(ws, { defval: "", raw: true });
-      if (raw.length === 0) { toast.error("File kosong", "Tidak ada baris data yang ditemukan."); return; }
-      if (raw.length > 200) { toast.error("Terlalu banyak baris", "Maksimum 200 member per sekali import."); return; }
+      if (raw.length === 0) { toast.error(t("admin.members.fileEmptyTitle"), t("admin.members.fileEmptyBody")); return; }
+      if (raw.length > 200) { toast.error(t("admin.members.tooManyRowsTitle"), t("admin.members.tooManyRowsBody")); return; }
       const validated = validateImportRows(raw, classes, schoolsList);
       setImportRows(validated);
       setImportPage(0);
       setImportStep("preview");
     } catch {
-      toast.error("Gagal membaca file", "Pastikan file berformat .xlsx, .xls, atau .csv.");
+      toast.error(t("admin.members.readFileFailedTitle"), t("admin.members.readFileFailedBody"));
     }
   };
 
@@ -505,7 +508,12 @@ export default function AdminMember({ branchId }: { branchId: string }) {
     const XLSX = await import("xlsx");
     const headers = ["nama_lengkap", "email", "password", "tipe_member", "tanggal_lahir", "jenis_kelamin", "no_hp", "alamat", "catatan_kesehatan", "jumlah_sesi", "nama_kelas", "nama_sekolah"];
     const example = ["Budi Santoso", "budi@gmail.com", "aqua2024", "reguler", "15/06/2010", "L", "08123456789", "Jl. Merdeka No. 1", "", "", "Kelas A Pagi", ""];
-    const notes = ["Nama lengkap", "Email unik", "Min. 6 karakter", "reguler / private / afiliasi_sekolah", "DD/MM/YYYY atau YYYY-MM-DD", "L atau P", "Opsional", "Opsional", "Opsional", "Wajib jika tipe=private", "Harus cocok persis nama kelas", "WAJIB jika tipe=afiliasi_sekolah"];
+    const notes = [
+      t("admin.coaches.fieldFullName2"), t("admin.members.emailUniqueNote"), t("admin.members.min6CharsNote"),
+      "reguler / private / afiliasi_sekolah", t("admin.members.dateFormatsNote"), t("admin.members.lOrPNote"),
+      t("admin.izin.optionalHint2"), t("admin.izin.optionalHint2"), t("admin.izin.optionalHint2"),
+      t("admin.members.requiredIfPrivateNote"), t("admin.members.mustMatchClassNameExactly"), t("admin.members.mandatoryIfSchoolAffiliateNote"),
+    ];
     const ws = XLSX.utils.aoa_to_sheet([headers, example, notes]);
     ws["!cols"] = headers.map((_, i) => ({ wch: [20, 28, 14, 20, 16, 14, 16, 28, 24, 14, 20, 24][i] }));
     ws["!freeze"] = { xSplit: 0, ySplit: 1 };
@@ -517,7 +525,7 @@ export default function AdminMember({ branchId }: { branchId: string }) {
   const runImport = async () => {
     const toImport = importRows.filter(r => r._status !== "error");
     if (toImport.length === 0) return;
-    const ok = await confirm({ title: "Konfirmasi Import", body: `Akan mengimport ${toImport.length} member. Proses ini tidak dapat dibatalkan. Lanjutkan?` });
+    const ok = await confirm({ title: t("admin.members.importConfirmTitle"), body: t("admin.members.importConfirmBody", { count: toImport.length }) });
     if (!ok) return;
 
     const CHUNK = 10;
@@ -546,7 +554,7 @@ export default function AdminMember({ branchId }: { branchId: string }) {
         });
         const json = await res.json() as { success: number; failed: { row: number; email: string; error: string }[] };
         if (!res.ok) {
-          toast.error("Import terhenti", (json as { error?: string }).error ?? "Terjadi kesalahan.");
+          toast.error(t("admin.members.importStoppedTitle"), (json as { error?: string }).error ?? t("admin.members.genericErrorOccurred"));
           break;
         }
         totalSuccess += json.success;
@@ -554,7 +562,7 @@ export default function AdminMember({ branchId }: { branchId: string }) {
         setImportProgress({ done: Math.min(i + CHUNK, toImport.length), total: toImport.length });
       }
     } catch {
-      toast.error("Import gagal", "Terjadi kesalahan jaringan.");
+      toast.error(t("admin.members.importFailedTitle"), t("admin.members.networkErrorOccurred"));
     }
 
     setImportResult({ success: totalSuccess, failed: allFailed });
@@ -596,38 +604,38 @@ export default function AdminMember({ branchId }: { branchId: string }) {
       URL.revokeObjectURL(url);
       setQrSelectMode(false);
       setSelectedQR(new Set());
-      toast.success("Download selesai", `${memberIds.length} QR code berhasil diunduh`);
+      toast.success(t("admin.members.downloadCompleteToast"), t("admin.members.qrDownloadedSub", { count: memberIds.length }));
     } catch {
-      toast.error("Gagal generate QR", "Terjadi kesalahan saat membuat file ZIP.");
+      toast.error(t("admin.members.generateQrFailedTitle"), t("admin.members.generateQrFailedBody"));
     }
     setGeneratingQR(false);
   };
 
   const doSuspendMember = async () => {
-    if (!suspendMemberTarget || !suspendMemberForm.reason || !suspendMemberForm.until) return toast.error("Alasan dan tanggal berakhir wajib diisi");
+    if (!suspendMemberTarget || !suspendMemberForm.reason || !suspendMemberForm.until) return toast.error(t("admin.coaches.reasonUntilRequired"));
     setSuspendingMember(true);
     const user = (await supabase.auth.getUser()).data.user;
     const { error } = await supabase.from("members")
       .update({ status: "suspended", suspend_until: suspendMemberForm.until, suspend_reason: suspendMemberForm.reason })
       .eq("id", suspendMemberTarget.id);
     setSuspendingMember(false);
-    if (error) return toast.error("Gagal suspend member", error.message);
-    toast.success(`${suspendMemberTarget.profile?.full_name ?? "Member"} di-suspend`);
-    logActivity(supabase, { userId: user?.id ?? "unknown", userRole: "admin", userName: user?.user_metadata?.full_name ?? "Admin", branchId, entityType: "members", entityId: suspendMemberTarget.id, entityLabel: suspendMemberTarget.profile?.full_name ?? undefined, action: "suspend", label: `Member ${suspendMemberTarget.profile?.full_name ?? suspendMemberTarget.id} di-suspend hingga ${suspendMemberForm.until}`, meta: { reason: suspendMemberForm.reason, until: suspendMemberForm.until } });
+    if (error) return toast.error(t("admin.members.suspendMemberFailed"), error.message);
+    toast.success(t("admin.members.memberSuspendedToast", { name: suspendMemberTarget.profile?.full_name ?? "Member" }));
+    logActivity(supabase, { userId: user?.id ?? "unknown", userRole: "admin", userName: user?.user_metadata?.full_name ?? "Admin", branchId, entityType: "members", entityId: suspendMemberTarget.id, entityLabel: suspendMemberTarget.profile?.full_name ?? undefined, action: "suspend", label: t("admin.members.activityMemberSuspended", { name: suspendMemberTarget.profile?.full_name ?? suspendMemberTarget.id, date: suspendMemberForm.until }), meta: { reason: suspendMemberForm.reason, until: suspendMemberForm.until } });
     setSuspendMemberTarget(null);
     setDetail(null);
     load();
   };
 
   const deleteMember = async (m: MemberRow) => {
-    const ok = await confirm({ body: `Hapus permanen akun member ${m.profile?.full_name ?? ""}? Semua data termasuk absensi dan tagihan akan ikut terhapus.`, danger: true, confirmLabel: "Hapus Permanen" });
+    const ok = await confirm({ body: t("admin.members.deleteMemberConfirmBody", { name: m.profile?.full_name ?? "" }), danger: true, confirmLabel: t("admin.members.deletePermanentlyBtnConfirm") });
     if (!ok) return;
     const res = await fetch(`/api/admin/users/${m.profile_id}`, { method: "DELETE" });
     if (!res.ok) {
       const j = await res.json() as { error?: string };
-      return toast.error("Gagal menghapus member", j.error);
+      return toast.error(t("admin.members.deleteMemberFailed"), j.error);
     }
-    toast.success("Akun member dihapus permanen");
+    toast.success(t("admin.members.memberAccountDeletedToast"));
     setDetail(null);
     load();
   };
@@ -637,9 +645,9 @@ export default function AdminMember({ branchId }: { branchId: string }) {
     const { error } = await supabase.from("members")
       .update({ status: "active", suspend_until: null, suspend_reason: null })
       .eq("id", m.id);
-    if (error) return toast.error("Gagal mengakhiri suspend", error.message);
-    toast.success("Suspend diakhiri");
-    logActivity(supabase, { userId: user?.id ?? "unknown", userRole: "admin", userName: user?.user_metadata?.full_name ?? "Admin", branchId, entityType: "members", entityId: m.id, entityLabel: m.profile?.full_name ?? undefined, action: "unsuspend", label: `Suspend member ${m.profile?.full_name ?? m.id} diakhiri` });
+    if (error) return toast.error(t("admin.coaches.endSuspendFailed"), error.message);
+    toast.success(t("admin.coaches.suspendEndedToast"));
+    logActivity(supabase, { userId: user?.id ?? "unknown", userRole: "admin", userName: user?.user_metadata?.full_name ?? "Admin", branchId, entityType: "members", entityId: m.id, entityLabel: m.profile?.full_name ?? undefined, action: "unsuspend", label: t("admin.members.activityUnsuspended", { name: m.profile?.full_name ?? m.id }) });
     setDetail(null);
     load();
   };
@@ -647,7 +655,7 @@ export default function AdminMember({ branchId }: { branchId: string }) {
   const doAddSesi = async () => {
     if (!detail) return;
     const jumlah = Number(addSesiForm.jumlah);
-    if (!jumlah || jumlah < 1) return toast.error("Jumlah sesi tidak valid");
+    if (!jumlah || jumlah < 1) return toast.error(t("admin.members.invalidSessionCount"));
     setSavingAddSesi(true);
     const db = createClient();
     const newTotal = (detail.total_sessions ?? 0) + jumlah;
@@ -655,7 +663,7 @@ export default function AdminMember({ branchId }: { branchId: string }) {
     const { error } = await db.from("members")
       .update({ total_sessions: newTotal, remaining_sessions: newRemaining })
       .eq("id", detail.id);
-    if (error) { setSavingAddSesi(false); return toast.error("Gagal menambah sesi", error.message); }
+    if (error) { setSavingAddSesi(false); return toast.error(t("admin.members.addSessionFailed"), error.message); }
 
     if (addSesiForm.generate_bill) {
       const selectedPkg = privateClassPackages.find(p => p.id === addSesiForm.selectedPackageId);
@@ -681,7 +689,7 @@ export default function AdminMember({ branchId }: { branchId: string }) {
         if (pricePerSession > 0) {
           await db.from("bills").insert({
             member_id: detail.id, branch_id: branchId,
-            period_label: `Tambah ${jumlah} sesi`,
+            period_label: t("admin.members.fallbackBillPeriodLabel", { count: jumlah }),
             type: "session_pack" as "monthly",
             amount: pricePerSession * jumlah,
             discount: 0,
@@ -693,7 +701,7 @@ export default function AdminMember({ branchId }: { branchId: string }) {
     }
 
     setSavingAddSesi(false);
-    toast.success(`${jumlah} sesi ditambahkan`);
+    toast.success(t("admin.members.sessionsAddedToast", { count: jumlah }));
     setOpenAddSesi(false);
     setAddSesiForm({ jumlah: "", generate_bill: false, selectedPackageId: "" });
     // Refresh detail
@@ -770,15 +778,15 @@ export default function AdminMember({ branchId }: { branchId: string }) {
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <div><h2 className="font-display font-bold text-2xl">Manajemen Member</h2><p className="text-ink-mute text-sm mt-0.5">CRUD member, suspend, dan reset password.</p></div>
+        <div><h2 className="font-display font-bold text-2xl">{t("admin.members.pageTitle")}</h2><p className="text-ink-mute text-sm mt-0.5">{t("admin.members.pageSub")}</p></div>
         <div className="flex flex-wrap gap-2">
           {qrSelectMode ? (
             <>
               <span className="self-center text-sm text-ink-mute font-medium">
-                {selectedQR.size > 0 ? `${selectedQR.size} dipilih` : "Pilih member"}
+                {selectedQR.size > 0 ? t("admin.members.selectedCountQr", { count: selectedQR.size }) : t("admin.members.selectMemberPrompt")}
               </span>
-              <Btn variant="ghost" size="sm" onClick={() => { setQrSelectMode(false); setSelectedQR(new Set()); }}>Batal</Btn>
-              <Btn variant="soft" size="sm" onClick={() => { setSelectedQR(new Set(filteredSorted.map(m => m.id))); }}>Pilih Semua ({filteredSorted.length})</Btn>
+              <Btn variant="ghost" size="sm" onClick={() => { setQrSelectMode(false); setSelectedQR(new Set()); }}>{t("common.actions.cancel")}</Btn>
+              <Btn variant="soft" size="sm" onClick={() => { setSelectedQR(new Set(filteredSorted.map(m => m.id))); }}>{t("admin.members.selectAllCountBtn", { count: filteredSorted.length })}</Btn>
               <Btn
                 variant="primary"
                 icon="download"
@@ -786,24 +794,24 @@ export default function AdminMember({ branchId }: { branchId: string }) {
                 disabled={selectedQR.size === 0 || generatingQR}
                 onClick={() => bulkDownloadQR(Array.from(selectedQR))}
               >
-                {generatingQR ? "Generating…" : `Download QR (${selectedQR.size})`}
+                {generatingQR ? t("admin.members.generatingBtn3") : t("admin.members.downloadQrCountBtn", { count: selectedQR.size })}
               </Btn>
             </>
           ) : (
             <>
-              <Btn variant="outline" icon="download" size="sm" onClick={downloadTemplate}>Unduh Template</Btn>
-              <Btn variant="soft" icon="upload" onClick={() => { setImportStep("upload"); setImportRows([]); setImportResult(null); setOpenImport(true); }}>Import Excel</Btn>
-              <Btn variant="outline" icon="qr" size="sm" onClick={() => { setQrSelectMode(true); setSelectedQR(new Set()); }}>Download QR</Btn>
-              <Btn variant="primary" icon="plus" onClick={() => { setForm({ full_name: "", birth_date: "", gender: "", type: "reguler", phone: "", phone_owner: "self", parent_name: "", parent_phone: "", address: "", health_notes: "", class_id: "", school_id: "", email: "", password: "", jumlah_sesi: "" }); setOpenCreate(true); }}>Tambah Member</Btn>
+              <Btn variant="outline" icon="download" size="sm" onClick={downloadTemplate}>{t("admin.members.downloadTemplateBtn")}</Btn>
+              <Btn variant="soft" icon="upload" onClick={() => { setImportStep("upload"); setImportRows([]); setImportResult(null); setOpenImport(true); }}>{t("admin.members.importExcelBtn")}</Btn>
+              <Btn variant="outline" icon="qr" size="sm" onClick={() => { setQrSelectMode(true); setSelectedQR(new Set()); }}>{t("admin.members.downloadQrBtn")}</Btn>
+              <Btn variant="primary" icon="plus" onClick={() => { setForm({ full_name: "", birth_date: "", gender: "", type: "reguler", phone: "", phone_owner: "self", parent_name: "", parent_phone: "", address: "", health_notes: "", class_id: "", school_id: "", email: "", password: "", jumlah_sesi: "" }); setOpenCreate(true); }}>{t("admin.members.addMemberBtn")}</Btn>
             </>
           )}
         </div>
       </div>
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Stat label="Total aktif"       value={stats.all}     icon="users"   tone="ocean" />
-        <Stat label="Reguler"           value={stats.reguler} icon="grid"    tone="wave"  />
-        <Stat label="Private"           value={stats.private} icon="sparkle" tone="ocean" />
-        <Stat label="Afiliasi sekolah"  value={stats.school}  icon="school"  tone="ocean" />
+        <Stat label={t("admin.members.statTotalActive")}      value={stats.all}     icon="users"   tone="ocean" />
+        <Stat label={t("admin.members.statRegular")}          value={stats.reguler} icon="grid"    tone="wave"  />
+        <Stat label={t("admin.members.statPrivate")}          value={stats.private} icon="sparkle" tone="ocean" />
+        <Stat label={t("admin.members.statSchoolAffiliate")}  value={stats.school}  icon="school"  tone="ocean" />
       </div>
       <Card padded={false}>
         {/* Search bar */}
@@ -813,7 +821,7 @@ export default function AdminMember({ branchId }: { branchId: string }) {
             <input
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Cari nama, email, atau nomor HP…"
+              placeholder={t("admin.members.searchPlaceholder2")}
               className="flex-1 text-sm outline-none bg-transparent"
               autoComplete="off"
             />
@@ -828,7 +836,7 @@ export default function AdminMember({ branchId }: { branchId: string }) {
           <div className="flex items-center gap-2 flex-wrap">
             {/* Tabs */}
             <div className="flex gap-1 bg-paper-deep rounded-xl p-1 flex-wrap">
-              {[["all", "Semua"], ["reguler", "Reguler"], ["private", "Private"], ["school_affiliate", "Afiliasi"], ["suspended", "Suspend"]].map(([id, l]) => (
+              {[["all", t("admin.members.tabAll")], ["reguler", t("admin.members.tabRegular")], ["private", t("admin.members.tabPrivate")], ["school_affiliate", t("admin.members.tabAffiliate")], ["suspended", t("admin.members.tabSuspended")]].map(([id, l]) => (
                 <button key={id} type="button" onClick={() => setTab(id)} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${tab === id ? "bg-white text-ocean-700 shadow-sm" : "text-ink-mute hover:text-ink-soft"}`}>{l}</button>
               ))}
             </div>
@@ -840,14 +848,14 @@ export default function AdminMember({ branchId }: { branchId: string }) {
                 onChange={e => { const [col, dir] = e.target.value.split(":"); setSortBy(col); setSortDir(dir as "asc" | "desc"); }}
                 className="text-xs font-semibold border border-line rounded-lg px-2.5 py-1.5 bg-white text-ink-soft outline-none cursor-pointer hover:border-ocean-400 transition"
               >
-                <option value="created_at:desc">Terbaru</option>
-                <option value="created_at:asc">Terlama</option>
-                <option value="name:asc">Nama A–Z</option>
-                <option value="name:desc">Nama Z–A</option>
-                <option value="date_start:asc">Bergabung lama</option>
-                <option value="date_start:desc">Bergabung baru</option>
-                <option value="sessions:asc">Sesi tersisa ↑</option>
-                <option value="sessions:desc">Sesi tersisa ↓</option>
+                <option value="created_at:desc">{t("admin.members.sortNewest")}</option>
+                <option value="created_at:asc">{t("admin.members.sortOldest")}</option>
+                <option value="name:asc">{t("admin.members.sortNameAZ")}</option>
+                <option value="name:desc">{t("admin.members.sortNameZA")}</option>
+                <option value="date_start:asc">{t("admin.members.sortJoinedOld")}</option>
+                <option value="date_start:desc">{t("admin.members.sortJoinedNew")}</option>
+                <option value="sessions:asc">{t("admin.members.sortSessionsAsc")}</option>
+                <option value="sessions:desc">{t("admin.members.sortSessionsDesc")}</option>
               </select>
 
               {/* Filter toggle */}
@@ -857,7 +865,7 @@ export default function AdminMember({ branchId }: { branchId: string }) {
                 className={`relative inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border transition ${showFilters ? "bg-ocean-600 text-white border-ocean-600" : "bg-white border-line text-ink-soft hover:border-ocean-400"}`}
               >
                 <Icon name="settings" className="w-3.5 h-3.5" />
-                Filter
+                {t("admin.financial.filterBtn")}
                 {activeFilterCount > 0 && (
                   <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-danger-500 text-white text-[10px] font-bold flex items-center justify-center">{activeFilterCount}</span>
                 )}
@@ -869,43 +877,43 @@ export default function AdminMember({ branchId }: { branchId: string }) {
           {showFilters && (
             <div className="bg-paper-tint border border-line rounded-xl p-4 grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
               <div>
-                <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-1.5">Jenis Kelamin</div>
+                <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-1.5">{t("admin.members.fieldGenderFilter")}</div>
                 <select value={filterGender} onChange={e => setFilterGender(e.target.value)} className="w-full text-sm border border-line rounded-lg px-2.5 py-1.5 bg-white outline-none">
-                  <option value="">Semua</option>
-                  <option value="male">Laki-laki</option>
-                  <option value="female">Perempuan</option>
+                  <option value="">{t("admin.members.allOpt")}</option>
+                  <option value="male">{t("admin.approvement.genderMale")}</option>
+                  <option value="female">{t("admin.approvement.genderFemale")}</option>
                 </select>
               </div>
               <div>
-                <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-1.5">Kelas</div>
+                <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-1.5">{t("admin.members.fieldClassFilter2")}</div>
                 <select value={filterClass} onChange={e => setFilterClass(e.target.value)} className="w-full text-sm border border-line rounded-lg px-2.5 py-1.5 bg-white outline-none">
-                  <option value="">Semua Kelas</option>
+                  <option value="">{t("admin.members.allClassesOpt3")}</option>
                   {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </div>
               {(tab === "all" || tab === "school_affiliate") && (
                 <div>
-                  <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-1.5">Sekolah</div>
+                  <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-1.5">{t("admin.members.fieldSchoolFilter")}</div>
                   <select value={filterSchool} onChange={e => setFilterSchool(e.target.value)} className="w-full text-sm border border-line rounded-lg px-2.5 py-1.5 bg-white outline-none">
-                    <option value="">Semua Sekolah</option>
+                    <option value="">{t("admin.members.allSchoolsOpt")}</option>
                     {schoolsList.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
                 </div>
               )}
               {(tab === "all" || tab === "private") && (
                 <div>
-                  <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-1.5">Sesi</div>
+                  <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-1.5">{t("admin.members.fieldSessionsFilter")}</div>
                   <select value={filterSessions} onChange={e => setFilterSessions(e.target.value)} className="w-full text-sm border border-line rounded-lg px-2.5 py-1.5 bg-white outline-none">
-                    <option value="">Semua</option>
-                    <option value="has">Ada sesi tersisa</option>
-                    <option value="low">Sisa ≤ 3 sesi</option>
-                    <option value="none">Sesi habis</option>
+                    <option value="">{t("admin.members.allOpt")}</option>
+                    <option value="has">{t("admin.members.hasSessionsLeftOpt")}</option>
+                    <option value="low">{t("admin.members.lowSessionsOpt")}</option>
+                    <option value="none">{t("admin.members.noSessionsOpt")}</option>
                   </select>
                 </div>
               )}
               {activeFilterCount > 0 && (
                 <div className="sm:col-span-2 lg:col-span-4 flex justify-end pt-1">
-                  <button type="button" onClick={resetFilters} className="text-xs font-semibold text-danger-600 hover:underline">Reset semua filter</button>
+                  <button type="button" onClick={resetFilters} className="text-xs font-semibold text-danger-600 hover:underline">{t("admin.members.resetAllFiltersBtn")}</button>
                 </div>
               )}
             </div>
@@ -916,34 +924,34 @@ export default function AdminMember({ branchId }: { branchId: string }) {
             <div className="flex items-center gap-2 flex-wrap">
               {filterGender && (
                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-ocean-50 text-ocean-700 text-xs font-semibold ring-1 ring-ocean-200">
-                  {filterGender === "male" ? "Laki-laki" : "Perempuan"}
+                  {genderLabel(filterGender)}
                   <button type="button" onClick={() => setFilterGender("")}><Icon name="x" className="w-3 h-3" /></button>
                 </span>
               )}
               {filterClass && (
                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-ocean-50 text-ocean-700 text-xs font-semibold ring-1 ring-ocean-200">
-                  {classes.find(c => c.id === filterClass)?.name ?? "Kelas"}
+                  {classes.find(c => c.id === filterClass)?.name ?? t("admin.members.classPillFallback")}
                   <button type="button" onClick={() => setFilterClass("")}><Icon name="x" className="w-3 h-3" /></button>
                 </span>
               )}
               {filterSchool && (
                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-ocean-50 text-ocean-700 text-xs font-semibold ring-1 ring-ocean-200">
-                  {schoolsList.find(s => s.id === filterSchool)?.name ?? "Sekolah"}
+                  {schoolsList.find(s => s.id === filterSchool)?.name ?? t("admin.members.schoolPillFallback")}
                   <button type="button" onClick={() => setFilterSchool("")}><Icon name="x" className="w-3 h-3" /></button>
                 </span>
               )}
               {filterSessions && (
                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-ocean-50 text-ocean-700 text-xs font-semibold ring-1 ring-ocean-200">
-                  {filterSessions === "has" ? "Ada sesi" : filterSessions === "low" ? "Sisa ≤3" : "Sesi habis"}
+                  {filterSessions === "has" ? t("admin.members.hasSessionsPill") : filterSessions === "low" ? t("admin.members.lowSessionsPill") : t("admin.members.noSessionsPill")}
                   <button type="button" onClick={() => setFilterSessions("")}><Icon name="x" className="w-3 h-3" /></button>
                 </span>
               )}
-              <button type="button" onClick={resetFilters} className="text-xs text-ink-mute hover:text-danger-600 transition ml-1">Hapus semua</button>
+              <button type="button" onClick={resetFilters} className="text-xs text-ink-mute hover:text-danger-600 transition ml-1">{t("admin.members.clearAllBtn")}</button>
             </div>
           )}
         </div>
 
-        {loading ? <div className="p-10 text-center text-ink-mute">Memuat data…</div> : (
+        {loading ? <div className="p-10 text-center text-ink-mute">{t("admin.members.loadingData2")}</div> : (
           <>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -962,15 +970,15 @@ export default function AdminMember({ branchId }: { branchId: string }) {
                       onClick={() => toggleSort("name")}
                     >
                       <span className="inline-flex items-center gap-1">
-                        Member
+                        {t("admin.members.colMember2")}
                         <span className={`transition-opacity ${sortBy === "name" ? "opacity-100 text-ocean-600" : "opacity-0 group-hover:opacity-40"}`}>
                           {sortBy === "name" ? (sortDir === "asc" ? "↑" : "↓") : "↕"}
                         </span>
                       </span>
                     </th>
-                    <th className="text-left py-3 font-bold hidden sm:table-cell">Tipe</th>
-                    <th className="text-left py-3 font-bold hidden md:table-cell">Kelas</th>
-                    <th className="text-left py-3 font-bold">Status</th>
+                    <th className="text-left py-3 font-bold hidden sm:table-cell">{t("admin.members.colType2")}</th>
+                    <th className="text-left py-3 font-bold hidden md:table-cell">{t("admin.members.colClass2")}</th>
+                    <th className="text-left py-3 font-bold">{t("admin.members.colStatus2")}</th>
                     {!qrSelectMode && <th className="px-5" />}
                   </tr>
                 </thead>
@@ -1003,13 +1011,13 @@ export default function AdminMember({ branchId }: { branchId: string }) {
                             <Avatar name={fullName} src={m.profile?.avatar_url ?? undefined} size={38} />
                             <div className="min-w-0">
                               <div className="font-semibold text-ink truncate max-w-[120px] sm:max-w-none">{fullName}</div>
-                              {age && <div className="text-xs text-ink-mute">{age} thn</div>}
+                              {age && <div className="text-xs text-ink-mute">{t("admin.approvement.yearsSuffix", { n: age })}</div>}
                             </div>
                           </div>
                         </td>
-                        <td className="hidden sm:table-cell"><Status kind={m.type === "private" ? "substitute" : m.type === "school_affiliate" ? "school_covered" : "active"} dot={false}>{m.type === "reguler" ? "Reguler" : m.type === "private" ? "Private" : "Afiliasi"}</Status></td>
+                        <td className="hidden sm:table-cell"><Status kind={m.type === "private" ? "substitute" : m.type === "school_affiliate" ? "school_covered" : "active"} dot={false}>{m.type === "reguler" ? t("admin.members.typeRegularShort") : m.type === "private" ? t("admin.members.typePrivateShort") : t("admin.members.typeAffiliateShort")}</Status></td>
                         <td className="text-ink-soft text-xs hidden md:table-cell max-w-[150px] truncate">{cls}</td>
-                        <td><Status kind={m.status === "suspended" ? "suspended" : "active"}>{m.status === "suspended" ? "Suspend" : "Aktif"}</Status></td>
+                        <td><Status kind={m.status === "suspended" ? "suspended" : "active"}>{m.status === "suspended" ? t("admin.members.statusSuspend2") : t("admin.members.statusActive2")}</Status></td>
                         {!qrSelectMode && <td className="px-5"><button className="text-ink-mute hover:text-ocean-600 p-1.5"><Icon name="eye" className="w-4 h-4" /></button></td>}
                       </tr>
                     );
@@ -1018,9 +1026,9 @@ export default function AdminMember({ branchId }: { branchId: string }) {
                     <tr>
                       <td colSpan={5} className="py-14 text-center">
                         <Icon name="search" className="w-8 h-8 text-ink-faint mx-auto mb-3" />
-                        <div className="text-sm font-semibold text-ink-mute">Tidak ada member yang cocok</div>
+                        <div className="text-sm font-semibold text-ink-mute">{t("admin.members.noMatchingMembers")}</div>
                         {(search || activeFilterCount > 0) && (
-                          <button type="button" onClick={() => { resetFilters(); setSearch(""); }} className="mt-2 text-xs text-ocean-600 hover:underline font-semibold">Hapus semua filter</button>
+                          <button type="button" onClick={() => { resetFilters(); setSearch(""); }} className="mt-2 text-xs text-ocean-600 hover:underline font-semibold">{t("admin.members.clearFiltersBtn")}</button>
                         )}
                       </td>
                     </tr>
@@ -1033,11 +1041,11 @@ export default function AdminMember({ branchId }: { branchId: string }) {
             {totalPages > 1 && (
               <div className="px-5 py-3.5 border-t border-line flex items-center justify-between flex-wrap gap-3">
                 <span className="text-xs text-ink-mute tabular-nums">
-                  {filteredSorted.length} member · halaman {safePage + 1} dari {totalPages}
+                  {t("admin.members.memberCountPageLabel", { count: filteredSorted.length, page: safePage + 1, total: totalPages })}
                 </span>
                 <div className="flex items-center gap-1">
                   <button type="button" disabled={safePage === 0} onClick={() => setPage(0)} className="px-2 py-1.5 rounded-lg border border-line text-ink-mute text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-paper-tint transition">«</button>
-                  <button type="button" disabled={safePage === 0} onClick={() => setPage(p => p - 1)} className="px-3 py-1.5 rounded-lg border border-line text-ink-mute text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-paper-tint transition">‹ Sebelumnya</button>
+                  <button type="button" disabled={safePage === 0} onClick={() => setPage(p => p - 1)} className="px-3 py-1.5 rounded-lg border border-line text-ink-mute text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-paper-tint transition">{t("admin.members.prevBtn")}</button>
                   {Array.from({ length: totalPages }, (_, i) => i)
                     .filter(i => i === 0 || i === totalPages - 1 || Math.abs(i - safePage) <= 1)
                     .reduce<(number | "…")[]>((acc, i, idx, arr) => {
@@ -1050,7 +1058,7 @@ export default function AdminMember({ branchId }: { branchId: string }) {
                       : <button key={item} type="button" onClick={() => setPage(item as number)} className={`w-8 h-8 rounded-lg text-sm font-semibold transition ${safePage === item ? "bg-ocean-600 text-white" : "border border-line text-ink-mute hover:bg-paper-tint"}`}>{(item as number) + 1}</button>
                     )
                   }
-                  <button type="button" disabled={safePage === totalPages - 1} onClick={() => setPage(p => p + 1)} className="px-3 py-1.5 rounded-lg border border-line text-ink-mute text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-paper-tint transition">Berikutnya ›</button>
+                  <button type="button" disabled={safePage === totalPages - 1} onClick={() => setPage(p => p + 1)} className="px-3 py-1.5 rounded-lg border border-line text-ink-mute text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-paper-tint transition">{t("admin.members.nextBtn")}</button>
                   <button type="button" disabled={safePage === totalPages - 1} onClick={() => setPage(totalPages - 1)} className="px-2 py-1.5 rounded-lg border border-line text-ink-mute text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-paper-tint transition">»</button>
                 </div>
               </div>
@@ -1062,9 +1070,9 @@ export default function AdminMember({ branchId }: { branchId: string }) {
       <Modal open={!!detail} onClose={() => { setDetail(null); setDetailTab("info"); setAttLoaded(false); setBillsLoaded(false); setRegProofUrl(null); }} title={detail?.profile?.full_name ?? ""} size="xl"
         footer={
           <>
-            <Btn variant="ghost" onClick={() => { setDetail(null); setDetailTab("info"); setAttLoaded(false); setBillsLoaded(false); setRegProofUrl(null); }}>Tutup</Btn>
-            <Btn variant="outline" icon="edit" onClick={() => detail && openEdit(detail)}>Edit Data</Btn>
-            <Btn variant="outline" icon="refresh" onClick={() => { setOpenResetPwd(true); setNewPwd(""); }}>Reset Password</Btn>
+            <Btn variant="ghost" onClick={() => { setDetail(null); setDetailTab("info"); setAttLoaded(false); setBillsLoaded(false); setRegProofUrl(null); }}>{t("common.actions.close")}</Btn>
+            <Btn variant="outline" icon="edit" onClick={() => detail && openEdit(detail)}>{t("admin.coaches.editDataBtn")}</Btn>
+            <Btn variant="outline" icon="refresh" onClick={() => { setOpenResetPwd(true); setNewPwd(""); }}>{t("admin.coaches.resetPasswordBtn")}</Btn>
             {detail?.type === "private" && (
               <Btn variant="accent" icon="plus" onClick={async () => {
                 setAddSesiForm({ jumlah: "", generate_bill: false, selectedPackageId: "" });
@@ -1078,13 +1086,13 @@ export default function AdminMember({ branchId }: { branchId: string }) {
                   setPrivateClassPackages([]);
                 }
                 setOpenAddSesi(true);
-              }}>Tambah Sesi</Btn>
+              }}>{t("admin.members.addSessionBtn")}</Btn>
             )}
             {detail?.status !== "suspended"
-              ? <Btn variant="ghost" className="text-warn-600" onClick={() => { setSuspendMemberTarget(detail); setSuspendMemberForm({ reason: "", until: "" }); }}>Suspend</Btn>
-              : <Btn variant="soft" size="sm" icon="check" onClick={() => detail && liftSuspendMember(detail)}>Akhiri Suspend</Btn>
+              ? <Btn variant="ghost" className="text-warn-600" onClick={() => { setSuspendMemberTarget(detail); setSuspendMemberForm({ reason: "", until: "" }); }}>{t("admin.members.suspendBtn2")}</Btn>
+              : <Btn variant="soft" size="sm" icon="check" onClick={() => detail && liftSuspendMember(detail)}>{t("admin.coaches.endSuspendBtn")}</Btn>
             }
-            <Btn variant="ghost" className="text-danger-500" icon="trash" onClick={() => detail && deleteMember(detail)}>Hapus Permanen</Btn>
+            <Btn variant="ghost" className="text-danger-500" icon="trash" onClick={() => detail && deleteMember(detail)}>{t("admin.coaches.deletePermanentlyBtn")}</Btn>
           </>
         }>
         {detail && (() => {
@@ -1102,15 +1110,15 @@ export default function AdminMember({ branchId }: { branchId: string }) {
                   </button>
                 </div>
                 <div className="font-display font-bold text-lg text-ink mt-3">{p?.full_name ?? "—"}</div>
-                {age && <div className="text-xs text-ink-mute">{age} tahun</div>}
+                {age && <div className="text-xs text-ink-mute">{t("admin.members.yearsOldSuffix", { n: age })}</div>}
                 <div className="mt-4 flex justify-center"><QRBox value={detail.qr_code ?? detail.id} size={120} /></div>
                 <div className="text-[9px] text-ink-faint font-mono mt-1 break-all">{detail.qr_code ?? detail.id}</div>
                 {p?.phone ? (
-                  <a href={`https://wa.me/62${p.phone.replace(/^0/, "").replace(/\D/g, "")}?text=${encodeURIComponent(`Halo ${p.full_name}, `)}`} target="_blank" rel="noreferrer" className="mt-3 inline-flex">
-                    <Btn variant="wa" size="sm" icon="whatsapp">Hubungi Member</Btn>
+                  <a href={`https://wa.me/62${p.phone.replace(/^0/, "").replace(/\D/g, "")}?text=${encodeURIComponent(t("admin.members.waGreetingPrefix", { name: p.full_name }))}`} target="_blank" rel="noreferrer" className="mt-3 inline-flex">
+                    <Btn variant="wa" size="sm" icon="whatsapp">{t("admin.members.contactMemberBtn")}</Btn>
                   </a>
                 ) : (
-                  <div className="mt-3 text-xs text-ink-faint">No HP tidak tersedia</div>
+                  <div className="mt-3 text-xs text-ink-faint">{t("admin.members.phoneNotAvailable")}</div>
                 )}
               </div>
 
@@ -1118,7 +1126,7 @@ export default function AdminMember({ branchId }: { branchId: string }) {
               <div className="md:col-span-2 space-y-4 text-sm">
                 {/* Tab bar */}
                 <div className="flex gap-1 bg-paper-tint rounded-xl p-1">
-                  {([["info", "Info"], ["absensi", "Absensi"], ["pembayaran", "Pembayaran"]] as const).map(([id, label]) => (
+                  {([["info", t("admin.members.tabInfo")], ["absensi", t("admin.members.tabAttendance2")], ["pembayaran", t("admin.members.tabPayment2")]] as const).map(([id, label]) => (
                     <button key={id} type="button"
                       onClick={() => {
                         setDetailTab(id);
@@ -1135,44 +1143,44 @@ export default function AdminMember({ branchId }: { branchId: string }) {
                 {detailTab === "info" && (
                   <>
                     <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-                      <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Tipe</div><div className="font-semibold text-ink capitalize">{detail.type === "reguler" ? "Reguler" : detail.type === "private" ? "Private" : "Afiliasi Sekolah"}</div></div>
-                      <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Sejak</div><div className="font-semibold text-ink">{fmtDate(detail.date_start)}</div></div>
-                      <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Sisa sesi</div><div className="font-semibold text-ink">{detail.remaining_sessions != null ? `${detail.remaining_sessions} / ${detail.total_sessions ?? "—"}` : "—"}</div></div>
-                      <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Jenis kelamin</div><div className="font-semibold text-ink">{p?.gender === "male" ? "Laki-laki" : p?.gender === "female" ? "Perempuan" : "—"}</div></div>
-                      <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Tanggal lahir</div><div className="font-semibold text-ink">{p?.birth_date ? fmtDate(p.birth_date) : "—"}</div></div>
-                      <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Email</div><div className="font-semibold text-ink text-xs break-all">{p?.email ?? "—"}</div></div>
+                      <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("admin.members.rowType2")}</div><div className="font-semibold text-ink capitalize">{detail.type === "reguler" ? t("admin.members.typeRegularFull") : detail.type === "private" ? t("admin.members.typePrivateFull") : t("admin.members.typeAffiliateFull")}</div></div>
+                      <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("admin.members.rowSince")}</div><div className="font-semibold text-ink">{fmtDate(detail.date_start)}</div></div>
+                      <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("admin.members.rowSessionsLeft")}</div><div className="font-semibold text-ink">{detail.remaining_sessions != null ? `${detail.remaining_sessions} / ${detail.total_sessions ?? "—"}` : "—"}</div></div>
+                      <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("admin.coaches.rowGender2")}</div><div className="font-semibold text-ink">{genderLabel(p?.gender) ?? "—"}</div></div>
+                      <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("admin.members.rowBirthDateFull")}</div><div className="font-semibold text-ink">{p?.birth_date ? fmtDate(p.birth_date) : "—"}</div></div>
+                      <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("admin.coaches.fieldEmail2")}</div><div className="font-semibold text-ink text-xs break-all">{p?.email ?? "—"}</div></div>
                     </div>
                     <div className="pt-3 border-t border-line grid grid-cols-2 gap-x-4 gap-y-3">
-                      <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">No HP</div><div className="font-semibold text-ink font-mono text-xs">{p?.phone ?? "—"}</div></div>
+                      <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("admin.approvement.rowPhone")}</div><div className="font-semibold text-ink font-mono text-xs">{p?.phone ?? "—"}</div></div>
                     </div>
                     {(p?.address || p?.health_notes) && (
                       <div className="pt-3 border-t border-line space-y-2">
-                        {p?.address && <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-0.5">Alamat</div><div className="text-ink-soft leading-snug">{p.address}</div></div>}
-                        {p?.health_notes && <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-0.5">Catatan kesehatan</div><div className="text-ink-soft leading-snug">{p.health_notes}</div></div>}
+                        {p?.address && <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-0.5">{t("admin.coaches.rowAddress2")}</div><div className="text-ink-soft leading-snug">{p.address}</div></div>}
+                        {p?.health_notes && <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-0.5">{t("admin.approvement.rowHealthNotes")}</div><div className="text-ink-soft leading-snug">{p.health_notes}</div></div>}
                       </div>
                     )}
                     {detail.status === "suspended" && (
                       <div className="pt-3 border-t border-line bg-warn-50 rounded-xl px-3 py-2">
-                        <div className="text-[10px] uppercase tracking-widest font-bold text-warn-500">Suspend s.d.</div>
+                        <div className="text-[10px] uppercase tracking-widest font-bold text-warn-500">{t("admin.members.suspendUntilLabel")}</div>
                         <div className="font-semibold text-warn-700">{fmtDate(detail.suspend_until ?? "")}</div>
                         {detail.suspend_reason && <div className="text-xs text-warn-600 mt-0.5">{detail.suspend_reason}</div>}
                       </div>
                     )}
                     <div className="pt-3 border-t border-line">
-                      <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-2">Kelas yang diikuti</div>
+                      <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-2">{t("admin.members.classesJoinedLabel")}</div>
                       <div className="flex flex-wrap gap-1.5">
                         {detail.member_classes?.map((mc, i) => mc.class && <span key={i} className="px-2 py-1 rounded-lg bg-ocean-50 text-ocean-700 text-xs font-semibold">{mc.class.name}</span>)}
-                        {(detail.member_classes?.length ?? 0) === 0 && <span className="text-xs text-warn-600 font-semibold">Belum assign ke kelas</span>}
+                        {(detail.member_classes?.length ?? 0) === 0 && <span className="text-xs text-warn-600 font-semibold">{t("admin.members.notAssignedToClass")}</span>}
                       </div>
                     </div>
                     <div className="pt-3 border-t border-line">
-                      <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-2">Bukti pembayaran awal</div>
+                      <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-2">{t("admin.members.initialPaymentProofLabel")}</div>
                       {regProofUrl ? (
                         <a href={regProofUrl} target="_blank" rel="noreferrer">
-                          <Btn variant="outline" size="sm" icon="eye">Lihat Bukti Transfer</Btn>
+                          <Btn variant="outline" size="sm" icon="eye">{t("admin.members.viewTransferProofBtn")}</Btn>
                         </a>
                       ) : (
-                        <span className="text-xs text-ink-faint">Tidak ada bukti</span>
+                        <span className="text-xs text-ink-faint">{t("admin.members.noProofAvailable")}</span>
                       )}
                     </div>
                   </>
@@ -1183,23 +1191,23 @@ export default function AdminMember({ branchId }: { branchId: string }) {
                   <div className="space-y-3">
                     {memberClassNames.length > 1 && (
                       <Select value={attClassFilter} onChange={e => setAttClassFilter(e.target.value)} className="text-xs">
-                        <option value="">Semua kelas</option>
+                        <option value="">{t("admin.members.allClassesLowerOpt")}</option>
                         {memberClassNames.map(n => <option key={n} value={n}>{n}</option>)}
                       </Select>
                     )}
                     {loadingAtt ? (
-                      <div className="py-8 text-center text-ink-mute text-sm">Memuat…</div>
+                      <div className="py-8 text-center text-ink-mute text-sm">{t("admin.classes.loadingEllipsis")}</div>
                     ) : filteredAtt.length === 0 ? (
-                      <div className="py-8 text-center text-ink-mute text-sm">Belum ada riwayat absensi.</div>
+                      <div className="py-8 text-center text-ink-mute text-sm">{t("admin.members.noAttendanceHistory")}</div>
                     ) : (
                       <div className="overflow-x-auto rounded-xl border border-line">
                         <table className="w-full text-xs">
                           <thead>
                             <tr className="text-[10px] uppercase tracking-widest text-ink-faint font-bold border-b border-line bg-paper-tint">
-                              <th className="text-left py-2 px-3 font-bold">Tanggal</th>
-                              <th className="text-left py-2 font-bold">Kelas</th>
-                              <th className="text-left py-2 font-bold">Status</th>
-                              <th className="text-left py-2 px-3 font-bold">Metode</th>
+                              <th className="text-left py-2 px-3 font-bold">{t("admin.absensi.colDate")}</th>
+                              <th className="text-left py-2 font-bold">{t("admin.absensi.colClass")}</th>
+                              <th className="text-left py-2 font-bold">{t("admin.absensi.colStatus")}</th>
+                              <th className="text-left py-2 px-3 font-bold">{t("admin.absensi.colMethod")}</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-line">
@@ -1209,15 +1217,15 @@ export default function AdminMember({ branchId }: { branchId: string }) {
                                 <td className="py-2 text-ink-soft">{a.class?.name ?? "—"}</td>
                                 <td className="py-2">
                                   {a.status === "hadir"
-                                    ? <Status kind="approved" dot={false}>Hadir</Status>
+                                    ? <Status kind="approved" dot={false}>{t("admin.absensi.statusPresent")}</Status>
                                     : a.status === "izin"
-                                    ? <Status kind="excused" dot={false}>Izin</Status>
+                                    ? <Status kind="excused" dot={false}>{t("admin.absensi.statusExcused")}</Status>
                                     : a.status === "sakit"
-                                    ? <Status kind="sick" dot={false}>Sakit</Status>
-                                    : <Status kind="rejected" dot={false}>Tidak Hadir</Status>
+                                    ? <Status kind="sick" dot={false}>{t("admin.absensi.statusSick")}</Status>
+                                    : <Status kind="rejected" dot={false}>{t("admin.absensi.statusAbsent")}</Status>
                                   }
                                 </td>
-                                <td className="py-2 px-3 text-ink-mute capitalize">{a.method === "manual" ? "Manual" : a.method === "qr" ? "QR Scan" : a.method ?? "—"}</td>
+                                <td className="py-2 px-3 text-ink-mute capitalize">{a.method === "manual" ? t("admin.absensi.methodManual") : a.method === "qr" ? t("admin.absensi.methodQr") : a.method ?? "—"}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -1231,20 +1239,20 @@ export default function AdminMember({ branchId }: { branchId: string }) {
                 {detailTab === "pembayaran" && (
                   <div className="space-y-3">
                     {loadingBills ? (
-                      <div className="py-8 text-center text-ink-mute text-sm">Memuat…</div>
+                      <div className="py-8 text-center text-ink-mute text-sm">{t("admin.classes.loadingEllipsis")}</div>
                     ) : bills.length === 0 ? (
-                      <div className="py-8 text-center text-ink-mute text-sm">Belum ada riwayat pembayaran.</div>
+                      <div className="py-8 text-center text-ink-mute text-sm">{t("admin.members.noPaymentHistory")}</div>
                     ) : (
                       <div className="overflow-x-auto rounded-xl border border-line">
                         <table className="w-full text-xs">
                           <thead>
                             <tr className="text-[10px] uppercase tracking-widest text-ink-faint font-bold border-b border-line bg-paper-tint">
-                              <th className="text-left py-2 px-3 font-bold">Periode</th>
-                              <th className="text-right py-2 font-bold">Nominal</th>
-                              <th className="text-right py-2 font-bold">Diskon</th>
-                              <th className="text-right py-2 font-bold">Total</th>
-                              <th className="text-left py-2 font-bold">Status</th>
-                              <th className="text-left py-2 px-3 font-bold">Tgl Bayar</th>
+                              <th className="text-left py-2 px-3 font-bold">{t("admin.financial.colPeriod")}</th>
+                              <th className="text-right py-2 font-bold">{t("admin.members.colAmount")}</th>
+                              <th className="text-right py-2 font-bold">{t("admin.members.colDiscount")}</th>
+                              <th className="text-right py-2 font-bold">{t("admin.financial.colTotalCol")}</th>
+                              <th className="text-left py-2 font-bold">{t("admin.financial.colStatusCol")}</th>
+                              <th className="text-left py-2 px-3 font-bold">{t("admin.members.colPaidDate")}</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-line">
@@ -1261,14 +1269,14 @@ export default function AdminMember({ branchId }: { branchId: string }) {
                                 <td className="py-2 text-right font-mono font-bold text-ink">{fmtIDR(b.total)}</td>
                                 <td className="py-2">
                                   {b.status === "paid"
-                                    ? <Status kind="approved" dot={false}>Lunas</Status>
+                                    ? <Status kind="approved" dot={false}>{t("admin.pembayaran.statusPaid")}</Status>
                                     : b.status === "unpaid"
-                                    ? <Status kind="rejected" dot={false}>Belum Bayar</Status>
+                                    ? <Status kind="rejected" dot={false}>{t("admin.pembayaran.statusUnpaid")}</Status>
                                     : b.status === "partial"
-                                    ? <Status kind="pending" dot={false}>Sebagian</Status>
+                                    ? <Status kind="pending" dot={false}>{t("admin.pembayaran.statusPartial")}</Status>
                                     : b.status === "free"
-                                    ? <Status kind="archived" dot={false}>Gratis</Status>
-                                    : <Status kind="school_covered" dot={false}>Sekolah</Status>
+                                    ? <Status kind="archived" dot={false}>{t("admin.pembayaran.statusFree")}</Status>
+                                    : <Status kind="school_covered" dot={false}>{t("admin.pembayaran.statusSchoolCovered")}</Status>
                                   }
                                 </td>
                                 <td className="py-2 px-3 text-ink-mute whitespace-nowrap">{b.paid_at ? fmtDate(b.paid_at) : "—"}</td>
@@ -1287,8 +1295,8 @@ export default function AdminMember({ branchId }: { branchId: string }) {
       </Modal>
 
       {/* Edit member modal */}
-      <Modal open={openEditMember} onClose={() => setOpenEditMember(false)} title={`Edit Member — ${detail?.profile?.full_name ?? ""}`} size="lg"
-        footer={<><Btn variant="ghost" onClick={() => setOpenEditMember(false)}>Batal</Btn><Btn variant="primary" onClick={saveMemberEdit} disabled={savingEdit}>{savingEdit ? "Menyimpan…" : "Simpan Perubahan"}</Btn></>}>
+      <Modal open={openEditMember} onClose={() => setOpenEditMember(false)} title={t("admin.members.editMemberModalTitle", { name: detail?.profile?.full_name ?? "" })} size="lg"
+        footer={<><Btn variant="ghost" onClick={() => setOpenEditMember(false)}>{t("common.actions.cancel")}</Btn><Btn variant="primary" onClick={saveMemberEdit} disabled={savingEdit}>{savingEdit ? t("common.actions.saving") : t("admin.members.saveChangesBtn2")}</Btn></>}>
         <div className="grid sm:grid-cols-2 gap-4">
           {/* Avatar picker */}
           <div className="sm:col-span-2 flex flex-col items-center gap-2">
@@ -1308,60 +1316,60 @@ export default function AdminMember({ branchId }: { branchId: string }) {
                 setEditAvatarPreview(f ? URL.createObjectURL(f) : null);
               }} />
             </label>
-            <p className="text-xs text-ink-faint">Klik untuk ganti foto (opsional)</p>
+            <p className="text-xs text-ink-faint">{t("admin.coaches.clickToChangePhotoHint")}</p>
           </div>
           {/* Identitas */}
-          <Field label="Nama lengkap" required><Input value={editMemberForm.full_name} onChange={e => setEditMemberForm(f => ({ ...f, full_name: e.target.value }))} /></Field>
-          <Field label="Email" hint="Ubah email login akun member"><Input type="email" placeholder="nama@email.com" value={editMemberForm.email} onChange={e => setEditMemberForm(f => ({ ...f, email: e.target.value }))} /></Field>
-          <Field label="Nomor Induk Member" hint="Dibuat otomatis saat akun dibuat, muncul di rapor sebagai ID member">
+          <Field label={t("admin.coaches.fieldFullName2")} required><Input value={editMemberForm.full_name} onChange={e => setEditMemberForm(f => ({ ...f, full_name: e.target.value }))} /></Field>
+          <Field label={t("admin.coaches.fieldEmail2")} hint={t("admin.members.emailLoginChangeHint")}><Input type="email" placeholder="nama@email.com" value={editMemberForm.email} onChange={e => setEditMemberForm(f => ({ ...f, email: e.target.value }))} /></Field>
+          <Field label={t("admin.members.fieldMemberNo")} hint={t("admin.members.memberNoHint")}>
             <div className="w-full px-3.5 py-2.5 min-h-[44px] rounded-xl border border-line bg-paper-tint text-sm font-mono text-ink-soft flex items-center">
               {editMemberForm.member_no || "—"}
             </div>
           </Field>
-          <Field label="Tanggal lahir"><DatePicker value={editMemberForm.birth_date} onChange={v => setEditMemberForm(f => ({ ...f, birth_date: v }))} /></Field>
-          <Field label="Jenis kelamin">
+          <Field label={t("admin.members.rowBirthDateFull")}><DatePicker value={editMemberForm.birth_date} onChange={v => setEditMemberForm(f => ({ ...f, birth_date: v }))} /></Field>
+          <Field label={t("admin.coaches.rowGender2")}>
             <Select value={editMemberForm.gender} onChange={e => setEditMemberForm(f => ({ ...f, gender: e.target.value }))}>
-              <option value="">— pilih —</option>
-              <option value="male">Laki-laki</option>
-              <option value="female">Perempuan</option>
+              <option value="">{t("admin.members.selectDashPlaceholder")}</option>
+              <option value="male">{t("admin.approvement.genderMale")}</option>
+              <option value="female">{t("admin.approvement.genderFemale")}</option>
             </Select>
           </Field>
-          <Field label="Tipe member" required>
+          <Field label={t("admin.members.fieldMemberType")} required>
             <Select value={editMemberForm.type} onChange={e => setEditMemberForm(f => ({ ...f, type: e.target.value }))}>
-              <option value="reguler">Reguler</option>
-              <option value="private">Private</option>
-              <option value="school_affiliate">Afiliasi Sekolah</option>
+              <option value="reguler">{t("admin.members.typeRegularFull")}</option>
+              <option value="private">{t("admin.members.typePrivateFull")}</option>
+              <option value="school_affiliate">{t("admin.members.typeAffiliateFull")}</option>
             </Select>
           </Field>
           {editMemberForm.type === "school_affiliate" && (
-            <Field label="Sekolah afiliasi">
+            <Field label={t("admin.members.fieldSchoolAffiliate")}>
               <Select value={editMemberForm.school_id} onChange={e => setEditMemberForm(f => ({ ...f, school_id: e.target.value }))}>
-                <option value="">— pilih sekolah —</option>
+                <option value="">{t("admin.members.selectSchoolPlaceholder")}</option>
                 {schoolsList.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
               </Select>
             </Field>
           )}
           {/* Kontak */}
-          <Field label="No HP / WA member"><Input type="tel" value={editMemberForm.phone} onChange={e => setEditMemberForm(f => ({ ...f, phone: e.target.value }))} /></Field>
-          <Field label="Pemilik kontak">
+          <Field label={t("admin.members.fieldMemberPhone")}><Input type="tel" value={editMemberForm.phone} onChange={e => setEditMemberForm(f => ({ ...f, phone: e.target.value }))} /></Field>
+          <Field label={t("admin.members.fieldContactOwner")}>
             <Select value={editMemberForm.phone_owner} onChange={e => setEditMemberForm(f => ({ ...f, phone_owner: e.target.value }))}>
-              <option value="self">Milik member sendiri</option>
-              <option value="parent">Milik orang tua / wali</option>
+              <option value="self">{t("admin.members.ownedByMemberOpt")}</option>
+              <option value="parent">{t("admin.members.ownedByParentOpt")}</option>
             </Select>
           </Field>
           {editMemberForm.phone_owner === "parent" && (
             <>
-              <Field label="Nama orang tua / wali"><Input value={editMemberForm.parent_name} onChange={e => setEditMemberForm(f => ({ ...f, parent_name: e.target.value }))} /></Field>
-              <Field label="No HP orang tua / wali"><Input type="tel" value={editMemberForm.parent_phone} onChange={e => setEditMemberForm(f => ({ ...f, parent_phone: e.target.value }))} /></Field>
+              <Field label={t("admin.members.fieldParentName2")}><Input value={editMemberForm.parent_name} onChange={e => setEditMemberForm(f => ({ ...f, parent_name: e.target.value }))} /></Field>
+              <Field label={t("admin.members.fieldParentPhone2")}><Input type="tel" value={editMemberForm.parent_phone} onChange={e => setEditMemberForm(f => ({ ...f, parent_phone: e.target.value }))} /></Field>
             </>
           )}
-          <Field label="Alamat" className="sm:col-span-2"><Textarea rows={2} value={editMemberForm.address} onChange={e => setEditMemberForm(f => ({ ...f, address: e.target.value }))} placeholder="Mis. Jl. Anggrek No. 12, Bekasi" /></Field>
-          <Field label="Catatan kesehatan" className="sm:col-span-2" hint="Alergi, kondisi khusus, dll."><Textarea rows={2} value={editMemberForm.health_notes} onChange={e => setEditMemberForm(f => ({ ...f, health_notes: e.target.value }))} /></Field>
+          <Field label={t("admin.coaches.fieldAddress2")} className="sm:col-span-2"><Textarea rows={2} value={editMemberForm.address} onChange={e => setEditMemberForm(f => ({ ...f, address: e.target.value }))} placeholder={t("admin.coaches.addressPlaceholder")} /></Field>
+          <Field label={t("admin.members.fieldHealthNotes3")} className="sm:col-span-2" hint={t("admin.members.healthNotesHint")}><Textarea rows={2} value={editMemberForm.health_notes} onChange={e => setEditMemberForm(f => ({ ...f, health_notes: e.target.value }))} /></Field>
           {/* Kelas — multi-select checkboxes */}
           <div className="sm:col-span-2">
-            <div className="text-sm font-semibold text-ink mb-2">Kelas yang diikuti</div>
+            <div className="text-sm font-semibold text-ink mb-2">{t("admin.members.classesJoinedFieldLabel")}</div>
             {classes.length === 0 ? (
-              <div className="text-sm text-ink-mute">Belum ada kelas aktif di cabang ini.</div>
+              <div className="text-sm text-ink-mute">{t("admin.coaches.noActiveClassesInBranch")}</div>
             ) : (
               <div className="grid sm:grid-cols-2 gap-2">
                 {classes.map(cls => {
@@ -1387,9 +1395,9 @@ export default function AdminMember({ branchId }: { branchId: string }) {
       </Modal>
 
       {/* Reset password modal */}
-      <Modal open={openResetPwd} onClose={() => setOpenResetPwd(false)} title={`Reset Password — ${detail?.profile?.full_name ?? ""}`} size="sm"
-        footer={<><Btn variant="ghost" onClick={() => setOpenResetPwd(false)}>Batal</Btn><Btn variant="primary" onClick={resetPassword}>Reset Password</Btn></>}>
-        <Field label="Password baru" hint="Min. 6 karakter">
+      <Modal open={openResetPwd} onClose={() => setOpenResetPwd(false)} title={t("admin.members.resetPasswordModalTitle2", { name: detail?.profile?.full_name ?? "" })} size="sm"
+        footer={<><Btn variant="ghost" onClick={() => setOpenResetPwd(false)}>{t("common.actions.cancel")}</Btn><Btn variant="primary" onClick={resetPassword}>{t("admin.coaches.resetPasswordBtn")}</Btn></>}>
+        <Field label={t("admin.coaches.fieldNewPassword")} hint={t("admin.coaches.minCharsHint")}>
           <div className="relative">
             <Input type={showNewPwd ? "text" : "password"} value={newPwd} onChange={e => setNewPwd(e.target.value)} placeholder="••••••••" className="pr-10" />
             <button type="button" tabIndex={-1} onClick={() => setShowNewPwd(v => !v)}
@@ -1400,8 +1408,8 @@ export default function AdminMember({ branchId }: { branchId: string }) {
         </Field>
       </Modal>
 
-      <Modal open={openCreate} onClose={() => setOpenCreate(false)} title="Tambah Member Baru" size="lg"
-        footer={<><Btn variant="ghost" onClick={() => setOpenCreate(false)}>Batal</Btn><Btn variant="primary" onClick={createMember} disabled={saving}>{saving ? "Menyimpan…" : "Simpan & kirim WA"}</Btn></>}>
+      <Modal open={openCreate} onClose={() => setOpenCreate(false)} title={t("admin.members.addMemberModalTitle")} size="lg"
+        footer={<><Btn variant="ghost" onClick={() => setOpenCreate(false)}>{t("common.actions.cancel")}</Btn><Btn variant="primary" onClick={createMember} disabled={saving}>{saving ? t("common.actions.saving") : t("admin.members.saveAndSendWaBtn")}</Btn></>}>
         <div className="grid sm:grid-cols-2 gap-4">
           {/* Avatar picker */}
           <div className="sm:col-span-2 flex flex-col items-center gap-2">
@@ -1421,60 +1429,60 @@ export default function AdminMember({ branchId }: { branchId: string }) {
                 setCreateAvatarPreview(f ? URL.createObjectURL(f) : null);
               }} />
             </label>
-            <p className="text-xs text-ink-faint">Foto profil (opsional)</p>
+            <p className="text-xs text-ink-faint">{t("admin.coaches.profilePhotoOptionalHint")}</p>
           </div>
-          <Field label="Nama lengkap" required><Input value={form.full_name} onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))} /></Field>
-          <Field label="Tanggal lahir"><DatePicker value={form.birth_date} onChange={v => setForm(f => ({ ...f, birth_date: v }))} /></Field>
-          <Field label="Jenis kelamin">
+          <Field label={t("admin.coaches.fieldFullName2")} required><Input value={form.full_name} onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))} /></Field>
+          <Field label={t("admin.members.rowBirthDateFull")}><DatePicker value={form.birth_date} onChange={v => setForm(f => ({ ...f, birth_date: v }))} /></Field>
+          <Field label={t("admin.coaches.rowGender2")}>
             <Select value={form.gender} onChange={e => setForm(f => ({ ...f, gender: e.target.value }))}>
-              <option value="">— pilih —</option>
-              <option value="male">Laki-laki</option>
-              <option value="female">Perempuan</option>
+              <option value="">{t("admin.members.selectDashPlaceholder")}</option>
+              <option value="male">{t("admin.approvement.genderMale")}</option>
+              <option value="female">{t("admin.approvement.genderFemale")}</option>
             </Select>
           </Field>
-          <Field label="Tipe member" required>
+          <Field label={t("admin.members.fieldMemberType")} required>
             <Select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}>
-              <option value="reguler">Reguler</option><option value="private">Private</option><option value="school_affiliate">Afiliasi Sekolah</option>
+              <option value="reguler">{t("admin.members.typeRegularFull")}</option><option value="private">{t("admin.members.typePrivateFull")}</option><option value="school_affiliate">{t("admin.members.typeAffiliateFull")}</option>
             </Select>
           </Field>
           {form.type === "school_affiliate" && (
-            <Field label="Sekolah afiliasi">
+            <Field label={t("admin.members.fieldSchoolAffiliate")}>
               <Select value={form.school_id} onChange={e => setForm(f => ({ ...f, school_id: e.target.value }))}>
-                <option value="">— pilih sekolah —</option>
+                <option value="">{t("admin.members.selectSchoolPlaceholder")}</option>
                 {schoolsList.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
               </Select>
             </Field>
           )}
-          <Field label="Assign kelas" hint={form.type === "private" ? "Hanya kelas private" : "Hanya kelas reguler"}>
+          <Field label={t("admin.members.fieldAssignClass")} hint={form.type === "private" ? t("admin.members.privateClassesOnlyHint") : t("admin.members.regularClassesOnlyHint")}>
             <Select value={form.class_id} onChange={e => setForm(f => ({ ...f, class_id: e.target.value }))}>
-              <option value="">— pilih kelas —</option>
+              <option value="">{t("admin.members.dashSelectClassPlaceholder")}</option>
               {classes.filter(c => c.class_type === form.type || (form.type === "school_affiliate" && c.class_type === "reguler")).map(c => <option key={c.id} value={c.id}>{c.name} ({c.enrolled}/{c.capacity})</option>)}
             </Select>
           </Field>
           {form.type === "private" && (
-            <Field label="Jumlah sesi" required hint={`Harga/sesi: ${classes.find(c => c.id === form.class_id)?.price_per_session ? fmtIDR(classes.find(c => c.id === form.class_id)!.price_per_session!) : "—"}`}>
+            <Field label={t("admin.members.fieldSessionCount2")} required hint={t("admin.members.pricePerSessionHintPrefix", { price: classes.find(c => c.id === form.class_id)?.price_per_session ? fmtIDR(classes.find(c => c.id === form.class_id)!.price_per_session!) : "—" })}>
               <Input type="number" min="1" value={form.jumlah_sesi} onChange={e => setForm(f => ({ ...f, jumlah_sesi: e.target.value }))} placeholder="Mis. 8" />
             </Field>
           )}
-          <Field label="No HP / WA member">
+          <Field label={t("admin.members.fieldMemberPhone")}>
             <Input type="tel" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} />
           </Field>
-          <Field label="Pemilik kontak">
+          <Field label={t("admin.members.fieldContactOwner")}>
             <Select value={form.phone_owner} onChange={e => setForm(f => ({ ...f, phone_owner: e.target.value }))}>
-              <option value="self">Milik member sendiri</option>
-              <option value="parent">Milik orang tua / wali</option>
+              <option value="self">{t("admin.members.ownedByMemberOpt")}</option>
+              <option value="parent">{t("admin.members.ownedByParentOpt")}</option>
             </Select>
           </Field>
           {form.phone_owner === "parent" && (
             <>
-              <Field label="Nama orang tua / wali"><Input value={form.parent_name} onChange={e => setForm(f => ({ ...f, parent_name: e.target.value }))} /></Field>
-              <Field label="No HP orang tua / wali"><Input type="tel" value={form.parent_phone} onChange={e => setForm(f => ({ ...f, parent_phone: e.target.value }))} /></Field>
+              <Field label={t("admin.members.fieldParentName2")}><Input value={form.parent_name} onChange={e => setForm(f => ({ ...f, parent_name: e.target.value }))} /></Field>
+              <Field label={t("admin.members.fieldParentPhone2")}><Input type="tel" value={form.parent_phone} onChange={e => setForm(f => ({ ...f, parent_phone: e.target.value }))} /></Field>
             </>
           )}
-          <Field label="Alamat" className="sm:col-span-2"><Textarea rows={2} value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} placeholder="Mis. Jl. Anggrek No. 12, Bekasi" /></Field>
-          <Field label="Catatan kesehatan" className="sm:col-span-2" hint="Alergi, kondisi khusus, dll."><Textarea rows={2} value={form.health_notes} onChange={e => setForm(f => ({ ...f, health_notes: e.target.value }))} /></Field>
-          <Field label="Email login" required><Input type="email" autoComplete="off" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} /></Field>
-          <Field label="Password" required hint="Min. 6 karakter">
+          <Field label={t("admin.coaches.fieldAddress2")} className="sm:col-span-2"><Textarea rows={2} value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} placeholder={t("admin.coaches.addressPlaceholder")} /></Field>
+          <Field label={t("admin.members.fieldHealthNotes3")} className="sm:col-span-2" hint={t("admin.members.healthNotesHint")}><Textarea rows={2} value={form.health_notes} onChange={e => setForm(f => ({ ...f, health_notes: e.target.value }))} /></Field>
+          <Field label={t("admin.schoolPanel.loginEmailLabel")} required><Input type="email" autoComplete="off" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} /></Field>
+          <Field label={t("admin.members.fieldPassword")} required hint={t("admin.coaches.minCharsHint")}>
             <div className="relative">
               <Input type={showCreatePwd ? "text" : "password"} autoComplete="new-password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder="••••••••" className="pr-10" />
               <button type="button" tabIndex={-1} onClick={() => setShowCreatePwd(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-mute hover:text-ink transition-colors">
@@ -1486,27 +1494,27 @@ export default function AdminMember({ branchId }: { branchId: string }) {
       </Modal>
 
       {/* Suspend member modal */}
-      <Modal open={!!suspendMemberTarget} onClose={() => setSuspendMemberTarget(null)} title={`Suspend Member — ${suspendMemberTarget?.profile?.full_name ?? ""}`} size="sm"
-        footer={<><Btn variant="ghost" onClick={() => setSuspendMemberTarget(null)}>Batal</Btn><Btn variant="ghost" className="text-warn-600" onClick={doSuspendMember} disabled={suspendingMember}>{suspendingMember ? "Menyimpan…" : "Terapkan Suspend"}</Btn></>}>
+      <Modal open={!!suspendMemberTarget} onClose={() => setSuspendMemberTarget(null)} title={t("admin.members.suspendMemberModalTitle", { name: suspendMemberTarget?.profile?.full_name ?? "" })} size="sm"
+        footer={<><Btn variant="ghost" onClick={() => setSuspendMemberTarget(null)}>{t("common.actions.cancel")}</Btn><Btn variant="ghost" className="text-warn-600" onClick={doSuspendMember} disabled={suspendingMember}>{suspendingMember ? t("common.actions.saving") : t("admin.coaches.applySuspendBtn")}</Btn></>}>
         <div className="space-y-4">
           <Card className="!p-3 bg-warn-50 border-warn-200">
-            <div className="flex items-start gap-2.5 text-sm text-warn-700"><Icon name="warning" className="w-5 h-5 shrink-0 mt-0.5" /><span>Member tidak bisa login selama masa suspend dan tidak muncul di daftar absensi coach.</span></div>
+            <div className="flex items-start gap-2.5 text-sm text-warn-700"><Icon name="warning" className="w-5 h-5 shrink-0 mt-0.5" /><span>{t("admin.members.suspendMemberNoticeText")}</span></div>
           </Card>
-          <Field label="Alasan suspend" required>
-            <Textarea rows={2} value={suspendMemberForm.reason} onChange={e => setSuspendMemberForm(f => ({ ...f, reason: e.target.value }))} placeholder="Mis. Belum membayar tagihan selama 2 bulan." />
+          <Field label={t("admin.coaches.fieldSuspendReason")} required>
+            <Textarea rows={2} value={suspendMemberForm.reason} onChange={e => setSuspendMemberForm(f => ({ ...f, reason: e.target.value }))} placeholder={t("admin.members.suspendReasonPlaceholder2")} />
           </Field>
-          <Field label="Suspend berakhir" required hint="Member otomatis aktif kembali setelah tanggal ini">
+          <Field label={t("admin.coaches.fieldSuspendUntil")} required hint={t("admin.members.suspendUntilHintMember")}>
             <Input type="date" value={suspendMemberForm.until} onChange={e => setSuspendMemberForm(f => ({ ...f, until: e.target.value }))} min={new Date().toISOString().slice(0, 10)} />
           </Field>
         </div>
       </Modal>
 
       {/* Tambah Sesi modal */}
-      <Modal open={openAddSesi} onClose={() => setOpenAddSesi(false)} title={`Tambah Sesi — ${detail?.profile?.full_name ?? ""}`} size="sm"
-        footer={<><Btn variant="ghost" onClick={() => setOpenAddSesi(false)}>Batal</Btn><Btn variant="primary" onClick={doAddSesi} disabled={savingAddSesi}>{savingAddSesi ? "Menyimpan…" : "Tambah Sesi"}</Btn></>}>
+      <Modal open={openAddSesi} onClose={() => setOpenAddSesi(false)} title={t("admin.members.addSessionModalTitle", { name: detail?.profile?.full_name ?? "" })} size="sm"
+        footer={<><Btn variant="ghost" onClick={() => setOpenAddSesi(false)}>{t("common.actions.cancel")}</Btn><Btn variant="primary" onClick={doAddSesi} disabled={savingAddSesi}>{savingAddSesi ? t("common.actions.saving") : t("admin.members.addSessionBtn")}</Btn></>}>
         <div className="space-y-4">
           {privateClassPackages.length > 0 ? (
-            <Field label="Pilih paket" required hint="Jumlah sesi otomatis terisi dari paket yang dipilih.">
+            <Field label={t("admin.pembayaran.fieldSelectPackage")} required hint={t("admin.members.packageAutoFillHint")}>
               <div className="space-y-2">
                 {privateClassPackages.map(pkg => (
                   <button key={pkg.id} type="button" onClick={() => setAddSesiForm(f => ({ ...f, jumlah: String(pkg.sessions), selectedPackageId: pkg.id }))}
@@ -1514,19 +1522,19 @@ export default function AdminMember({ branchId }: { branchId: string }) {
                     <span className="font-semibold text-ink">{pkg.name}</span>
                     <div className="text-right shrink-0 ml-3">
                       <div className="font-mono font-bold text-ocean-700">{fmtIDR(pkg.price)}</div>
-                      <div className="text-xs text-ink-mute">{pkg.sessions} sesi</div>
+                      <div className="text-xs text-ink-mute">{t("admin.pembayaran.sessionsUnit", { n: pkg.sessions })}</div>
                     </div>
                   </button>
                 ))}
               </div>
             </Field>
           ) : (
-            <Field label="Jumlah sesi yang ditambahkan" required>
+            <Field label={t("admin.members.fieldSessionsToAdd")} required>
               <Input type="number" min="1" value={addSesiForm.jumlah} onChange={e => setAddSesiForm(f => ({ ...f, jumlah: e.target.value }))} placeholder="Mis. 8" />
             </Field>
           )}
           <div className="flex items-center justify-between p-3 rounded-xl bg-ocean-50/50 border border-ocean-100">
-            <div><div className="font-semibold text-ink text-sm">Generate tagihan</div><div className="text-xs text-ink-mute">{privateClassPackages.length > 0 ? "Buat tagihan otomatis dari paket yang dipilih." : "Buat tagihan otomatis berdasarkan harga per sesi."}</div></div>
+            <div><div className="font-semibold text-ink text-sm">{t("admin.members.generateBillLabel")}</div><div className="text-xs text-ink-mute">{privateClassPackages.length > 0 ? t("admin.members.generateBillFromPackageHint") : t("admin.members.generateBillFromPriceHint")}</div></div>
             <Switch checked={addSesiForm.generate_bill} onChange={v => setAddSesiForm(f => ({ ...f, generate_bill: v }))} />
           </div>
           {addSesiForm.generate_bill && (() => {
@@ -1534,9 +1542,9 @@ export default function AdminMember({ branchId }: { branchId: string }) {
             if (selectedPkg) {
               return (
                 <div className="bg-paper-tint rounded-xl p-3 text-sm">
-                  <div className="text-ink-mute">Tagihan yang akan dibuat:</div>
+                  <div className="text-ink-mute">{t("admin.members.billToBeCreatedLabel")}</div>
                   <div className="font-bold text-ink mt-1">{fmtIDR(selectedPkg.price)}</div>
-                  <div className="text-xs text-ink-mute">{selectedPkg.name} · {selectedPkg.sessions} sesi</div>
+                  <div className="text-xs text-ink-mute">{selectedPkg.name} · {t("admin.pembayaran.sessionsUnit", { n: selectedPkg.sessions })}</div>
                 </div>
               );
             }
@@ -1545,12 +1553,12 @@ export default function AdminMember({ branchId }: { branchId: string }) {
             const jumlah = Number(addSesiForm.jumlah) || 0;
             return pricePerSession ? (
               <div className="bg-paper-tint rounded-xl p-3 text-sm">
-                <div className="text-ink-mute">Tagihan yang akan dibuat:</div>
+                <div className="text-ink-mute">{t("admin.members.billToBeCreatedLabel")}</div>
                 <div className="font-bold text-ink mt-1">{fmtIDR(pricePerSession * jumlah)}</div>
-                <div className="text-xs text-ink-mute">{jumlah} sesi × {fmtIDR(pricePerSession)}</div>
+                <div className="text-xs text-ink-mute">{jumlah} × {fmtIDR(pricePerSession)}</div>
               </div>
             ) : (
-              <div className="text-xs text-warn-600">Belum ada paket atau harga per sesi yang diset di kelas ini.</div>
+              <div className="text-xs text-warn-600">{t("admin.members.noPackageOrPriceSet")}</div>
             );
           })()}
         </div>
@@ -1564,17 +1572,17 @@ export default function AdminMember({ branchId }: { branchId: string }) {
       <Modal
         open={openImport}
         onClose={() => setOpenImport(false)}
-        title={importStep === "upload" ? "Import Member dari Excel" : importStep === "preview" ? `Preview Import (${importRows.length} baris)` : "Hasil Import"}
+        title={importStep === "upload" ? t("admin.members.importModalTitleUpload") : importStep === "preview" ? t("admin.members.importModalTitlePreview", { count: importRows.length }) : t("admin.members.importModalTitleResult")}
         size="xl"
         footer={
           importStep === "upload" ? (
-            <Btn variant="ghost" onClick={() => setOpenImport(false)}>Tutup</Btn>
+            <Btn variant="ghost" onClick={() => setOpenImport(false)}>{t("common.actions.close")}</Btn>
           ) : importStep === "preview" ? (
             importing && importProgress ? (
               <div className="flex-1 flex items-center gap-3 min-w-0">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-semibold text-ink-soft">Mengimport member…</span>
+                    <span className="text-xs font-semibold text-ink-soft">{t("admin.members.importingMembersLabel")}</span>
                     <span className="text-xs font-bold text-ocean-600 tabular-nums">
                       {importProgress.done}/{importProgress.total} ({Math.round((importProgress.done / importProgress.total) * 100)}%)
                     </span>
@@ -1589,23 +1597,23 @@ export default function AdminMember({ branchId }: { branchId: string }) {
               </div>
             ) : (
               <>
-                <Btn variant="ghost" onClick={() => setImportStep("upload")}>Kembali</Btn>
+                <Btn variant="ghost" onClick={() => setImportStep("upload")}>{t("admin.members.backBtn")}</Btn>
                 <Btn
                   variant="primary"
                   icon="upload"
                   disabled={importRows.filter(r => r._status !== "error").length === 0}
                   onClick={runImport}
                 >
-                  {`Import ${importRows.filter(r => r._status !== "error").length} Member`}
+                  {t("admin.members.importCountMembersBtn", { count: importRows.filter(r => r._status !== "error").length })}
                 </Btn>
               </>
             )
           ) : (
             <>
               {importResult && importResult.failed.length > 0 && (
-                <Btn variant="ghost" onClick={() => setImportStep("preview")}>Lihat Detail Preview</Btn>
+                <Btn variant="ghost" onClick={() => setImportStep("preview")}>{t("admin.members.viewPreviewDetailBtn")}</Btn>
               )}
-              <Btn variant="primary" onClick={() => setOpenImport(false)}>Tutup</Btn>
+              <Btn variant="primary" onClick={() => setOpenImport(false)}>{t("common.actions.close")}</Btn>
             </>
           )
         }
@@ -1614,25 +1622,25 @@ export default function AdminMember({ branchId }: { branchId: string }) {
         {importStep === "upload" && (
           <div className="space-y-5">
             <div className="bg-ocean-50 border border-ocean-100 rounded-xl p-4 text-sm text-ocean-800 space-y-2">
-              <div className="font-bold text-ocean-700 mb-1">Kolom yang dibutuhkan dalam file Excel:</div>
+              <div className="font-bold text-ocean-700 mb-1">{t("admin.members.columnsRequiredTitle")}</div>
               <div className="grid sm:grid-cols-2 gap-x-6 gap-y-1 text-xs">
-                <div><span className="font-mono font-bold">nama_lengkap</span> <span className="text-ocean-600">— WAJIB</span></div>
-                <div><span className="font-mono font-bold">email</span> <span className="text-ocean-600">— WAJIB</span></div>
-                <div><span className="font-mono font-bold">password</span> <span className="text-ocean-600">— WAJIB (min. 6 karakter)</span></div>
+                <div><span className="font-mono font-bold">nama_lengkap</span> <span className="text-ocean-600">{t("admin.members.requiredBadge")}</span></div>
+                <div><span className="font-mono font-bold">email</span> <span className="text-ocean-600">{t("admin.members.requiredBadge")}</span></div>
+                <div><span className="font-mono font-bold">password</span> <span className="text-ocean-600">{t("admin.members.requiredMin6Badge")}</span></div>
                 <div><span className="font-mono font-bold">tipe_member</span> <span className="text-ink-mute">— reguler / private / afiliasi_sekolah</span></div>
                 <div><span className="font-mono font-bold">tanggal_lahir</span> <span className="text-ink-mute">— DD/MM/YYYY</span></div>
-                <div><span className="font-mono font-bold">jenis_kelamin</span> <span className="text-ink-mute">— L atau P</span></div>
-                <div><span className="font-mono font-bold">no_hp</span> <span className="text-ink-mute">— Opsional</span></div>
-                <div><span className="font-mono font-bold">jumlah_sesi</span> <span className="text-ink-mute">— Wajib jika tipe=private</span></div>
-                <div><span className="font-mono font-bold">nama_kelas</span> <span className="text-ink-mute">— Harus cocok nama kelas di sistem</span></div>
-                <div><span className="font-mono font-bold">nama_sekolah</span> <span className="text-ocean-600">— WAJIB jika tipe=afiliasi_sekolah</span></div>
+                <div><span className="font-mono font-bold">jenis_kelamin</span> <span className="text-ink-mute">{t("admin.members.genderColHint")}</span></div>
+                <div><span className="font-mono font-bold">no_hp</span> <span className="text-ink-mute">{t("admin.members.optionalBadge")}</span></div>
+                <div><span className="font-mono font-bold">jumlah_sesi</span> <span className="text-ink-mute">{t("admin.members.sessionCountColHint")}</span></div>
+                <div><span className="font-mono font-bold">nama_kelas</span> <span className="text-ink-mute">{t("admin.members.classNameColHint")}</span></div>
+                <div><span className="font-mono font-bold">nama_sekolah</span> <span className="text-ocean-600">{t("admin.members.schoolNameColHint")}</span></div>
               </div>
             </div>
             <label className="flex flex-col items-center justify-center gap-3 border-2 border-dashed border-line rounded-2xl p-10 cursor-pointer hover:border-ocean-400 hover:bg-ocean-50/30 transition-colors">
               <Icon name="upload" className="w-10 h-10 text-ink-faint" />
               <div className="text-center">
-                <div className="font-semibold text-ink">Klik untuk pilih file</div>
-                <div className="text-sm text-ink-mute">.xlsx, .xls, atau .csv</div>
+                <div className="font-semibold text-ink">{t("admin.members.clickToChooseFile")}</div>
+                <div className="text-sm text-ink-mute">{t("admin.members.fileTypesHint")}</div>
               </div>
               <input
                 type="file"
@@ -1643,7 +1651,7 @@ export default function AdminMember({ branchId }: { branchId: string }) {
             </label>
             <div className="text-center">
               <button type="button" onClick={downloadTemplate} className="text-sm text-ocean-600 hover:underline font-semibold">
-                Unduh template Excel
+                {t("admin.members.downloadExcelTemplateBtn")}
               </button>
             </div>
           </div>
@@ -1660,22 +1668,22 @@ export default function AdminMember({ branchId }: { branchId: string }) {
           return (
             <div className="space-y-4">
               <div className="flex flex-wrap gap-2">
-                <span className="px-3 py-1 rounded-full text-xs font-bold bg-ok-50 text-ok-700 ring-1 ring-ok-200">{okCount} OK</span>
-                {warnCount > 0 && <span className="px-3 py-1 rounded-full text-xs font-bold bg-warn-50 text-warn-700 ring-1 ring-warn-200">{warnCount} Peringatan</span>}
-                {errCount > 0 && <span className="px-3 py-1 rounded-full text-xs font-bold bg-danger-50 text-danger-700 ring-1 ring-danger-200">{errCount} Error — akan dilewati</span>}
+                <span className="px-3 py-1 rounded-full text-xs font-bold bg-ok-50 text-ok-700 ring-1 ring-ok-200">{t("admin.members.okBadge", { count: okCount })}</span>
+                {warnCount > 0 && <span className="px-3 py-1 rounded-full text-xs font-bold bg-warn-50 text-warn-700 ring-1 ring-warn-200">{t("admin.members.warningBadge", { count: warnCount })}</span>}
+                {errCount > 0 && <span className="px-3 py-1 rounded-full text-xs font-bold bg-danger-50 text-danger-700 ring-1 ring-danger-200">{t("admin.members.errorSkippedBadge", { count: errCount })}</span>}
               </div>
               <div className="overflow-x-auto rounded-xl border border-line">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-paper-tint border-b border-line text-left">
                       <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs w-10">#</th>
-                      <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs">Nama</th>
-                      <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs">Email</th>
-                      <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs">Tipe</th>
-                      <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs">Kelas</th>
-                      <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs">Sekolah</th>
-                      <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs">Status</th>
-                      <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs">Keterangan</th>
+                      <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs">{t("admin.members.colName3")}</th>
+                      <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs">{t("admin.coaches.colEmail")}</th>
+                      <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs">{t("admin.members.colType2")}</th>
+                      <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs">{t("admin.members.colClassImport")}</th>
+                      <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs">{t("admin.members.colSchoolImport")}</th>
+                      <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs">{t("admin.members.colStatusImport")}</th>
+                      <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs">{t("admin.members.colNotesImport")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1692,7 +1700,7 @@ export default function AdminMember({ branchId }: { branchId: string }) {
                         <td className="px-3 py-2 text-xs text-ink-soft">{r.nama_sekolah_raw || "—"}</td>
                         <td className="px-3 py-2">
                           {r._status === "ok" && <span className="text-xs font-bold text-ok-600">OK</span>}
-                          {r._status === "warn" && <span className="text-xs font-bold text-warn-600">Peringatan</span>}
+                          {r._status === "warn" && <span className="text-xs font-bold text-warn-600">{t("admin.members.statusWarn")}</span>}
                           {r._status === "error" && <span className="text-xs font-bold text-danger-600">Error</span>}
                         </td>
                         <td className="px-3 py-2 text-xs text-ink-mute max-w-[200px]">
@@ -1705,9 +1713,9 @@ export default function AdminMember({ branchId }: { branchId: string }) {
               </div>
               {totalPages > 1 && (
                 <div className="flex items-center justify-between text-sm">
-                  <button type="button" onClick={() => setImportPage(p => Math.max(0, p - 1))} disabled={importPage === 0} className="px-3 py-1.5 rounded-lg border border-line text-ink-mute disabled:opacity-40">← Sebelumnya</button>
-                  <span className="text-ink-mute text-xs">Halaman {importPage + 1} / {totalPages}</span>
-                  <button type="button" onClick={() => setImportPage(p => Math.min(totalPages - 1, p + 1))} disabled={importPage === totalPages - 1} className="px-3 py-1.5 rounded-lg border border-line text-ink-mute disabled:opacity-40">Berikutnya →</button>
+                  <button type="button" onClick={() => setImportPage(p => Math.max(0, p - 1))} disabled={importPage === 0} className="px-3 py-1.5 rounded-lg border border-line text-ink-mute disabled:opacity-40">{t("admin.members.prevBtn")}</button>
+                  <span className="text-ink-mute text-xs">{t("admin.rapor.pageOfLabel", { page: importPage + 1, total: totalPages })}</span>
+                  <button type="button" onClick={() => setImportPage(p => Math.min(totalPages - 1, p + 1))} disabled={importPage === totalPages - 1} className="px-3 py-1.5 rounded-lg border border-line text-ink-mute disabled:opacity-40">{t("admin.members.nextBtn")}</button>
                 </div>
               )}
             </div>
@@ -1720,12 +1728,12 @@ export default function AdminMember({ branchId }: { branchId: string }) {
             <div className="grid sm:grid-cols-2 gap-4">
               <div className="rounded-2xl bg-ok-50 border border-ok-200 p-6 text-center">
                 <div className="text-4xl font-display font-extrabold text-ok-600">{importResult.success}</div>
-                <div className="text-sm font-semibold text-ok-700 mt-1">Member berhasil dibuat</div>
+                <div className="text-sm font-semibold text-ok-700 mt-1">{t("admin.members.membersCreatedSuccessfully")}</div>
               </div>
               {importResult.failed.length > 0 && (
                 <div className="rounded-2xl bg-danger-50 border border-danger-200 p-6 text-center">
                   <div className="text-4xl font-display font-extrabold text-danger-600">{importResult.failed.length}</div>
-                  <div className="text-sm font-semibold text-danger-700 mt-1">Gagal diimport</div>
+                  <div className="text-sm font-semibold text-danger-700 mt-1">{t("admin.members.failedToImport")}</div>
                 </div>
               )}
             </div>
@@ -1734,9 +1742,9 @@ export default function AdminMember({ branchId }: { branchId: string }) {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-paper-tint border-b border-line text-left">
-                      <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs w-14">Baris</th>
-                      <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs">Email</th>
-                      <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs">Alasan</th>
+                      <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs w-14">{t("admin.members.colRowImport")}</th>
+                      <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs">{t("admin.coaches.colEmail")}</th>
+                      <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs">{t("admin.members.colReasonImport")}</th>
                     </tr>
                   </thead>
                   <tbody>

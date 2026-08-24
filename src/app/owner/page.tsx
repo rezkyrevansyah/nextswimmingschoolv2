@@ -2049,7 +2049,7 @@ function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: 
     setInvoices(prev => prev.map(i => i.id === id ? { ...i, status: "paid", paid_at: new Date().toISOString() } : i));
     if (detail?.id === id) setDetail(prev => prev ? { ...prev, status: "paid", paid_at: new Date().toISOString() } : prev);
     toast.success(t("owner.invoices.markedPaid"));
-    logActivity(supabase, { userId, userRole: "owner", userName, branchId: inv?.branch?.name ? undefined : undefined, entityType: "coach_invoices", entityId: id, entityLabel: inv?.invoice_number ?? id, action: "update", label: `Invoice ${inv?.invoice_number ?? id} — ${inv?.coach?.full_name ?? "coach"} ditandai lunas (${fmtIDR(inv?.total_amount ?? 0)})`, meta: { amount: inv?.total_amount, coach: inv?.coach?.full_name } });
+    logActivity(supabase, { userId, userRole: "owner", userName, branchId: inv?.branch?.name ? undefined : undefined, entityType: "coach_invoices", entityId: id, entityLabel: inv?.invoice_number ?? id, action: "update", label: t("owner.invoices.activityMarkedPaid", { number: inv?.invoice_number ?? id, coach: inv?.coach?.full_name ?? "coach", amount: fmtIDR(inv?.total_amount ?? 0) }), meta: { amount: inv?.total_amount, coach: inv?.coach?.full_name } });
   };
 
   const approveInvoice = async (id: string) => {
@@ -2065,7 +2065,7 @@ function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: 
       await supabase.from("notifications").insert({ user_id: inv.coach.id, title: t("owner.invoices.notifApprovedTitle"), body: t("owner.invoices.notifApprovedBody", { number: inv.invoice_number, period: inv.period_label }), icon: "check", kind: "success" });
     }
     toast.success(t("owner.invoices.approved"));
-    logActivity(supabase, { userId, userRole: "owner", userName, entityType: "coach_invoices", entityId: id, entityLabel: inv?.invoice_number ?? id, action: "update", label: `Invoice ${inv?.invoice_number ?? id} disetujui` });
+    logActivity(supabase, { userId, userRole: "owner", userName, entityType: "coach_invoices", entityId: id, entityLabel: inv?.invoice_number ?? id, action: "update", label: t("owner.invoices.activityApproved", { number: inv?.invoice_number ?? id }) });
   };
 
   const rejectInvoice = async (id: string, reason: string) => {
@@ -2084,7 +2084,7 @@ function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: 
     setRejectModal(null);
     setRejectReason("");
     toast.success(t("owner.invoices.rejected"));
-    logActivity(supabase, { userId, userRole: "owner", userName, entityType: "coach_invoices", entityId: id, entityLabel: inv?.invoice_number ?? id, action: "update", label: `Invoice ${inv?.invoice_number ?? id} ditolak: ${reason}` });
+    logActivity(supabase, { userId, userRole: "owner", userName, entityType: "coach_invoices", entityId: id, entityLabel: inv?.invoice_number ?? id, action: "update", label: t("owner.invoices.activityRejected", { number: inv?.invoice_number ?? id, reason }) });
   };
 
   const printInvoice = (iv: Invoice) => {
@@ -2463,7 +2463,10 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
     logActivity(supabase, {
       userId, userRole: "owner", userName, branchId: txnForm.branch_id, entityType: "manual_transactions",
       entityId: showTxnModal.edit?.id ?? "new", action: isEdit ? "update" : "create",
-      label: `${showTxnModal.kind === "income" ? "Income" : "Expense"} manual "${txnForm.description.trim()}" (${fmtIDR(amount)}) ${isEdit ? "diperbarui" : "ditambahkan"}`,
+      label: t(isEdit ? "owner.financial.activityTxnUpdated" : "owner.financial.activityTxnAdded", {
+        kind: t(showTxnModal.kind === "income" ? "owner.financial.txnKindIncome" : "owner.financial.txnKindExpense"),
+        description: txnForm.description.trim(), amount: fmtIDR(amount),
+      }),
       meta: { amount, category },
     });
     setShowTxnModal(null);
@@ -2478,7 +2481,10 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
     toast.success(t("owner.financial.txnDeleted"));
     logActivity(supabase, {
       userId, userRole: "owner", userName, branchId: row.branch_id, entityType: "manual_transactions",
-      entityId: row.id, action: "delete", label: `${row.kind === "income" ? "Income" : "Expense"} manual "${row.description}" (${fmtIDR(row.amount)}) dihapus`,
+      entityId: row.id, action: "delete", label: t("owner.financial.activityTxnDeleted", {
+        kind: t(row.kind === "income" ? "owner.financial.txnKindIncome" : "owner.financial.txnKindExpense"),
+        description: row.description, amount: fmtIDR(row.amount),
+      }),
     });
     setManualTxns(prev => prev.filter(t => t.id !== row.id));
   };

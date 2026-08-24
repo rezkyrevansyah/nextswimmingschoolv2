@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
+import { useLocale } from "@/components/providers/LocaleProvider";
 import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
 import { Field, Input, Select, Textarea } from "@/components/ui/FormFields";
@@ -32,6 +33,9 @@ interface LeaveRow {
 export default function AdminIzin({ branchId }: { branchId: string }) {
   const supabase = createClient();
   const toast = useToast();
+  const { t } = useLocale();
+  const typeLabel = (ty: string) => ({ sakit: t("admin.izin.typeSick"), izin: t("admin.izin.typePermission"), cuti: t("admin.izin.typeLeaveOff") }[ty] ?? ty);
+  const statusLabel = (s: string) => ({ pending: t("admin.izin.statusPending"), approved: t("admin.izin.statusApproved"), rejected: t("admin.izin.statusRejected") }[s] ?? s);
   const [tab, setTab] = useState("coach");
   const [leaves, setLeaves] = useState<LeaveRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -156,7 +160,7 @@ export default function AdminIzin({ branchId }: { branchId: string }) {
     }
     const table = tab === "coach" ? "coach_leaves" : "member_leaves";
     const { error } = await supabase.from(table as "coach_leaves").update({ status, reviewed_at: new Date().toISOString() }).eq("id", id);
-    if (error) return toast.error("Gagal update status", error.message);
+    if (error) return toast.error(t("admin.izin.updateStatusFailed"), error.message);
     // Auto-create member attendance records when member leave approved
     if (status === "approved" && tab === "member") {
       await autoCreateMemberAttendances(id);
@@ -164,32 +168,34 @@ export default function AdminIzin({ branchId }: { branchId: string }) {
       if (leave?.member_id) {
         await supabase.from("notifications").insert({
           user_id: leave.member_id,
-          title: "Izin disetujui",
-          body: `Izin Anda (${fmtDate(leave.date_from)} – ${fmtDate(leave.date_to)}) telah disetujui.`,
+          title: t("admin.izin.leaveApprovedNotifTitle"),
+          body: t("admin.izin.leaveApprovedNotifBody", { from: fmtDate(leave.date_from), to: fmtDate(leave.date_to) }),
           icon: "check",
           kind: "success",
         });
       }
     }
-    toast.success(status === "approved" ? "Izin disetujui" : "Izin ditolak");
+    toast.success(status === "approved" ? t("admin.izin.leaveApprovedToast") : t("admin.izin.leaveRejectedToast"));
     load();
   };
 
   const confirmReject = async () => {
     if (!rejectTarget) return;
-    if (!rejectReason.trim()) return toast.error("Alasan penolakan wajib diisi");
+    if (!rejectReason.trim()) return toast.error(t("admin.izin.reasonRequired2"));
     setRejecting(true);
     const upd: Database["public"]["Tables"]["coach_leaves"]["Update"] = { status: "rejected" as Database["public"]["Enums"]["leave_status"], reviewed_at: new Date().toISOString(), reject_reason: rejectReason.trim() };
     const table = tab === "coach" ? "coach_leaves" : "member_leaves";
     const { error } = await supabase.from(table as "coach_leaves").update(upd).eq("id", rejectTarget.id);
     setRejecting(false);
-    if (error) return toast.error("Gagal menolak izin", error.message);
+    if (error) return toast.error(t("admin.izin.rejectLeaveFailed"), error.message);
     // Notify coach/member when leave is rejected
     if (tab === "coach" && rejectTarget.coach_id) {
       await supabase.from("notifications").insert({
         user_id: rejectTarget.coach_id,
-        title: "Izin ditolak",
-        body: `Izin Anda (${fmtDate(rejectTarget.date_from)} – ${fmtDate(rejectTarget.date_to)}) telah ditolak${rejectReason.trim() ? `: "${rejectReason.trim()}"` : "."}`,
+        title: t("admin.izin.leaveRejectedNotifTitle"),
+        body: rejectReason.trim()
+          ? t("admin.izin.leaveRejectedNotifBodyWithReason", { from: fmtDate(rejectTarget.date_from), to: fmtDate(rejectTarget.date_to), reason: rejectReason.trim() })
+          : t("admin.izin.leaveRejectedNotifBodyNoReason", { from: fmtDate(rejectTarget.date_from), to: fmtDate(rejectTarget.date_to) }),
         icon: "x",
         kind: "warn",
       });
@@ -197,25 +203,27 @@ export default function AdminIzin({ branchId }: { branchId: string }) {
     if (tab === "member" && rejectTarget.member_id) {
       await supabase.from("notifications").insert({
         user_id: rejectTarget.member_id,
-        title: "Izin ditolak",
-        body: `Izin Anda (${fmtDate(rejectTarget.date_from)} – ${fmtDate(rejectTarget.date_to)}) telah ditolak${rejectReason.trim() ? `: "${rejectReason.trim()}"` : "."}`,
+        title: t("admin.izin.leaveRejectedNotifTitle"),
+        body: rejectReason.trim()
+          ? t("admin.izin.leaveRejectedNotifBodyWithReason", { from: fmtDate(rejectTarget.date_from), to: fmtDate(rejectTarget.date_to), reason: rejectReason.trim() })
+          : t("admin.izin.leaveRejectedNotifBodyNoReason", { from: fmtDate(rejectTarget.date_from), to: fmtDate(rejectTarget.date_to) }),
         icon: "x",
         kind: "warn",
       });
     }
-    toast.success("Izin ditolak");
+    toast.success(t("admin.izin.leaveRejectedToast"));
     setRejectTarget(null);
     load();
   };
 
   const createLeave = async () => {
-    if (!createForm.target_id || !createForm.date_from || !createForm.date_to) return toast.error("Target, tanggal mulai, dan selesai wajib diisi");
+    if (!createForm.target_id || !createForm.date_from || !createForm.date_to) return toast.error(t("admin.izin.targetDatesRequired"));
     setCreating(true);
     if (tab === "coach") {
       const primarySubId = Object.values(createForm.class_substitutes).find(s => !!s) ?? null;
       const ins: Database["public"]["Tables"]["coach_leaves"]["Insert"] = { coach_id: createForm.target_id, type: createForm.type as Database["public"]["Enums"]["leave_type"], date_from: createForm.date_from, date_to: createForm.date_to, reason: createForm.reason || null, status: "approved" as Database["public"]["Enums"]["leave_status"], created_by_admin: true, reviewed_at: new Date().toISOString(), substitute_id: primarySubId || null };
       const { data, error } = await supabase.from("coach_leaves").insert(ins).select("id").single();
-      if (error || !data) { setCreating(false); return toast.error("Gagal membuat izin", error?.message); }
+      if (error || !data) { setCreating(false); return toast.error(t("admin.izin.createLeaveFailed"), error?.message); }
       if (createForm.class_ids.length > 0) {
         await supabase.from("coach_leave_classes").insert(
           createForm.class_ids.map(cid => ({
@@ -250,7 +258,7 @@ export default function AdminIzin({ branchId }: { branchId: string }) {
       }
     } else {
       const { data, error } = await supabase.from("member_leaves").insert({ member_id: createForm.target_id, type: createForm.type as Database["public"]["Enums"]["leave_type"], date_from: createForm.date_from, date_to: createForm.date_to, reason: createForm.reason || null, status: "approved" as Database["public"]["Enums"]["leave_status"], created_by_admin: true, reviewed_at: new Date().toISOString() }).select("id").single();
-      if (error || !data) { setCreating(false); return toast.error("Gagal membuat izin", error?.message); }
+      if (error || !data) { setCreating(false); return toast.error(t("admin.izin.createLeaveFailed"), error?.message); }
       if (createForm.class_ids.length > 0) {
         await supabase.from("member_leave_classes").insert(createForm.class_ids.map(cid => ({ leave_id: data.id, class_id: cid })));
         // Auto-create attendance records
@@ -259,15 +267,15 @@ export default function AdminIzin({ branchId }: { branchId: string }) {
       // Notify member that admin created an approved leave for them
       await supabase.from("notifications").insert({
         user_id: createForm.target_id,
-        title: "Izin dicatat oleh admin",
-        body: `Admin telah mencatat izin Anda (${fmtDate(createForm.date_from)} – ${fmtDate(createForm.date_to)}) dan sudah disetujui.`,
+        title: t("admin.izin.leaveRecordedByAdminNotifTitle"),
+        body: t("admin.izin.leaveRecordedByAdminNotifBody", { from: fmtDate(createForm.date_from), to: fmtDate(createForm.date_to) }),
         icon: "check",
         kind: "info",
       });
     }
     setCreating(false);
     setOpenCreate(false);
-    toast.success("Izin berhasil dibuat");
+    toast.success(t("admin.izin.leaveCreatedToast"));
     load();
   };
 
@@ -284,7 +292,7 @@ export default function AdminIzin({ branchId }: { branchId: string }) {
       substitute_id: primarySubId || null,
     };
     const { error } = await supabase.from("coach_leaves").update(upd).eq("id", approveTarget.id);
-    if (error) { setApproving(false); return toast.error("Gagal menyetujui izin", error.message); }
+    if (error) { setApproving(false); return toast.error(t("admin.izin.approveLeaveFailed"), error.message); }
 
     // Upsert per-class substitute_id
     const perClassRows = Object.entries(classSubstitutes).map(([class_id, substitute_id]) => ({
@@ -337,10 +345,11 @@ export default function AdminIzin({ branchId }: { branchId: string }) {
     // Notify leaving coach
     if (detail?.coach_id) {
       const classNames = detail.coach_leave_classes.map(lc => lc.class?.name).filter(Boolean).join(", ");
+      const dateRange = detail.date_from === detail.date_to ? detail.date_from : `${detail.date_from} – ${detail.date_to}`;
       await supabase.from("notifications").insert({
         user_id: detail.coach_id,
-        title: "Izin disetujui",
-        body: `Izin Anda${classNames ? ` untuk ${classNames}` : ""} (${detail.date_from === detail.date_to ? detail.date_from : `${detail.date_from} – ${detail.date_to}`}) telah disetujui.`,
+        title: t("admin.izin.leaveApprovedNotifTitle"),
+        body: classNames ? t("admin.izin.leaveApprovedForClassBody", { classes: classNames, dateRange }) : t("admin.izin.leaveApprovedNoClassBody", { dateRange }),
         icon: "check",
         kind: "success",
       });
@@ -356,10 +365,11 @@ export default function AdminIzin({ branchId }: { branchId: string }) {
         uniqueSubs.get(subId)!.push(lc.class?.name ?? "—");
       }
       for (const [subId, classNames] of uniqueSubs) {
+        const dateRange = detail.date_from === detail.date_to ? detail.date_from : `${detail.date_from} – ${detail.date_to}`;
         await supabase.from("notifications").insert({
           user_id: subId,
-          title: "Anda ditambahkan sebagai coach pengganti",
-          body: `Anda menggantikan coach untuk kelas ${classNames.join(", ")} pada ${detail.date_from === detail.date_to ? detail.date_from : `${detail.date_from} – ${detail.date_to}`}.`,
+          title: t("admin.izin.substituteAssignedNotifTitle"),
+          body: t("admin.izin.substituteAssignedNotifBody", { classes: classNames.join(", "), dateRange }),
           icon: "refresh",
           kind: "info",
         });
@@ -367,7 +377,7 @@ export default function AdminIzin({ branchId }: { branchId: string }) {
     }
 
     setApproving(false);
-    toast.success("Izin disetujui" + (primarySubId ? " & sesi dialihkan ke pengganti" : ""));
+    toast.success(t("admin.izin.leaveApprovedToast") + (primarySubId ? t("admin.izin.andSessionsTransferredSuffix") : ""));
     setApproveTarget(null);
     load();
   };
@@ -379,24 +389,24 @@ export default function AdminIzin({ branchId }: { branchId: string }) {
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <div><h2 className="font-display font-bold text-2xl">Manajemen Izin</h2><p className="text-ink-mute text-sm mt-0.5">Approve pengajuan izin coach & member.</p></div>
-        <Btn variant="primary" icon="plus" onClick={() => { setCreateForm({ target_id: "", type: "sakit", date_from: "", date_to: "", reason: "", class_ids: [], class_substitutes: {} }); setOpenCreate(true); }}>Buat Izin</Btn>
+        <div><h2 className="font-display font-bold text-2xl">{t("admin.izin.pageTitle")}</h2><p className="text-ink-mute text-sm mt-0.5">{t("admin.izin.pageSub")}</p></div>
+        <Btn variant="primary" icon="plus" onClick={() => { setCreateForm({ target_id: "", type: "sakit", date_from: "", date_to: "", reason: "", class_ids: [], class_substitutes: {} }); setOpenCreate(true); }}>{t("admin.izin.createLeaveBtn")}</Btn>
       </div>
       <Card padded={false}>
         <div className="px-5 py-3 border-b border-line flex items-center gap-2">
           <div className="flex gap-1.5 bg-paper-tint rounded-xl p-1">
-            {[["coach", "Izin Coach"], ["member", "Izin Member"]].map(([id, l]) => (
+            {[["coach", t("admin.izin.tabCoachLeave")], ["member", t("admin.izin.tabMemberLeave")]].map(([id, l]) => (
               <button key={id} onClick={() => setTab(id)} className={`px-4 py-1.5 text-sm font-bold rounded-lg ${tab === id ? "bg-white text-ocean-700 shadow-sm" : "text-ink-mute hover:text-ink-soft"}`}>{l}</button>
             ))}
           </div>
         </div>
-        {loading ? <div className="p-10 text-center text-ink-mute">Memuat data…</div> : (
+        {loading ? <div className="p-10 text-center text-ink-mute">{t("admin.izin.loadingData")}</div> : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead><tr className="text-[11px] uppercase tracking-widest text-ink-faint font-bold border-b border-line">
-                <th className="text-left py-3 px-5 font-bold">Nama</th>
-                <th className="text-left py-3 font-bold">Jenis</th><th className="text-left py-3 font-bold hidden sm:table-cell">Mulai</th>
-                <th className="text-left py-3 font-bold hidden sm:table-cell">Selesai</th><th className="text-left py-3 font-bold">Status</th><th className="text-left py-3 font-bold hidden md:table-cell">Pengganti</th><th className="px-5" />
+                <th className="text-left py-3 px-5 font-bold">{t("admin.izin.colName")}</th>
+                <th className="text-left py-3 font-bold">{t("admin.izin.colType")}</th><th className="text-left py-3 font-bold hidden sm:table-cell">{t("admin.izin.colStart")}</th>
+                <th className="text-left py-3 font-bold hidden sm:table-cell">{t("admin.izin.colEnd")}</th><th className="text-left py-3 font-bold">{t("admin.izin.colStatus")}</th><th className="text-left py-3 font-bold hidden md:table-cell">{t("admin.izin.colSubstitute")}</th><th className="px-5" />
               </tr></thead>
               <tbody className="divide-y divide-line">
                 {paginatedLeaves.map((l) => (
@@ -410,17 +420,17 @@ export default function AdminIzin({ branchId }: { branchId: string }) {
                         </div>
                       </div>
                     </td>
-                    <td className="capitalize text-sm">{l.type}</td>
+                    <td className="capitalize text-sm">{typeLabel(l.type)}</td>
                     <td className="text-ink-soft hidden sm:table-cell">{fmtDate(l.date_from)}</td>
                     <td className="text-ink-soft hidden sm:table-cell">{fmtDate(l.date_to)}</td>
-                    <td><Status kind={l.status as "pending" | "approved" | "rejected"}>{l.status === "pending" ? "Menunggu" : l.status === "approved" ? "Disetujui" : "Ditolak"}</Status></td>
+                    <td><Status kind={l.status as "pending" | "approved" | "rejected"}>{statusLabel(l.status)}</Status></td>
                     <td className="text-ink-soft text-xs hidden md:table-cell">
                       {(() => {
                         const hasPerClass = l.coach_leave_classes && l.coach_leave_classes.length > 0;
                         if (hasPerClass) {
                           const filled = l.coach_leave_classes!.filter(lc => lc.substitute_id).length;
                           const total = l.coach_leave_classes!.length;
-                          return <span className={filled === total ? "text-ok-600 font-semibold" : "text-warn-600"}>{filled}/{total} kelas</span>;
+                          return <span className={filled === total ? "text-ok-600 font-semibold" : "text-warn-600"}>{t("admin.izin.classesCountSuffix", { filled, total })}</span>;
                         }
                         return l.substitute_profile?.full_name ?? "—";
                       })()}
@@ -428,8 +438,8 @@ export default function AdminIzin({ branchId }: { branchId: string }) {
                     <td className="px-5" onClick={e => e.stopPropagation()}>
                       {l.status === "pending" ? (
                         <div className="flex gap-1 justify-end">
-                          <Btn variant="ghost" size="sm" className="text-danger-500" onClick={() => decide(l.id, "rejected")}>Tolak</Btn>
-                          <Btn variant="soft" size="sm" icon="check" onClick={() => decide(l.id, "approved")}>Setujui</Btn>
+                          <Btn variant="ghost" size="sm" className="text-danger-500" onClick={() => decide(l.id, "rejected")}>{t("common.actions.reject")}</Btn>
+                          <Btn variant="soft" size="sm" icon="check" onClick={() => decide(l.id, "approved")}>{t("common.actions.approve")}</Btn>
                         </div>
                       ) : (
                         <div className="flex justify-end">
@@ -441,7 +451,7 @@ export default function AdminIzin({ branchId }: { branchId: string }) {
                     </td>
                   </tr>
                 ))}
-                {leaves.length === 0 && <tr><td colSpan={7} className="py-10 text-center text-ink-mute">Tidak ada pengajuan izin</td></tr>}
+                {leaves.length === 0 && <tr><td colSpan={7} className="py-10 text-center text-ink-mute">{t("admin.izin.emptyLeaveRequests")}</td></tr>}
               </tbody>
             </table>
           </div>
@@ -449,7 +459,7 @@ export default function AdminIzin({ branchId }: { branchId: string }) {
         {!loading && totalPages > 1 && (
           <div className="px-5 py-3.5 border-t border-line flex items-center justify-between flex-wrap gap-3">
             <span className="text-xs text-ink-mute tabular-nums">
-              {leaves.length} pengajuan · halaman {safePage + 1} dari {totalPages}
+              {t("admin.izin.itemsPageLabel2", { count: leaves.length, page: safePage + 1, total: totalPages })}
             </span>
             <div className="flex items-center gap-1">
               <button type="button" disabled={safePage === 0} onClick={() => setPage(0)}
@@ -484,23 +494,23 @@ export default function AdminIzin({ branchId }: { branchId: string }) {
       </Card>
 
       {/* Approve coach leave + assign per-class substitute modal */}
-      <Modal open={!!approveTarget} onClose={() => setApproveTarget(null)} title="Setujui Izin Coach" size="sm"
+      <Modal open={!!approveTarget} onClose={() => setApproveTarget(null)} title={t("admin.izin.approveCoachLeaveModalTitle")} size="sm"
         footer={<>
-          <Btn variant="ghost" onClick={() => setApproveTarget(null)}>Batal</Btn>
+          <Btn variant="ghost" onClick={() => setApproveTarget(null)}>{t("common.actions.cancel")}</Btn>
           <Btn variant="primary" icon="check" onClick={confirmApprove}
             disabled={approving || (approveTarget?.coach_leave_classes?.length ? approveTarget.coach_leave_classes.some(lc => !classSubstitutes[lc.class_id]) : false)}>
-            {approving ? "Menyetujui…" : "Setujui Izin"}
+            {approving ? t("admin.izin.approvingBtn") : t("admin.izin.approveLeaveBtn")}
           </Btn>
         </>}>
         <div className="space-y-4">
           <Card className="!p-3 bg-paper-tint">
             <div className="text-sm font-semibold text-ink">{approveTarget?.profile?.full_name}</div>
-            <div className="text-xs text-ink-mute mt-0.5">{fmtDate(approveTarget?.date_from ?? "")} – {fmtDate(approveTarget?.date_to ?? "")} · {approveTarget?.type}</div>
+            <div className="text-xs text-ink-mute mt-0.5">{fmtDate(approveTarget?.date_from ?? "")} – {fmtDate(approveTarget?.date_to ?? "")} · {typeLabel(approveTarget?.type ?? "")}</div>
             {approveTarget?.reason && <div className="text-xs text-ink-soft mt-1">{approveTarget.reason}</div>}
           </Card>
           {approveTarget?.coach_leave_classes && approveTarget.coach_leave_classes.length > 0 ? (
             <div>
-              <div className="text-xs font-semibold text-ink-mute uppercase tracking-wider mb-2">Pengganti per Kelas</div>
+              <div className="text-xs font-semibold text-ink-mute uppercase tracking-wider mb-2">{t("admin.izin.substitutePerClassLabel")}</div>
               <div className="space-y-3">
                 {approveTarget.coach_leave_classes.map(lc => (
                   <div key={lc.class_id} className="space-y-1.5">
@@ -509,22 +519,22 @@ export default function AdminIzin({ branchId }: { branchId: string }) {
                       value={classSubstitutes[lc.class_id] ?? ""}
                       onChange={e => setClassSubstitutes(prev => ({ ...prev, [lc.class_id]: e.target.value }))}
                     >
-                      <option value="">— pilih coach pengganti —</option>
+                      <option value="">{t("admin.izin.selectSubstitutePlaceholder")}</option>
                       {allCoaches
                         .filter(c => c.full_name !== approveTarget?.profile?.full_name)
                         .map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
                     </Select>
                     {!classSubstitutes[lc.class_id] && (
-                      <p className="text-xs text-warn-600">Wajib pilih pengganti untuk kelas ini</p>
+                      <p className="text-xs text-warn-600">{t("admin.izin.substituteRequiredHint")}</p>
                     )}
                   </div>
                 ))}
               </div>
             </div>
           ) : (
-            <Field label="Assign Coach Pengganti" hint="Opsional. Pengganti muncul di coach page mereka dengan label 'Pengganti' selama tanggal izin.">
+            <Field label={t("admin.izin.assignSubstituteLabel")} hint={t("admin.izin.assignSubstituteHint")}>
               <Select value={classSubstitutes["__single__"] ?? ""} onChange={e => setClassSubstitutes({ "__single__": e.target.value })}>
-                <option value="">— tanpa pengganti —</option>
+                <option value="">{t("admin.izin.noSubstitutePlaceholder")}</option>
                 {allCoaches
                   .filter(c => c.full_name !== approveTarget?.profile?.full_name)
                   .map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
@@ -535,33 +545,33 @@ export default function AdminIzin({ branchId }: { branchId: string }) {
       </Modal>
 
       {/* Reject leave + reason modal (coach & member) */}
-      <Modal open={!!rejectTarget} onClose={() => setRejectTarget(null)} title={`Tolak Izin ${tab === "coach" ? "Coach" : "Member"}`} size="sm"
-        footer={<><Btn variant="ghost" onClick={() => setRejectTarget(null)}>Batal</Btn><Btn variant="danger" onClick={confirmReject} disabled={rejecting}>{rejecting ? "Menolak…" : "Tolak Izin"}</Btn></>}>
+      <Modal open={!!rejectTarget} onClose={() => setRejectTarget(null)} title={t("admin.izin.rejectLeaveModalTitle", { role: tab === "coach" ? t("admin.izin.roleCoach") : t("admin.izin.roleMember") })} size="sm"
+        footer={<><Btn variant="ghost" onClick={() => setRejectTarget(null)}>{t("common.actions.cancel")}</Btn><Btn variant="danger" onClick={confirmReject} disabled={rejecting}>{rejecting ? t("admin.izin.rejectingBtn2") : t("admin.izin.rejectLeaveBtn")}</Btn></>}>
         <div className="space-y-4">
           <Card className="!p-3 bg-paper-tint">
             <div className="text-sm font-semibold text-ink">{rejectTarget?.profile?.full_name}</div>
-            <div className="text-xs text-ink-mute mt-0.5">{fmtDate(rejectTarget?.date_from ?? "")} – {fmtDate(rejectTarget?.date_to ?? "")} · {rejectTarget?.type}</div>
+            <div className="text-xs text-ink-mute mt-0.5">{fmtDate(rejectTarget?.date_from ?? "")} – {fmtDate(rejectTarget?.date_to ?? "")} · {typeLabel(rejectTarget?.type ?? "")}</div>
             {rejectTarget?.reason && <div className="text-xs text-ink-soft mt-1">{rejectTarget.reason}</div>}
           </Card>
-          <Field label="Alasan penolakan" required hint="Wajib diisi — akan dilihat oleh coach/member.">
-            <Textarea rows={2} value={rejectReason} onChange={e => setRejectReason(e.target.value)} placeholder="Mis. Tanggal bentrok dengan acara cabang." />
+          <Field label={t("admin.izin.fieldRejectReason2")} required hint={t("admin.izin.rejectReasonHint")}>
+            <Textarea rows={2} value={rejectReason} onChange={e => setRejectReason(e.target.value)} placeholder={t("admin.izin.rejectReasonPlaceholder")} />
           </Field>
         </div>
       </Modal>
 
       {/* Detail leave modal */}
-      <Modal open={!!detailTarget} onClose={() => setDetailTarget(null)} title="Detail Izin" size="md"
+      <Modal open={!!detailTarget} onClose={() => setDetailTarget(null)} title={t("admin.izin.detailModalTitle2")} size="md"
         footer={
           <div className="flex gap-2 w-full">
             {detailTarget?.status === "pending" && (
               <>
                 <Btn variant="ghost" className="text-danger-500"
-                  onClick={() => { setRejectTarget(detailTarget); setRejectReason(""); setDetailTarget(null); }}>Tolak</Btn>
+                  onClick={() => { setRejectTarget(detailTarget); setRejectReason(""); setDetailTarget(null); }}>{t("common.actions.reject")}</Btn>
                 <Btn variant="soft" icon="check"
-                  onClick={() => { decide(detailTarget.id, "approved"); setDetailTarget(null); }}>Setujui</Btn>
+                  onClick={() => { decide(detailTarget.id, "approved"); setDetailTarget(null); }}>{t("common.actions.approve")}</Btn>
               </>
             )}
-            <Btn variant="ghost" className="ml-auto" onClick={() => setDetailTarget(null)}>Tutup</Btn>
+            <Btn variant="ghost" className="ml-auto" onClick={() => setDetailTarget(null)}>{t("common.actions.close")}</Btn>
           </div>
         }>
         {detailTarget && (
@@ -573,9 +583,9 @@ export default function AdminIzin({ branchId }: { branchId: string }) {
                 <div className="font-display font-bold text-lg text-ink leading-tight truncate">{detailTarget.profile?.full_name ?? "—"}</div>
                 <div className="flex items-center gap-2 mt-1 flex-wrap">
                   <Status kind={detailTarget.status as "pending" | "approved" | "rejected"}>
-                    {detailTarget.status === "pending" ? "Menunggu" : detailTarget.status === "approved" ? "Disetujui" : "Ditolak"}
+                    {statusLabel(detailTarget.status)}
                   </Status>
-                  <span className="text-xs text-ink-mute capitalize">{detailTarget.type}</span>
+                  <span className="text-xs text-ink-mute capitalize">{typeLabel(detailTarget.type)}</span>
                 </div>
               </div>
             </div>
@@ -583,22 +593,22 @@ export default function AdminIzin({ branchId }: { branchId: string }) {
             {/* Info rows */}
             <div className="bg-paper-tint rounded-xl divide-y divide-line">
               <div className="flex items-center justify-between px-4 py-3">
-                <span className="text-xs text-ink-mute">Jenis</span>
-                <span className="text-sm text-ink font-medium capitalize">{detailTarget.type}</span>
+                <span className="text-xs text-ink-mute">{t("admin.izin.colType")}</span>
+                <span className="text-sm text-ink font-medium capitalize">{typeLabel(detailTarget.type)}</span>
               </div>
               <div className="flex items-center justify-between px-4 py-3">
-                <span className="text-xs text-ink-mute">Tanggal mulai</span>
+                <span className="text-xs text-ink-mute">{t("admin.izin.rowStartDate")}</span>
                 <span className="text-sm text-ink">{fmtDate(detailTarget.date_from)}</span>
               </div>
               <div className="flex items-center justify-between px-4 py-3">
-                <span className="text-xs text-ink-mute">Tanggal selesai</span>
+                <span className="text-xs text-ink-mute">{t("admin.izin.rowEndDate")}</span>
                 <span className="text-sm text-ink">{fmtDate(detailTarget.date_to)}</span>
               </div>
               {detailTarget.date_from !== detailTarget.date_to && (
                 <div className="flex items-center justify-between px-4 py-3">
-                  <span className="text-xs text-ink-mute">Durasi</span>
+                  <span className="text-xs text-ink-mute">{t("admin.izin.rowDuration")}</span>
                   <span className="text-sm text-ink tabular-nums">
-                    {Math.round((new Date(detailTarget.date_to).getTime() - new Date(detailTarget.date_from).getTime()) / 86400000) + 1} hari
+                    {t("admin.izin.daysCountSuffix", { n: Math.round((new Date(detailTarget.date_to).getTime() - new Date(detailTarget.date_from).getTime()) / 86400000) + 1 })}
                   </span>
                 </div>
               )}
@@ -606,24 +616,24 @@ export default function AdminIzin({ branchId }: { branchId: string }) {
 
             {/* Reason — main ask */}
             <div className="space-y-1.5">
-              <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Alasan / Keterangan</div>
+              <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("admin.izin.reasonNotesLabel")}</div>
               {detailTarget.reason
                 ? <p className="text-sm text-ink bg-paper-tint rounded-xl px-4 py-3 leading-relaxed whitespace-pre-wrap">{detailTarget.reason}</p>
-                : <p className="text-sm text-ink-faint italic px-4 py-3 bg-paper-tint rounded-xl">Tidak ada keterangan.</p>
+                : <p className="text-sm text-ink-faint italic px-4 py-3 bg-paper-tint rounded-xl">{t("admin.izin.noNotes")}</p>
               }
             </div>
 
             {/* Per-class substitutes (coach, new format) */}
             {tab === "coach" && detailTarget.coach_leave_classes && detailTarget.coach_leave_classes.length > 0 && (
               <div className="space-y-1.5">
-                <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Kelas & Pengganti</div>
+                <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("admin.izin.classesAndSubstitutesLabel")}</div>
                 <div className="bg-paper-tint rounded-xl divide-y divide-line">
                   {detailTarget.coach_leave_classes.map(lc => (
                     <div key={lc.class_id} className="flex items-center justify-between px-4 py-3">
                       <span className="text-sm text-ink">{lc.class?.name ?? "—"}</span>
                       {lc.substitute?.full_name
                         ? <span className="text-xs font-semibold text-ok-600">{lc.substitute.full_name}</span>
-                        : <span className="text-xs text-warn-600">Belum ada pengganti</span>}
+                        : <span className="text-xs text-warn-600">{t("admin.izin.noSubstituteYet")}</span>}
                     </div>
                   ))}
                 </div>
@@ -634,7 +644,7 @@ export default function AdminIzin({ branchId }: { branchId: string }) {
             {tab === "coach" && !(detailTarget.coach_leave_classes?.length) && detailTarget.substitute_profile && (
               <div className="bg-paper-tint rounded-xl divide-y divide-line">
                 <div className="flex items-center justify-between px-4 py-3">
-                  <span className="text-xs text-ink-mute">Pengganti</span>
+                  <span className="text-xs text-ink-mute">{t("admin.izin.colSubstitute")}</span>
                   <span className="text-sm font-semibold text-ok-600">{detailTarget.substitute_profile.full_name}</span>
                 </div>
               </div>
@@ -644,29 +654,29 @@ export default function AdminIzin({ branchId }: { branchId: string }) {
       </Modal>
 
       {/* Admin create leave modal */}
-      <Modal open={openCreate} onClose={() => setOpenCreate(false)} title={`Buat Izin ${tab === "coach" ? "Coach" : "Member"}`} size="sm"
-        footer={<><Btn variant="ghost" onClick={() => setOpenCreate(false)}>Batal</Btn><Btn variant="primary" icon="check" onClick={createLeave} disabled={creating}>{creating ? "Menyimpan…" : "Buat Izin"}</Btn></>}>
+      <Modal open={openCreate} onClose={() => setOpenCreate(false)} title={t("admin.izin.createLeaveModalTitle", { role: tab === "coach" ? t("admin.izin.roleCoach") : t("admin.izin.roleMember") })} size="sm"
+        footer={<><Btn variant="ghost" onClick={() => setOpenCreate(false)}>{t("common.actions.cancel")}</Btn><Btn variant="primary" icon="check" onClick={createLeave} disabled={creating}>{creating ? t("common.actions.saving") : t("admin.izin.createLeaveBtn")}</Btn></>}>
         <div className="space-y-4">
-          <Field label={tab === "coach" ? "Coach" : "Member"} required>
+          <Field label={tab === "coach" ? t("admin.izin.roleCoach") : t("admin.izin.roleMember")} required>
             <Select value={createForm.target_id} onChange={e => setCreateForm(f => ({ ...f, target_id: e.target.value }))}>
-              <option value="">— pilih {tab === "coach" ? "coach" : "member"} —</option>
+              <option value="">{t("admin.izin.selectTargetPlaceholder", { role: tab === "coach" ? t("admin.izin.roleCoach").toLowerCase() : t("admin.izin.roleMember").toLowerCase() })}</option>
               {tab === "coach"
                 ? allCoaches.map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)
                 : allMembers.map(m => <option key={m.id} value={m.id}>{m.full_name}</option>)}
             </Select>
           </Field>
-          <Field label="Jenis izin" required>
+          <Field label={t("admin.izin.fieldLeaveType")} required>
             <Select value={createForm.type} onChange={e => setCreateForm(f => ({ ...f, type: e.target.value }))}>
-              <option value="sakit">Sakit</option>
-              <option value="izin">Izin</option>
-              <option value="cuti">Cuti</option>
+              <option value="sakit">{t("admin.izin.typeSick")}</option>
+              <option value="izin">{t("admin.izin.typePermission")}</option>
+              <option value="cuti">{t("admin.izin.typeLeaveOff")}</option>
             </Select>
           </Field>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Field label="Tanggal mulai" required><Input type="date" value={createForm.date_from} onChange={e => setCreateForm(f => ({ ...f, date_from: e.target.value }))} /></Field>
-            <Field label="Tanggal selesai" required><Input type="date" value={createForm.date_to} onChange={e => setCreateForm(f => ({ ...f, date_to: e.target.value }))} min={createForm.date_from} /></Field>
+            <Field label={t("admin.izin.rowStartDate")} required><Input type="date" value={createForm.date_from} onChange={e => setCreateForm(f => ({ ...f, date_from: e.target.value }))} /></Field>
+            <Field label={t("admin.izin.rowEndDate")} required><Input type="date" value={createForm.date_to} onChange={e => setCreateForm(f => ({ ...f, date_to: e.target.value }))} min={createForm.date_from} /></Field>
           </div>
-          <Field label="Kelas yang ditinggalkan" hint="Opsional">
+          <Field label={t("admin.izin.fieldClassesLeft")} hint={t("admin.izin.optionalHint2")}>
             <div className="flex flex-wrap gap-1.5 mt-1">
               {allClasses.map(c => {
                 const sel = createForm.class_ids.includes(c.id);
@@ -687,7 +697,7 @@ export default function AdminIzin({ branchId }: { branchId: string }) {
           </Field>
           {tab === "coach" && createForm.class_ids.length > 0 && (
             <div>
-              <div className="text-xs font-semibold text-ink-mute uppercase tracking-wider mb-2">Coach Pengganti per Kelas</div>
+              <div className="text-xs font-semibold text-ink-mute uppercase tracking-wider mb-2">{t("admin.izin.substituteCoachPerClassLabel")}</div>
               <div className="space-y-3">
                 {allClasses.filter(c => createForm.class_ids.includes(c.id)).map(c => (
                   <div key={c.id} className="space-y-1.5">
@@ -696,7 +706,7 @@ export default function AdminIzin({ branchId }: { branchId: string }) {
                       value={createForm.class_substitutes[c.id] ?? ""}
                       onChange={e => setCreateForm(f => ({ ...f, class_substitutes: { ...f.class_substitutes, [c.id]: e.target.value } }))}
                     >
-                      <option value="">— tanpa pengganti —</option>
+                      <option value="">{t("admin.izin.noSubstitutePlaceholder")}</option>
                       {allCoaches.filter(c2 => c2.id !== createForm.target_id).map(c2 => <option key={c2.id} value={c2.id}>{c2.full_name}</option>)}
                     </Select>
                   </div>
@@ -704,8 +714,8 @@ export default function AdminIzin({ branchId }: { branchId: string }) {
               </div>
             </div>
           )}
-          <Field label="Keterangan" hint="Opsional">
-            <Textarea rows={2} value={createForm.reason} onChange={e => setCreateForm(f => ({ ...f, reason: e.target.value }))} placeholder="Mis. Demam sejak kemarin." />
+          <Field label={t("admin.izin.fieldNotes")} hint={t("admin.izin.optionalHint2")}>
+            <Textarea rows={2} value={createForm.reason} onChange={e => setCreateForm(f => ({ ...f, reason: e.target.value }))} placeholder={t("admin.izin.notesPlaceholder")} />
           </Field>
         </div>
       </Modal>

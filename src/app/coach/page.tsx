@@ -36,15 +36,17 @@ import type { User } from "@supabase/supabase-js";
 
 type TabId = "home" | "absen" | "kelas" | "invoice" | "rapor" | "payslip" | "profile";
 
-const NAV_ITEMS: MobileNavItem[] = [
-  { id: "home",    label: "Home",      short: "Home",    icon: "home"    },
-  { id: "absen",   label: "Absensi",   short: "Absen",   icon: "check"   },
-  { id: "kelas",   label: "Kelas",     short: "Kelas",   icon: "swim"    },
-  { id: "invoice", label: "Invoice",   short: "Invoice", icon: "invoice" },
-  { id: "rapor",   label: "Rapor",     short: "Rapor",   icon: "book"    },
-  { id: "payslip", label: "Slip Gaji", short: "Slip",    icon: "wallet"  },
-  { id: "profile", label: "Profile",   short: "Saya",    icon: "user"    },
-];
+function buildNavItems(t: (key: string) => string): MobileNavItem[] {
+  return [
+    { id: "home",    label: t("coach.tabs.homeLabel"),    short: t("coach.tabs.homeShort"),    icon: "home"    },
+    { id: "absen",   label: t("coach.tabs.absenLabel"),   short: t("coach.tabs.absenShort"),   icon: "check"   },
+    { id: "kelas",   label: t("coach.tabs.kelasLabel"),   short: t("coach.tabs.kelasShort"),   icon: "swim"    },
+    { id: "invoice", label: t("coach.tabs.invoiceLabel"), short: t("coach.tabs.invoiceShort"), icon: "invoice" },
+    { id: "rapor",   label: t("coach.tabs.raporLabel"),   short: t("coach.tabs.raporShort"),   icon: "book"    },
+    { id: "payslip", label: t("coach.tabs.payslipLabel"), short: t("coach.tabs.payslipShort"), icon: "wallet"  },
+    { id: "profile", label: t("coach.tabs.profileLabel"), short: t("coach.tabs.profileShort"), icon: "user"    },
+  ];
+}
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -174,6 +176,8 @@ function Shell({ children, active, onNav, title, sub, user, avatarUrl, branches,
   activeBranchId?: string;
   onBranchChange?: (branchId: string) => void;
 }) {
+  const { t } = useLocale();
+  const navItems = useMemo(() => buildNavItems(t), [t]);
   return (
     <div className="min-h-screen bg-paper-tint pb-24 lg:pb-0">
       <header className="sticky top-0 z-30 bg-white/85 backdrop-blur border-b border-line">
@@ -196,7 +200,7 @@ function Shell({ children, active, onNav, title, sub, user, avatarUrl, branches,
             </select>
           )}
           <div className="hidden lg:flex items-center gap-1">
-            {NAV_ITEMS.map((it) => (
+            {navItems.map((it) => (
               <button key={it.id} onClick={() => onNav(it.id as TabId)}
                 className={`px-3 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 ${active === it.id ? "bg-ocean-50 text-ocean-700" : "text-ink-soft hover:bg-paper-tint"}`}>
                 <Icon name={it.icon ?? ""} className="w-4 h-4" /> {it.label}
@@ -205,13 +209,13 @@ function Shell({ children, active, onNav, title, sub, user, avatarUrl, branches,
           </div>
           <LanguageSwitcher />
           <Bell userId={user?.id ?? ""} />
-          <button onClick={() => onNav("profile")} title="Profile">
+          <button onClick={() => onNav("profile")} title={t("coach.tabs.profileTitleAttr")}>
             <Avatar name={user?.user_metadata?.full_name ?? "C"} src={avatarUrl ?? undefined} size={36} />
           </button>
         </div>
       </header>
       <main className="max-w-3xl mx-auto p-4 lg:p-7">{children}</main>
-      <MobileNav items={NAV_ITEMS} active={active} onSelect={(id) => onNav(id as TabId)} />
+      <MobileNav items={navItems} active={active} onSelect={(id) => onNav(id as TabId)} />
     </div>
   );
 }
@@ -238,6 +242,7 @@ function ClockInFlow({ back, coachId, branchId, classes, preselectedClassId, onS
   const toast = useToast();
   const { upload, uploading } = useUpload();
   const supabase = createClient();
+  const { t } = useLocale();
   const [step, setStep] = useState(0);
   const isPreselected = !!preselectedClassId;
   // If preselected, lock to that class. Otherwise default to first today's class.
@@ -286,7 +291,7 @@ function ClockInFlow({ back, coachId, branchId, classes, preselectedClassId, onS
   };
 
   const submit = async () => {
-    if (!classId) return toast.error("Pilih kelas terlebih dahulu");
+    if (!classId) return toast.error(t("coach.clockIn.selectClassFirst"));
     setSubmitting(true);
     const today = new Date().toISOString().split("T")[0];
     const nowTime = new Date().toTimeString().slice(0, 8);
@@ -301,7 +306,7 @@ function ClockInFlow({ back, coachId, branchId, classes, preselectedClassId, onS
       try {
         selfieUrl = await upload.selfie(photoFile, classId, today);
       } catch {
-        toast.error("Upload selfie gagal", "Absensi tetap disimpan tanpa foto");
+        toast.error(t("coach.clockIn.selfieUploadFailedTitle"), t("coach.clockIn.selfieUploadFailedBody"));
       }
     }
 
@@ -310,7 +315,7 @@ function ClockInFlow({ back, coachId, branchId, classes, preselectedClassId, onS
       .select("id").eq("coach_id", coachId).eq("class_id", classId).eq("session_date", today).maybeSingle();
     if (existing) {
       setSubmitting(false);
-      toast.error("Sudah absen sesi ini", "Anda sudah melakukan clock-in untuk kelas ini hari ini.");
+      toast.error(t("coach.clockIn.alreadyClockedInTitle"), t("coach.clockIn.alreadyClockedInBody"));
       return;
     }
 
@@ -325,14 +330,14 @@ function ClockInFlow({ back, coachId, branchId, classes, preselectedClassId, onS
     setSubmitting(false);
     if (error) {
       const isDuplicate = error.message.includes("duplicate key") || error.message.includes("unique constraint");
-      if (isDuplicate) { toast.error("Sudah absen sesi ini", "Anda sudah melakukan clock-in untuk kelas ini hari ini."); return; }
-      toast.error("Gagal menyimpan absensi", error.message);
+      if (isDuplicate) { toast.error(t("coach.clockIn.alreadyClockedInTitle"), t("coach.clockIn.alreadyClockedInBody")); return; }
+      toast.error(t("coach.clockIn.saveAttendanceFailedTitle"), error.message);
       return;
     }
     if (coachStatus === "late") {
-      toast.error("Absensi tercatat — Telat", `Anda clock-in ${lateMinutes} menit setelah kelas dimulai`);
+      toast.error(t("coach.clockIn.attendanceRecordedLateTitle"), t("coach.clockIn.attendanceRecordedLateBody", { minutes: lateMinutes }));
     } else {
-      toast.success("Absensi Berhasil!", "Data tersimpan ke history & admin panel");
+      toast.success(t("coach.clockIn.attendanceSuccessTitle"), t("coach.clockIn.attendanceSuccessBody"));
     }
     onSuccess?.(classId);
     setStep(3);
@@ -342,11 +347,11 @@ function ClockInFlow({ back, coachId, branchId, classes, preselectedClassId, onS
 
   const distLabel = distanceMeters != null
     ? distanceMeters < 1000
-      ? `${distanceMeters} m dari cabang`
-      : `${(distanceMeters / 1000).toFixed(1)} km dari cabang`
+      ? t("coach.clockIn.distFromBranchMeters", { m: distanceMeters })
+      : t("coach.clockIn.distFromBranchKm", { km: (distanceMeters / 1000).toFixed(1) })
     : branchCoords == null
-      ? "Koordinat cabang belum diset"
-      : "Menghitung jarak…";
+      ? t("coach.clockIn.branchCoordsNotSet")
+      : t("coach.clockIn.calculatingDistance");
 
   const distColor = distanceMeters == null ? "text-ink-mute"
     : distanceMeters <= 500 ? "text-ok-600"
@@ -356,17 +361,17 @@ function ClockInFlow({ back, coachId, branchId, classes, preselectedClassId, onS
   return (
     <div className="space-y-4 max-w-md mx-auto">
       <button onClick={back} className="text-sm text-ink-mute hover:text-ocean-600 font-semibold inline-flex items-center gap-1">
-        <Icon name="arrowL" className="w-4 h-4" /> Kembali
+        <Icon name="arrowL" className="w-4 h-4" /> {t("coach.clockIn.backBtn")}
       </button>
       {step === 0 && (
         <Card className="anim-in">
           <div className="text-center">
             <div className="w-20 h-20 rounded-2xl bg-wave-50 text-wave-600 mx-auto flex items-center justify-center mb-3"><Icon name="camera" className="w-10 h-10" /></div>
-            <h2 className="font-display font-bold text-xl text-ink">Clock-In</h2>
+            <h2 className="font-display font-bold text-xl text-ink">{t("coach.clockIn.clockInTitle")}</h2>
           </div>
           {isPreselected ? (
             <div className="rounded-xl bg-paper-tint border border-line px-4 py-3">
-              <div className="text-xs text-ink-mute mb-0.5">Kelas</div>
+              <div className="text-xs text-ink-mute mb-0.5">{t("coach.clockIn.fieldClassLabel")}</div>
               <div className="font-semibold text-ink">{selectedClass?.name ?? "—"}</div>
               {selectedClass && (
                 <div className="text-xs text-ink-mute mt-0.5">
@@ -375,7 +380,7 @@ function ClockInFlow({ back, coachId, branchId, classes, preselectedClassId, onS
               )}
             </div>
           ) : (
-            <Field label="Pilih kelas" required>
+            <Field label={t("coach.clockIn.selectClassLabel")} required>
               <Select value={classId} onChange={e => setClassId(e.target.value)}>
                 {(todayClasses.length > 0 ? todayClasses : classes).map(c => (
                   <option key={c.id} value={c.id}>{c.name} — {c.time_start?.slice(0,5)}{c.time_end ? `–${c.time_end.slice(0,5)}` : ""}</option>
@@ -386,20 +391,20 @@ function ClockInFlow({ back, coachId, branchId, classes, preselectedClassId, onS
           <Card className="!p-3 mt-4 bg-paper-tint">
             <div className="grid grid-cols-2 gap-3 text-xs">
               <div>
-                <div className="text-ink-faint font-bold uppercase tracking-widest mb-0.5">GPS</div>
+                <div className="text-ink-faint font-bold uppercase tracking-widest mb-0.5">{t("coach.clockIn.gpsLabel")}</div>
                 <div className={`font-semibold ${gpsStatus === "ok" ? "text-ok-600" : gpsStatus === "error" ? "text-danger-500" : "text-warn-600"}`}>
-                  {gpsStatus === "ok" ? "✓ Terdeteksi" : gpsStatus === "error" ? "✗ Gagal" : "Mendeteksi…"}
+                  {gpsStatus === "ok" ? t("coach.clockIn.gpsDetected") : gpsStatus === "error" ? t("coach.clockIn.gpsFailed") : t("coach.clockIn.gpsDetecting")}
                 </div>
               </div>
               <div>
-                <div className="text-ink-faint font-bold uppercase tracking-widest mb-0.5">Jarak ke Cabang</div>
+                <div className="text-ink-faint font-bold uppercase tracking-widest mb-0.5">{t("coach.clockIn.distToBranchLabel")}</div>
                 <div className={`font-semibold ${distColor}`}>{distLabel}</div>
               </div>
             </div>
           </Card>
           <label className="block mt-4">
             <div className="w-full px-5 py-3 bg-ocean-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 cursor-pointer hover:bg-ocean-800 transition">
-              <Icon name="camera" className="w-4 h-4" /> Buka kamera selfie
+              <Icon name="camera" className="w-4 h-4" /> {t("coach.clockIn.openSelfieCameraBtn")}
             </div>
             <input type="file" accept="image/*" capture="user" className="sr-only" onChange={handleCapture} />
           </label>
@@ -415,7 +420,7 @@ function ClockInFlow({ back, coachId, branchId, classes, preselectedClassId, onS
             <div className="flex items-center gap-2 text-sm">
               <Icon name="pin" className="w-4 h-4 text-ocean-600 shrink-0" />
               <span className={`font-semibold ${distColor}`}>{distLabel}</span>
-              <Status kind={gpsStatus === "ok" ? "active" : "inactive"} className="ml-auto">{gpsStatus === "ok" ? "GPS OK" : "No GPS"}</Status>
+              <Status kind={gpsStatus === "ok" ? "active" : "inactive"} className="ml-auto">{gpsStatus === "ok" ? t("coach.clockIn.gpsOkBadge") : t("coach.clockIn.noGpsBadge")}</Status>
             </div>
             {coords && (
               <div className="text-[11px] text-ink-faint font-mono">
@@ -425,23 +430,23 @@ function ClockInFlow({ back, coachId, branchId, classes, preselectedClassId, onS
           </Card>
           <div className="grid grid-cols-2 gap-2 mt-4">
             <label>
-              <Btn variant="outline" size="lg" icon="refresh" className="w-full pointer-events-none">Ambil ulang</Btn>
+              <Btn variant="outline" size="lg" icon="refresh" className="w-full pointer-events-none">{t("coach.clockIn.retakeBtn")}</Btn>
               <input type="file" accept="image/*" capture="user" className="sr-only" onChange={handleCapture} />
             </label>
-            <Btn variant="primary" size="lg" onClick={submit} disabled={submitting || uploading}>{submitting || uploading ? "Menyimpan…" : "Submit"}</Btn>
+            <Btn variant="primary" size="lg" onClick={submit} disabled={submitting || uploading}>{submitting || uploading ? t("coach.leave.sendingBtn") : t("coach.clockIn.submitBtn")}</Btn>
           </div>
         </Card>
       )}
       {step === 3 && (
         <Card className="anim-in text-center">
           <div className="w-20 h-20 rounded-full bg-ok-50 text-ok-600 mx-auto flex items-center justify-center mb-3"><Icon name="check" className="w-10 h-10" strokeWidth={3} /></div>
-          <h2 className="font-display font-bold text-xl text-ink">Absensi Berhasil!</h2>
-          <p className="text-ink-mute text-sm mt-1">Sekarang Anda bisa scan QR member yang hadir.</p>
+          <h2 className="font-display font-bold text-xl text-ink">{t("coach.clockIn.attendanceSuccessTitle")}</h2>
+          <p className="text-ink-mute text-sm mt-1">{t("coach.clockIn.scanQrHint")}</p>
           {distanceMeters != null && (
             <p className={`text-sm font-semibold mt-1 ${distColor}`}>{distLabel}</p>
           )}
           <div className="mt-5">
-            <Btn variant="outline" size="lg" className="w-full" onClick={back}>Kembali ke Home</Btn>
+            <Btn variant="outline" size="lg" className="w-full" onClick={back}>{t("coach.clockIn.backToHomeBtn")}</Btn>
           </div>
         </Card>
       )}
@@ -460,6 +465,7 @@ interface LeaveHistoryRow {
 
 function LeaveHistory({ back, coachId }: { back: () => void; coachId: string }) {
   const supabase = createClient();
+  const { t } = useLocale();
   const [leaves, setLeaves] = useState<LeaveHistoryRow[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -475,21 +481,21 @@ function LeaveHistory({ back, coachId }: { back: () => void; coachId: string }) 
   }, [coachId]); // eslint-disable-line react-hooks/exhaustive-deps
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  const statusLabel: Record<string, string> = { pending: "Menunggu", approved: "Disetujui", rejected: "Ditolak" };
+  const statusLabel: Record<string, string> = { pending: t("common.status.pending"), approved: t("common.status.approved"), rejected: t("common.status.rejected") };
   const statusKind: Record<string, "pending" | "approved" | "rejected"> = { pending: "pending", approved: "approved", rejected: "rejected" };
-  const typeLabel: Record<string, string> = { izin: "Izin", sakit: "Sakit", lainnya: "Lainnya" };
+  const typeLabel: Record<string, string> = { izin: t("coach.leave.typeIzin"), sakit: t("coach.leave.typeSakit"), lainnya: t("coach.leave.typeLainnya") };
 
   return (
     <div className="max-w-md mx-auto space-y-4">
       <button onClick={back} className="text-sm text-ink-mute hover:text-ocean-600 font-semibold inline-flex items-center gap-1">
-        <Icon name="arrowL" className="w-4 h-4" /> Kembali
+        <Icon name="arrowL" className="w-4 h-4" /> {t("coach.clockIn.backBtn")}
       </button>
       <Card>
-        <SectionTitle sub="Semua pengajuan izin Anda">Riwayat Izin</SectionTitle>
+        <SectionTitle sub={t("coach.leave.historySub")}>{t("coach.leave.historyTitle")}</SectionTitle>
         {loading ? (
-          <div className="text-ink-mute text-sm">Memuat…</div>
+          <div className="text-ink-mute text-sm">{t("coach.leave.loadingEllipsis")}</div>
         ) : leaves.length === 0 ? (
-          <p className="text-ink-mute text-sm">Belum ada pengajuan izin.</p>
+          <p className="text-ink-mute text-sm">{t("coach.leave.noLeaveRequestsYet")}</p>
         ) : (
           <div className="space-y-3">
             {leaves.map((l) => {
@@ -520,11 +526,11 @@ function LeaveHistory({ back, coachId }: { back: () => void; coachId: string }) 
                   )}
                   {/* Fallback: old single-substitute display for pre-migration leaves */}
                   {!hasPerClassSub && l.substitute_profile && (
-                    <div className="text-xs text-ink-mute">Pengganti: <span className="font-semibold text-ink">{l.substitute_profile.full_name}</span></div>
+                    <div className="text-xs text-ink-mute">{t("coach.leave.substitutePrefix")} <span className="font-semibold text-ink">{l.substitute_profile.full_name}</span></div>
                   )}
                   {l.status === "rejected" && l.reject_reason && (
                     <div className="rounded-lg bg-danger-50 border border-danger-200 px-3 py-2">
-                      <div className="text-xs font-bold text-danger-700 mb-0.5">Alasan penolakan</div>
+                      <div className="text-xs font-bold text-danger-700 mb-0.5">{t("coach.leave.rejectReasonLabel")}</div>
                       <p className="text-xs text-danger-600">{l.reject_reason}</p>
                     </div>
                   )}
@@ -543,6 +549,7 @@ function LeaveHistory({ back, coachId }: { back: () => void; coachId: string }) 
 function LeaveForm({ back, coachId, branchId, classes }: { back: () => void; coachId: string; branchId?: string; classes: ClassRow[] }) {
   const toast = useToast();
   const supabase = createClient();
+  const { t } = useLocale();
   const [type, setType] = useState("sakit");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -583,9 +590,9 @@ function LeaveForm({ back, coachId, branchId, classes }: { back: () => void; coa
   const canSubmit = selectedClasses.length > 0 && selectedClasses.every(c => !!c.substitute_id);
 
   const submit = async () => {
-    if (!startDate || !endDate) return toast.error("Tanggal mulai dan selesai wajib diisi");
-    if (selectedClasses.length === 0) return toast.error("Pilih minimal 1 kelas terdampak");
-    if (!selectedClasses.every(c => c.substitute_id)) return toast.error("Setiap kelas wajib memiliki coach pengganti");
+    if (!startDate || !endDate) return toast.error(t("coach.leave.startEndDateRequired"));
+    if (selectedClasses.length === 0) return toast.error(t("coach.leave.selectAtLeastOneClass"));
+    if (!selectedClasses.every(c => c.substitute_id)) return toast.error(t("coach.leave.everyClassNeedsSubstitute"));
     setSaving(true);
 
     const { data: leave, error } = await supabase.from("coach_leaves").insert({
@@ -599,7 +606,7 @@ function LeaveForm({ back, coachId, branchId, classes }: { back: () => void; coa
       substitute_id: selectedClasses[0]?.substitute_id || null,
     }).select("id").single();
 
-    if (error || !leave) { toast.error("Gagal mengajukan izin", error?.message ?? ""); setSaving(false); return; }
+    if (error || !leave) { toast.error(t("coach.leave.submitLeaveFailed"), error?.message ?? ""); setSaving(false); return; }
 
     // Insert per-class entries with individual substitute_id
     await supabase.from("coach_leave_classes").insert(
@@ -611,21 +618,21 @@ function LeaveForm({ back, coachId, branchId, classes }: { back: () => void; coa
     );
 
     setSaving(false);
-    toast.success("Pengajuan terkirim", "Menunggu persetujuan admin");
+    toast.success(t("coach.leave.requestSentToast"), t("coach.leave.awaitingAdminApproval"));
     back();
   };
 
   return (
     <div className="max-w-md mx-auto space-y-4">
       <button onClick={back} className="text-sm text-ink-mute hover:text-ocean-600 font-semibold inline-flex items-center gap-1">
-        <Icon name="arrowL" className="w-4 h-4" /> Kembali
+        <Icon name="arrowL" className="w-4 h-4" /> {t("coach.clockIn.backBtn")}
       </button>
       <Card>
-        <SectionTitle sub="Akan masuk ke admin untuk persetujuan">Ajukan Izin</SectionTitle>
+        <SectionTitle sub={t("coach.leave.formSub")}>{t("coach.leave.formTitle")}</SectionTitle>
         <div className="space-y-4">
-          <Field label="Jenis izin" required>
+          <Field label={t("coach.leave.fieldLeaveType")} required>
             <div className="grid grid-cols-3 gap-2">
-              {[["izin", "Izin"], ["sakit", "Sakit"], ["lainnya", "Lainnya"]].map(([val, label]) => (
+              {[["izin", t("coach.leave.typeIzin")], ["sakit", t("coach.leave.typeSakit")], ["lainnya", t("coach.leave.typeLainnya")]].map(([val, label]) => (
                 <label key={val} className={`px-3 py-2 rounded-xl border text-sm font-semibold text-center cursor-pointer ${type === val ? "border-ocean-500 bg-ocean-50 text-ocean-700" : "border-line text-ink-soft hover:bg-paper-tint"}`}>
                   <input type="radio" name="leave" className="sr-only" checked={type === val} onChange={() => setType(val)} />{label}
                 </label>
@@ -633,13 +640,13 @@ function LeaveForm({ back, coachId, branchId, classes }: { back: () => void; coa
             </div>
           </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Mulai" required><Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} /></Field>
-            <Field label="Selesai" required><Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} /></Field>
+            <Field label={t("coach.leave.fieldStart")} required><Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} /></Field>
+            <Field label={t("coach.leave.fieldEnd")} required><Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} /></Field>
           </div>
 
-          <Field label="Kelas terdampak" required hint="Pilih semua kelas yang terdampak. Setiap kelas wajib memiliki coach pengganti.">
+          <Field label={t("coach.leave.fieldAffectedClasses")} required hint={t("coach.leave.affectedClassesHint")}>
             <div className="space-y-2 mt-1">
-              {classes.length === 0 && <p className="text-xs text-ink-mute">Tidak ada kelas terdaftar.</p>}
+              {classes.length === 0 && <p className="text-xs text-ink-mute">{t("coach.leave.noClassesRegistered")}</p>}
               {classes.map(c => {
                 const sel = selectedClasses.find(s => s.class_id === c.id);
                 const isChecked = !!sel;
@@ -669,13 +676,13 @@ function LeaveForm({ back, coachId, branchId, classes }: { back: () => void; coa
                           value={sel?.substitute_id ?? ""}
                           onChange={e => setSubstituteForClass(c.id, e.target.value)}
                         >
-                          <option value="">— pilih coach pengganti —</option>
+                          <option value="">{t("coach.leave.selectSubstitutePlaceholder")}</option>
                           {allCoaches.map(coach => (
                             <option key={coach.id} value={coach.id}>{coach.full_name}</option>
                           ))}
                         </Select>
                         {!sel?.substitute_id && (
-                          <p className="text-xs text-warn-600 mt-1">Wajib pilih coach pengganti untuk kelas ini</p>
+                          <p className="text-xs text-warn-600 mt-1">{t("coach.leave.substituteRequiredForClass")}</p>
                         )}
                       </div>
                     )}
@@ -685,9 +692,9 @@ function LeaveForm({ back, coachId, branchId, classes }: { back: () => void; coa
             </div>
           </Field>
 
-          <Field label="Alasan / deskripsi"><Textarea rows={3} value={reason} onChange={e => setReason(e.target.value)} placeholder="Mis. Demam dan tidak fit" /></Field>
+          <Field label={t("coach.leave.fieldReasonDesc")}><Textarea rows={3} value={reason} onChange={e => setReason(e.target.value)} placeholder={t("coach.leave.reasonPlaceholder")} /></Field>
           <Btn variant="primary" size="lg" className="w-full" onClick={submit} disabled={saving || !canSubmit}>
-            {saving ? "Mengirim…" : !canSubmit && selectedClasses.length > 0 ? "Lengkapi pengganti tiap kelas" : "Submit pengajuan"}
+            {saving ? t("coach.leave.sendingBtn") : !canSubmit && selectedClasses.length > 0 ? t("coach.leave.completeSubstitutesBtn") : t("coach.leave.submitRequestBtn")}
           </Btn>
         </div>
       </Card>
@@ -704,6 +711,7 @@ function QRScanner({ coachId, classes, onClose }: {
 }) {
   const toast = useToast();
   const supabase = createClient();
+  const { t } = useLocale();
   const divId = "qr-reader-coach";
   const [lastScanned, setLastScanned] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
@@ -723,7 +731,7 @@ function QRScanner({ coachId, classes, onClose }: {
       .single();
 
     if (mErr || !member) {
-      toast.error("QR tidak dikenali", "Member tidak ditemukan");
+      toast.error(t("coach.qrScanner.qrNotRecognizedTitle"), t("coach.qrScanner.memberNotFoundBody"));
       setTimeout(() => setLastScanned(null), 2000);
       return;
     }
@@ -734,7 +742,7 @@ function QRScanner({ coachId, classes, onClose }: {
     // Block suspended members
     const today = new Date().toISOString().split("T")[0];
     if (typedMember.status === "suspended" || (typedMember.suspend_until && typedMember.suspend_until >= today)) {
-      toast.error(`${name} sedang disuspend`, "Member tidak bisa diabsen selama masa suspend");
+      toast.error(t("coach.qrScanner.memberSuspendedTitle", { name }), t("coach.qrScanner.memberSuspendedBody"));
       setTimeout(() => setLastScanned(null), 2500);
       return;
     }
@@ -754,11 +762,11 @@ function QRScanner({ coachId, classes, onClose }: {
     }, { onConflict: "class_id,member_id,session_date" });
 
     if (error) {
-      toast.error(`Gagal absen ${name}`, error.message);
+      toast.error(t("coach.qrScanner.attendanceFailedTitle", { name }), error.message);
     } else if (memberStatus === "telat") {
-      toast.error(`${name} hadir — Telat`, `${memberLateMin} menit setelah kelas dimulai`);
+      toast.error(t("coach.qrScanner.memberLateTitle", { name }), t("coach.qrScanner.memberLateBody", { minutes: memberLateMin }));
     } else {
-      toast.success(`✓ ${name} hadir`, "Absensi tercatat");
+      toast.success(t("coach.qrScanner.memberPresentTitle", { name }), t("coach.qrScanner.attendanceRecordedBody"));
     }
 
     // Allow scanning again after 2.5s
@@ -785,7 +793,7 @@ function QRScanner({ coachId, classes, onClose }: {
         );
         setScanning(true);
       } catch {
-        toast.error("Tidak bisa mengakses kamera", "Izinkan akses kamera di browser");
+        toast.error(t("coach.qrScanner.cameraAccessFailedTitle"), t("coach.qrScanner.cameraAccessFailedBody"));
       }
     }
 
@@ -802,15 +810,15 @@ function QRScanner({ coachId, classes, onClose }: {
   return (
     <div className="max-w-sm mx-auto space-y-4">
       <button onClick={onClose} className="text-sm text-ink-mute hover:text-ocean-600 font-semibold inline-flex items-center gap-1">
-        <Icon name="arrowL" className="w-4 h-4" /> Kembali
+        <Icon name="arrowL" className="w-4 h-4" /> {t("coach.qrScanner.backBtn")}
       </button>
       <Card className="text-center">
-        <div className="font-display font-bold text-lg text-ink">Scan QR Member</div>
-        <p className="text-xs text-ink-mute mt-1 mb-4">Arahkan kamera ke QR card member</p>
+        <div className="font-display font-bold text-lg text-ink">{t("coach.qrScanner.title")}</div>
+        <p className="text-xs text-ink-mute mt-1 mb-4">{t("coach.qrScanner.hint")}</p>
         <div id={divId} className="rounded-xl overflow-hidden bg-black" />
-        {!scanning && <p className="text-xs text-ink-mute mt-3 animate-pulse">Memulai kamera…</p>}
+        {!scanning && <p className="text-xs text-ink-mute mt-3 animate-pulse">{t("coach.qrScanner.startingCamera")}</p>}
         {lastScanned && (
-          <div className="mt-3 text-xs text-ok-600 font-semibold animate-pulse">Memproses scan…</div>
+          <div className="mt-3 text-xs text-ok-600 font-semibold animate-pulse">{t("coach.qrScanner.processingScan")}</div>
         )}
       </Card>
     </div>
@@ -847,6 +855,7 @@ function CoachHome({ setOverlay, setActive, coachId, branchId, profile, classes,
   ownSpreadsheets: Map<string, string>;
 }) {
   const supabase = createClient();
+  const { t } = useLocale();
   const [monthStats, setMonthStats] = useState({ present: 0, leave: 0, sub: 0 });
   const [subClasses, setSubClasses] = useState<{ classId: string; className: string; originalCoach: string }[]>([]);
   // School contact email (for the "Hubungi via Email" button)
@@ -958,7 +967,7 @@ function CoachHome({ setOverlay, setActive, coachId, branchId, profile, classes,
               <Icon name="bell" className="w-5 h-5" />
             </span>
             <div className="flex-1 min-w-0">
-              <Status kind="active" className="!text-[10px] mb-1">PENGUMUMAN</Status>
+              <Status kind="active" className="!text-[10px] mb-1">{t("coach.home.announcementBadge")}</Status>
               <div className="font-display font-bold text-ink">{latestAnnouncement.title}</div>
               <p className="text-sm text-ink-soft mt-1.5 leading-relaxed">{latestAnnouncement.body}</p>
             </div>
@@ -971,18 +980,18 @@ function CoachHome({ setOverlay, setActive, coachId, branchId, profile, classes,
             <Icon name="alert" className="w-5 h-5" />
           </span>
           <div className="flex-1 min-w-0">
-            <div className="font-bold text-warn-800 text-sm">Spreadsheet program belum diisi</div>
+            <div className="font-bold text-warn-800 text-sm">{t("coach.home.spreadsheetUnfilledTitle")}</div>
             <p className="text-warn-700 text-xs mt-0.5 leading-relaxed">
               {unfilledClasses.length === 1
-                ? <>Kelas <span className="font-semibold">{unfilledClasses[0].name}</span> belum memiliki program bulanan.</>
-                : <>{unfilledClasses.length} kelas belum memiliki program bulanan: <span className="font-semibold">{unfilledClasses.map(c => c.name).join(", ")}</span>.</>
+                ? <>{t("coach.home.spreadsheetUnfilledSinglePrefix")} <span className="font-semibold">{unfilledClasses[0].name}</span> {t("coach.home.spreadsheetUnfilledSingleSuffix")}</>
+                : <>{t("coach.home.spreadsheetUnfilledMultiPrefix", { count: unfilledClasses.length })} <span className="font-semibold">{unfilledClasses.map(c => c.name).join(", ")}</span>.</>
               }
             </p>
             <button
               className="mt-2 text-xs font-semibold text-warn-700 underline underline-offset-2 hover:text-warn-900"
               onClick={() => setActive("kelas")}
             >
-              Buka menu Kelas untuk mengisi →
+              {t("coach.home.openClassMenuBtn")}
             </button>
           </div>
         </div>
@@ -990,11 +999,11 @@ function CoachHome({ setOverlay, setActive, coachId, branchId, profile, classes,
       <div className="bg-ocean-700 text-white rounded-2xl border border-ocean-700 shadow-card p-5 relative overflow-hidden">
         <div className="caustics absolute inset-0 opacity-30" />
         <div className="relative">
-          <div className="text-wave-200 text-[11px] uppercase tracking-widest font-bold">Selamat siang</div>
-          <h2 className="font-display font-bold text-2xl mt-0.5">Halo, {profile?.full_name ?? "Coach"}</h2>
-          <p className="text-white/80 text-sm mt-1.5">Anda punya {todayClasses.length + subClasses.length} kelas hari ini.</p>
+          <div className="text-wave-200 text-[11px] uppercase tracking-widest font-bold">{t("coach.home.greeting")}</div>
+          <h2 className="font-display font-bold text-2xl mt-0.5">{t("coach.home.helloName", { name: profile?.full_name ?? t("coach.home.defaultCoachName") })}</h2>
+          <p className="text-white/80 text-sm mt-1.5">{t("coach.home.classesTodayCount", { count: todayClasses.length + subClasses.length })}</p>
           <div className="mt-4 grid grid-cols-3 gap-2 min-w-0">
-            {[["Hadir bln ini", monthStats.present.toString()], ["Izin", monthStats.leave.toString()], ["Pengganti", monthStats.sub.toString()]].map(([l, v]) => (
+            {[[t("coach.home.statPresentThisMonth"), monthStats.present.toString()], [t("coach.home.statLeave"), monthStats.leave.toString()], [t("coach.home.statSubstitute"), monthStats.sub.toString()]].map(([l, v]) => (
               <div key={l} className="bg-white/10 backdrop-blur ring-1 ring-white/15 rounded-xl p-3">
                 <div className="text-[10px] uppercase tracking-widest font-bold text-wave-200">{l}</div>
                 <div className="font-display font-bold text-2xl mt-0.5">{v}</div>
@@ -1005,9 +1014,9 @@ function CoachHome({ setOverlay, setActive, coachId, branchId, profile, classes,
       </div>
 
       <div>
-        <SectionTitle sub={fmtDateLong(new Date())}>Kelas hari ini</SectionTitle>
+        <SectionTitle sub={fmtDateLong(new Date())}>{t("coach.home.classesTodayTitle")}</SectionTitle>
         {todayClasses.length === 0 && subClasses.length === 0 ? (
-          <Card><p className="text-ink-mute text-sm">Tidak ada kelas hari ini.</p></Card>
+          <Card><p className="text-ink-mute text-sm">{t("coach.home.noClassesToday")}</p></Card>
         ) : (
           <div className="space-y-3">
             {todayClasses.map((c) => {
@@ -1024,19 +1033,19 @@ function CoachHome({ setOverlay, setActive, coachId, branchId, profile, classes,
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <div className="font-display font-bold text-ink">{c.name}</div>
-                        {isHoliday && <Status kind="holiday">Libur</Status>}
-                        {isOnLeave && <Status kind="inactive">Izin Hari Ini</Status>}
-                        {isClockedIn && <Status kind="approved">Sudah Absen</Status>}
+                        {isHoliday && <Status kind="holiday">{t("coach.home.holidayBadge")}</Status>}
+                        {isOnLeave && <Status kind="inactive">{t("coach.home.onLeaveTodayBadge")}</Status>}
+                        {isClockedIn && <Status kind="approved">{t("coach.home.alreadyClockedInBadge")}</Status>}
                       </div>
                       <div className="text-xs text-ink-mute mt-0.5 font-mono">{c.time_start?.slice(0,5)}{c.time_end ? `–${c.time_end.slice(0,5)}` : ""} · {c.enrolled}/{c.capacity} member</div>
                       {!isHoliday && !isOnLeave && !isClockedIn && (
                         <div className="mt-3 flex flex-wrap gap-2">
                           {inWindow ? (
-                            <Btn variant="primary" size="sm" icon="camera" onClick={() => setOverlay(`clockin:${c.id}`)}>Clock-In</Btn>
+                            <Btn variant="primary" size="sm" icon="camera" onClick={() => setOverlay(`clockin:${c.id}`)}>{t("coach.home.clockInBtn")}</Btn>
                           ) : (
                             <div className="text-xs text-ink-mute font-semibold flex items-center gap-1">
                               <Icon name="clock" className="w-3.5 h-3.5" />
-                              Di luar window — hubungi admin untuk input manual
+                              {t("coach.home.outsideWindowHint")}
                             </div>
                           )}
                         </div>
@@ -1059,18 +1068,18 @@ function CoachHome({ setOverlay, setActive, coachId, branchId, profile, classes,
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <div className="font-display font-bold text-ink">{s.className}</div>
-                        <Status kind="substitute">Pengganti</Status>
-                        {isClockedIn && <Status kind="approved">Sudah Absen</Status>}
+                        <Status kind="substitute">{t("coach.home.substituteBadge")}</Status>
+                        {isClockedIn && <Status kind="approved">{t("coach.home.alreadyClockedInBadge")}</Status>}
                       </div>
-                      <div className="text-xs text-ink-mute mt-0.5">Menggantikan: {s.originalCoach}</div>
+                      <div className="text-xs text-ink-mute mt-0.5">{t("coach.home.substitutingForLabel", { name: s.originalCoach })}</div>
                       {!isClockedIn && (
                         <div className="mt-3 flex flex-wrap gap-2">
                           {inWindow ? (
-                            <Btn variant="primary" size="sm" icon="camera" onClick={() => setOverlay(`clockin:${s.classId}`)}>Clock-In</Btn>
+                            <Btn variant="primary" size="sm" icon="camera" onClick={() => setOverlay(`clockin:${s.classId}`)}>{t("coach.home.clockInBtn")}</Btn>
                           ) : (
                             <div className="text-xs text-ink-mute font-semibold flex items-center gap-1">
                               <Icon name="clock" className="w-3.5 h-3.5" />
-                              Di luar window — hubungi admin untuk input manual
+                              {t("coach.home.outsideWindowHint")}
                             </div>
                           )}
                         </div>
@@ -1085,17 +1094,17 @@ function CoachHome({ setOverlay, setActive, coachId, branchId, profile, classes,
       </div>
 
       <Card>
-        <SectionTitle>Quick actions</SectionTitle>
+        <SectionTitle>{t("coach.home.quickActionsTitle")}</SectionTitle>
         <div className="grid grid-cols-2 gap-2.5">
           <button onClick={() => setOverlay("leave")} className="p-4 rounded-xl bg-paper-tint hover:bg-ocean-50 border border-line text-left">
             <span className="w-9 h-9 rounded-lg bg-white text-ocean-600 flex items-center justify-center mb-2"><Icon name="clipboard" className="w-4 h-4" /></span>
-            <div className="font-bold text-sm text-ink">Ajukan Izin</div>
-            <div className="text-xs text-ink-mute mt-0.5">Izin · sakit · pengganti</div>
+            <div className="font-bold text-sm text-ink">{t("coach.home.requestLeaveTitle")}</div>
+            <div className="text-xs text-ink-mute mt-0.5">{t("coach.home.requestLeaveSub")}</div>
           </button>
           <button onClick={() => setOverlay("leave-history")} className="p-4 rounded-xl bg-paper-tint hover:bg-ocean-50 border border-line text-left">
             <span className="w-9 h-9 rounded-lg bg-white text-wave-600 flex items-center justify-center mb-2"><Icon name="calendar" className="w-4 h-4" /></span>
-            <div className="font-bold text-sm text-ink">Riwayat Izin</div>
-            <div className="text-xs text-ink-mute mt-0.5">Status pengajuan izin</div>
+            <div className="font-bold text-sm text-ink">{t("coach.home.leaveHistoryTitle")}</div>
+            <div className="text-xs text-ink-mute mt-0.5">{t("coach.home.leaveHistorySub")}</div>
           </button>
         </div>
       </Card>
@@ -1103,8 +1112,8 @@ function CoachHome({ setOverlay, setActive, coachId, branchId, profile, classes,
       <Card>
         <a
           href={mailtoLink(
-            "Pertanyaan dari Coach - Next Swimming School",
-            `Halo Admin/Owner Next Swimming School,\n\nSaya ${profile?.full_name ?? "Coach"} ingin menanyakan...\n\n`,
+            t("coach.home.contactSubject"),
+            t("coach.home.contactBody", { name: profile?.full_name ?? t("coach.home.defaultCoachName") }),
             contactEmail
           )}
           className="w-full flex items-center gap-3 py-1 group"
@@ -1112,7 +1121,7 @@ function CoachHome({ setOverlay, setActive, coachId, branchId, profile, classes,
           <span className="w-9 h-9 rounded-xl bg-ocean-50 text-ocean-600 flex items-center justify-center group-hover:bg-ocean-100 transition-colors">
             <Icon name="mail" className="w-4 h-4" />
           </span>
-          <span className="font-semibold text-ink group-hover:text-ocean-700">Hubungi via Email</span>
+          <span className="font-semibold text-ink group-hover:text-ocean-700">{t("coach.home.contactViaEmail")}</span>
         </a>
       </Card>
     </div>
@@ -1127,6 +1136,8 @@ function CoachAbsensi({ setOverlay, coachId, branchId, classes, holidayClassIds,
 }) {
   const supabase = createClient();
   const toast = useToast();
+  const { t, locale } = useLocale();
+  const localeTag = locale === "id" ? "id-ID" : "en-US";
   const [history, setHistory] = useState<AttendanceRow[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
   const [historyPage, setHistoryPage] = useState(0);
@@ -1248,7 +1259,7 @@ function CoachAbsensi({ setOverlay, coachId, branchId, classes, holidayClassIds,
         const d = new Date(today); d.setDate(today.getDate() - daysBack);
         if (cls.schedule_days.some(sd => DAY_MAP[sd] === d.getDay())) {
           const iso = d.toISOString().split("T")[0];
-          dates.push({ value: iso, label: d.toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long" }) });
+          dates.push({ value: iso, label: d.toLocaleDateString(localeTag, { weekday: "long", day: "numeric", month: "long" }) });
         }
       }
     }
@@ -1294,15 +1305,15 @@ function CoachAbsensi({ setOverlay, coachId, branchId, classes, holidayClassIds,
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const saveManualAtt = async () => {
-    if (!manualClassId || !manualDate) return toast.error("Kelas dan tanggal wajib diisi");
-    if (memberAtt.length === 0) return toast.error("Tidak ada member di kelas ini");
+    if (!manualClassId || !manualDate) return toast.error(t("coach.absen.classAndDateRequired"));
+    if (memberAtt.length === 0) return toast.error(t("coach.absen.noMembersInClass"));
     setSaving(true);
     const rows = memberAtt.map(m => ({ class_id: manualClassId, member_id: m.member_id, session_date: manualDate, status: (attStatus[m.member_id] ?? "hadir") as "hadir" | "telat" | "izin" | "sakit" | "tidak_hadir", method: "manual" as const }));
     const { error } = await supabase.from("member_attendances").upsert(rows, { onConflict: "class_id,member_id,session_date" });
     setSaving(false);
-    if (error) return toast.error("Gagal menyimpan", error.message);
+    if (error) return toast.error(t("coach.absen.saveFailed"), error.message);
     const hadirCount = rows.filter(r => r.status === "hadir").length;
-    toast.success("Absensi member disimpan", `${hadirCount} hadir dari ${rows.length} member`);
+    toast.success(t("coach.absen.memberAttendanceSaved"), t("coach.absen.presentCountOfTotal", { present: hadirCount, total: rows.length }));
     const savedClassId = manualClassId;
     const savedDate = manualDate;
     const savedClassName = classes.find(c => c.id === manualClassId)?.name ?? "—";
@@ -1313,18 +1324,18 @@ function CoachAbsensi({ setOverlay, coachId, branchId, classes, holidayClassIds,
   };
 
   const savePrivateSession = async () => {
-    if (!privateClassId || !privateDate) return toast.error("Kelas dan tanggal wajib diisi");
+    if (!privateClassId || !privateDate) return toast.error(t("coach.absen.classAndDateRequired"));
     setSavingPrivate(true);
     // Get member_id for this private class (capacity=1, so 1 member)
     const { data: mcData } = await supabase.from("member_classes").select("member_id").eq("class_id", privateClassId).limit(1);
     const memberId = mcData?.[0]?.member_id;
-    if (!memberId) { setSavingPrivate(false); return toast.error("Tidak ada member di kelas ini"); }
+    if (!memberId) { setSavingPrivate(false); return toast.error(t("coach.absen.noMembersInClass")); }
     // Check for duplicate (same class + date)
     const { data: dupCheck } = await supabase.from("member_attendances").select("id").eq("class_id", privateClassId).eq("member_id", memberId).eq("session_date", privateDate).limit(1);
-    if (dupCheck && dupCheck.length > 0) { setSavingPrivate(false); return toast.error("Sesi di tanggal ini sudah dicatat"); }
+    if (dupCheck && dupCheck.length > 0) { setSavingPrivate(false); return toast.error(t("coach.absen.sessionAlreadyRecorded")); }
     // Insert attendance
     const { error: attErr } = await supabase.from("member_attendances").insert({ class_id: privateClassId, member_id: memberId, session_date: privateDate, status: "hadir", method: "manual" });
-    if (attErr) { setSavingPrivate(false); return toast.error("Gagal mencatat sesi", attErr.message); }
+    if (attErr) { setSavingPrivate(false); return toast.error(t("coach.absen.recordSessionFailed"), attErr.message); }
     // Decrement remaining_sessions on members table
     const { data: memberRow } = await supabase.from("members").select("remaining_sessions").eq("id", memberId).single();
     const remaining = memberRow?.remaining_sessions ?? 0;
@@ -1342,15 +1353,15 @@ function CoachAbsensi({ setOverlay, coachId, branchId, classes, holidayClassIds,
       if (activeBill.sessions_total != null && (activeBill.sessions_total - newUsed) <= 1) {
         await supabase.from("notifications").insert({
           user_id: memberId,
-          title: "Sesi hampir habis",
-          body: `Sisa sesi paket Anda tinggal ${activeBill.sessions_total - newUsed} sesi lagi. Hubungi admin untuk perpanjangan paket.`,
+          title: t("coach.absen.sessionsAlmostUpTitle"),
+          body: t("coach.absen.sessionsAlmostUpBody", { remaining: activeBill.sessions_total - newUsed }),
           icon: "warning",
           kind: "warn",
         });
       }
     }
     setSavingPrivate(false);
-    toast.success("Sesi private dicatat", `Sisa sesi: ${newRemaining}`);
+    toast.success(t("coach.absen.privateSessionRecorded"), t("coach.absen.remainingSessions", { count: newRemaining }));
     setOpenPrivate(false);
     setPrivateClassId(""); setPrivateDate(new Date().toISOString().split("T")[0]); setPrivateNote("");
   };
@@ -1367,9 +1378,9 @@ function CoachAbsensi({ setOverlay, coachId, branchId, classes, holidayClassIds,
 
   return (
     <div className="space-y-5">
-      <SectionTitle sub="Kelas yang sedang/akan berlangsung">Absen sekarang</SectionTitle>
+      <SectionTitle sub={t("coach.absen.absenNowSub")}>{t("coach.absen.absenNowTitle")}</SectionTitle>
       {todayClasses.length === 0 ? (
-        <Card><p className="text-ink-mute text-sm">Tidak ada kelas hari ini.</p></Card>
+        <Card><p className="text-ink-mute text-sm">{t("coach.absen.noClassesToday")}</p></Card>
       ) : (
         <div className="space-y-3">
           {todayClasses.map((c) => {
@@ -1382,8 +1393,8 @@ function CoachAbsensi({ setOverlay, coachId, branchId, classes, holidayClassIds,
                   <div className="flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <div className="font-display font-bold text-ink">{c.name}</div>
-                      {isHoliday && <Status kind="holiday">Libur</Status>}
-                      {isClockedIn && <Status kind="approved">Sudah Absen</Status>}
+                      {isHoliday && <Status kind="holiday">{t("coach.home.holidayBadge")}</Status>}
+                      {isClockedIn && <Status kind="approved">{t("coach.home.alreadyClockedInBadge")}</Status>}
                     </div>
                     <div className="text-xs text-ink-mute font-mono">{c.time_start?.slice(0,5)}{c.time_end ? `–${c.time_end.slice(0,5)}` : ""}</div>
                   </div>
@@ -1392,11 +1403,11 @@ function CoachAbsensi({ setOverlay, coachId, branchId, classes, holidayClassIds,
                       <Icon name="check" className="w-5 h-5" strokeWidth={2.5} />
                     </span>
                   ) : inWindow ? (
-                    <Btn variant="primary" size="md" icon="camera" onClick={() => setOverlay(`clockin:${c.id}`)}>Clock-In</Btn>
+                    <Btn variant="primary" size="md" icon="camera" onClick={() => setOverlay(`clockin:${c.id}`)}>{t("coach.home.clockInBtn")}</Btn>
                   ) : (
                     <div className="text-right">
-                      <div className="text-xs font-semibold text-ink-mute">Di luar window</div>
-                      <div className="text-[10px] text-ink-faint">Hubungi admin</div>
+                      <div className="text-xs font-semibold text-ink-mute">{t("coach.absen.outsideWindowShort")}</div>
+                      <div className="text-[10px] text-ink-faint">{t("coach.absen.contactAdminShort")}</div>
                     </div>
                   ))}
                 </div>
@@ -1409,22 +1420,22 @@ function CoachAbsensi({ setOverlay, coachId, branchId, classes, holidayClassIds,
       <div className={`grid gap-3 ${privateClasses.length > 0 ? "grid-cols-1 sm:grid-cols-3" : "grid-cols-1 sm:grid-cols-2"}`}>
         <Card className="bg-ocean-50 border-ocean-100">
           <Icon name="qr" className="w-8 h-8 text-ocean-600 mb-2" />
-          <div className="font-display font-bold text-ink">Scan QR Member</div>
-          <p className="text-xs text-ink-mute mt-1">Otomatis deteksi kelas yang sedang berjalan</p>
-          <Btn variant="primary" size="sm" className="mt-3 w-full" onClick={() => setShowQR(true)}>Buka kamera</Btn>
+          <div className="font-display font-bold text-ink">{t("coach.qrScanner.title")}</div>
+          <p className="text-xs text-ink-mute mt-1">{t("coach.absen.qrAutoDetectHint")}</p>
+          <Btn variant="primary" size="sm" className="mt-3 w-full" onClick={() => setShowQR(true)}>{t("coach.absen.openCameraBtn")}</Btn>
         </Card>
         <Card>
           <Icon name="edit" className="w-8 h-8 text-wave-600 mb-2" />
-          <div className="font-display font-bold text-ink">Absen Manual</div>
-          <p className="text-xs text-ink-mute mt-1">Checklist member per kelas</p>
-          <Btn variant="soft" size="sm" className="mt-3 w-full" onClick={() => setOpenManual(true)}>Pilih kelas</Btn>
+          <div className="font-display font-bold text-ink">{t("coach.absen.manualAttendanceTitle")}</div>
+          <p className="text-xs text-ink-mute mt-1">{t("coach.absen.manualAttendanceHint")}</p>
+          <Btn variant="soft" size="sm" className="mt-3 w-full" onClick={() => setOpenManual(true)}>{t("coach.absen.selectClassBtn")}</Btn>
         </Card>
         {privateClasses.length > 0 && (
           <Card className="bg-wave-50 border-wave-100">
             <Icon name="sparkle" className="w-8 h-8 text-wave-600 mb-2" />
-            <div className="font-display font-bold text-ink">Sesi Private</div>
-            <p className="text-xs text-ink-mute mt-1">Catat sesi 1-on-1, kurangi sisa sesi</p>
-            <Btn variant="soft" size="sm" className="mt-3 w-full" onClick={() => setOpenPrivate(true)}>Catat sesi</Btn>
+            <div className="font-display font-bold text-ink">{t("coach.absen.privateSessionTitle")}</div>
+            <p className="text-xs text-ink-mute mt-1">{t("coach.absen.privateSessionHint")}</p>
+            <Btn variant="soft" size="sm" className="mt-3 w-full" onClick={() => setOpenPrivate(true)}>{t("coach.absen.recordSessionBtn")}</Btn>
           </Card>
         )}
       </div>
@@ -1432,7 +1443,7 @@ function CoachAbsensi({ setOverlay, coachId, branchId, classes, holidayClassIds,
       <Card padded={false}>
         {/* Header + filter */}
         <div className="p-5 border-b border-line space-y-3">
-          <SectionTitle>History Absensi</SectionTitle>
+          <SectionTitle>{t("coach.absen.historyTitle")}</SectionTitle>
           <div className="flex flex-wrap gap-2">
             {/* Month filter */}
             <select
@@ -1443,7 +1454,7 @@ function CoachAbsensi({ setOverlay, coachId, branchId, classes, holidayClassIds,
               {Array.from({ length: 12 }, (_, i) => {
                 const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - i);
                 const val = d.toISOString().slice(0, 7);
-                const label = d.toLocaleDateString("id-ID", { month: "long", year: "numeric" });
+                const label = d.toLocaleDateString(localeTag, { month: "long", year: "numeric" });
                 return <option key={val} value={val}>{label}</option>;
               })}
             </select>
@@ -1453,13 +1464,13 @@ function CoachAbsensi({ setOverlay, coachId, branchId, classes, holidayClassIds,
               onChange={e => setFilterClassId(e.target.value)}
               className="text-sm rounded-lg border border-line bg-white px-3 py-1.5 text-ink focus:outline-none focus:ring-2 focus:ring-ocean-300 max-w-[180px] truncate"
             >
-              <option value="all">Semua kelas</option>
+              <option value="all">{t("coach.absen.allClassesOpt")}</option>
               {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
         </div>
         {historyLoading && history.length === 0 ? (
-          <div className="p-6 text-center text-ink-mute text-sm">Memuat…</div>
+          <div className="p-6 text-center text-ink-mute text-sm">{t("coach.leave.loadingEllipsis")}</div>
         ) : (
           <>
             <div className="divide-y divide-line">
@@ -1471,18 +1482,18 @@ function CoachAbsensi({ setOverlay, coachId, branchId, classes, holidayClassIds,
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <div className="font-semibold text-ink text-sm">{h.class?.name}</div>
-                      {h.is_manual && <Status kind="manual">Manual</Status>}
-                      {!h.is_manual && h.status === "late" && <Status kind="late">Telat</Status>}
+                      {h.is_manual && <Status kind="manual">{t("coach.absen.manualBadge")}</Status>}
+                      {!h.is_manual && h.status === "late" && <Status kind="late">{t("coach.absen.lateBadge")}</Status>}
                     </div>
                     <div className="text-xs text-ink-mute font-mono">{fmtDate(h.session_date)} · {h.clock_in_time?.slice(0, 5) ?? "—"}{h.distance_meters != null ? ` · ${h.distance_meters}m` : ""}</div>
                     {h.is_manual && h.manual_by_profile && (
-                      <div className="text-[10px] text-ink-faint mt-0.5">oleh: {h.manual_by_profile.full_name}{h.manual_note ? ` · "${h.manual_note}"` : ""}</div>
+                      <div className="text-[10px] text-ink-faint mt-0.5">{t("coach.absen.byLabel", { name: h.manual_by_profile.full_name })}{h.manual_note ? ` · "${h.manual_note}"` : ""}</div>
                     )}
                   </div>
                 </div>
               ))}
               {!historyLoading && history.length === 0 && (
-                <div className="p-6 text-center text-ink-mute text-sm">Tidak ada absensi di periode ini.</div>
+                <div className="p-6 text-center text-ink-mute text-sm">{t("coach.absen.noAttendanceInPeriod")}</div>
               )}
             </div>
             {historyHasMore && (
@@ -1496,7 +1507,7 @@ function CoachAbsensi({ setOverlay, coachId, branchId, classes, holidayClassIds,
                   disabled={historyLoading}
                   className="w-full text-sm font-semibold text-ocean-700 hover:text-ocean-900 py-2 rounded-lg hover:bg-ocean-50 transition-colors disabled:opacity-50"
                 >
-                  {historyLoading ? "Memuat…" : "Tampilkan lebih banyak"}
+                  {historyLoading ? t("coach.leave.loadingEllipsis") : t("coach.absen.showMoreBtn")}
                 </button>
               </div>
             )}
@@ -1506,7 +1517,7 @@ function CoachAbsensi({ setOverlay, coachId, branchId, classes, holidayClassIds,
 
       {memberAttHistory.length > 0 && (
         <Card padded={false}>
-          <div className="p-5 border-b border-line"><SectionTitle sub="Klik sesi untuk lihat detail member">History Absensi Member</SectionTitle></div>
+          <div className="p-5 border-b border-line"><SectionTitle sub={t("coach.absen.memberHistorySub")}>{t("coach.absen.memberHistoryTitle")}</SectionTitle></div>
           <div className="divide-y divide-line">
             {memberAttHistory.map((h) => (
               <div
@@ -1524,7 +1535,7 @@ function CoachAbsensi({ setOverlay, coachId, branchId, classes, holidayClassIds,
                 <div className="flex items-center gap-3">
                   <div className="text-right">
                     <div className="font-bold text-ok-600 text-sm">{h.hadir}/{h.total}</div>
-                    <div className="text-[10px] text-ink-faint">hadir</div>
+                    <div className="text-[10px] text-ink-faint">{t("coach.absen.presentLabel")}</div>
                   </div>
                   <Icon name="arrow" className="w-4 h-4 text-ink-faint -rotate-90" />
                 </div>
@@ -1534,19 +1545,19 @@ function CoachAbsensi({ setOverlay, coachId, branchId, classes, holidayClassIds,
         </Card>
       )}
 
-      <Modal open={openManual} onClose={() => { setOpenManual(false); setManualClassId(""); setManualDate(""); setManualSessionDates([]); setMemberAtt([]); setAttStatus({}); }} title="Absensi Manual Member"
-        footer={<><Btn variant="ghost" onClick={() => { setOpenManual(false); setManualClassId(""); setManualDate(""); setManualSessionDates([]); setMemberAtt([]); setAttStatus({}); }}>Batal</Btn><Btn variant="primary" onClick={saveManualAtt} disabled={saving}>{saving ? "Menyimpan…" : "Submit"}</Btn></>}>
+      <Modal open={openManual} onClose={() => { setOpenManual(false); setManualClassId(""); setManualDate(""); setManualSessionDates([]); setMemberAtt([]); setAttStatus({}); }} title={t("coach.absen.manualModalTitle")}
+        footer={<><Btn variant="ghost" onClick={() => { setOpenManual(false); setManualClassId(""); setManualDate(""); setManualSessionDates([]); setMemberAtt([]); setAttStatus({}); }}>{t("common.actions.cancel")}</Btn><Btn variant="primary" onClick={saveManualAtt} disabled={saving}>{saving ? t("coach.absen.savingBtn") : t("coach.clockIn.submitBtn")}</Btn></>}>
         <div className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Field label="Kelas" required>
+            <Field label={t("coach.clockIn.fieldClassLabel")} required>
               <Select value={manualClassId} onChange={e => onManualClassChange(e.target.value)}>
-                <option value="">Pilih kelas…</option>
+                <option value="">{t("coach.absen.selectClassEllipsis")}</option>
                 {classes.filter(c => c.class_type !== "private").map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </Select>
             </Field>
-            <Field label="Sesi / tanggal" required>
+            <Field label={t("coach.absen.fieldSessionDate")} required>
               <Select value={manualDate} onChange={e => setManualDate(e.target.value)} disabled={!manualClassId}>
-                <option value="">{manualClassId ? "Pilih sesi…" : "Pilih kelas dulu"}</option>
+                <option value="">{manualClassId ? t("coach.absen.selectSessionOpt") : t("coach.absen.selectClassFirstOpt")}</option>
                 {manualSessionDates.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
               </Select>
             </Field>
@@ -1558,7 +1569,7 @@ function CoachAbsensi({ setOverlay, coachId, branchId, classes, holidayClassIds,
                   <Avatar name={m.member?.full_name ?? "?"} src={m.member?.avatar_url ?? undefined} size={36} />
                   <div className="flex-1 min-w-0"><div className="font-semibold text-ink text-sm truncate">{m.member?.full_name}</div></div>
                   <div className="flex flex-wrap gap-1">
-                    {([["hadir", "Hadir"], ["telat", "Telat"], ["izin", "Izin"], ["sakit", "Sakit"], ["tidak_hadir", "Absen"]] as const).map(([id, l]) => {
+                    {([["hadir", t("coach.absen.attStatusHadir")], ["telat", t("coach.absen.attStatusTelat")], ["izin", t("coach.absen.attStatusIzin")], ["sakit", t("coach.absen.attStatusSakit")], ["tidak_hadir", t("coach.absen.attStatusTidakHadirShort")]] as const).map(([id, l]) => {
                       const active = (attStatus[m.member_id] ?? "hadir") === id;
                       const activeStyle = id === "hadir" ? "border-ok-500 bg-ok-50 text-ok-600" : id === "telat" ? "border-warn-500 bg-warn-50 text-warn-600" : id === "tidak_hadir" ? "border-danger-500 bg-danger-50 text-danger-600" : "border-warn-400 bg-warn-50 text-warn-500";
                       return (
@@ -1574,24 +1585,24 @@ function CoachAbsensi({ setOverlay, coachId, branchId, classes, holidayClassIds,
         </div>
       </Modal>
 
-      <Modal open={openPrivate} onClose={() => setOpenPrivate(false)} title="Catat Sesi Private"
-        footer={<><Btn variant="ghost" onClick={() => setOpenPrivate(false)}>Batal</Btn><Btn variant="primary" onClick={savePrivateSession} disabled={savingPrivate}>{savingPrivate ? "Menyimpan…" : "Catat Sesi"}</Btn></>}>
+      <Modal open={openPrivate} onClose={() => setOpenPrivate(false)} title={t("coach.absen.recordPrivateSessionTitle")}
+        footer={<><Btn variant="ghost" onClick={() => setOpenPrivate(false)}>{t("common.actions.cancel")}</Btn><Btn variant="primary" onClick={savePrivateSession} disabled={savingPrivate}>{savingPrivate ? t("coach.absen.savingBtn") : t("coach.absen.recordSessionConfirmBtn")}</Btn></>}>
         <div className="space-y-4">
           <div className="bg-wave-50 border border-wave-100 rounded-xl p-3 text-sm text-wave-800 flex gap-2">
             <Icon name="info" className="w-4 h-4 mt-0.5 shrink-0 text-wave-500" />
-            <span>Mencatat sesi ini akan otomatis mengurangi sisa sesi member sebanyak 1.</span>
+            <span>{t("coach.absen.privateSessionInfoBanner")}</span>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Field label="Kelas private" required>
+            <Field label={t("coach.absen.fieldPrivateClass")} required>
               <Select value={privateClassId} onChange={e => setPrivateClassId(e.target.value)}>
-                <option value="">Pilih kelas…</option>
+                <option value="">{t("coach.absen.selectClassEllipsis")}</option>
                 {privateClasses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </Select>
             </Field>
-            <Field label="Tanggal sesi" required><Input type="date" value={privateDate} onChange={e => setPrivateDate(e.target.value)} max={new Date().toISOString().split("T")[0]} /></Field>
+            <Field label={t("coach.absen.fieldSessionDateSingle")} required><Input type="date" value={privateDate} onChange={e => setPrivateDate(e.target.value)} max={new Date().toISOString().split("T")[0]} /></Field>
           </div>
-          <Field label="Catatan" hint="Opsional — materi, kondisi member, dll.">
-            <Textarea rows={2} value={privateNote} onChange={e => setPrivateNote(e.target.value)} placeholder="Mis. Latihan gaya dada, progress baik." />
+          <Field label={t("coach.absen.fieldNoteLabel")} hint={t("coach.absen.fieldNoteHint")}>
+            <Textarea rows={2} value={privateNote} onChange={e => setPrivateNote(e.target.value)} placeholder={t("coach.absen.notePlaceholder")} />
           </Field>
         </div>
       </Modal>
@@ -1602,29 +1613,29 @@ function CoachAbsensi({ setOverlay, coachId, branchId, classes, holidayClassIds,
         onClose={() => setDetailSesi(null)}
         title={detailSesi ? `${detailSesi.className} — ${fmtDate(detailSesi.date)}` : ""}
         size="sm"
-        footer={<Btn variant="ghost" onClick={() => setDetailSesi(null)}>Tutup</Btn>}
+        footer={<Btn variant="ghost" onClick={() => setDetailSesi(null)}>{t("common.actions.close")}</Btn>}
       >
         {loadingDetail ? (
-          <div className="py-6 text-center text-ink-mute text-sm">Memuat…</div>
+          <div className="py-6 text-center text-ink-mute text-sm">{t("coach.leave.loadingEllipsis")}</div>
         ) : (
           <div>
             {/* Summary bar */}
             <div className="flex gap-4 text-xs font-bold mb-4 pb-3 border-b border-line">
               <span className="flex items-center gap-1 text-ok-600">
                 <span className="w-4 h-4 rounded-full bg-ok-100 flex items-center justify-center"><Icon name="check" className="w-2.5 h-2.5" strokeWidth={3} /></span>
-                {detailRows.filter(r => r.status === "hadir").length} Hadir
+                {detailRows.filter(r => r.status === "hadir").length} {t("coach.absen.attStatusHadir")}
               </span>
               <span className="flex items-center gap-1 text-warn-600">
                 <span className="w-4 h-4 rounded-full bg-warn-100 flex items-center justify-center"><Icon name="clipboard" className="w-2.5 h-2.5" /></span>
-                {detailRows.filter(r => r.status === "izin").length} Izin
+                {detailRows.filter(r => r.status === "izin").length} {t("coach.absen.attStatusIzin")}
               </span>
               <span className="flex items-center gap-1 text-orange-500">
                 <span className="w-4 h-4 rounded-full bg-orange-100 flex items-center justify-center"><Icon name="alert" className="w-2.5 h-2.5" /></span>
-                {detailRows.filter(r => r.status === "sakit").length} Sakit
+                {detailRows.filter(r => r.status === "sakit").length} {t("coach.absen.attStatusSakit")}
               </span>
               <span className="flex items-center gap-1 text-danger-500">
                 <span className="w-4 h-4 rounded-full bg-danger-100 flex items-center justify-center"><Icon name="close" className="w-2.5 h-2.5" /></span>
-                {detailRows.filter(r => r.status === "tidak_hadir").length} Absen
+                {detailRows.filter(r => r.status === "tidak_hadir").length} {t("coach.absen.attStatusTidakHadirShort")}
               </span>
             </div>
             <div className="space-y-0.5">
@@ -1642,12 +1653,12 @@ function CoachAbsensi({ setOverlay, coachId, branchId, classes, holidayClassIds,
                     <div className="text-sm font-semibold text-ink truncate">{r.full_name}</div>
                   </div>
                   <Status kind={r.status === "hadir" ? "approved" : r.status === "izin" ? "excused" : r.status === "sakit" ? "sick" : "inactive"}>
-                    {r.status === "hadir" ? "Hadir" : r.status === "izin" ? "Izin" : r.status === "sakit" ? "Sakit" : "Tidak Hadir"}
+                    {r.status === "hadir" ? t("coach.absen.attStatusHadir") : r.status === "izin" ? t("coach.absen.attStatusIzin") : r.status === "sakit" ? t("coach.absen.attStatusSakit") : t("coach.absen.attStatusTidakHadirFull")}
                   </Status>
                 </div>
               ))}
               {detailRows.length === 0 && (
-                <div className="py-4 text-center text-ink-mute text-sm">Tidak ada data absensi untuk sesi ini.</div>
+                <div className="py-4 text-center text-ink-mute text-sm">{t("coach.absen.noAttendanceDataForSession")}</div>
               )}
             </div>
           </div>
@@ -1664,12 +1675,13 @@ function SpreadsheetModal({ classId, className, coachId, currentUrl, onClose, on
 }) {
   const supabase = createClient();
   const toast = useToast();
+  const { t } = useLocale();
   const [url, setUrl] = useState(currentUrl ?? "");
   const [saving, setSaving] = useState(false);
 
   const save = async () => {
     const trimmed = url.trim();
-    if (!trimmed) return toast.error("Masukkan link spreadsheet terlebih dahulu");
+    if (!trimmed) return toast.error(t("coach.kelas.spreadsheetLinkRequired"));
     setSaving(true);
     // Upsert per-coach entry
     const { error } = await supabase
@@ -1678,23 +1690,23 @@ function SpreadsheetModal({ classId, className, coachId, currentUrl, onClose, on
         { class_id: classId, coach_id: coachId, spreadsheet_url: trimmed, updated_at: new Date().toISOString() },
         { onConflict: "class_id,coach_id" }
       );
-    if (error) { setSaving(false); return toast.error("Gagal menyimpan", error.message); }
+    if (error) { setSaving(false); return toast.error(t("coach.absen.saveFailed"), error.message); }
     // Keep classes.spreadsheet_filled in sync (aggregate: any coach filled = true)
     await supabase.from("classes").update({ spreadsheet_filled: true }).eq("id", classId);
     setSaving(false);
-    toast.success("Link spreadsheet tersimpan");
+    toast.success(t("coach.kelas.spreadsheetLinkSaved"));
     onSaved?.();
     onClose();
   };
 
   return (
-    <Modal open onClose={onClose} title={`Spreadsheet Program — ${className}`} size="md"
-      footer={<><Btn variant="ghost" onClick={onClose}>Batal</Btn><Btn variant="primary" onClick={save} disabled={saving}>{saving ? "Menyimpan…" : "Simpan"}</Btn></>}>
+    <Modal open onClose={onClose} title={t("coach.kelas.spreadsheetModalTitle", { className })} size="md"
+      footer={<><Btn variant="ghost" onClick={onClose}>{t("common.actions.cancel")}</Btn><Btn variant="primary" onClick={save} disabled={saving}>{saving ? t("coach.absen.savingBtn") : t("coach.kelas.saveBtn")}</Btn></>}>
       <div className="space-y-4">
         <div className="p-3 rounded-xl bg-ocean-50 border border-ocean-100 text-sm text-ocean-800 leading-relaxed">
-          Buat spreadsheet program kelas di Google Sheets, lalu paste link-nya di sini. Pastikan link bisa diakses oleh siapa pun yang memiliki link.
+          {t("coach.kelas.spreadsheetHint")}
         </div>
-        <Field label="Link Google Sheets / Spreadsheet">
+        <Field label={t("coach.kelas.spreadsheetFieldLabel")}>
           <Input
             value={url}
             onChange={e => setUrl(e.target.value)}
@@ -1706,7 +1718,7 @@ function SpreadsheetModal({ classId, className, coachId, currentUrl, onClose, on
           <a href={currentUrl} target="_blank" rel="noreferrer"
             className="inline-flex items-center gap-1.5 text-xs text-ocean-600 hover:text-ocean-800 font-semibold">
             <Icon name="link" className="w-3.5 h-3.5" />
-            Buka spreadsheet saat ini
+            {t("coach.kelas.openCurrentSpreadsheetLink")}
           </a>
         )}
       </div>
@@ -1716,6 +1728,7 @@ function SpreadsheetModal({ classId, className, coachId, currentUrl, onClose, on
 
 function ReimburseModal({ onClose, onAdd }: { onClose: () => void; onAdd: (item: Omit<DraftReimburseItem, "id">) => void }) {
   const toast = useToast();
+  const { t } = useLocale();
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
   const [proofUrl, setProofUrl] = useState("");
@@ -1724,26 +1737,26 @@ function ReimburseModal({ onClose, onAdd }: { onClose: () => void; onAdd: (item:
     const desc = description.trim();
     const url = proofUrl.trim();
     const val = Number(amount);
-    if (!desc) return toast.error("Masukkan deskripsi terlebih dahulu");
-    if (!val || val <= 0) return toast.error("Masukkan nominal yang valid");
-    if (!url) return toast.error("Masukkan link bukti terlebih dahulu");
+    if (!desc) return toast.error(t("coach.reimburse.descriptionRequired"));
+    if (!val || val <= 0) return toast.error(t("coach.reimburse.validAmountRequired"));
+    if (!url) return toast.error(t("coach.reimburse.proofLinkRequired"));
     onAdd({ description: desc, amount: val, proofUrl: url });
   };
 
   return (
-    <Modal open onClose={onClose} title="Tambah Expenses / Reimburse" size="md"
-      footer={<><Btn variant="ghost" onClick={onClose}>Batal</Btn><Btn variant="primary" onClick={submit}>Tambah ke Invoice</Btn></>}>
+    <Modal open onClose={onClose} title={t("coach.reimburse.modalTitle")} size="md"
+      footer={<><Btn variant="ghost" onClick={onClose}>{t("common.actions.cancel")}</Btn><Btn variant="primary" onClick={submit}>{t("coach.reimburse.addToInvoiceBtn")}</Btn></>}>
       <div className="space-y-4">
         <div className="p-3 rounded-xl bg-ocean-50 border border-ocean-100 text-sm text-ocean-800 leading-relaxed">
-          Ajukan reimburse pengeluaran (misal beli perlengkapan). Sertakan link Google Drive sebagai bukti. Item ini akan masuk ke invoice saat Anda klik Generate Invoice.
+          {t("coach.reimburse.hint")}
         </div>
-        <Field label="Deskripsi">
-          <Input value={description} onChange={e => setDescription(e.target.value)} placeholder="Mis. Beli kickboard baru" />
+        <Field label={t("coach.reimburse.fieldDescription")}>
+          <Input value={description} onChange={e => setDescription(e.target.value)} placeholder={t("coach.reimburse.descriptionPlaceholder")} />
         </Field>
-        <Field label="Nominal (Rp)">
+        <Field label={t("coach.reimburse.fieldAmount")}>
           <Input type="number" inputMode="numeric" min={0} value={amount} onChange={e => setAmount(e.target.value)} placeholder="150000" />
         </Field>
-        <Field label="Link Bukti (Google Drive)">
+        <Field label={t("coach.reimburse.fieldProofLink")}>
           <Input value={proofUrl} onChange={e => setProofUrl(e.target.value)} placeholder="https://drive.google.com/..." type="url" />
         </Field>
       </div>
@@ -1763,15 +1776,16 @@ function calcAgeFromBirthDate(birthDate: string, nowMs: number = MODULE_NOW_MS):
 }
 
 function MemberDetailModal({ member, onClose }: { member: MemberDetail; onClose: () => void }) {
+  const { t } = useLocale();
   const name = member.profile?.full_name ?? "—";
   const age = member.profile?.birth_date ? calcAgeFromBirthDate(member.profile.birth_date) : null;
 
   const rows: [string, string | null | undefined][] = [
-    ["Usia", age != null ? `${age} tahun` : null],
-    ["Jenis kelamin", member.profile?.gender === "male" ? "Laki-laki" : member.profile?.gender === "female" ? "Perempuan" : null],
-    ["No. HP", member.profile?.phone],
-    ["Alamat", member.profile?.address],
-    ["Riwayat kesehatan / alergi", member.profile?.health_notes],
+    [t("coach.kelas.memberAgeLabel"), age != null ? t("coach.kelas.ageYears", { age }) : null],
+    [t("coach.kelas.memberGenderLabel"), member.profile?.gender === "male" ? t("coach.kelas.memberGenderMale") : member.profile?.gender === "female" ? t("coach.kelas.memberGenderFemale") : null],
+    [t("coach.kelas.memberPhoneLabel"), member.profile?.phone],
+    [t("coach.kelas.memberAddressLabel"), member.profile?.address],
+    [t("coach.kelas.memberHealthNotesLabel"), member.profile?.health_notes],
   ];
 
   return (
@@ -1779,11 +1793,11 @@ function MemberDetailModal({ member, onClose }: { member: MemberDetail; onClose:
       footer={
         <div className="flex items-center gap-2 w-full">
           {member.profile?.phone && (
-            <a href={waLink(`Halo ${name}, saya Coach dari Next Swimming School.`)} target="_blank" rel="noreferrer" className="flex-1">
-              <Btn variant="wa" className="w-full" icon="whatsapp">Chat Member</Btn>
+            <a href={waLink(t("coach.kelas.waGreeting", { name }))} target="_blank" rel="noreferrer" className="flex-1">
+              <Btn variant="wa" className="w-full" icon="whatsapp">{t("coach.kelas.chatMemberBtn")}</Btn>
             </a>
           )}
-          <Btn variant="ghost" onClick={onClose}>Tutup</Btn>
+          <Btn variant="ghost" onClick={onClose}>{t("common.actions.close")}</Btn>
         </div>
       }>
       <div className="space-y-1">
@@ -1791,7 +1805,7 @@ function MemberDetailModal({ member, onClose }: { member: MemberDetail; onClose:
           <Avatar name={name} src={member.profile?.avatar_url ?? undefined} size={48} />
           <div>
             <div className="font-display font-bold text-ink text-base">{name}</div>
-            {age != null && <div className="text-xs text-ink-mute">{age} tahun</div>}
+            {age != null && <div className="text-xs text-ink-mute">{t("coach.kelas.ageYears", { age })}</div>}
           </div>
         </div>
         {rows.filter(([, v]) => v).map(([label, value]) => (
@@ -1813,6 +1827,9 @@ function CoachKelas({ classes, coachId, classSpreadsheets, ownSpreadsheets, onRe
   onRefreshClasses?: () => void;
 }) {
   const supabase = createClient();
+  const { t, tArray, locale } = useLocale();
+  const localeTag = locale === "id" ? "id-ID" : "en-US";
+  const monthsShort = tArray("common.months.short");
   const [det, setDet] = useState<ClassRow | null>(null);
   const [openSpreadsheet, setOpenSpreadsheet] = useState<ClassRow | null>(null);
   const [memberDet, setMemberDet] = useState<MemberDetail | null>(null);
@@ -1832,7 +1849,7 @@ function CoachKelas({ classes, coachId, classSpreadsheets, ownSpreadsheets, onRe
 
   return (
     <div className="space-y-5">
-      <SectionTitle sub={`${classes.length} kelas`}>Kelas Anda</SectionTitle>
+      <SectionTitle sub={t("coach.kelas.sectionSub", { count: classes.length })}>{t("coach.kelas.sectionTitle")}</SectionTitle>
       <div className="space-y-3">
         {classes.map((c) => (
           <Card key={c.id} className="cursor-pointer hover:shadow-lift transition" onClick={() => setDet(c)}>
@@ -1845,16 +1862,16 @@ function CoachKelas({ classes, coachId, classSpreadsheets, ownSpreadsheets, onRe
                 <div className="mt-2 flex items-center gap-3 text-xs text-ink-mute">
                   <span className="inline-flex items-center gap-1"><Icon name="users" className="w-3.5 h-3.5" />{c.enrolled}/{c.capacity}</span>
                   {ownSpreadsheets.has(c.id)
-                    ? <a href={ownSpreadsheets.get(c.id)!} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="inline-flex items-center gap-1 text-ok-600 font-semibold hover:underline"><Icon name="link" className="w-3 h-3" />Program Saya</a>
-                    : <span className="text-warn-500 font-semibold">Program belum diisi</span>
+                    ? <a href={ownSpreadsheets.get(c.id)!} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="inline-flex items-center gap-1 text-ok-600 font-semibold hover:underline"><Icon name="link" className="w-3 h-3" />{t("coach.kelas.myProgramLink")}</a>
+                    : <span className="text-warn-500 font-semibold">{t("coach.kelas.programNotFilled")}</span>
                   }
                 </div>
               </div>
-              <Btn variant="soft" size="sm" icon="book" onClick={e => { e.stopPropagation(); setOpenSpreadsheet(c); }}>Program</Btn>
+              <Btn variant="soft" size="sm" icon="book" onClick={e => { e.stopPropagation(); setOpenSpreadsheet(c); }}>{t("coach.kelas.programBtn")}</Btn>
             </div>
           </Card>
         ))}
-        {classes.length === 0 && <Card><p className="text-ink-mute text-sm">Belum ada kelas yang diassign.</p></Card>}
+        {classes.length === 0 && <Card><p className="text-ink-mute text-sm">{t("coach.kelas.noClassesAssigned")}</p></Card>}
       </div>
 
       {/* Detail kelas modal */}
@@ -1863,14 +1880,14 @@ function CoachKelas({ classes, coachId, classSpreadsheets, ownSpreadsheets, onRe
           <div className="flex items-center gap-2 w-full">
             {det && ownSpreadsheets.has(det.id) && (
               <a href={ownSpreadsheets.get(det.id)!} target="_blank" rel="noreferrer">
-                <Btn variant="soft" size="sm" icon="link">Buka Spreadsheet Saya</Btn>
+                <Btn variant="soft" size="sm" icon="link">{t("coach.kelas.openMySpreadsheetBtn")}</Btn>
               </a>
             )}
             <div className="flex-1" />
             <Btn variant="soft" size="sm" icon="book" onClick={() => { setOpenSpreadsheet(det); setDet(null); }}>
-              {det && ownSpreadsheets.has(det.id) ? "Edit Program" : "Isi Program"}
+              {det && ownSpreadsheets.has(det.id) ? t("coach.kelas.editProgramBtn") : t("coach.kelas.fillProgramBtn")}
             </Btn>
-            <Btn variant="ghost" onClick={() => setDet(null)}>Tutup</Btn>
+            <Btn variant="ghost" onClick={() => setDet(null)}>{t("common.actions.close")}</Btn>
           </div>
         }>
         {det && (
@@ -1884,17 +1901,17 @@ function CoachKelas({ classes, coachId, classSpreadsheets, ownSpreadsheets, onRe
                 {det.branch?.address && <div className="text-xs text-ink-mute mt-0.5">{det.branch.address}</div>}
               </div>
             </div>
-            {det.goals && <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Tujuan</div><p className="text-sm text-ink-soft mt-1">{det.goals}</p></div>}
-            {det.description && <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Deskripsi</div><p className="text-sm text-ink-soft mt-1">{det.description}</p></div>}
+            {det.goals && <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("coach.kelas.goalsLabel")}</div><p className="text-sm text-ink-soft mt-1">{det.goals}</p></div>}
+            {det.description && <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("coach.kelas.descriptionLabel")}</div><p className="text-sm text-ink-soft mt-1">{det.description}</p></div>}
             {!ownSpreadsheets.has(det.id) && (
               <div className="flex items-center gap-2 p-3 rounded-xl bg-warn-50 border border-warn-200 text-sm text-warn-800">
                 <Icon name="alert" className="w-4 h-4 shrink-0 text-warn-500" />
-                Spreadsheet program Anda untuk kelas ini belum diisi.
+                {t("coach.kelas.spreadsheetNotFilledForClass")}
               </div>
             )}
             {(classSpreadsheets.get(det.id) ?? []).length > 0 && (
               <div>
-                <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-2">Spreadsheet Semua Coach</div>
+                <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-2">{t("coach.kelas.allCoachSpreadsheetsLabel")}</div>
                 <div className="space-y-2">
                   {(classSpreadsheets.get(det.id) ?? []).map(s => (
                     <div key={s.coach_id} className="flex items-center gap-2.5 p-2.5 rounded-xl border border-line bg-paper-tint">
@@ -1902,13 +1919,13 @@ function CoachKelas({ classes, coachId, classSpreadsheets, ownSpreadsheets, onRe
                       <div className="flex-1 min-w-0">
                         <div className="text-sm font-semibold text-ink">
                           {s.coach?.full_name ?? "—"}
-                          {s.coach_id === coachId && <span className="ml-1.5 text-[10px] text-ocean-600 font-bold uppercase tracking-wide">Anda</span>}
+                          {s.coach_id === coachId && <span className="ml-1.5 text-[10px] text-ocean-600 font-bold uppercase tracking-wide">{t("coach.kelas.youBadge")}</span>}
                         </div>
-                        <div className="text-[10px] text-ink-faint font-mono">{new Date(s.updated_at).toLocaleDateString("id-ID")}</div>
+                        <div className="text-[10px] text-ink-faint font-mono">{new Date(s.updated_at).toLocaleDateString(localeTag)}</div>
                       </div>
                       <a href={s.spreadsheet_url} target="_blank" rel="noreferrer"
                         className="shrink-0 text-ocean-600 flex items-center gap-1 text-xs font-semibold hover:underline">
-                        <Icon name="link" className="w-3.5 h-3.5" />Buka
+                        <Icon name="link" className="w-3.5 h-3.5" />{t("coach.kelas.openBtnShort")}
                       </a>
                     </div>
                   ))}
@@ -1916,7 +1933,7 @@ function CoachKelas({ classes, coachId, classSpreadsheets, ownSpreadsheets, onRe
               </div>
             )}
             <div>
-              <SectionTitle sub={`${det.enrolled} member terdaftar · klik untuk detail`}>Daftar Member</SectionTitle>
+              <SectionTitle sub={t("coach.kelas.memberListSub", { count: det.enrolled })}>{t("coach.kelas.memberListTitle")}</SectionTitle>
               <div className="space-y-2">
                 {(det.member_classes ?? []).map((mc, i) => {
                   const memberAge = mc.member?.profile?.birth_date ? calcAgeFromBirthDate(mc.member.profile.birth_date) : null;
@@ -1928,7 +1945,7 @@ function CoachKelas({ classes, coachId, classSpreadsheets, ownSpreadsheets, onRe
                         <div className="font-semibold text-sm text-ink truncate">{mc.member.profile?.full_name ?? "—"}</div>
                         {mc.member.profile?.birth_date && (
                           <div className="text-xs text-ink-mute">
-                            {memberAge} tahun
+                            {t("coach.kelas.ageYears", { age: memberAge ?? 0 })}
                           </div>
                         )}
                       </div>
@@ -1936,12 +1953,12 @@ function CoachKelas({ classes, coachId, classSpreadsheets, ownSpreadsheets, onRe
                     <button
                       onClick={() => openMemberAtt(mc.member!.id, mc.member!.profile?.full_name ?? "—", det.id, det.name)}
                       className="shrink-0 px-2.5 py-1.5 rounded-lg border border-line text-xs font-semibold text-ink-soft hover:bg-ocean-50 hover:border-ocean-200 hover:text-ocean-700 transition flex items-center gap-1">
-                      <Icon name="check" className="w-3 h-3" />Absensi
+                      <Icon name="check" className="w-3 h-3" />{t("coach.kelas.attendanceBtnShort")}
                     </button>
                   </div>
                 );
                 })}
-                {(det.member_classes?.length ?? 0) === 0 && <div className="text-sm text-ink-mute">Belum ada member terdaftar.</div>}
+                {(det.member_classes?.length ?? 0) === 0 && <div className="text-sm text-ink-mute">{t("coach.kelas.noMembersRegistered")}</div>}
               </div>
             </div>
           </div>
@@ -1954,20 +1971,19 @@ function CoachKelas({ classes, coachId, classSpreadsheets, ownSpreadsheets, onRe
       {/* Member attendance history modal */}
       {memberAttHistory && (
         <Modal open={!!memberAttHistory} onClose={() => setMemberAttHistory(null)}
-          title={`Absensi — ${memberAttHistory.memberName}`}
-          footer={<Btn variant="ghost" onClick={() => setMemberAttHistory(null)}>Tutup</Btn>}>
+          title={t("coach.kelas.attendanceModalTitle", { name: memberAttHistory.memberName })}
+          footer={<Btn variant="ghost" onClick={() => setMemberAttHistory(null)}>{t("common.actions.close")}</Btn>}>
           <div className="text-xs text-ink-mute mb-3 font-semibold uppercase tracking-widest">{memberAttHistory.className}</div>
           {loadingAtt ? (
-            <div className="text-center py-6 text-ink-mute text-sm">Memuat…</div>
+            <div className="text-center py-6 text-ink-mute text-sm">{t("coach.leave.loadingEllipsis")}</div>
           ) : memberAttHistory.rows.length === 0 ? (
-            <div className="text-center py-6 text-ink-mute text-sm">Belum ada data absensi di kelas ini.</div>
+            <div className="text-center py-6 text-ink-mute text-sm">{t("coach.kelas.noAttendanceDataForClass")}</div>
           ) : (
             <div className="divide-y divide-line -mx-5">
               {memberAttHistory.rows.map((r) => {
                 const d = new Date(r.session_date + "T00:00:00");
-                const monthNames = ["Jan","Feb","Mar","Apr","Mei","Jun","Jul","Agt","Sep","Okt","Nov","Des"];
-                const dateStr = `${d.getDate()} ${monthNames[d.getMonth()]} ${d.getFullYear()}`;
-                const statusLabel = r.status === "hadir" ? "Hadir" : r.status === "izin" ? "Izin" : r.status === "sakit" ? "Sakit" : "Absen";
+                const dateStr = `${d.getDate()} ${monthsShort[d.getMonth()]} ${d.getFullYear()}`;
+                const statusLabel = r.status === "hadir" ? t("coach.absen.attStatusHadir") : r.status === "izin" ? t("coach.absen.attStatusIzin") : r.status === "sakit" ? t("coach.absen.attStatusSakit") : t("coach.absen.attStatusTidakHadirShort");
                 const statusKind = r.status === "hadir" ? "present" : r.status === "izin" ? "excused" : r.status === "sakit" ? "sick" : "absent";
                 return (
                   <div key={r.id} className="px-5 py-3 flex items-center gap-3">
@@ -2005,6 +2021,8 @@ function CoachInvoice({ coachId, branchId, profile }: { coachId: string; branchI
   const supabase = createClient();
   const toast = useToast();
   const confirm = useConfirm();
+  const { t, locale } = useLocale();
+  const localeTag = locale === "id" ? "id-ID" : "en-US";
   const [sessions, setSessions] = useState<InvoiceSession[]>([]);
   const [pastInvoices, setPastInvoices] = useState<PastInvoice[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -2098,7 +2116,7 @@ function CoachInvoice({ coachId, branchId, profile }: { coachId: string; branchI
   const addExtraItem = () => {
     if (extraRatePerSession == null) return;
     const count = Number(extraSessionCount);
-    if (!count || count <= 0) return toast.error("Masukkan jumlah sesi yang valid");
+    if (!count || count <= 0) return toast.error(t("coach.invoice.validSessionCountRequired"));
     setExtraItems(prev => [...prev, { id: crypto.randomUUID(), sessionCount: count, rate: extraRatePerSession }]);
     setExtraSessionCount("");
   };
@@ -2111,12 +2129,12 @@ function CoachInvoice({ coachId, branchId, profile }: { coachId: string; branchI
   const removeReimburseItem = (id: string) => setReimburseItems(prev => prev.filter(r => r.id !== id));
 
   const generate = async () => {
-    if (selected.size === 0 && extraItems.length === 0 && reimburseItems.length === 0) return toast.error("Pilih minimal 1 sesi atau tambahkan extra/reimburse");
+    if (selected.size === 0 && extraItems.length === 0 && reimburseItems.length === 0) return toast.error(t("coach.invoice.selectAtLeastOneOrAddExtra"));
     const noRate = sessions.filter(s => selected.has(s.id) && !s.rate_set);
-    if (noRate.length > 0) return toast.error("Tarif belum diset", `Kelas belum ada tarif: ${noRate.map(s => s.class?.name ?? s.class_id).join(", ")}`);
+    if (noRate.length > 0) return toast.error(t("coach.invoice.rateNotSetTitle"), t("coach.invoice.rateNotSetBody", { classes: noRate.map(s => s.class?.name ?? s.class_id).join(", ") }));
     setGenerating(true);
     const [y, m] = monthFilter.split("-");
-    const periodLabel = new Date(parseInt(y), parseInt(m) - 1, 1).toLocaleDateString("id-ID", { month: "long", year: "numeric" });
+    const periodLabel = new Date(parseInt(y), parseInt(m) - 1, 1).toLocaleDateString(localeTag, { month: "long", year: "numeric" });
     const num = `INV-${monthFilter.replace("-", "")}-${coachId.slice(0, 6).toUpperCase()}`;
 
     const { data: inv, error: invError } = await supabase.from("coach_invoices").insert({
@@ -2126,7 +2144,7 @@ function CoachInvoice({ coachId, branchId, profile }: { coachId: string; branchI
       status: "pending",
     }).select("id").single();
 
-    if (invError || !inv) { toast.error("Gagal membuat invoice", invError?.message); setGenerating(false); return; }
+    if (invError || !inv) { toast.error(t("coach.invoice.generateInvoiceFailed"), invError?.message); setGenerating(false); return; }
 
     // Link sessions to invoice
     const selectedSessions = sessions.filter(s => selected.has(s.id));
@@ -2156,8 +2174,8 @@ function CoachInvoice({ coachId, branchId, profile }: { coachId: string; branchI
     if (ownerProfiles && ownerProfiles.length > 0) {
       await supabase.from("notifications").insert(ownerProfiles.map((op: { id: string }) => ({
         user_id: op.id,
-        title: "Invoice baru dari coach",
-        body: `${profile?.full_name ?? "Coach"} mengirimkan invoice ${num} — ${periodLabel} (${fmtIDR(total)})`,
+        title: t("coach.invoice.ownerNewInvoiceTitle"),
+        body: t("coach.invoice.ownerNewInvoiceBody", { name: profile?.full_name ?? t("coach.home.defaultCoachName"), num, period: periodLabel, amount: fmtIDR(total) }),
         icon: "invoice",
         kind: "info",
       })));
@@ -2166,19 +2184,19 @@ function CoachInvoice({ coachId, branchId, profile }: { coachId: string; branchI
     setGenerating(false);
     setExtraItems([]);
     setReimburseItems([]);
-    toast.success("Invoice dibuat", "Invoice masuk ke owner panel");
+    toast.success(t("coach.invoice.invoiceCreatedTitle"), t("coach.invoice.invoiceCreatedBody"));
     load();
   };
 
   const cancelInvoice = async (invoiceId: string) => {
-    const ok = await confirm({ title: "Batalkan Invoice?", body: "Sesi yang sudah dipilih akan kembali tersedia untuk diinvoice. Tindakan ini tidak bisa dibatalkan.", confirmLabel: "Ya, batalkan", danger: true });
+    const ok = await confirm({ title: t("coach.invoice.cancelInvoiceConfirmTitle"), body: t("coach.invoice.cancelInvoiceConfirmBody"), confirmLabel: t("coach.invoice.cancelInvoiceConfirmLabel"), danger: true });
     if (!ok) return;
     setCancelling(invoiceId);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { error } = await (supabase as any).rpc("cancel_coach_invoice", { p_invoice_id: invoiceId, p_coach_id: coachId });
     setCancelling(null);
-    if (error) return toast.error("Gagal membatalkan invoice", error.message);
-    toast.success("Invoice dibatalkan", "Sesi kembali tersedia untuk diinvoice");
+    if (error) return toast.error(t("coach.invoice.cancelInvoiceFailed"), error.message);
+    toast.success(t("coach.invoice.invoiceCancelledTitle"), t("coach.invoice.invoiceCancelledBody"));
     load();
   };
 
@@ -2187,22 +2205,22 @@ function CoachInvoice({ coachId, branchId, profile }: { coachId: string; branchI
       <div className="bg-ocean-700 text-white rounded-2xl border border-ocean-700 shadow-card p-5 relative overflow-hidden">
         <div className="caustics absolute inset-0 opacity-30" />
         <div className="relative">
-          <div className="text-wave-200 text-[11px] uppercase tracking-widest font-bold">Generate invoice</div>
-          <h2 className="font-display font-bold text-2xl mt-0.5">{new Date(monthFilter + "-01").toLocaleDateString("id-ID", { month: "long", year: "numeric" })}</h2>
-          <p className="text-white/80 text-sm mt-1">Pilih sesi yang ingin dimasukkan ke invoice.</p>
+          <div className="text-wave-200 text-[11px] uppercase tracking-widest font-bold">{t("coach.invoice.generateInvoiceHeader")}</div>
+          <h2 className="font-display font-bold text-2xl mt-0.5">{new Date(monthFilter + "-01").toLocaleDateString(localeTag, { month: "long", year: "numeric" })}</h2>
+          <p className="text-white/80 text-sm mt-1">{t("coach.invoice.selectSessionsHint")}</p>
         </div>
       </div>
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <Input type="month" value={monthFilter} onChange={e => setMonthFilter(e.target.value)} className="!w-36 sm:!w-44 font-mono" />
         <div className="flex items-center gap-3">
-          <Btn variant="outline" size="sm" icon="plus" onClick={() => setShowReimburseModal(true)}>Expenses</Btn>
-          <button onClick={() => setSelected(new Set(sessions.map(s => s.id)))} className="text-sm font-bold text-ocean-600 hover:text-ocean-700">Pilih semua</button>
+          <Btn variant="outline" size="sm" icon="plus" onClick={() => setShowReimburseModal(true)}>{t("coach.invoice.expensesBtn")}</Btn>
+          <button onClick={() => setSelected(new Set(sessions.map(s => s.id)))} className="text-sm font-bold text-ocean-600 hover:text-ocean-700">{t("coach.invoice.selectAllBtn")}</button>
         </div>
       </div>
-      {loading ? <div className="text-center text-ink-mute p-6">Memuat sesi…</div> : (
+      {loading ? <div className="text-center text-ink-mute p-6">{t("coach.invoice.loadingSessions")}</div> : (
         <>
           <Card padded={false}>
-            {sessions.length === 0 ? <div className="p-6 text-center text-ink-mute">Tidak ada sesi yang belum diinvoice bulan ini.</div> : (
+            {sessions.length === 0 ? <div className="p-6 text-center text-ink-mute">{t("coach.invoice.noUninvoicedSessions")}</div> : (
               <div className="divide-y divide-line">
                 {sessions.map((s) => (
                   <label key={s.id} className={`flex items-center gap-3 px-5 py-3 hover:bg-paper-tint cursor-pointer ${selected.has(s.id) ? "bg-ocean-50/40" : ""} ${!s.rate_set ? "opacity-60" : ""}`}>
@@ -2213,7 +2231,7 @@ function CoachInvoice({ coachId, branchId, profile }: { coachId: string; branchI
                     </div>
                     {s.rate_set
                       ? <div className="font-mono font-bold text-sm shrink-0">{fmtIDR(s.rate_per_session)}</div>
-                      : <div className="text-xs font-semibold text-warn-600 flex items-center gap-1 shrink-0"><Icon name="warning" className="w-3.5 h-3.5" /><span className="hidden sm:inline">Tarif belum diset</span><span className="sm:hidden">No tarif</span></div>
+                      : <div className="text-xs font-semibold text-warn-600 flex items-center gap-1 shrink-0"><Icon name="warning" className="w-3.5 h-3.5" /><span className="hidden sm:inline">{t("coach.invoice.rateNotSetLong")}</span><span className="sm:hidden">{t("coach.invoice.rateNotSetShort")}</span></div>
                     }
                   </label>
                 ))}
@@ -2224,26 +2242,26 @@ function CoachInvoice({ coachId, branchId, profile }: { coachId: string; branchI
           {/* Sesi Extra */}
           <Card className="space-y-3">
             <div>
-              <div className="font-display font-bold text-ink">Sesi Extra</div>
-              <p className="text-xs text-ink-mute mt-0.5">Sesi tambahan di luar kelas reguler, dihitung dari tarif extra yang ditetapkan owner.</p>
+              <div className="font-display font-bold text-ink">{t("coach.invoice.extraSessionsTitle")}</div>
+              <p className="text-xs text-ink-mute mt-0.5">{t("coach.invoice.extraSessionsHint")}</p>
             </div>
             {extraRatePerSession == null ? (
-              <div className="text-xs text-warn-700 bg-warn-50 border border-warn-100 rounded-xl p-3">Owner belum menetapkan tarif extra untuk Anda — hubungi owner untuk mengatur tarif extra terlebih dahulu.</div>
+              <div className="text-xs text-warn-700 bg-warn-50 border border-warn-100 rounded-xl p-3">{t("coach.invoice.extraRateNotSet")}</div>
             ) : (
               <>
                 <div className="flex items-end gap-2">
                   <div className="flex-1">
-                    <Field label="Jumlah sesi extra" hint={`Tarif extra: ${fmtIDR(extraRatePerSession)}/sesi`}>
+                    <Field label={t("coach.invoice.fieldExtraSessionCount")} hint={t("coach.invoice.extraRateHint", { rate: fmtIDR(extraRatePerSession) })}>
                       <Input type="number" inputMode="numeric" min={1} value={extraSessionCount} onChange={e => setExtraSessionCount(e.target.value)} placeholder="1" />
                     </Field>
                   </div>
-                  <Btn variant="soft" onClick={addExtraItem} disabled={!extraSessionCount}>Tambah</Btn>
+                  <Btn variant="soft" onClick={addExtraItem} disabled={!extraSessionCount}>{t("coach.invoice.addBtn")}</Btn>
                 </div>
                 {extraItems.length > 0 && (
                   <div className="divide-y divide-line border-t border-line pt-2">
                     {extraItems.map(e => (
                       <div key={e.id} className="flex items-center justify-between py-2 text-sm">
-                        <span className="text-ink-soft">{e.sessionCount} sesi extra × {fmtIDR(e.rate)}</span>
+                        <span className="text-ink-soft">{t("coach.invoice.extraSessionLine", { count: e.sessionCount, rate: fmtIDR(e.rate) })}</span>
                         <div className="flex items-center gap-2">
                           <span className="font-mono font-bold">{fmtIDR(e.sessionCount * e.rate)}</span>
                           <button onClick={() => removeExtraItem(e.id)} className="text-ink-faint hover:text-danger-600"><Icon name="x" className="w-3.5 h-3.5" /></button>
@@ -2259,13 +2277,13 @@ function CoachInvoice({ coachId, branchId, profile }: { coachId: string; branchI
           {/* Expenses / Reimburse draft */}
           {reimburseItems.length > 0 && (
             <Card className="space-y-2">
-              <div className="font-display font-bold text-ink">Expenses / Reimburse</div>
+              <div className="font-display font-bold text-ink">{t("coach.invoice.expensesReimburseTitle")}</div>
               <div className="divide-y divide-line">
                 {reimburseItems.map(r => (
                   <div key={r.id} className="flex items-center justify-between py-2 text-sm gap-2">
                     <div className="flex-1 min-w-0">
                       <div className="text-ink-soft truncate">{r.description}</div>
-                      <a href={r.proofUrl} target="_blank" rel="noreferrer" className="text-xs text-ocean-600 hover:underline inline-flex items-center gap-1"><Icon name="link" className="w-3 h-3" />Lihat bukti</a>
+                      <a href={r.proofUrl} target="_blank" rel="noreferrer" className="text-xs text-ocean-600 hover:underline inline-flex items-center gap-1"><Icon name="link" className="w-3 h-3" />{t("coach.invoice.viewProofLink")}</a>
                     </div>
                     <span className="font-mono font-bold shrink-0">{fmtIDR(r.amount)}</span>
                     <button onClick={() => removeReimburseItem(r.id)} className="text-ink-faint hover:text-danger-600 shrink-0"><Icon name="x" className="w-3.5 h-3.5" /></button>
@@ -2277,18 +2295,18 @@ function CoachInvoice({ coachId, branchId, profile }: { coachId: string; branchI
 
           <Card className="bg-paper-tint">
             <div className="flex items-baseline justify-between">
-              <div className="text-[11px] uppercase tracking-widest font-bold text-ink-faint">Total ({selected.size} sesi{extraItems.length > 0 ? ` + ${extraItems.length} extra` : ""}{reimburseItems.length > 0 ? ` + ${reimburseItems.length} reimburse` : ""})</div>
+              <div className="text-[11px] uppercase tracking-widest font-bold text-ink-faint">{t("coach.invoice.totalLabel", { count: selected.size, extra: extraItems.length > 0 ? t("coach.invoice.totalWithExtra", { count: extraItems.length }) : "", reimburse: reimburseItems.length > 0 ? t("coach.invoice.totalWithReimburse", { count: reimburseItems.length }) : "" })}</div>
               <div className="font-display font-extrabold text-2xl text-ocean-700">{fmtIDR(total)}</div>
             </div>
             <Btn variant="primary" size="lg" className="w-full mt-4" icon="invoice" onClick={generate} disabled={generating || (selected.size === 0 && extraItems.length === 0 && reimburseItems.length === 0)}>
-              {generating ? "Membuat invoice…" : "Generate Invoice"}
+              {generating ? t("coach.invoice.generatingBtn") : t("coach.invoice.generateInvoiceBtn")}
             </Btn>
           </Card>
         </>
       )}
       {pastInvoices.length > 0 && (
         <Card padded={false}>
-          <div className="p-5 border-b border-line"><SectionTitle sub="Invoice yang sudah pernah dibuat">History Invoice</SectionTitle></div>
+          <div className="p-5 border-b border-line"><SectionTitle sub={t("coach.invoice.historySub")}>{t("coach.invoice.historyTitle")}</SectionTitle></div>
           <div className="divide-y divide-line">
             {pastInvoices.map((iv) => (
               <div key={iv.id} className="px-5 py-3 flex items-center gap-3 hover:bg-paper-tint">
@@ -2305,23 +2323,23 @@ function CoachInvoice({ coachId, branchId, profile }: { coachId: string; branchI
                 </div>
                 <div className="font-mono font-bold text-sm">{fmtIDR(iv.total_amount)}</div>
                 <Status kind={iv.status === "paid" ? "paid" : iv.status === "approved" ? "approved" : iv.status === "rejected" ? "rejected" : "pending"}>
-                  {iv.status === "paid" ? "Lunas" : iv.status === "approved" ? "Disetujui" : iv.status === "rejected" ? "Ditolak" : "Pending"}
+                  {iv.status === "paid" ? t("coach.invoice.statusPaid") : iv.status === "approved" ? t("coach.invoice.statusApproved") : iv.status === "rejected" ? t("coach.invoice.statusRejected") : t("coach.invoice.statusPending")}
                 </Status>
-                <button title="Cetak / Unduh PDF" onClick={() => {
+                <button title={t("coach.invoice.printTitleAttr")} onClick={() => {
                   const w = window.open("", "_blank", "width=700,height=900");
                   if (!w) return;
                   // Group items by class (or unique per extra/reimburse row), sum session counts
                   const itemMap: Record<string, { name: string; sessions: number; rate: number }> = {};
                   (iv.coach_invoice_items ?? []).forEach(item => {
                     const key = item.item_type === "class" ? (item.class_id ?? item.id) : item.id;
-                    const label = item.item_type === "extra" ? "Sesi Extra"
-                      : item.item_type === "reimburse" ? `Reimburse — ${item.description ?? ""}`
+                    const label = item.item_type === "extra" ? t("coach.invoice.extraSessionsTitle")
+                      : item.item_type === "reimburse" ? t("coach.invoice.printReimburseLabel", { desc: item.description ?? "" })
                       : (item.class?.name ?? item.class_id ?? "—");
                     if (!itemMap[key]) itemMap[key] = { name: label, sessions: 0, rate: item.rate };
                     itemMap[key].sessions += item.session_count;
                   });
                   const itemRows = Object.values(itemMap).map(item =>
-                    `<div class="row"><span>${item.name}</span><span>${item.sessions} sesi × Rp ${item.rate.toLocaleString("id-ID")} = <b>Rp ${(item.sessions * item.rate).toLocaleString("id-ID")}</b></span></div>`
+                    `<div class="row"><span>${item.name}</span><span>${item.sessions} ${t("coach.invoice.printSessionsUnit")} × Rp ${item.rate.toLocaleString(localeTag)} = <b>Rp ${(item.sessions * item.rate).toLocaleString(localeTag)}</b></span></div>`
                   ).join("");
                   w.document.write(`<!DOCTYPE html><html><head><title>${iv.invoice_number}</title>
                     <style>body{font-family:sans-serif;padding:32px;color:#0f172a;max-width:640px;margin:auto}
@@ -2334,18 +2352,18 @@ function CoachInvoice({ coachId, branchId, profile }: { coachId: string; branchI
                     .badge{display:inline-block;padding:2px 10px;border-radius:4px;font-size:11px;font-weight:700;background:${iv.status === "paid" ? "#dcfce7" : "#fef9c3"};color:${iv.status === "paid" ? "#166534" : "#854d0e"}}
                     footer{margin-top:40px;border-top:1px solid #e2e8f0;padding-top:12px;font-size:11px;color:#94a3b8;text-align:center}
                     </style></head><body>
-                    <h1>Invoice Coach</h1>
-                    <div class="sub">${iv.invoice_number} &nbsp;·&nbsp; <span class="badge">${iv.status === "paid" ? "Lunas" : "Pending"}</span></div>
-                    <div class="section">Informasi</div>
+                    <h1>${t("coach.invoice.printDocTitle")}</h1>
+                    <div class="sub">${iv.invoice_number} &nbsp;·&nbsp; <span class="badge">${iv.status === "paid" ? t("coach.invoice.statusPaid") : t("coach.invoice.statusPending")}</span></div>
+                    <div class="section">${t("coach.invoice.printInfoSection")}</div>
                     <div class="meta">
-                      <b>Periode:</b> ${iv.period_label}<br/>
-                      <b>Coach:</b> ${profile?.full_name ?? "—"}<br/>
-                      <b>Rekening:</b> ${iv.bank_info ?? (profile?.bank_name ? `${profile.bank_name} - ${profile.bank_account} a/n ${profile.bank_holder}` : "—")}
+                      <b>${t("coach.invoice.printPeriodLabel")}</b> ${iv.period_label}<br/>
+                      <b>${t("coach.invoice.printCoachLabel")}</b> ${profile?.full_name ?? "—"}<br/>
+                      <b>${t("coach.invoice.printBankLabel")}</b> ${iv.bank_info ?? (profile?.bank_name ? `${profile.bank_name} - ${profile.bank_account} a/n ${profile.bank_holder}` : "—")}
                     </div>
-                    <div class="section">Rincian Kelas</div>
-                    ${itemRows || '<div class="row"><span style="color:#94a3b8">Tidak ada rincian</span></div>'}
-                    <div class="total"><span>Total</span><span>Rp ${iv.total_amount.toLocaleString("id-ID")}</span></div>
-                    <footer>Next Swimming School &nbsp;·&nbsp; Dicetak ${new Date().toLocaleDateString("id-ID", { dateStyle: "long" })}</footer>
+                    <div class="section">${t("coach.invoice.printClassDetailsSection")}</div>
+                    ${itemRows || `<div class="row"><span style="color:#94a3b8">${t("coach.invoice.printNoDetails")}</span></div>`}
+                    <div class="total"><span>${t("coach.invoice.printTotalLabel")}</span><span>Rp ${iv.total_amount.toLocaleString(localeTag)}</span></div>
+                    <footer>Next Swimming School &nbsp;·&nbsp; ${t("coach.invoice.printFooterPrinted", { date: new Date().toLocaleDateString(localeTag, { dateStyle: "long" }) })}</footer>
                     </body></html>`);
                   w.document.close();
                   w.focus();
@@ -2355,7 +2373,7 @@ function CoachInvoice({ coachId, branchId, profile }: { coachId: string; branchI
                 </button>
                 {iv.status === "pending" && (
                   <button
-                    title="Batalkan invoice"
+                    title={t("coach.invoice.cancelTitleAttr")}
                     onClick={() => cancelInvoice(iv.id)}
                     disabled={cancelling === iv.id}
                     className="w-8 h-8 rounded-lg border border-danger-200 hover:bg-danger-50 flex items-center justify-center text-danger-400 hover:text-danger-600 transition-colors disabled:opacity-40"
@@ -2574,9 +2592,9 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
     if (!open || !period) return;
     // Check period still open
     const today = new Date().toISOString().split("T")[0];
-    if (period.date_to < today) return toast.error("Periode rapor sudah berakhir", "Hubungi admin untuk memperpanjang periode.");
+    if (period.date_to < today) return toast.error(t("coach.rapor.periodClosedTitle"), t("coach.rapor.periodClosedBody"));
     const { data: periodCheck } = await supabase.from("rapor_periods").select("is_open").eq("id", period.id).single();
-    if (!periodCheck?.is_open) return toast.error("Periode rapor sudah ditutup", "Hubungi admin untuk membuka kembali periode.");
+    if (!periodCheck?.is_open) return toast.error(t("coach.rapor.periodClosedTitle2"), t("coach.rapor.periodClosedBody2"));
     setSaving(true);
     const isNew = !open.locked;
     const { error } = await supabase.from("rapor_entries")
@@ -2592,7 +2610,7 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any)
       .eq("id", open.id);
-    if (error) { setSaving(false); return toast.error("Gagal menyimpan rapor", error.message); }
+    if (error) { setSaving(false); return toast.error(t("coach.rapor.saveFailedTitle"), error.message); }
     // Delete removed best time rows
     for (const id of removedBtIds) {
       await supabase.from("member_best_times").delete().eq("id", id);
@@ -2626,13 +2644,13 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
     if (isNew) {
       await supabase.from("notifications").insert({
         user_id: open.member_id,
-        title: "Rapor tersedia",
-        body: `Rapor Anda untuk periode "${period.label}" sudah diisi coach. Buka menu Rapor untuk melihat hasilnya.`,
+        title: t("coach.rapor.raporAvailableNotifTitle"),
+        body: t("coach.rapor.raporAvailableNotifBody", { period: period.label }),
         icon: "book",
         kind: "info",
       });
     }
-    toast.success("Rapor disimpan");
+    toast.success(t("coach.rapor.raporSavedToast"));
     setOpen(null);
     setRemovedBtIds([]);
     setEntries(prev => prev.map(e => e.id === open.id ? {
@@ -2665,21 +2683,21 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
           <div className="absolute -right-12 -bottom-12 w-44 h-44 rounded-full bg-wave-500/30 blur-2xl" />
           <div className="relative">
             <div className="text-wave-200 text-[11px] uppercase tracking-widest font-bold flex items-center gap-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-wave-300 animate-pulse" /> Periode aktif
+              <span className="w-1.5 h-1.5 rounded-full bg-wave-300 animate-pulse" /> {t("coach.rapor.activePeriodBadge")}
             </div>
             <div className="font-display font-bold text-2xl mt-0.5">{period.label}</div>
             {!loading && (
               <div className="flex flex-wrap gap-2.5 mt-3">
                 <div className="bg-white/15 backdrop-blur rounded-xl px-3.5 py-2 ring-1 ring-white/20">
-                  <div className="text-[10px] uppercase tracking-widest font-bold text-wave-200">Sudah diisi</div>
+                  <div className="text-[10px] uppercase tracking-widest font-bold text-wave-200">{t("coach.rapor.filledCount")}</div>
                   <div className="font-display font-bold text-xl text-ok-300">{totalFilled}</div>
                 </div>
                 <div className="bg-white/15 backdrop-blur rounded-xl px-3.5 py-2 ring-1 ring-white/20">
-                  <div className="text-[10px] uppercase tracking-widest font-bold text-wave-200">Belum diisi</div>
+                  <div className="text-[10px] uppercase tracking-widest font-bold text-wave-200">{t("coach.rapor.pendingCount")}</div>
                   <div className="font-display font-bold text-xl text-warn-300">{totalPending}</div>
                 </div>
                 <div className="bg-white/15 backdrop-blur rounded-xl px-3.5 py-2 ring-1 ring-white/20">
-                  <div className="text-[10px] uppercase tracking-widest font-bold text-wave-200">Penyelesaian</div>
+                  <div className="text-[10px] uppercase tracking-widest font-bold text-wave-200">{t("coach.rapor.completionLabel")}</div>
                   <div className="font-display font-bold text-xl">{pct}%</div>
                 </div>
               </div>
@@ -2687,15 +2705,15 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
           </div>
         </div>
       ) : (
-        <Card><p className="text-ink-mute">Tidak ada periode rapor aktif.</p></Card>
+        <Card><p className="text-ink-mute">{t("coach.rapor.noActivePeriod")}</p></Card>
       )}
 
       {/* Progress summary card */}
       {period && !loading && entries.length > 0 && (
         <div className="bg-white rounded-2xl border border-line shadow-card p-4 space-y-3">
           <div className="flex justify-between items-center">
-            <div className="text-sm font-semibold text-ink">Progress Pengisian Rapor</div>
-            <div className="text-sm font-bold text-ocean-700 tabular-nums">{totalFilled}/{entries.length} member</div>
+            <div className="text-sm font-semibold text-ink">{t("coach.rapor.progressTitle")}</div>
+            <div className="text-sm font-bold text-ocean-700 tabular-nums">{t("coach.rapor.progressCount", { filled: totalFilled, total: entries.length })}</div>
           </div>
           <div className="h-2.5 bg-paper-deep rounded-full overflow-hidden">
             <div
@@ -2706,19 +2724,19 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
           <div className="grid grid-cols-3 gap-2 pt-1">
             <div className="text-center">
               <div className="font-display font-bold text-lg text-ok-600">{totalFilled}</div>
-              <div className="text-[10px] uppercase tracking-widest text-ink-faint font-bold">Selesai</div>
+              <div className="text-[10px] uppercase tracking-widest text-ink-faint font-bold">{t("coach.rapor.completedLabel")}</div>
             </div>
             <div className="text-center border-x border-line">
               <div className="font-display font-bold text-lg text-warn-600">{totalPending}</div>
-              <div className="text-[10px] uppercase tracking-widest text-ink-faint font-bold">Belum</div>
+              <div className="text-[10px] uppercase tracking-widest text-ink-faint font-bold">{t("coach.rapor.pendingLabelShort")}</div>
             </div>
             <div className="text-center flex flex-col items-center gap-1">
               {pct === 100
-                ? <Status kind="approved" dot={false}>Semua Selesai</Status>
+                ? <Status kind="approved" dot={false}>{t("coach.rapor.allDoneBadge")}</Status>
                 : pct > 0
-                ? <Status kind="pending" dot={false}>{pct}% selesai</Status>
-                : <Status kind="inactive" dot={false}>Belum mulai</Status>}
-              <div className="text-[10px] uppercase tracking-widest text-ink-faint font-bold">Status</div>
+                ? <Status kind="pending" dot={false}>{t("coach.rapor.percentDoneBadge", { pct })}</Status>
+                : <Status kind="inactive" dot={false}>{t("coach.rapor.notStartedBadge")}</Status>}
+              <div className="text-[10px] uppercase tracking-widest text-ink-faint font-bold">{t("coach.rapor.statusLabel")}</div>
             </div>
           </div>
         </div>
@@ -2729,16 +2747,16 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
         <div className="bg-white rounded-2xl border border-line shadow-card p-4">
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div className="min-w-0">
-              <p className="font-semibold text-sm text-ink">Tanda Tangan Rapor</p>
+              <p className="font-semibold text-sm text-ink">{t("coach.rapor.signatureTitle")}</p>
               <p className="text-xs text-ink-mute mt-0.5">
-                Upload tanda tangan untuk ditampilkan di rapor siswa yang Anda cetak
+                {t("coach.rapor.signatureHint")}
               </p>
             </div>
             <div className="flex items-center gap-3 flex-shrink-0">
               {signatureUrl && (
                 <img
                   src={signatureUrl}
-                  alt="Tanda tangan"
+                  alt={t("coach.rapor.signatureAlt")}
                   className="h-12 max-w-[120px] object-contain border border-line rounded-lg bg-paper-tint px-2"
                 />
               )}
@@ -2755,16 +2773,16 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
                     try {
                       const url = await upload.signature(file);
                       setSignatureUrl(url);
-                      toast.success("Tanda tangan berhasil diupload");
+                      toast.success(t("coach.rapor.signatureUploadedToast"));
                     } catch (err) {
-                      toast.error("Gagal upload tanda tangan", (err as Error).message);
+                      toast.error(t("coach.rapor.signatureUploadFailedTitle"), (err as Error).message);
                     } finally {
                       setSigUploading(false);
                       ev.target.value = "";
                     }
                   }}
                 />
-                {sigUploading ? "Mengupload…" : signatureUrl ? "Ganti TTD" : "Upload TTD"}
+                {sigUploading ? t("coach.rapor.uploadingBtn") : signatureUrl ? t("coach.rapor.changeSignatureBtn") : t("coach.rapor.uploadSignatureBtn")}
               </label>
             </div>
           </div>
@@ -2772,7 +2790,7 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
       )}
 
       {/* Entry list */}
-      {loading ? <div className="text-ink-mute text-sm">Memuat…</div> : (
+      {loading ? <div className="text-ink-mute text-sm">{t("coach.leave.loadingEllipsis")}</div> : (
         <div className="space-y-3">
           {paginated.map((e) => (
             <Card key={e.id || e.member_id} className="flex items-center gap-3">
@@ -2781,22 +2799,22 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
                 <div className="font-semibold text-ink truncate">{e.member?.profile?.full_name}</div>
                 <div className="text-xs text-ink-mute">{e.class?.name}</div>
               </div>
-              {e.locked ? <Status kind="approved">Selesai</Status> : <Status kind="pending">Belum</Status>}
+              {e.locked ? <Status kind="approved">{t("coach.rapor.doneBadge")}</Status> : <Status kind="pending">{t("coach.rapor.notDoneBadge")}</Status>}
               {e.locked && (
-                <Btn variant="outline" size="sm" onClick={() => openView(e)}>Lihat</Btn>
+                <Btn variant="outline" size="sm" onClick={() => openView(e)}>{t("coach.rapor.viewBtn")}</Btn>
               )}
               <Btn variant={e.locked ? "ghost" : "primary"} size="sm" onClick={() => openEntry(e)}>
-                {e.locked ? "Edit" : "Isi rapor"}
+                {e.locked ? t("coach.rapor.editBtn") : t("coach.rapor.fillRaporBtn")}
               </Btn>
             </Card>
           ))}
-          {entries.length === 0 && period && <p className="text-ink-mute text-sm">Belum ada entri rapor untuk periode ini.</p>}
+          {entries.length === 0 && period && <p className="text-ink-mute text-sm">{t("coach.rapor.noEntriesForPeriod")}</p>}
 
           {/* Pagination */}
           {totalPages > 1 && (
             <div className="flex items-center justify-between pt-1 flex-wrap gap-2">
               <span className="text-xs text-ink-mute tabular-nums">
-                {entries.length} member · hal. {safePage + 1}/{totalPages}
+                {t("coach.rapor.paginationSummary", { count: entries.length, page: safePage + 1, total: totalPages })}
               </span>
               <div className="flex items-center gap-1">
                 <button type="button" disabled={safePage === 0} onClick={() => setPage(0)}
@@ -2825,11 +2843,11 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
           )}
         </div>
       )}
-      <Modal open={!!open} onClose={() => { setOpen(null); setBestTimeMatrix([]); setOtherRecorded([]); setRemovedBtIds([]); setLevel(""); setLevelId(""); }} title={`Rapor — ${open?.member?.profile?.full_name ?? ""}`} size="lg"
-        footer={<><Btn variant="ghost" onClick={() => { setOpen(null); setBestTimeMatrix([]); setOtherRecorded([]); setRemovedBtIds([]); setLevel(""); setLevelId(""); }}>Batal</Btn><Btn variant="primary" onClick={saveRapor} disabled={saving || notesInvalid}>{saving ? "Menyimpan…" : "Simpan rapor"}</Btn></>}>
+      <Modal open={!!open} onClose={() => { setOpen(null); setBestTimeMatrix([]); setOtherRecorded([]); setRemovedBtIds([]); setLevel(""); setLevelId(""); }} title={t("coach.rapor.modalTitle", { name: open?.member?.profile?.full_name ?? "" })} size="lg"
+        footer={<><Btn variant="ghost" onClick={() => { setOpen(null); setBestTimeMatrix([]); setOtherRecorded([]); setRemovedBtIds([]); setLevel(""); setLevelId(""); }}>{t("common.actions.cancel")}</Btn><Btn variant="primary" onClick={saveRapor} disabled={saving || notesInvalid}>{saving ? t("coach.absen.savingBtn") : t("coach.rapor.saveRaporBtn")}</Btn></>}>
         <div className="space-y-5">
           {criteria.length === 0 && (
-            <p className="text-xs text-warn-600">Pilih level member di bawah untuk memuat aspek penilaian.</p>
+            <p className="text-xs text-warn-600">{t("coach.rapor.selectLevelHint")}</p>
           )}
           {criteria.map((c) => (
             <div key={c.id}>
@@ -2858,28 +2876,28 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
               )}
               {c.kind === "text" && (
                 <Textarea rows={2} value={(scores[c.id] as string) ?? ""}
-                  onChange={e => setScores(s => ({ ...s, [c.id]: e.target.value }))} placeholder="Mis. Sudah cukup baik, perlu latihan lebih konsisten." />
+                  onChange={e => setScores(s => ({ ...s, [c.id]: e.target.value }))} placeholder={t("coach.rapor.notesPlaceholder")} />
               )}
             </div>
           ))}
-          <Field label="Level Member" hint="Pilih level untuk memuat kriteria & tabel waktu standar secara otomatis">
+          <Field label={t("coach.rapor.fieldLevelMember")} hint={t("coach.rapor.levelHint")}>
             <select
               value={levelId}
               onChange={e => void handleLevelChange(e.target.value)}
               disabled={loadingLevelTemplate}
               className="w-full border border-line rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ocean-500 bg-white disabled:opacity-60"
             >
-              <option value="">— Pilih level —</option>
+              <option value="">{t("coach.rapor.selectLevelPlaceholder")}</option>
               {visibleLevelOptions.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
             </select>
           </Field>
           <Field
-            label="Catatan umum coach"
-            hint={notesInvalid ? undefined : "Maks. 289 karakter · 50 kata · 1 kalimat · 1 paragraf"}
+            label={t("coach.rapor.fieldGeneralNotes")}
+            hint={notesInvalid ? undefined : t("coach.rapor.notesHint")}
             error={
-              notesStats.hasNewline ? "Tidak boleh lebih dari 1 paragraf (hapus baris baru)" :
-              notesStats.sentences > 1 ? `Tidak boleh lebih dari 1 kalimat (${notesStats.sentences} kalimat terdeteksi)` :
-              notesStats.words > 50 ? `Tidak boleh lebih dari 50 kata (${notesStats.words} kata)` :
+              notesStats.hasNewline ? t("coach.rapor.notesErrorNewline") :
+              notesStats.sentences > 1 ? t("coach.rapor.notesErrorSentences", { count: notesStats.sentences }) :
+              notesStats.words > 50 ? t("coach.rapor.notesErrorWords", { count: notesStats.words }) :
               undefined
             }
           >
@@ -2889,7 +2907,7 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
                 value={notes}
                 maxLength={289}
                 onChange={e => setNotes(e.target.value)}
-                placeholder="Mis. Member menunjukkan progres yang baik bulan ini, terutama pada teknik pernapasan."
+                placeholder={t("coach.rapor.notesPlaceholder")}
                 className={notesInvalid ? "border-danger-400 focus:border-danger-400 focus:ring-danger-100" : undefined}
               />
               <span className={`absolute bottom-2 right-3 text-[10px] font-mono tabular-nums pointer-events-none ${289 - notesStats.chars <= 20 ? "text-danger-500 font-bold" : "text-ink-faint"}`}>
@@ -2968,15 +2986,15 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
           </div>
 
           <div className="border-t border-line pt-4 space-y-4">
-            <div className="text-xs font-bold uppercase tracking-widest text-ink-mute">Evaluasi Karakter</div>
-            <Field label="Kepribadian" hint="Mis. Disiplin, percaya diri, komunikatif">
-              <Input value={personality} onChange={e => setPersonality(e.target.value)} placeholder="Mis. Disiplin, kooperatif, antusias" />
+            <div className="text-xs font-bold uppercase tracking-widest text-ink-mute">{t("coach.rapor.characterEvalTitle")}</div>
+            <Field label={t("coach.rapor.fieldPersonality")} hint={t("coach.rapor.personalityHint")}>
+              <Input value={personality} onChange={e => setPersonality(e.target.value)} placeholder={t("coach.rapor.personalityPlaceholder")} />
             </Field>
-            <Field label="Motivasi Belajar" hint="Seberapa besar semangat belajar member">
-              <Input value={motivation} onChange={e => setMotivation(e.target.value)} placeholder="Mis. Sangat antusias dan selalu tepat waktu" />
+            <Field label={t("coach.rapor.fieldMotivation")} hint={t("coach.rapor.motivationHint")}>
+              <Input value={motivation} onChange={e => setMotivation(e.target.value)} placeholder={t("coach.rapor.motivationPlaceholder")} />
             </Field>
-            <Field label="Capaian Pembelajaran" hint="Pencapaian spesifik yang dicapai dalam periode ini">
-              <Textarea rows={2} value={learningAchievements} onChange={e => setLearningAchievements(e.target.value)} placeholder="Mis. Berhasil menguasai teknik pernapasan freestyle dan mulai latihan backstroke." />
+            <Field label={t("coach.rapor.fieldLearningAchievements")} hint={t("coach.rapor.learningAchievementsHint")}>
+              <Textarea rows={2} value={learningAchievements} onChange={e => setLearningAchievements(e.target.value)} placeholder={t("coach.rapor.learningAchievementsPlaceholder")} />
             </Field>
           </div>
         </div>
@@ -2986,11 +3004,11 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
       <Modal
         open={!!viewing}
         onClose={() => { setViewing(null); setViewBestTimes([]); }}
-        title={`Rapor — ${viewing?.member?.profile?.full_name ?? ""}`}
+        title={t("coach.rapor.modalTitle", { name: viewing?.member?.profile?.full_name ?? "" })}
         size="lg"
         footer={
           <>
-            <Btn variant="ghost" onClick={() => { setViewing(null); setViewBestTimes([]); }}>Tutup</Btn>
+            <Btn variant="ghost" onClick={() => { setViewing(null); setViewBestTimes([]); }}>{t("common.actions.close")}</Btn>
             {viewing && period && (() => {
               const vScores = (viewing as unknown as { scores?: Record<string, number | string> }).scores ?? {};
               const vNotes  = (viewing as unknown as { notes?: string | null }).notes ?? null;
@@ -3021,11 +3039,11 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
               return (<>
                 <Btn variant="outline" size="sm" icon="printer"
                   onClick={() => printSingleRaporPopup(raporData)}>
-                  Print
+                  {t("coach.rapor.printBtn")}
                 </Btn>
                 <Btn variant="primary" size="sm" icon="download"
                   onClick={() => void downloadRaporPdf(raporData)}>
-                  Download PDF
+                  {t("coach.rapor.downloadPdfBtn")}
                 </Btn>
               </>);
             })()}
@@ -3055,7 +3073,7 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
               {/* Level */}
               {viewing.level && (
                 <div className="flex items-center gap-2 text-sm">
-                  <span className="font-semibold text-ink-soft">Level:</span>
+                  <span className="font-semibold text-ink-soft">{t("coach.rapor.levelLabel")}</span>
                   <span className="font-semibold text-ink">{viewing.level}</span>
                 </div>
               )}
@@ -3090,14 +3108,14 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
                   );
                 })}
                 {Object.keys(vScores).length === 0 && (
-                  <p className="text-sm text-ink-mute italic">Belum ada penilaian.</p>
+                  <p className="text-sm text-ink-mute italic">{t("coach.rapor.noScoresYet")}</p>
                 )}
               </div>
 
               {/* Notes */}
               {vNotes && (
                 <div>
-                  <div className="font-semibold text-ink text-sm mb-1">Catatan coach</div>
+                  <div className="font-semibold text-ink text-sm mb-1">{t("coach.rapor.notesLabel")}</div>
                   <p className="text-sm text-ink-soft bg-paper-tint p-3 rounded-xl leading-relaxed">{vNotes}</p>
                 </div>
               )}
@@ -3105,14 +3123,14 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
               {/* Personal Best Times */}
               {viewBestTimes.length > 0 && (
                 <div>
-                  <div className="font-semibold text-ink text-sm mb-2">Personal Best Time</div>
+                  <div className="font-semibold text-ink text-sm mb-2">{t("coach.bestTime.sectionTitle")}</div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm border-collapse">
                       <thead>
                         <tr className="bg-ocean-600 text-white">
-                          <th className="text-left px-3 py-2 font-semibold rounded-tl-lg">Gaya</th>
-                          <th className="text-center px-3 py-2 font-semibold">Jarak</th>
-                          <th className="text-center px-3 py-2 font-semibold rounded-tr-lg">Waktu</th>
+                          <th className="text-left px-3 py-2 font-semibold rounded-tl-lg">{t("coach.rapor.strokeColHeader")}</th>
+                          <th className="text-center px-3 py-2 font-semibold">{t("coach.rapor.distanceColHeader")}</th>
+                          <th className="text-center px-3 py-2 font-semibold rounded-tr-lg">{t("coach.rapor.timeColHeader")}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -3133,9 +3151,9 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
               {(viewing.personality || viewing.motivation || viewing.learning_achievements) && (
                 <div className="space-y-2 pt-2 border-t border-line">
                   {[
-                    { label: "Kepribadian", value: viewing.personality },
-                    { label: "Motivasi belajar", value: viewing.motivation },
-                    { label: "Capaian pembelajaran", value: viewing.learning_achievements },
+                    { label: t("coach.rapor.fieldPersonality"), value: viewing.personality },
+                    { label: t("coach.rapor.motivationViewLabel"), value: viewing.motivation },
+                    { label: t("coach.rapor.learningAchievementsViewLabel"), value: viewing.learning_achievements },
                   ].filter(x => x.value).map(x => (
                     <div key={x.label} className="flex items-baseline gap-2 text-sm">
                       <span className="text-ink-mute min-w-[148px] shrink-0">{x.label}</span>
@@ -3150,7 +3168,7 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
       </Modal>
 
       <div>
-        <SectionTitle sub="Ulasan member terhadap Anda">Ulasan Saya</SectionTitle>
+        <SectionTitle sub={t("coach.rapor.myReviewsSub")}>{t("coach.rapor.myReviewsTitle")}</SectionTitle>
         <CoachMyReviews coachId={coachId} />
       </div>
     </div>
@@ -3165,6 +3183,7 @@ interface MyReviewRow {
 }
 
 function CoachMyReviews({ coachId }: { coachId: string }) {
+  const { t } = useLocale();
   const [reviews, setReviews] = useState<MyReviewRow[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -3180,7 +3199,7 @@ function CoachMyReviews({ coachId }: { coachId: string }) {
 
   const avg = reviews.length ? reviews.reduce((s, r) => s + r.stars, 0) / reviews.length : null;
 
-  if (loading) return <div className="text-ink-mute text-sm py-3">Memuat ulasan…</div>;
+  if (loading) return <div className="text-ink-mute text-sm py-3">{t("coach.rapor.loadingReviews")}</div>;
 
   return (
     <div className="space-y-3">
@@ -3189,7 +3208,7 @@ function CoachMyReviews({ coachId }: { coachId: string }) {
           <div className="text-center shrink-0">
             <div className="text-3xl font-bold text-amber-600">{avg.toFixed(1)}</div>
             <StarDisplay stars={Math.round(avg)} size="sm" />
-            <div className="text-xs text-ink-mute mt-1">{reviews.length} ulasan</div>
+            <div className="text-xs text-ink-mute mt-1">{t("coach.rapor.reviewCountLabel", { count: reviews.length })}</div>
           </div>
           <div className="flex-1 space-y-1">
             {[5,4,3,2,1].map(s => {
@@ -3208,7 +3227,7 @@ function CoachMyReviews({ coachId }: { coachId: string }) {
           </div>
         </div>
       )}
-      {reviews.length === 0 && <p className="text-ink-mute text-sm text-center py-6">Belum ada ulasan dari member.</p>}
+      {reviews.length === 0 && <p className="text-ink-mute text-sm text-center py-6">{t("coach.rapor.noReviewsYet")}</p>}
       <div className="space-y-2.5">
         {reviews.map(r => (
           <div key={r.id} className="bg-white border border-line rounded-2xl p-4">
@@ -3237,6 +3256,7 @@ function CoachProfile({ profile, onRefresh, onLogout, onAvatarChange }: { profil
   const supabase = createClient();
   const toast = useToast();
   const confirm = useConfirm();
+  const { t } = useLocale();
   const { upload, uploading } = useUpload();
   // Password
   const [newPwd, setNewPwd] = useState("");
@@ -3285,13 +3305,13 @@ function CoachProfile({ profile, onRefresh, onLogout, onAvatarChange }: { profil
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const changePassword = async () => {
-    if (!newPwd || newPwd.length < 6) return toast.error("Password minimal 6 karakter");
-    if (newPwd !== confirmPwd) return toast.error("Password tidak cocok");
+    if (!newPwd || newPwd.length < 6) return toast.error(t("coach.profile.pwdMinLength"));
+    if (newPwd !== confirmPwd) return toast.error(t("coach.profile.pwdMismatch"));
     setSavingPwd(true);
     const { error } = await supabase.auth.updateUser({ password: newPwd });
     setSavingPwd(false);
-    if (error) return toast.error("Gagal ganti password", error.message);
-    toast.success("Password diubah");
+    if (error) return toast.error(t("coach.profile.pwdChangeFailed"), error.message);
+    toast.success(t("coach.profile.pwdChanged"));
     setNewPwd(""); setConfirmPwd("");
   };
 
@@ -3306,16 +3326,16 @@ function CoachProfile({ profile, onRefresh, onLogout, onAvatarChange }: { profil
       onAvatarChange?.(url);
       setAvatarPreview(null);
       setPendingAvatarFile(null);
-      toast.success("Foto profil diperbarui");
+      toast.success(t("coach.profile.avatarUpdated"));
     } catch {
-      toast.error("Gagal upload foto, coba lagi");
+      toast.error(t("coach.profile.photoUploadFailed"));
       setAvatarPreview(null);
       setPendingAvatarFile(null);
     }
   };
 
   const saveCert = async () => {
-    if (!profile?.id) return toast.error("Profil belum dimuat, coba refresh");
+    if (!profile?.id) return toast.error(t("coach.profile.profileNotLoaded"));
     setSavingCert(true);
     const title = certForm.title.trim();
 
@@ -3329,7 +3349,7 @@ function CoachProfile({ profile, onRefresh, onLogout, onAvatarChange }: { profil
       status: "pending",
     }).select("id").single();
 
-    if (error) { setSavingCert(false); return toast.error("Gagal menambah sertifikasi", error.message); }
+    if (error) { setSavingCert(false); return toast.error(t("coach.profile.addCertFailed"), error.message); }
 
     // 2. Upload photo if provided — route handler already updates photo_url in DB
     if (cert && certFile) {
@@ -3337,7 +3357,7 @@ function CoachProfile({ profile, onRefresh, onLogout, onAvatarChange }: { profil
     }
 
     setSavingCert(false);
-    toast.success("Sertifikasi ditambahkan", "Menunggu verifikasi admin");
+    toast.success(t("coach.profile.certAddedTitle"), t("coach.profile.certAddedBody"));
     setOpenAddCert(false);
     setCertForm({ title: "", issuer: "", issued_at: "", expires_at: "", no_expiry: false });
     setCertFile(null);
@@ -3352,11 +3372,11 @@ function CoachProfile({ profile, onRefresh, onLogout, onAvatarChange }: { profil
   };
 
   const deleteCert = async (s: { id: string; title: string }) => {
-    const ok = await confirm({ title: "Hapus sertifikasi?", body: `Hapus "${s.title}"? Tindakan ini tidak bisa dibatalkan.`, confirmLabel: "Hapus", danger: true });
+    const ok = await confirm({ title: t("coach.profile.deleteCertConfirmTitle"), body: t("coach.profile.deleteCertConfirmBody", { title: s.title }), confirmLabel: t("coach.profile.deleteCertConfirmLabel"), danger: true });
     if (!ok) return;
     const { error } = await supabase.from("certifications").delete().eq("id", s.id);
-    if (error) return toast.error("Gagal menghapus", error.message);
-    toast.success("Sertifikasi dihapus");
+    if (error) return toast.error(t("coach.profile.deleteCertFailed"), error.message);
+    toast.success(t("coach.profile.certDeleted"));
     onRefresh();
   };
 
@@ -3364,13 +3384,13 @@ function CoachProfile({ profile, onRefresh, onLogout, onAvatarChange }: { profil
     const { error } = await supabase.from("certifications")
       .update({ status: "pending", reject_reason: null })
       .eq("id", id);
-    if (error) return toast.error("Gagal mengajukan ulang", error.message);
-    toast.success("Sertifikasi diajukan ulang", "Menunggu verifikasi admin");
+    if (error) return toast.error(t("coach.profile.resubmitCertFailed"), error.message);
+    toast.success(t("coach.profile.certResubmittedTitle"), t("coach.profile.certResubmittedBody"));
     onRefresh();
   };
 
   const saveCertEdit = async () => {
-    if (!editCertTarget) return toast.error("Sertifikasi tidak ditemukan, coba refresh");
+    if (!editCertTarget) return toast.error(t("coach.profile.certNotFound"));
     setSavingCert(true);
     const title = certForm.title.trim();
     // Any edit on an approved or rejected cert resets it to pending for re-approval
@@ -3386,8 +3406,8 @@ function CoachProfile({ profile, onRefresh, onLogout, onAvatarChange }: { profil
       try { await upload.cert(certFile, editCertTarget.id); } catch { /* non-fatal */ }
     }
     setSavingCert(false);
-    if (error) return toast.error("Gagal memperbarui sertifikasi", error.message);
-    toast.success("Sertifikasi diperbarui");
+    if (error) return toast.error(t("coach.profile.updateCertFailed"), error.message);
+    toast.success(t("coach.profile.certUpdated"));
     setOpenAddCert(false);
     setEditCertTarget(null);
     onRefresh();
@@ -3417,8 +3437,8 @@ function CoachProfile({ profile, onRefresh, onLogout, onAvatarChange }: { profil
       is_profile_complete: nowComplete,
     }).eq("id", profile?.id ?? "");
     setSavingProfile(false);
-    if (error) return toast.error("Gagal menyimpan profil", error.message);
-    toast.success("Profil diperbarui");
+    if (error) return toast.error(t("coach.profile.saveProfileFailed"), error.message);
+    toast.success(t("coach.profile.profileUpdated"));
     onRefresh();
   };
 
@@ -3428,7 +3448,7 @@ function CoachProfile({ profile, onRefresh, onLogout, onAvatarChange }: { profil
   };
 
   const saveBank = async () => {
-    if (!bankForm.bank_name || !bankForm.bank_account || !bankForm.bank_holder) return toast.error("Semua field rekening wajib diisi");
+    if (!bankForm.bank_name || !bankForm.bank_account || !bankForm.bank_holder) return toast.error(t("coach.profile.bankFieldsRequired"));
     setSavingBank(true);
     const nowComplete = !!(
       bankForm.bank_name && bankForm.bank_account && bankForm.bank_holder &&
@@ -3439,8 +3459,8 @@ function CoachProfile({ profile, onRefresh, onLogout, onAvatarChange }: { profil
       is_profile_complete: nowComplete,
     }).eq("id", profile?.id ?? "");
     setSavingBank(false);
-    if (error) return toast.error("Gagal menyimpan rekening", error.message);
-    toast.success("Informasi rekening diperbarui");
+    if (error) return toast.error(t("coach.profile.saveBankFailed"), error.message);
+    toast.success(t("coach.profile.bankUpdated"));
     setOpenEditBank(false);
     onRefresh();
   };
@@ -3459,88 +3479,88 @@ function CoachProfile({ profile, onRefresh, onLogout, onAvatarChange }: { profil
           <div className="flex-1 min-w-0">
             <div className="font-display font-bold text-xl text-ink leading-tight">{profile?.full_name ?? "—"}</div>
             {profile?.nick_name && <div className="text-sm text-ink-mute">({profile.nick_name})</div>}
-            <div className="text-sm text-ocean-700 font-semibold mt-0.5">{profile?.specialization ?? "Coach"}</div>
+            <div className="text-sm text-ocean-700 font-semibold mt-0.5">{profile?.specialization ?? t("coach.home.defaultCoachName")}</div>
           </div>
         </div>
         {uploading && (
-          <div className="mt-2 text-xs text-ink-mute font-semibold animate-pulse">Mengupload foto…</div>
+          <div className="mt-2 text-xs text-ink-mute font-semibold animate-pulse">{t("coach.profile.uploadingPhoto")}</div>
         )}
       </Card>
 
       {/* ── Inline Profile form ── */}
       <Card>
-        <SectionTitle>Profil Saya</SectionTitle>
+        <SectionTitle>{t("coach.profile.myProfileTitle")}</SectionTitle>
         <div className="mt-4 space-y-4">
-          <div className="text-xs font-bold text-ink-mute uppercase tracking-widest">Data Pribadi</div>
+          <div className="text-xs font-bold text-ink-mute uppercase tracking-widest">{t("coach.profile.personalDataLabel")}</div>
           <div className="grid sm:grid-cols-2 gap-3">
-            <Field label="Nama panggilan"><Input value={profileForm.nick_name} onChange={e => setProfileForm(f => ({ ...f, nick_name: e.target.value }))} placeholder="Mis. Kak Reza" /></Field>
-            <Field label="Jenis kelamin">
+            <Field label={t("coach.profile.fieldNickname")}><Input value={profileForm.nick_name} onChange={e => setProfileForm(f => ({ ...f, nick_name: e.target.value }))} placeholder={t("coach.profile.nicknamePlaceholder")} /></Field>
+            <Field label={t("coach.profile.fieldGender")}>
               <Select value={profileForm.gender} onChange={e => setProfileForm(f => ({ ...f, gender: e.target.value }))}>
-                <option value="">Pilih…</option>
-                <option value="male">Laki-laki</option>
-                <option value="female">Perempuan</option>
+                <option value="">{t("coach.profile.selectEllipsis")}</option>
+                <option value="male">{t("coach.kelas.memberGenderMale")}</option>
+                <option value="female">{t("coach.kelas.memberGenderFemale")}</option>
               </Select>
             </Field>
           </div>
           <div className="grid sm:grid-cols-2 gap-3">
-            <Field label="Tanggal lahir"><DatePicker value={profileForm.birth_date} onChange={v => setProfileForm(f => ({ ...f, birth_date: v }))} /></Field>
-            <Field label="Nomor WhatsApp"><Input type="tel" value={profileForm.phone} onChange={e => setProfileForm(f => ({ ...f, phone: e.target.value }))} placeholder="08xxxxxxxxxx" /></Field>
+            <Field label={t("coach.profile.fieldBirthDate")}><DatePicker value={profileForm.birth_date} onChange={v => setProfileForm(f => ({ ...f, birth_date: v }))} /></Field>
+            <Field label={t("coach.profile.fieldWaNumber")}><Input type="tel" value={profileForm.phone} onChange={e => setProfileForm(f => ({ ...f, phone: e.target.value }))} placeholder="08xxxxxxxxxx" /></Field>
           </div>
           <div className="grid sm:grid-cols-2 gap-3">
             <div>
-              <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-1">Email</div>
+              <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-1">{t("coach.profile.emailLabel")}</div>
               <div className="text-sm font-semibold text-ink">{profile?.email ?? "—"}</div>
             </div>
             <div>
-              <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-1">ID Number</div>
+              <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-1">{t("coach.profile.idNumberLabel")}</div>
               <div className="text-sm font-semibold text-ink font-mono">{profile?.user_no ?? "—"}</div>
             </div>
           </div>
-          <Field label="Alamat"><Textarea rows={2} value={profileForm.address} onChange={e => setProfileForm(f => ({ ...f, address: e.target.value }))} placeholder="Mis. Jl. Anggrek No. 12, Bekasi" /></Field>
+          <Field label={t("coach.profile.fieldAddress")}><Textarea rows={2} value={profileForm.address} onChange={e => setProfileForm(f => ({ ...f, address: e.target.value }))} placeholder={t("coach.profile.addressPlaceholder")} /></Field>
 
           <div className="pt-3 border-t border-line">
-            <div className="text-xs font-bold text-ink-mute uppercase tracking-widest mb-3">Pendidikan</div>
+            <div className="text-xs font-bold text-ink-mute uppercase tracking-widest mb-3">{t("coach.profile.educationSectionTitle")}</div>
             <div className="grid sm:grid-cols-2 gap-3">
-              <Field label="Pendidikan terakhir">
+              <Field label={t("coach.profile.fieldEducationLevel")}>
                 <Select value={profileForm.education_level} onChange={e => setProfileForm(f => ({ ...f, education_level: e.target.value }))}>
-                  <option value="">Pilih…</option>
+                  <option value="">{t("coach.profile.selectEllipsis")}</option>
                   {["TK","SD","SMP","SMA","D1","D2","D3","S1/D4","S2","S3"].map(l => <option key={l} value={l}>{l}</option>)}
                 </Select>
               </Field>
-              <Field label="Nama instansi"><Input value={profileForm.education_institution} onChange={e => setProfileForm(f => ({ ...f, education_institution: e.target.value }))} placeholder="Mis. Universitas Indonesia" /></Field>
+              <Field label={t("coach.profile.fieldInstitutionName")}><Input value={profileForm.education_institution} onChange={e => setProfileForm(f => ({ ...f, education_institution: e.target.value }))} placeholder={t("coach.profile.institutionPlaceholder")} /></Field>
             </div>
           </div>
 
           <div className="pt-3 border-t border-line">
-            <div className="text-xs font-bold text-ink-mute uppercase tracking-widest mb-3">Profil Pelatih</div>
+            <div className="text-xs font-bold text-ink-mute uppercase tracking-widest mb-3">{t("coach.profile.coachProfileSectionTitle")}</div>
             <div className="space-y-3">
-              <Field label="Spesialisasi"><Input value={profileForm.specialization} onChange={e => setProfileForm(f => ({ ...f, specialization: e.target.value }))} placeholder="Mis. Renang gaya bebas, anak-anak" /></Field>
-              <Field label="Bio / Deskripsi"><Textarea rows={3} value={profileForm.bio} onChange={e => setProfileForm(f => ({ ...f, bio: e.target.value }))} placeholder="Mis. Berpengalaman 5 tahun melatih renang anak usia dini dengan pendekatan bermain." /></Field>
+              <Field label={t("coach.profile.fieldSpecialization")}><Input value={profileForm.specialization} onChange={e => setProfileForm(f => ({ ...f, specialization: e.target.value }))} placeholder={t("coach.profile.specializationPlaceholder")} /></Field>
+              <Field label={t("coach.profile.fieldBio")}><Textarea rows={3} value={profileForm.bio} onChange={e => setProfileForm(f => ({ ...f, bio: e.target.value }))} placeholder={t("coach.profile.bioPlaceholder")} /></Field>
             </div>
           </div>
 
-          <Btn variant="primary" size="md" onClick={saveProfileInfo} disabled={savingProfile}>{savingProfile ? "Menyimpan…" : "Simpan Profil"}</Btn>
+          <Btn variant="primary" size="md" onClick={saveProfileInfo} disabled={savingProfile}>{savingProfile ? t("coach.absen.savingBtn") : t("coach.profile.saveProfileBtn")}</Btn>
         </div>
       </Card>
 
       {/* ── Bank info ── */}
       <Card>
         <div className="flex items-center justify-between mb-3">
-          <SectionTitle>Informasi Rekening</SectionTitle>
-          <Btn variant="ghost" size="sm" icon="edit" onClick={openBankEdit}>Edit</Btn>
+          <SectionTitle>{t("coach.profile.bankInfoTitle")}</SectionTitle>
+          <Btn variant="ghost" size="sm" icon="edit" onClick={openBankEdit}>{t("common.actions.edit")}</Btn>
         </div>
         {profile?.bank_name ? (
           <div className="text-sm font-semibold text-ink">{profile.bank_name} · <span className="font-mono">{profile.bank_account}</span> a/n {profile.bank_holder}</div>
         ) : (
-          <div className="text-sm text-warn-600 font-semibold">Belum diisi — diperlukan untuk generate invoice</div>
+          <div className="text-sm text-warn-600 font-semibold">{t("coach.profile.bankNotFilled")}</div>
         )}
       </Card>
 
       {/* ── Certifications ── */}
       <Card padded={false}>
         <div className="p-5 border-b border-line flex items-center justify-between">
-          <SectionTitle sub="Perlu approve admin saat ditambahkan">Sertifikasi</SectionTitle>
-          <Btn variant="soft" size="sm" icon="plus" onClick={() => { setCertForm({ title: "", issuer: "", issued_at: "", expires_at: "", no_expiry: false }); setCertFile(null); setEditCertTarget(null); setOpenAddCert(true); }}>Tambah</Btn>
+          <SectionTitle sub={t("coach.profile.certsSub")}>{t("coach.profile.certsTitle")}</SectionTitle>
+          <Btn variant="soft" size="sm" icon="plus" onClick={() => { setCertForm({ title: "", issuer: "", issued_at: "", expires_at: "", no_expiry: false }); setCertFile(null); setEditCertTarget(null); setOpenAddCert(true); }}>{t("coach.invoice.addBtn")}</Btn>
         </div>
         <div className="divide-y divide-line">
           {(profile?.certifications ?? []).map((s) => (
@@ -3549,12 +3569,12 @@ function CoachProfile({ profile, onRefresh, onLogout, onAvatarChange }: { profil
                 <span className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${s.status === "approved" ? "bg-ok-50 text-ok-600" : s.status === "rejected" ? "bg-danger-50 text-danger-600" : "bg-warn-50 text-warn-600"}`}><Icon name="shield" className="w-5 h-5" /></span>
                 <div className="flex-1 min-w-0">
                   <div className="font-semibold text-ink text-sm">{s.title}</div>
-                  {s.valid_from && <div className="text-xs text-ink-mute">{fmtMonthYear(s.valid_from)}{s.valid_until ? ` – ${fmtMonthYear(s.valid_until)}` : " · Tidak kedaluwarsa"}</div>}
+                  {s.valid_from && <div className="text-xs text-ink-mute">{fmtMonthYear(s.valid_from)}{s.valid_until ? ` – ${fmtMonthYear(s.valid_until)}` : ` · ${t("coach.profile.noExpiryLabel")}`}</div>}
                 </div>
-                <Status kind={s.status}>{s.status === "approved" ? "Disetujui" : s.status === "rejected" ? "Ditolak" : "Menunggu"}</Status>
+                <Status kind={s.status}>{s.status === "approved" ? t("coach.profile.certStatusApproved") : s.status === "rejected" ? t("coach.profile.certStatusRejected") : t("coach.profile.certStatusPending")}</Status>
                 <div className="flex items-center gap-1">
-                  <button onClick={() => openCertEdit(s)} className="p-1.5 rounded hover:bg-paper-tint text-ink-mute hover:text-ink" title="Edit"><Icon name="edit" className="w-4 h-4" /></button>
-                  <button onClick={() => deleteCert(s)} className="p-1.5 rounded hover:bg-danger-50 text-ink-mute hover:text-danger-600" title="Hapus"><Icon name="trash" className="w-4 h-4" /></button>
+                  <button onClick={() => openCertEdit(s)} className="p-1.5 rounded hover:bg-paper-tint text-ink-mute hover:text-ink" title={t("common.actions.edit")}><Icon name="edit" className="w-4 h-4" /></button>
+                  <button onClick={() => deleteCert(s)} className="p-1.5 rounded hover:bg-danger-50 text-ink-mute hover:text-danger-600" title={t("coach.profile.deleteTitleAttr")}><Icon name="trash" className="w-4 h-4" /></button>
                 </div>
               </div>
               {s.status === "rejected" && (
@@ -3563,63 +3583,63 @@ function CoachProfile({ profile, onRefresh, onLogout, onAvatarChange }: { profil
                     <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-danger-50 border border-danger-100">
                       <Icon name="warning" className="w-4 h-4 text-danger-500 shrink-0 mt-0.5" />
                       <div>
-                        <div className="text-xs font-bold text-danger-600 uppercase tracking-wide mb-0.5">Alasan Ditolak</div>
+                        <div className="text-xs font-bold text-danger-600 uppercase tracking-wide mb-0.5">{t("coach.profile.rejectedReasonLabel")}</div>
                         <div className="text-sm text-danger-700">{s.reject_reason}</div>
                       </div>
                     </div>
                   )}
-                  <Btn variant="soft" size="sm" icon="refresh" onClick={() => resubmitCert(s.id)}>Ajukan Lagi</Btn>
+                  <Btn variant="soft" size="sm" icon="refresh" onClick={() => resubmitCert(s.id)}>{t("coach.profile.resubmitBtn")}</Btn>
                 </div>
               )}
               {s.photo_url && <CertPhotoLink storageKey={s.photo_url} title={s.title} />}
             </div>
           ))}
-          {(profile?.certifications?.length ?? 0) === 0 && <div className="px-5 py-4 text-sm text-ink-mute">Belum ada sertifikasi.</div>}
+          {(profile?.certifications?.length ?? 0) === 0 && <div className="px-5 py-4 text-sm text-ink-mute">{t("coach.profile.noCertsYet")}</div>}
         </div>
       </Card>
 
       {/* ── Change password ── */}
       <Card>
-        <SectionTitle>Ganti Password</SectionTitle>
+        <SectionTitle>{t("coach.profile.changePasswordTitle")}</SectionTitle>
         <div className="mt-4 space-y-3">
-          <Field label="Password baru"><Input type="password" placeholder="••••••••" value={newPwd} onChange={e => setNewPwd(e.target.value)} /></Field>
-          <Field label="Konfirmasi"><Input type="password" placeholder="••••••••" value={confirmPwd} onChange={e => setConfirmPwd(e.target.value)} /></Field>
-          <Btn variant="primary" size="md" onClick={changePassword} disabled={savingPwd}>{savingPwd ? "Menyimpan…" : "Simpan password baru"}</Btn>
+          <Field label={t("coach.profile.fieldNewPassword")}><Input type="password" placeholder="••••••••" value={newPwd} onChange={e => setNewPwd(e.target.value)} /></Field>
+          <Field label={t("coach.profile.fieldConfirmPassword")}><Input type="password" placeholder="••••••••" value={confirmPwd} onChange={e => setConfirmPwd(e.target.value)} /></Field>
+          <Btn variant="primary" size="md" onClick={changePassword} disabled={savingPwd}>{savingPwd ? t("coach.absen.savingBtn") : t("coach.profile.savePasswordBtn")}</Btn>
         </div>
       </Card>
 
       {/* ── Cert modal ── */}
-      <Modal open={openAddCert} onClose={() => { setOpenAddCert(false); setEditCertTarget(null); }} title={editCertTarget ? "Edit Sertifikasi" : "Tambah Sertifikasi"} size="sm"
-        footer={<><Btn variant="ghost" onClick={() => { setOpenAddCert(false); setEditCertTarget(null); }}>Batal</Btn><Btn variant="primary" onClick={editCertTarget ? saveCertEdit : saveCert} disabled={savingCert}>{savingCert ? "Menyimpan…" : "Submit"}</Btn></>}>
+      <Modal open={openAddCert} onClose={() => { setOpenAddCert(false); setEditCertTarget(null); }} title={editCertTarget ? t("coach.profile.editCertModalTitle") : t("coach.profile.addCertModalTitle")} size="sm"
+        footer={<><Btn variant="ghost" onClick={() => { setOpenAddCert(false); setEditCertTarget(null); }}>{t("common.actions.cancel")}</Btn><Btn variant="primary" onClick={editCertTarget ? saveCertEdit : saveCert} disabled={savingCert}>{savingCert ? t("coach.absen.savingBtn") : t("coach.clockIn.submitBtn")}</Btn></>}>
         <div className="space-y-4">
           {editCertTarget?.status === "approved" && (
             <div className="flex items-start gap-2 p-3 rounded-xl bg-warn-50 border border-warn-200 text-xs text-warn-800">
               <Icon name="info" className="w-4 h-4 shrink-0 mt-0.5 text-warn-600" />
-              Mengedit sertifikasi yang sudah disetujui akan mengembalikan statusnya ke <strong>Menunggu Persetujuan</strong> untuk direview ulang oleh admin.
+              {t("coach.profile.approvedCertEditWarningPrefix")} <strong>{t("coach.profile.approvedCertEditWarningMiddle")}</strong> {t("coach.profile.approvedCertEditWarningSuffix")}
             </div>
           )}
-          <Field label="Nama sertifikasi"><Input value={certForm.title} onChange={e => setCertForm(f => ({ ...f, title: e.target.value }))} placeholder="Mis. Lifeguard ARC" /></Field>
-          <Field label="Penerbit"><Input value={certForm.issuer} onChange={e => setCertForm(f => ({ ...f, issuer: e.target.value }))} placeholder="Mis. PMI / FINA" /></Field>
-          <Field label="Berlaku dari"><MonthYearPicker value={certForm.issued_at} onChange={v => setCertForm(f => ({ ...f, issued_at: v }))} placeholder="Pilih bulan & tahun" /></Field>
-          <Field label="Berlaku sampai"><MonthYearPicker value={certForm.expires_at} onChange={v => setCertForm(f => ({ ...f, expires_at: v }))} placeholder="Pilih bulan & tahun" disabled={certForm.no_expiry} /></Field>
+          <Field label={t("coach.profile.fieldCertName")}><Input value={certForm.title} onChange={e => setCertForm(f => ({ ...f, title: e.target.value }))} placeholder={t("coach.profile.certNamePlaceholder")} /></Field>
+          <Field label={t("coach.profile.fieldIssuer")}><Input value={certForm.issuer} onChange={e => setCertForm(f => ({ ...f, issuer: e.target.value }))} placeholder={t("coach.profile.issuerPlaceholder")} /></Field>
+          <Field label={t("coach.profile.fieldValidFrom")}><MonthYearPicker value={certForm.issued_at} onChange={v => setCertForm(f => ({ ...f, issued_at: v }))} placeholder={t("coach.profile.monthYearPlaceholder")} /></Field>
+          <Field label={t("coach.profile.fieldValidUntil")}><MonthYearPicker value={certForm.expires_at} onChange={v => setCertForm(f => ({ ...f, expires_at: v }))} placeholder={t("coach.profile.monthYearPlaceholder")} disabled={certForm.no_expiry} /></Field>
           <label className="flex items-center gap-2 text-sm text-ink-soft cursor-pointer">
             <input type="checkbox" checked={certForm.no_expiry} onChange={e => setCertForm(f => ({ ...f, no_expiry: e.target.checked, expires_at: "" }))} className="rounded" />
-            Tidak ada kedaluwarsa
+            {t("coach.profile.noExpiryCheckbox")}
           </label>
           <div>
-            <div className="text-sm font-semibold text-ink mb-1.5">Foto sertifikat <span className="text-ink-faint font-normal text-xs">(opsional, bantu proses verifikasi)</span></div>
+            <div className="text-sm font-semibold text-ink mb-1.5">{t("coach.profile.certPhotoLabel")} <span className="text-ink-faint font-normal text-xs">{t("coach.profile.certPhotoOptionalHint")}</span></div>
             {editCertTargetPhotoUrl && !certFile && (
-              <img src={editCertTargetPhotoUrl} alt="Foto saat ini" className="w-full max-h-36 object-cover rounded-xl border border-line mb-2" />
+              <img src={editCertTargetPhotoUrl} alt={t("coach.profile.currentPhotoAlt")} className="w-full max-h-36 object-cover rounded-xl border border-line mb-2" />
             )}
             {certFile && (
               // eslint-disable-next-line @next/next/no-img-element -- blob URL from file picker
-              <img src={URL.createObjectURL(certFile)} alt="Preview" className="w-full max-h-36 object-cover rounded-xl border border-line mb-2" />
+              <img src={URL.createObjectURL(certFile)} alt={t("coach.profile.previewAlt")} className="w-full max-h-36 object-cover rounded-xl border border-line mb-2" />
             )}
             <div className="flex items-center gap-3">
               <button type="button" onClick={() => certFileInputRef.current?.click()}
                 className="flex items-center gap-2 px-3 py-2 rounded-lg border border-line bg-paper-tint hover:bg-white hover:border-ocean-400 transition-colors text-sm font-semibold text-ink-soft hover:text-ink">
                 <Icon name="camera" className="w-4 h-4" />
-                {certFile ? "Ganti foto" : editCertTarget?.photo_url ? "Ganti foto" : "Pilih foto"}
+                {certFile ? t("coach.profile.changePhotoBtn") : editCertTarget?.photo_url ? t("coach.profile.changePhotoBtn") : t("coach.profile.choosePhotoBtn")}
               </button>
               {certFile && <span className="text-sm text-ink-mute truncate max-w-[160px]">{certFile.name}</span>}
               <input ref={certFileInputRef} type="file" accept="image/*" className="sr-only" onChange={e => setCertFile(e.target.files?.[0] ?? null)} />
@@ -3629,12 +3649,12 @@ function CoachProfile({ profile, onRefresh, onLogout, onAvatarChange }: { profil
       </Modal>
 
       {/* ── Bank modal ── */}
-      <Modal open={openEditBank} onClose={() => setOpenEditBank(false)} title="Edit Informasi Rekening" size="sm"
-        footer={<><Btn variant="ghost" onClick={() => setOpenEditBank(false)}>Batal</Btn><Btn variant="primary" onClick={saveBank} disabled={savingBank}>{savingBank ? "Menyimpan…" : "Simpan"}</Btn></>}>
+      <Modal open={openEditBank} onClose={() => setOpenEditBank(false)} title={t("coach.profile.editBankModalTitle")} size="sm"
+        footer={<><Btn variant="ghost" onClick={() => setOpenEditBank(false)}>{t("common.actions.cancel")}</Btn><Btn variant="primary" onClick={saveBank} disabled={savingBank}>{savingBank ? t("coach.absen.savingBtn") : t("coach.kelas.saveBtn")}</Btn></>}>
         <div className="space-y-4">
-          <Field label="Nama bank" required><Input value={bankForm.bank_name} onChange={e => setBankForm(f => ({ ...f, bank_name: e.target.value }))} placeholder="Mis. BCA, BRI, Mandiri" /></Field>
-          <Field label="Nomor rekening" required><Input value={bankForm.bank_account} onChange={e => setBankForm(f => ({ ...f, bank_account: e.target.value }))} placeholder="Mis. 1234567890" /></Field>
-          <Field label="Atas nama" required><Input value={bankForm.bank_holder} onChange={e => setBankForm(f => ({ ...f, bank_holder: e.target.value }))} placeholder="Mis. Reza Fahlevi" /></Field>
+          <Field label={t("coach.profile.fieldBankName")} required><Input value={bankForm.bank_name} onChange={e => setBankForm(f => ({ ...f, bank_name: e.target.value }))} placeholder={t("coach.profile.bankNamePlaceholder")} /></Field>
+          <Field label={t("coach.profile.fieldAccountNumber")} required><Input value={bankForm.bank_account} onChange={e => setBankForm(f => ({ ...f, bank_account: e.target.value }))} placeholder={t("coach.profile.accountNumberPlaceholder")} /></Field>
+          <Field label={t("coach.profile.fieldAccountHolder")} required><Input value={bankForm.bank_holder} onChange={e => setBankForm(f => ({ ...f, bank_holder: e.target.value }))} placeholder={t("coach.profile.accountHolderPlaceholder")} /></Field>
         </div>
       </Modal>
 
@@ -3643,7 +3663,7 @@ function CoachProfile({ profile, onRefresh, onLogout, onAvatarChange }: { profil
           <span className="w-9 h-9 rounded-xl bg-danger-50 text-danger-500 flex items-center justify-center group-hover:bg-danger-100 transition-colors">
             <Icon name="logout" className="w-4 h-4" />
           </span>
-          <span className="font-semibold text-danger-600 group-hover:text-danger-700">Keluar dari akun</span>
+          <span className="font-semibold text-danger-600 group-hover:text-danger-700">{t("coach.profile.logoutBtn")}</span>
         </button>
       </Card>
 
@@ -3677,6 +3697,8 @@ interface PayslipDeductionRow {
 
 function CoachPayslip({ coachId, coachName }: { coachId: string; coachName: string }) {
   const supabase = createClient();
+  const { t, locale } = useLocale();
+  const localeTag = locale === "id" ? "id-ID" : "en-US";
   const [payslips, setPayslips] = useState<CoachPayslipItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -3714,15 +3736,15 @@ function CoachPayslip({ coachId, coachName }: { coachId: string; coachName: stri
 
   return (
     <div className="space-y-4">
-      <SectionTitle sub="Slip gaji yang telah diterbitkan oleh owner.">Slip Gaji</SectionTitle>
+      <SectionTitle sub={t("coach.payslip.sub")}>{t("coach.payslip.title")}</SectionTitle>
 
       {loading ? (
-        <Card className="!p-10 text-center text-ink-mute">Memuat data…</Card>
+        <Card className="!p-10 text-center text-ink-mute">{t("coach.payslip.loadingData")}</Card>
       ) : payslips.length === 0 ? (
         <Card className="!p-10 text-center">
           <Icon name="invoice" className="w-10 h-10 text-ink-faint mx-auto mb-3" />
-          <div className="font-display font-bold text-ink">Belum ada slip gaji</div>
-          <p className="text-sm text-ink-mute mt-1">Slip gaji akan muncul di sini setelah owner menerbitkannya.</p>
+          <div className="font-display font-bold text-ink">{t("coach.payslip.noPayslipsYet")}</div>
+          <p className="text-sm text-ink-mute mt-1">{t("coach.payslip.payslipsAppearHint")}</p>
         </Card>
       ) : (
         <div className="space-y-3">
@@ -3734,11 +3756,11 @@ function CoachPayslip({ coachId, coachName }: { coachId: string; coachName: stri
                 </span>
                 <div className="flex-1 min-w-0">
                   <div className="font-semibold text-ink">{p.period_label}</div>
-                  <div className="text-xs text-ink-mute mt-0.5">{p.branch?.name ?? "—"} · {p.published_at ? new Date(p.published_at).toLocaleDateString("id-ID", { dateStyle: "long" }) : "—"}</div>
+                  <div className="text-xs text-ink-mute mt-0.5">{p.branch?.name ?? "—"} · {p.published_at ? new Date(p.published_at).toLocaleDateString(localeTag, { dateStyle: "long" }) : "—"}</div>
                 </div>
                 <div className="text-right shrink-0">
                   <div className="font-mono font-bold text-ok-700">{fmtIDR(p.net_amount)}</div>
-                  <div className="text-xs text-ink-mute">Gaji Bersih</div>
+                  <div className="text-xs text-ink-mute">{t("coach.payslip.netSalaryLabel")}</div>
                 </div>
                 <Icon name={expanded === p.id ? "chevronD" : "chevron"} className="w-4 h-4 text-ink-faint shrink-0 rotate-0" />
               </button>
@@ -3747,11 +3769,11 @@ function CoachPayslip({ coachId, coachName }: { coachId: string; coachName: stri
                 <div className="border-t border-line px-4 py-4 space-y-3 bg-paper-tint">
                   <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
                     <div className="col-span-2">
-                      <div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">Gaji Kotor</div>
+                      <div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">{t("coach.payslip.grossSalaryLabel")}</div>
                       <div className="font-mono font-semibold">{fmtIDR(p.gross_amount)}</div>
                     </div>
                     {loadingDeductions ? (
-                      <div className="col-span-2 text-xs text-ink-mute">Memuat rincian potongan…</div>
+                      <div className="col-span-2 text-xs text-ink-mute">{t("coach.payslip.loadingDeductions")}</div>
                     ) : deductions.length > 0 ? (
                       deductions.map(d => (
                         <div key={d.id} className="col-span-2 flex items-center justify-between">
@@ -3761,12 +3783,12 @@ function CoachPayslip({ coachId, coachName }: { coachId: string; coachName: stri
                       ))
                     ) : (
                       <div className="col-span-2 flex items-center justify-between">
-                        <span className="text-xs text-ink-faint uppercase tracking-widest font-bold">Potongan</span>
+                        <span className="text-xs text-ink-faint uppercase tracking-widest font-bold">{t("coach.payslip.deductionsLabel")}</span>
                         <span className="font-mono font-semibold text-danger-700 text-sm">- {fmtIDR(p.deductions)}</span>
                       </div>
                     )}
                     <div className="col-span-2 bg-ok-50 border border-ok-200 rounded-xl px-3 py-2 flex items-center justify-between">
-                      <span className="text-sm font-semibold text-ok-900">Gaji Bersih</span>
+                      <span className="text-sm font-semibold text-ok-900">{t("coach.payslip.netSalaryLabel")}</span>
                       <span className="font-mono font-bold text-ok-700 text-base">{fmtIDR(p.net_amount)}</span>
                     </div>
                   </div>
@@ -3774,7 +3796,7 @@ function CoachPayslip({ coachId, coachName }: { coachId: string; coachName: stri
                     <div className="text-sm text-ink-mute bg-white rounded-xl px-3 py-2 border border-line">{p.notes}</div>
                   )}
                   <Btn variant="outline" icon="print" size="sm" className="w-full" onClick={() => printSlip(p)}>
-                    Cetak Slip Gaji
+                    {t("coach.payslip.printPayslipBtn")}
                   </Btn>
                 </div>
               )}
@@ -3787,10 +3809,11 @@ function CoachPayslip({ coachId, coachName }: { coachId: string; coachName: stri
 }
 
 function LockedNotice({ feature, reason }: { feature: string; reason: string }) {
+  const { t } = useLocale();
   return (
     <Card className="!p-8 text-center border-dashed border-2">
       <Icon name="lock" className="w-8 h-8 text-ink-faint mx-auto mb-3" />
-      <div className="font-display font-bold text-ink">{feature} tidak tersedia</div>
+      <div className="font-display font-bold text-ink">{feature} {t("coach.lockedNotice.unavailableSuffix")}</div>
       <p className="text-sm text-ink-mute mt-1">{reason}</p>
     </Card>
   );
@@ -3800,6 +3823,8 @@ function LockedNotice({ feature, reason }: { feature: string; reason: string }) 
 
 export default function CoachPage() {
   const router = useRouter();
+  const { t, locale } = useLocale();
+  const localeTag = locale === "id" ? "id-ID" : "en-US";
   const supabase = useMemo(() => createClient(), []);
   const [active, setActive] = useState<TabId>("home");
   const [overlay, setOverlay] = useState<string | null>(null);
@@ -3896,7 +3921,7 @@ export default function CoachPage() {
       setUser(u);
       const p = await loadProfile(u.id);
       if (!p) {
-        setInitError("Data akun tidak ditemukan di database. Kemungkinan data telah direset. Silakan hubungi admin untuk membuat ulang akun Anda.");
+        setInitError(t("coach.page.accountNotFoundBody"));
         return;
       }
       loadClasses(p.id);
@@ -3941,15 +3966,16 @@ export default function CoachPage() {
     ? true // keep unlocked while loading — will lock once profile loads if incomplete
     : !!(profile.phone && profile.gender && profile.birth_date && profile.bank_name && profile.bank_account && profile.bank_holder);
 
-  const todayName = new Date().toLocaleDateString("id-ID", { weekday: "long" });
-  const title = active === "home" ? (profile?.full_name ?? "Coach") : {
-    absen: "Absensi", kelas: "Kelas", invoice: "Invoice", rapor: "Rapor", payslip: "Slip Gaji", profile: "Profile"
+  const todayName = new Date().toLocaleDateString(localeTag, { weekday: "long" });
+  const title = active === "home" ? (profile?.full_name ?? t("coach.home.defaultCoachName")) : {
+    absen: t("coach.tabs.absenLabel"), kelas: t("coach.tabs.kelasLabel"), invoice: t("coach.tabs.invoiceLabel"),
+    rapor: t("coach.tabs.raporLabel"), payslip: t("coach.tabs.payslipLabel"), profile: t("coach.tabs.profileLabel")
   }[active] ?? "";
   const sub = active === "home" ? `${todayName} · ${fmtDateLong(new Date())}` : {
-    absen: "Clock-in & scan QR", kelas: "Kelas yang Anda handle",
-    invoice: "Generate invoice bulanan", rapor: "Isi rapor member",
-    payslip: "Slip gaji yang diterbitkan owner",
-    profile: "Data pribadi & sertifikasi"
+    absen: t("coach.page.absenSub"), kelas: t("coach.page.kelasSub"),
+    invoice: t("coach.page.invoiceSub"), rapor: t("coach.page.raporSub"),
+    payslip: t("coach.page.payslipSub"),
+    profile: t("coach.page.profileSub")
   }[active] ?? "";
 
   // Suspend countdown hook — ticks every second
@@ -3959,17 +3985,17 @@ export default function CoachPage() {
     if (!isSuspended || !profile?.suspend_until) { setSuspendCountdown(""); return; }
     const tick = () => {
       const diff = new Date(profile.suspend_until!).getTime() - Date.now();
-      if (diff <= 0) { setSuspendCountdown("Segera aktif kembali…"); return; }
+      if (diff <= 0) { setSuspendCountdown(t("coach.page.activeAgainSoon")); return; }
       const days = Math.floor(diff / 86400000);
       const hrs  = Math.floor((diff % 86400000) / 3600000);
       const mins = Math.floor((diff % 3600000) / 60000);
       const secs = Math.floor((diff % 60000) / 1000);
-      setSuspendCountdown(`${days}h ${hrs}j ${mins}m ${secs}d`);
+      setSuspendCountdown(t("coach.page.countdownFormat", { days, hrs, mins, secs }));
     };
     tick();
-    const t = setInterval(tick, 1000);
-    return () => clearInterval(t);
-  }, [isSuspended, profile?.suspend_until]);
+    const intervalId = setInterval(tick, 1000);
+    return () => clearInterval(intervalId);
+  }, [isSuspended, profile?.suspend_until, t]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   // Suspend/incomplete banners shown at the top of each tab's content
@@ -3978,25 +4004,25 @@ export default function CoachPage() {
       <div className="flex items-start gap-3">
         <span className="w-10 h-10 rounded-xl bg-danger-100 text-danger-600 flex items-center justify-center shrink-0 animate-pulse"><Icon name="warning" className="w-5 h-5" /></span>
         <div className="flex-1">
-          <div className="font-display font-bold text-danger-700 text-base">Akun Anda sedang disuspend</div>
-          {profile?.suspend_reason && <p className="text-sm text-danger-600 mt-1">Alasan: {profile.suspend_reason}</p>}
+          <div className="font-display font-bold text-danger-700 text-base">{t("coach.page.accountSuspendedTitle")}</div>
+          {profile?.suspend_reason && <p className="text-sm text-danger-600 mt-1">{t("coach.page.reasonLabel")} {profile.suspend_reason}</p>}
           <div className="mt-2 flex items-center gap-2">
-            <span className="text-xs text-danger-500 font-semibold">Aktif kembali dalam:</span>
+            <span className="text-xs text-danger-500 font-semibold">{t("coach.page.activeAgainIn")}</span>
             <span className="bg-danger-100 text-danger-700 font-mono text-xs font-bold px-2 py-0.5 rounded-lg">{suspendCountdown}</span>
           </div>
-          <p className="text-xs text-danger-500 mt-1">Semua fitur tidak dapat diakses selama masa suspend. Hubungi admin cabang jika ada pertanyaan.</p>
+          <p className="text-xs text-danger-500 mt-1">{t("coach.page.suspendedFeaturesHint")}</p>
         </div>
       </div>
     </Card>
   ) : null;
 
   const missingFields = profile && !isProfileComplete ? [
-    !profile.phone && "No HP",
-    !profile.gender && "Jenis Kelamin",
-    !profile.birth_date && "Tanggal Lahir",
-    !profile.bank_name && "Nama Bank",
-    !profile.bank_account && "Nomor Rekening",
-    !profile.bank_holder && "Atas Nama Rekening",
+    !profile.phone && t("coach.page.missingPhone"),
+    !profile.gender && t("coach.page.missingGender"),
+    !profile.birth_date && t("coach.page.missingBirthDate"),
+    !profile.bank_name && t("coach.page.missingBankName"),
+    !profile.bank_account && t("coach.page.missingAccountNumber"),
+    !profile.bank_holder && t("coach.page.missingAccountHolder"),
   ].filter(Boolean) : [];
 
   const IncompleteBanner = (!isSuspended && profile && !isProfileComplete) ? (
@@ -4004,8 +4030,8 @@ export default function CoachPage() {
       <div className="flex items-start gap-3">
         <span className="w-10 h-10 rounded-xl bg-warn-100 text-warn-600 flex items-center justify-center shrink-0"><Icon name="warning" className="w-5 h-5" /></span>
         <div>
-          <div className="font-display font-bold text-warn-700">Profil belum lengkap</div>
-          <p className="text-sm text-warn-600 mt-1">Lengkapi data berikut di tab <strong>Profile</strong> untuk mengaktifkan Clock In, Invoice, dan Rapor.</p>
+          <div className="font-display font-bold text-warn-700">{t("coach.page.incompleteProfileTitle")}</div>
+          <p className="text-sm text-warn-600 mt-1">{t("coach.page.incompleteProfileHintPrefix")} <strong>{t("coach.page.incompleteProfileHintTab")}</strong> {t("coach.page.incompleteProfileHintSuffix")}</p>
           {missingFields.length > 0 && (
             <div className="flex flex-wrap gap-1 mt-2">
               {missingFields.map(f => (
@@ -4020,7 +4046,7 @@ export default function CoachPage() {
 
   // Lock active features when suspended or profile incomplete
   const locked = isSuspended || !isProfileComplete;
-  const lockReason = isSuspended ? "Akun Anda sedang disuspend." : "Lengkapi profil Anda terlebih dahulu.";
+  const lockReason = isSuspended ? t("coach.lockedNotice.accountSuspended") : t("coach.lockedNotice.completeProfileFirst");
 
   const clockinClassId = overlay?.startsWith("clockin:") ? overlay.slice(8) : null;
   const content = (overlay === "clockin" || overlay?.startsWith("clockin:"))
@@ -4031,10 +4057,10 @@ export default function CoachPage() {
     ? <LeaveHistory back={() => setOverlay(null)} coachId={coachId} />
     : {
         home:    <>{SuspendBanner}{IncompleteBanner}<CoachHome setOverlay={setOverlay} setActive={(tab) => setActive(tab as TabId)} coachId={coachId} branchId={branchId} profile={profile} classes={classes} holidayClassIds={holidayClassIds} clockedInIds={clockedInIds} setClockedInIds={setClockedInIds} ownSpreadsheets={ownSpreadsheets} /></>,
-        absen:   <>{SuspendBanner}{IncompleteBanner}{locked ? <LockedNotice feature="Absensi" reason={lockReason} /> : <CoachAbsensi setOverlay={setOverlay} coachId={coachId} branchId={branchId} classes={classes} holidayClassIds={holidayClassIds} clockedInIds={clockedInIds} />}</>,
+        absen:   <>{SuspendBanner}{IncompleteBanner}{locked ? <LockedNotice feature={t("coach.tabs.absenLabel")} reason={lockReason} /> : <CoachAbsensi setOverlay={setOverlay} coachId={coachId} branchId={branchId} classes={classes} holidayClassIds={holidayClassIds} clockedInIds={clockedInIds} />}</>,
         kelas:   <CoachKelas classes={classes} coachId={coachId} classSpreadsheets={classSpreadsheets} ownSpreadsheets={ownSpreadsheets} onRefreshClasses={refreshClasses} />,
-        invoice: <>{SuspendBanner}{IncompleteBanner}{locked ? <LockedNotice feature="Invoice" reason={lockReason} /> : <CoachInvoice coachId={coachId} branchId={branchId} profile={profile} />}</>,
-        rapor:   <>{SuspendBanner}{IncompleteBanner}{locked ? <LockedNotice feature="Rapor" reason={lockReason} /> : <CoachRapor coachId={coachId} branchId={branchId} coachName={profile?.full_name ?? ""} branchName={coachBranches.find(b => b.branch_id === branchId)?.name ?? ""} />}</>,
+        invoice: <>{SuspendBanner}{IncompleteBanner}{locked ? <LockedNotice feature={t("coach.tabs.invoiceLabel")} reason={lockReason} /> : <CoachInvoice coachId={coachId} branchId={branchId} profile={profile} />}</>,
+        rapor:   <>{SuspendBanner}{IncompleteBanner}{locked ? <LockedNotice feature={t("coach.tabs.raporLabel")} reason={lockReason} /> : <CoachRapor coachId={coachId} branchId={branchId} coachName={profile?.full_name ?? ""} branchName={coachBranches.find(b => b.branch_id === branchId)?.name ?? ""} />}</>,
         payslip: <CoachPayslip coachId={coachId} coachName={profile?.full_name ?? ""} />,
         profile: <CoachProfile profile={profile} onRefresh={() => user && loadProfile(user.id)} onLogout={logout} onAvatarChange={url => setProfile(prev => prev ? { ...prev, avatar_url: url } : prev)} />,
       }[active];
@@ -4046,11 +4072,11 @@ export default function CoachPage() {
           <Icon name="warning" className="w-7 h-7" />
         </div>
         <div>
-          <h2 className="font-display font-bold text-xl text-ink">Data Tidak Ditemukan</h2>
+          <h2 className="font-display font-bold text-xl text-ink">{t("coach.page.accountNotFoundTitle")}</h2>
           <p className="text-sm text-ink-mute mt-2 leading-relaxed">{initError}</p>
         </div>
         <Btn variant="primary" className="w-full" onClick={async () => { await supabase.auth.signOut(); window.location.href = "/login"; }}>
-          Kembali ke Login
+          {t("coach.page.backToLoginBtn")}
         </Btn>
       </div>
     </div>

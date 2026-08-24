@@ -11,6 +11,7 @@ import { fmtIDR } from "@/lib/utils";
 import { logActivity } from "@/lib/activityLog";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
+import { useLocale } from "@/components/providers/LocaleProvider";
 
 interface FinancialRow {
   id: string;
@@ -45,6 +46,7 @@ export default function AdminFinancial({ branchId, userId, userName }: { branchI
   const supabase = createClient();
   const toast = useToast();
   const confirm = useConfirm();
+  const { t } = useLocale();
   const [tab, setTab] = useState<FinTab>("income");
 
   const [bills, setBills] = useState<FinancialRow[]>([]);
@@ -151,9 +153,9 @@ export default function AdminFinancial({ branchId, userId, userName }: { branchI
   const thisMonthTotal = thisMonthPaid.reduce((a, b) => a + (b.total ?? 0), 0) + thisMonthManual.reduce((a, t) => a + t.amount, 0);
   const totalExpenseManual = manualExpense.reduce((a, t) => a + t.amount, 0);
 
-  const typeLabel = (t: string) => ({ monthly: "Bulanan", session_pack: "Paket Sesi", custom: "Custom", package: "Paket" }[t] ?? t);
+  const typeLabel = (ty: string) => ({ monthly: t("admin.pembayaran.typeMonthly"), session_pack: t("admin.pembayaran.typeSessionPack"), custom: t("admin.pembayaran.typeCustom"), package: t("admin.financial.typePackage") }[ty] ?? ty);
   const statusKind = (s: string): "paid" | "unpaid" | "school_covered" | "pending" => ({ paid: "paid", unpaid: "unpaid", partial: "pending", school_covered: "school_covered", free: "paid" }[s] as "paid" | "unpaid" | "school_covered" | "pending" ?? "unpaid");
-  const statusLabel = (s: string) => ({ paid: "Lunas", unpaid: "Belum Bayar", partial: "Sebagian", school_covered: "Sekolah", free: "Gratis" }[s] ?? s);
+  const statusLabel = (s: string) => ({ paid: t("admin.pembayaran.statusPaid"), unpaid: t("admin.pembayaran.statusUnpaid"), partial: t("admin.pembayaran.statusPartial"), school_covered: t("admin.pembayaran.statusSchoolCovered"), free: t("admin.pembayaran.statusFree") }[s] ?? s);
 
   const SortBtn = ({ col, label }: { col: "paid_at" | "created_at" | "total"; label: string }) => (
     <button onClick={() => { if (sortBy === col) setSortDir(d => d === "asc" ? "desc" : "asc"); else { setSortBy(col); setSortDir("desc"); } }}
@@ -187,10 +189,10 @@ export default function AdminFinancial({ branchId, userId, userName }: { branchI
 
   const saveTxn = async () => {
     if (!showTxnModal) return;
-    if (!txnForm.description.trim()) return toast.error("Deskripsi wajib diisi");
+    if (!txnForm.description.trim()) return toast.error(t("admin.financial.descriptionRequired"));
     const amount = Number(txnForm.amount || 0);
-    if (!amount || amount <= 0) return toast.error("Masukkan nominal yang valid");
-    if (txnForm.isReimburse && !txnForm.proofUrl.trim()) return toast.error("Masukkan link bukti untuk pengeluaran reimburse");
+    if (!amount || amount <= 0) return toast.error(t("admin.financial.invalidAmount"));
+    if (txnForm.isReimburse && !txnForm.proofUrl.trim()) return toast.error(t("admin.financial.proofLinkRequired"));
     const category = txnForm.category === "Lainnya" ? (txnForm.categoryOther.trim() || "Lainnya") : txnForm.category;
 
     setSavingTxn(true);
@@ -204,12 +206,15 @@ export default function AdminFinancial({ branchId, userId, userName }: { branchI
       ? await supabase.from("manual_transactions").update({ ...payload, updated_at: new Date().toISOString() }).eq("id", showTxnModal.edit!.id)
       : await supabase.from("manual_transactions").insert({ ...payload, created_by: userId, created_by_role: "admin" });
     setSavingTxn(false);
-    if (error) return toast.error(isEdit ? "Gagal menyimpan" : "Gagal menambah", error.message);
-    toast.success(isEdit ? "Transaksi diperbarui" : "Transaksi ditambahkan");
+    if (error) return toast.error(isEdit ? t("admin.financial.txnSaveFailed") : t("admin.financial.txnAddFailed"), error.message);
+    toast.success(isEdit ? t("admin.financial.txnUpdatedToast") : t("admin.financial.txnAddedToast"));
     logActivity(supabase, {
       userId, userRole: "admin", userName, branchId, entityType: "manual_transactions",
       entityId: showTxnModal.edit?.id ?? "new", action: isEdit ? "update" : "create",
-      label: `${showTxnModal.kind === "income" ? "Income" : "Expense"} manual "${txnForm.description.trim()}" (${fmtIDR(amount)}) ${isEdit ? "diperbarui" : "ditambahkan"}`,
+      label: t(isEdit ? "admin.financial.activityTxnUpdated2" : "admin.financial.activityTxnAdded2", {
+        kind: t(showTxnModal.kind === "income" ? "admin.financial.kindIncome" : "admin.financial.kindExpense"),
+        description: txnForm.description.trim(), amount: fmtIDR(amount),
+      }),
       meta: { amount, category },
     });
     setShowTxnModal(null);
@@ -217,14 +222,17 @@ export default function AdminFinancial({ branchId, userId, userName }: { branchI
   };
 
   const deleteTxn = async (row: ManualTxnRow) => {
-    const ok = await confirm({ title: "Hapus transaksi manual?", body: `"${row.description}" (${fmtIDR(row.amount)}) akan dihapus permanen.`, confirmLabel: "Hapus", danger: true });
+    const ok = await confirm({ title: t("admin.financial.deleteConfirmTitle2"), body: t("admin.financial.deleteConfirmBody2", { description: row.description, amount: fmtIDR(row.amount) }), confirmLabel: t("common.actions.delete"), danger: true });
     if (!ok) return;
     const { error } = await supabase.from("manual_transactions").delete().eq("id", row.id);
-    if (error) return toast.error("Gagal menghapus", error.message);
-    toast.success("Transaksi dihapus");
+    if (error) return toast.error(t("admin.financial.deleteFailedGeneric"), error.message);
+    toast.success(t("admin.financial.txnDeletedToast"));
     logActivity(supabase, {
       userId, userRole: "admin", userName, branchId, entityType: "manual_transactions",
-      entityId: row.id, action: "delete", label: `${row.kind === "income" ? "Income" : "Expense"} manual "${row.description}" (${fmtIDR(row.amount)}) dihapus`,
+      entityId: row.id, action: "delete", label: t("admin.financial.activityTxnDeleted2", {
+        kind: t(row.kind === "income" ? "admin.financial.kindIncome" : "admin.financial.kindExpense"),
+        description: row.description, amount: fmtIDR(row.amount),
+      }),
     });
     setManualTxns(prev => prev.filter(t => t.id !== row.id));
   };
@@ -233,18 +241,18 @@ export default function AdminFinancial({ branchId, userId, userName }: { branchI
     <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h2 className="font-display font-bold text-2xl">Financial</h2>
-          <p className="text-ink-mute text-sm mt-0.5">Database keuangan &amp; riwayat pembayaran cabang.</p>
+          <h2 className="font-display font-bold text-2xl">{t("admin.financial.pageTitle")}</h2>
+          <p className="text-ink-mute text-sm mt-0.5">{t("admin.financial.pageSub")}</p>
         </div>
-        <Btn variant="ghost" icon="refresh" onClick={() => { load(); loadManualTxns(); }}>Refresh</Btn>
+        <Btn variant="ghost" icon="refresh" onClick={() => { load(); loadManualTxns(); }}>{t("admin.financial.refreshBtn")}</Btn>
       </div>
 
       {/* Sub-tabs */}
       <div className="flex gap-1 flex-wrap bg-paper-tint border border-line rounded-xl p-1 w-fit">
-        {([{ id: "income", label: "Income", icon: "wallet" }, { id: "expenses", label: "Expenses", icon: "invoice" }] as const).map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)}
-            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-semibold transition-colors ${tab === t.id ? "bg-white text-ocean-700 shadow-card" : "text-ink-soft hover:bg-white/60"}`}>
-            <Icon name={t.icon} className="w-4 h-4" /> {t.label}
+        {([{ id: "income", label: t("admin.financial.tabIncome"), icon: "wallet" }, { id: "expenses", label: t("admin.financial.tabExpenses"), icon: "invoice" }] as const).map(tb => (
+          <button key={tb.id} onClick={() => setTab(tb.id)}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-semibold transition-colors ${tab === tb.id ? "bg-white text-ocean-700 shadow-card" : "text-ink-soft hover:bg-white/60"}`}>
+            <Icon name={tb.icon} className="w-4 h-4" /> {tb.label}
           </button>
         ))}
       </div>
@@ -252,32 +260,32 @@ export default function AdminFinancial({ branchId, userId, userName }: { branchI
       {tab === "income" && (
         <div className="space-y-4">
           <div className="flex justify-end">
-            <Btn variant="primary" icon="plus" size="sm" onClick={() => openAddTxn("income")}>Tambah Income</Btn>
+            <Btn variant="primary" icon="plus" size="sm" onClick={() => openAddTxn("income")}>{t("admin.financial.addIncomeBtn")}</Btn>
           </div>
 
           {/* Summary stats */}
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Stat label="Lunas" value={paidBills.length + manualIncome.length} icon="check" tone="ok" sub={fmtIDR(totalPaid)} />
-            <Stat label="Belum Lunas" value={unpaidBills.length} icon="warning" tone="warn" sub={fmtIDR(totalUnpaid)} />
-            <Stat label="Diskon Diberikan" value={bills.filter(b => b.discount > 0).length} icon="invoice" tone="ocean" sub={fmtIDR(totalDiscount)} />
-            <Stat label="Bulan Ini (Lunas)" value={thisMonthPaid.length + thisMonthManual.length} icon="calendar" tone="ocean" sub={fmtIDR(thisMonthTotal)} />
+            <Stat label={t("admin.financial.statPaid")} value={paidBills.length + manualIncome.length} icon="check" tone="ok" sub={fmtIDR(totalPaid)} />
+            <Stat label={t("admin.financial.statUnpaid")} value={unpaidBills.length} icon="warning" tone="warn" sub={fmtIDR(totalUnpaid)} />
+            <Stat label={t("admin.financial.statDiscountGiven")} value={bills.filter(b => b.discount > 0).length} icon="invoice" tone="ocean" sub={fmtIDR(totalDiscount)} />
+            <Stat label={t("admin.financial.statThisMonthPaid")} value={thisMonthPaid.length + thisMonthManual.length} icon="calendar" tone="ocean" sub={fmtIDR(thisMonthTotal)} />
           </div>
 
           {/* Toolbar */}
           <div className="space-y-3">
             <div className="flex items-center gap-2 flex-wrap">
               <div className="flex-1 min-w-[180px]">
-                <Input placeholder="Cari nama member, periode, kelas, deskripsi…" value={search} onChange={e => setSearch(e.target.value)} />
+                <Input placeholder={t("admin.financial.searchIncomePlaceholder")} value={search} onChange={e => setSearch(e.target.value)} />
               </div>
               <button onClick={() => setShowFilters(f => !f)}
                 className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border text-sm font-semibold transition-colors ${showFilters ? "bg-ocean-50 border-ocean-300 text-ocean-700" : "border-line text-ink-soft hover:border-ocean-300"}`}>
                 <Icon name="settings" className="w-4 h-4" />
-                Filter
+                {t("admin.financial.filterBtn")}
                 {activeFilterCount > 0 && <span className="bg-ocean-600 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">{activeFilterCount}</span>}
               </button>
               {activeFilterCount > 0 && (
                 <button onClick={resetFilters} className="inline-flex items-center gap-1 px-3 py-2 rounded-xl border border-line text-sm font-semibold text-danger-600 hover:bg-danger-50 transition-colors">
-                  <Icon name="x" className="w-4 h-4" />Reset
+                  <Icon name="x" className="w-4 h-4" />{t("admin.financial.resetBtn")}
                 </button>
               )}
             </div>
@@ -285,42 +293,42 @@ export default function AdminFinancial({ branchId, userId, userName }: { branchI
             {showFilters && (
               <Card padded={false}>
                 <div className="p-4 grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  <Field label="Status">
+                  <Field label={t("admin.financial.fieldStatus")}>
                     <Select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
-                      <option value="">— Semua status —</option>
-                      <option value="paid">Lunas</option>
-                      <option value="unpaid">Belum Bayar</option>
-                      <option value="partial">Sebagian</option>
-                      <option value="school_covered">Sekolah</option>
-                      <option value="free">Gratis</option>
+                      <option value="">{t("admin.financial.allStatusesOpt2")}</option>
+                      <option value="paid">{t("admin.pembayaran.statusPaid")}</option>
+                      <option value="unpaid">{t("admin.pembayaran.statusUnpaid")}</option>
+                      <option value="partial">{t("admin.pembayaran.statusPartial")}</option>
+                      <option value="school_covered">{t("admin.pembayaran.statusSchoolCovered")}</option>
+                      <option value="free">{t("admin.pembayaran.statusFree")}</option>
                     </Select>
                   </Field>
-                  <Field label="Tipe">
+                  <Field label={t("admin.financial.fieldType")}>
                     <Select value={filterType} onChange={e => setFilterType(e.target.value)}>
-                      <option value="">— Semua tipe —</option>
-                      <option value="monthly">Bulanan</option>
-                      <option value="session_pack">Paket Sesi</option>
-                      <option value="custom">Custom</option>
+                      <option value="">{t("admin.financial.allTypesOpt")}</option>
+                      <option value="monthly">{t("admin.pembayaran.typeMonthly")}</option>
+                      <option value="session_pack">{t("admin.pembayaran.typeSessionPack")}</option>
+                      <option value="custom">{t("admin.pembayaran.typeCustom")}</option>
                     </Select>
                   </Field>
-                  <Field label="Kelas">
+                  <Field label={t("admin.financial.fieldClassFilter")}>
                     <Select value={filterClass} onChange={e => setFilterClass(e.target.value)}>
-                      <option value="">— Semua kelas —</option>
+                      <option value="">{t("admin.financial.allClassesOpt2")}</option>
                       {classList.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </Select>
                   </Field>
-                  <Field label="Metode Bayar">
+                  <Field label={t("admin.financial.fieldPaymentMethod")}>
                     <Select value={filterMethod} onChange={e => setFilterMethod(e.target.value)}>
-                      <option value="">— Semua metode —</option>
-                      <option value="transfer">Transfer</option>
-                      <option value="cash">Cash</option>
-                      <option value="qris">QRIS</option>
+                      <option value="">{t("admin.financial.allMethodsOpt")}</option>
+                      <option value="transfer">{t("admin.financial.methodTransfer")}</option>
+                      <option value="cash">{t("admin.financial.methodCash")}</option>
+                      <option value="qris">{t("admin.financial.methodQris")}</option>
                     </Select>
                   </Field>
-                  <Field label="Tanggal dari">
+                  <Field label={t("admin.financial.fieldDateFrom")}>
                     <Input type="date" value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)} className="font-mono" />
                   </Field>
-                  <Field label="Tanggal sampai">
+                  <Field label={t("admin.financial.fieldDateTo")}>
                     <Input type="date" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)} className="font-mono" />
                   </Field>
                 </div>
@@ -331,37 +339,37 @@ export default function AdminFinancial({ branchId, userId, userName }: { branchI
           {/* Table */}
           <Card padded={false}>
             {loading ? (
-              <div className="p-10 text-center text-ink-mute">Memuat data…</div>
+              <div className="p-10 text-center text-ink-mute">{t("admin.financial.loadingData")}</div>
             ) : (
               <>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-line bg-paper-tint">
-                        <th className="text-left px-4 py-3 font-semibold text-ink-mute text-xs uppercase tracking-wide">Member</th>
-                        <th className="text-left px-3 py-3 font-semibold text-ink-mute text-xs uppercase tracking-wide hidden md:table-cell">Kelas</th>
-                        <th className="text-left px-3 py-3 font-semibold text-ink-mute text-xs uppercase tracking-wide">Periode</th>
-                        <th className="text-left px-3 py-3 font-semibold text-ink-mute text-xs uppercase tracking-wide hidden lg:table-cell">Tipe</th>
-                        <th className="text-left px-3 py-3 font-semibold text-ink-mute text-xs uppercase tracking-wide hidden lg:table-cell">Metode</th>
+                        <th className="text-left px-4 py-3 font-semibold text-ink-mute text-xs uppercase tracking-wide">{t("admin.financial.colMember")}</th>
+                        <th className="text-left px-3 py-3 font-semibold text-ink-mute text-xs uppercase tracking-wide hidden md:table-cell">{t("admin.financial.colClassCol")}</th>
+                        <th className="text-left px-3 py-3 font-semibold text-ink-mute text-xs uppercase tracking-wide">{t("admin.financial.colPeriod")}</th>
+                        <th className="text-left px-3 py-3 font-semibold text-ink-mute text-xs uppercase tracking-wide hidden lg:table-cell">{t("admin.financial.colType")}</th>
+                        <th className="text-left px-3 py-3 font-semibold text-ink-mute text-xs uppercase tracking-wide hidden lg:table-cell">{t("admin.financial.colMethodCol")}</th>
                         <th className="text-left px-3 py-3 font-semibold text-ink-mute text-xs uppercase tracking-wide">
-                          <SortBtn col="paid_at" label="Tanggal" />
+                          <SortBtn col="paid_at" label={t("admin.financial.colDateCol")} />
                         </th>
                         <th className="text-right px-3 py-3 font-semibold text-ink-mute text-xs uppercase tracking-wide">
-                          <SortBtn col="total" label="Total" />
+                          <SortBtn col="total" label={t("admin.financial.colTotalCol")} />
                         </th>
-                        <th className="text-left px-3 py-3 font-semibold text-ink-mute text-xs uppercase tracking-wide">Status</th>
+                        <th className="text-left px-3 py-3 font-semibold text-ink-mute text-xs uppercase tracking-wide">{t("admin.financial.colStatusCol")}</th>
                         <th className="px-3 py-3 w-16"></th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-line">
                       {paginated.length === 0 ? (
-                        <tr><td colSpan={9} className="py-12 text-center text-ink-mute">Tidak ada data.</td></tr>
+                        <tr><td colSpan={9} className="py-12 text-center text-ink-mute">{t("admin.financial.noData")}</td></tr>
                       ) : paginated.map(row => row.source === "manual" ? (
                         <tr key={row.id} className="hover:bg-paper-tint/50 transition-colors">
                           <td className="px-4 py-3">
                             <div className="font-semibold text-ink text-sm">
                               {row.description}
-                              <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-paper-deep text-ink-mute text-[10px] font-semibold align-middle">Manual</span>
+                              <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-paper-deep text-ink-mute text-[10px] font-semibold align-middle">{t("admin.financial.manualBadge")}</span>
                             </div>
                           </td>
                           <td className="px-3 py-3 text-ink-soft hidden md:table-cell">—</td>
@@ -373,12 +381,12 @@ export default function AdminFinancial({ branchId, userId, userName }: { branchI
                             <div className="font-mono font-bold text-ink">{fmtIDR(row.amount)}</div>
                           </td>
                           <td className="px-3 py-3">
-                            <Status kind="paid" dot={false}>Tercatat</Status>
+                            <Status kind="paid" dot={false}>{t("admin.financial.recordedStatus")}</Status>
                           </td>
                           <td className="px-3 py-3">
                             <div className="flex items-center gap-1 justify-end">
-                              <button onClick={() => openEditTxn(row)} className="w-7 h-7 rounded-lg hover:bg-paper-deep flex items-center justify-center text-ink-mute hover:text-ocean-600" title="Edit"><Icon name="edit" className="w-3.5 h-3.5" /></button>
-                              <button onClick={() => deleteTxn(row)} className="w-7 h-7 rounded-lg hover:bg-danger-50 flex items-center justify-center text-ink-mute hover:text-danger-600" title="Hapus"><Icon name="trash" className="w-3.5 h-3.5" /></button>
+                              <button onClick={() => openEditTxn(row)} className="w-7 h-7 rounded-lg hover:bg-paper-deep flex items-center justify-center text-ink-mute hover:text-ocean-600" title={t("common.actions.edit")}><Icon name="edit" className="w-3.5 h-3.5" /></button>
+                              <button onClick={() => deleteTxn(row)} className="w-7 h-7 rounded-lg hover:bg-danger-50 flex items-center justify-center text-ink-mute hover:text-danger-600" title={t("common.actions.delete")}><Icon name="trash" className="w-3.5 h-3.5" /></button>
                             </div>
                           </td>
                         </tr>
@@ -412,7 +420,7 @@ export default function AdminFinancial({ branchId, userId, userName }: { branchI
 
                 {/* Pagination */}
                 <div className="flex items-center justify-between px-4 py-3 border-t border-line text-sm">
-                  <div className="text-ink-mute text-xs">{filtered.length} transaksi · halaman {safePage + 1} dari {totalPages}</div>
+                  <div className="text-ink-mute text-xs">{t("admin.financial.txnCountLabel", { count: filtered.length, page: safePage + 1, total: totalPages })}</div>
                   <div className="flex gap-1">
                     {[
                       { label: "«", disabled: safePage === 0, action: () => setPage(0) },
@@ -436,18 +444,18 @@ export default function AdminFinancial({ branchId, userId, userName }: { branchI
       {tab === "expenses" && (
         <div className="space-y-4">
           <div className="flex justify-end">
-            <Btn variant="primary" icon="plus" size="sm" onClick={() => openAddTxn("expense")}>Tambah Expense</Btn>
+            <Btn variant="primary" icon="plus" size="sm" onClick={() => openAddTxn("expense")}>{t("admin.financial.addExpenseBtn")}</Btn>
           </div>
 
           <div className="grid sm:grid-cols-2 gap-4">
-            <Stat label="Total Expense Manual" value={manualExpense.length} icon="invoice" tone="danger" sub={fmtIDR(totalExpenseManual)} />
-            <Stat label="Bulan Ini" value={manualExpense.filter(t => t.occurred_at.startsWith(thisMonth)).length} icon="calendar" tone="ocean" sub={fmtIDR(manualExpense.filter(t => t.occurred_at.startsWith(thisMonth)).reduce((a, t) => a + t.amount, 0))} />
+            <Stat label={t("admin.financial.statTotalExpenseManual")} value={manualExpense.length} icon="invoice" tone="danger" sub={fmtIDR(totalExpenseManual)} />
+            <Stat label={t("admin.financial.statThisMonth")} value={manualExpense.filter(tx => tx.occurred_at.startsWith(thisMonth)).length} icon="calendar" tone="ocean" sub={fmtIDR(manualExpense.filter(tx => tx.occurred_at.startsWith(thisMonth)).reduce((a, tx) => a + tx.amount, 0))} />
           </div>
 
           <Card padded={false}>
             {manualExpense.length === 0 ? (
               <div className="p-10 text-center text-ink-mute">
-                Belum ada expense manual — klik &ldquo;Tambah Expense&rdquo; di atas buat catat pengeluaran cabang seperti listrik, perlengkapan, dll.
+                {t("admin.financial.noManualExpenseYet")}
               </div>
             ) : (
               <div className="divide-y divide-line">
@@ -459,20 +467,20 @@ export default function AdminFinancial({ branchId, userId, userName }: { branchI
                     <div className="flex-1 min-w-0">
                       <div className="font-semibold text-sm text-ink flex items-center gap-1.5">
                         {row.description}
-                        {row.is_reimburse && <span className="px-1.5 py-0.5 rounded-full bg-warn-50 text-warn-700 text-[10px] font-semibold">Reimburse</span>}
+                        {row.is_reimburse && <span className="px-1.5 py-0.5 rounded-full bg-warn-50 text-warn-700 text-[10px] font-semibold">{t("admin.financial.reimburseBadge")}</span>}
                       </div>
                       <div className="text-xs text-ink-mute mt-0.5">{row.category ?? "—"} · {row.occurred_at.slice(0, 10)}</div>
                       {row.notes && <div className="text-xs text-ink-faint mt-0.5">{row.notes}</div>}
                       {row.proof_url && (
                         <a href={row.proof_url} target="_blank" rel="noreferrer" className="text-xs text-ocean-600 hover:underline inline-flex items-center gap-1 mt-0.5">
-                          <Icon name="link" className="w-3 h-3" />Lihat bukti
+                          <Icon name="link" className="w-3 h-3" />{t("admin.financial.viewProofBtn")}
                         </a>
                       )}
                     </div>
                     <div className="font-mono font-bold text-sm text-danger-700 shrink-0">{fmtIDR(row.amount)}</div>
                     <div className="flex items-center gap-1 shrink-0">
-                      <button onClick={() => openEditTxn(row)} className="w-8 h-8 rounded-lg border border-line hover:bg-paper-tint flex items-center justify-center text-ink-mute hover:text-ocean-600" title="Edit"><Icon name="edit" className="w-4 h-4" /></button>
-                      <button onClick={() => deleteTxn(row)} className="w-8 h-8 rounded-lg border border-line hover:bg-danger-50 flex items-center justify-center text-ink-mute hover:text-danger-600" title="Hapus"><Icon name="trash" className="w-4 h-4" /></button>
+                      <button onClick={() => openEditTxn(row)} className="w-8 h-8 rounded-lg border border-line hover:bg-paper-tint flex items-center justify-center text-ink-mute hover:text-ocean-600" title={t("common.actions.edit")}><Icon name="edit" className="w-4 h-4" /></button>
+                      <button onClick={() => deleteTxn(row)} className="w-8 h-8 rounded-lg border border-line hover:bg-danger-50 flex items-center justify-center text-ink-mute hover:text-danger-600" title={t("common.actions.delete")}><Icon name="trash" className="w-4 h-4" /></button>
                     </div>
                   </div>
                 ))}
@@ -484,42 +492,42 @@ export default function AdminFinancial({ branchId, userId, userName }: { branchI
 
       {/* ── Modal: Tambah/Edit Transaksi Manual ─────────────────────────────── */}
       <Modal open={!!showTxnModal} onClose={() => setShowTxnModal(null)}
-        title={showTxnModal?.edit ? `Edit ${showTxnModal.kind === "income" ? "Income" : "Expense"} Manual` : `Tambah ${showTxnModal?.kind === "income" ? "Income" : "Expense"} Manual`}
+        title={t(showTxnModal?.edit ? "admin.financial.editModalTitleEdit" : "admin.financial.addModalTitleAdd", { kind: t(showTxnModal?.kind === "income" ? "admin.financial.kindIncome" : "admin.financial.kindExpense") })}
         size="md"
         footer={
           <div className="flex gap-2 justify-end w-full">
-            <Btn variant="ghost" onClick={() => setShowTxnModal(null)}>Batal</Btn>
-            <Btn variant="primary" onClick={saveTxn} disabled={savingTxn}>{savingTxn ? "Menyimpan…" : "Simpan"}</Btn>
+            <Btn variant="ghost" onClick={() => setShowTxnModal(null)}>{t("common.actions.cancel")}</Btn>
+            <Btn variant="primary" onClick={saveTxn} disabled={savingTxn}>{savingTxn ? t("common.actions.saving") : t("common.actions.save")}</Btn>
           </div>
         }>
         <div className="space-y-4">
-          <Field label="Kategori">
+          <Field label={t("admin.financial.fieldCategory")}>
             <Select value={txnForm.category} onChange={e => setTxnForm(f => ({ ...f, category: e.target.value }))}>
               {categoriesByKind(showTxnModal?.kind ?? "income").map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
             </Select>
             {categoriesByKind(showTxnModal?.kind ?? "income").length === 0 && (
-              <p className="text-xs text-warn-600 mt-1">Belum ada kategori — minta owner menambahkannya di panel Owner.</p>
+              <p className="text-xs text-warn-600 mt-1">{t("admin.financial.noCategoriesHint")}</p>
             )}
           </Field>
           {txnForm.category === "Lainnya" && (
-            <Field label="Kategori Custom"><Input value={txnForm.categoryOther} onChange={e => setTxnForm(f => ({ ...f, categoryOther: e.target.value }))} placeholder="Contoh: Donasi alumni" /></Field>
+            <Field label={t("admin.financial.fieldCategoryCustom")}><Input value={txnForm.categoryOther} onChange={e => setTxnForm(f => ({ ...f, categoryOther: e.target.value }))} placeholder={t("admin.financial.categoryCustomPlaceholder")} /></Field>
           )}
-          <Field label="Deskripsi"><Input value={txnForm.description} onChange={e => setTxnForm(f => ({ ...f, description: e.target.value }))} placeholder="Contoh: Bayar listrik bulan ini" /></Field>
+          <Field label={t("admin.financial.fieldDescription")}><Input value={txnForm.description} onChange={e => setTxnForm(f => ({ ...f, description: e.target.value }))} placeholder={t("admin.financial.descriptionPlaceholder")} /></Field>
           {showTxnModal?.kind === "expense" && (
             <>
-              <Switch checked={txnForm.isReimburse} onChange={v => setTxnForm(f => ({ ...f, isReimburse: v }))} label="Ini pengeluaran reimburse (perlu bukti)" />
+              <Switch checked={txnForm.isReimburse} onChange={v => setTxnForm(f => ({ ...f, isReimburse: v }))} label={t("admin.financial.reimburseSwitchLabel")} />
               {txnForm.isReimburse && (
-                <Field label="Link Bukti (Google Drive)">
+                <Field label={t("admin.financial.fieldProofLink")}>
                   <Input value={txnForm.proofUrl} onChange={e => setTxnForm(f => ({ ...f, proofUrl: e.target.value }))} placeholder="https://drive.google.com/..." type="url" />
                 </Field>
               )}
             </>
           )}
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Nominal (Rp)"><Input type="number" inputMode="numeric" min={0} value={txnForm.amount} onChange={e => setTxnForm(f => ({ ...f, amount: e.target.value.replace(/\D/g, "") }))} /></Field>
-            <Field label="Tanggal"><Input type="date" value={txnForm.occurred_at} onChange={e => setTxnForm(f => ({ ...f, occurred_at: e.target.value }))} className="font-mono" /></Field>
+            <Field label={t("admin.financial.fieldAmount")}><Input type="number" inputMode="numeric" min={0} value={txnForm.amount} onChange={e => setTxnForm(f => ({ ...f, amount: e.target.value.replace(/\D/g, "") }))} /></Field>
+            <Field label={t("admin.financial.fieldDate")}><Input type="date" value={txnForm.occurred_at} onChange={e => setTxnForm(f => ({ ...f, occurred_at: e.target.value }))} className="font-mono" /></Field>
           </div>
-          <Field label="Catatan (opsional)"><Textarea value={txnForm.notes} onChange={e => setTxnForm(f => ({ ...f, notes: e.target.value }))} rows={2} /></Field>
+          <Field label={t("admin.financial.fieldNotesOptional")}><Textarea value={txnForm.notes} onChange={e => setTxnForm(f => ({ ...f, notes: e.target.value }))} rows={2} /></Field>
         </div>
       </Modal>
     </div>

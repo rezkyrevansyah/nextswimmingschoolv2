@@ -5,10 +5,12 @@ import { Card, SectionTitle, Stat } from "@/components/ui/Card";
 import Status from "@/components/ui/Status";
 import Avatar from "@/components/ui/Avatar";
 import { createClient } from "@/utils/supabase/client";
+import { useLocale } from "@/components/providers/LocaleProvider";
 import type { ClassRow, AttendanceRow } from "../_types";
 
 export default function AdminDashboard({ branchId }: { branchId: string }) {
   const supabase = createClient();
+  const { t } = useLocale();
   const [stats, setStats] = useState({ members: 0, coaches: 0, classes: 0, pending: 0, coachLeaves: 0, memberLeaves: 0 });
   const [todayClasses, setTodayClasses] = useState<(ClassRow & { is_holiday?: boolean })[]>([]);
   const [recentCoachAtt, setRecentCoachAtt] = useState<AttendanceRow[]>([]);
@@ -115,8 +117,8 @@ export default function AdminDashboard({ branchId }: { branchId: string }) {
           <div className="flex items-start gap-3">
             <span className="w-10 h-10 rounded-xl bg-danger-100 text-danger-600 flex items-center justify-center shrink-0"><Icon name="warning" className="w-5 h-5" /></span>
             <div className="flex-1">
-              <div className="font-display font-bold text-danger-700">Kelas tanpa coach aktif</div>
-              <p className="text-sm text-danger-600 mt-0.5">Kelas berikut tidak memiliki coach aktif — semua coach sedang disuspend atau belum di-assign. Segera assign coach pengganti.</p>
+              <div className="font-display font-bold text-danger-700">{t("admin.dashboard.noCoachTitle")}</div>
+              <p className="text-sm text-danger-600 mt-0.5">{t("admin.dashboard.noCoachBody")}</p>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {classesWithoutCoach.map((c) => (
                   <span key={c.id} className="px-2 py-1 rounded-lg bg-danger-100 text-danger-700 text-xs font-bold">{c.name}</span>
@@ -131,29 +133,29 @@ export default function AdminDashboard({ branchId }: { branchId: string }) {
           <div className="flex items-start gap-3">
             <span className="w-10 h-10 rounded-xl bg-warn-100 text-warn-600 flex items-center justify-center shrink-0"><Icon name="invoice" className="w-5 h-5" /></span>
             <div className="flex-1">
-              <div className="font-display font-bold text-warn-700">Tagihan belum dibayar ({overdueCount})</div>
-              <p className="text-sm text-warn-600 mt-0.5">Ada {overdueCount} tagihan yang sudah lebih dari 30 hari belum dibayar. Cek menu Pembayaran untuk detail.</p>
+              <div className="font-display font-bold text-warn-700">{t("admin.dashboard.overdueTitle", { count: overdueCount })}</div>
+              <p className="text-sm text-warn-600 mt-0.5">{t("admin.dashboard.overdueBody", { count: overdueCount })}</p>
             </div>
           </div>
         </Card>
       )}
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Stat label="Member aktif"  value={stats.members} icon="users"   tone="ocean" />
-        <Stat label="Coach aktif"   value={stats.coaches} icon="swim"    tone="wave"  />
-        <Stat label="Kelas aktif"   value={stats.classes} icon="grid"    tone="ocean" />
-        <Stat label="Approvement"   value={stats.pending} icon="warning" tone="warn"  sub="Semua yang pending" />
+        <Stat label={t("admin.dashboard.statActiveMembers")} value={stats.members} icon="users"   tone="ocean" />
+        <Stat label={t("admin.dashboard.statActiveCoaches")} value={stats.coaches} icon="swim"    tone="wave"  />
+        <Stat label={t("admin.dashboard.statActiveClasses")} value={stats.classes} icon="grid"    tone="ocean" />
+        <Stat label={t("admin.dashboard.statApprovement")}   value={stats.pending} icon="warning" tone="warn"  sub={t("admin.dashboard.statApprovementSub")} />
       </div>
       <div className="grid sm:grid-cols-2 gap-4">
-        <Stat label="Izin coach"  value={stats.coachLeaves} icon="calendar" tone="warn" sub="Menunggu persetujuan" />
-        <Stat label="Izin member" value={stats.memberLeaves} icon="calendar" tone="warn" sub="Menunggu persetujuan" />
+        <Stat label={t("admin.dashboard.statCoachLeave")}  value={stats.coachLeaves} icon="calendar" tone="warn" sub={t("admin.dashboard.statLeaveSub")} />
+        <Stat label={t("admin.dashboard.statMemberLeave")} value={stats.memberLeaves} icon="calendar" tone="warn" sub={t("admin.dashboard.statLeaveSub")} />
       </div>
 
       <div className="grid lg:grid-cols-3 gap-5">
         <Card className="lg:col-span-2">
-          <SectionTitle sub="Kelas hari ini">Kelas aktif hari ini</SectionTitle>
+          <SectionTitle sub={t("admin.dashboard.todayClassesSub")}>{t("admin.dashboard.todayClassesTitle")}</SectionTitle>
           {todayClasses.length === 0 ? (
-            <p className="text-ink-mute text-sm">Tidak ada kelas hari ini.</p>
+            <p className="text-ink-mute text-sm">{t("admin.dashboard.noClassesToday")}</p>
           ) : (
             <div className="grid sm:grid-cols-2 gap-3">
               {todayClasses.map((c) => {
@@ -164,7 +166,7 @@ export default function AdminDashboard({ branchId }: { branchId: string }) {
                     <div className="flex items-center justify-between">
                       <div className="font-semibold text-ink text-sm">{c.name}</div>
                       {isHoliday
-                        ? <span className="px-2 py-0.5 rounded-full bg-archive-100 text-archive-600 text-[10px] font-bold">LIBUR</span>
+                        ? <span className="px-2 py-0.5 rounded-full bg-archive-100 text-archive-600 text-[10px] font-bold">{t("admin.dashboard.holidayBadge")}</span>
                         : <Status kind="active" className="!text-[10px]">{c.time_start?.slice(0,5)}{c.time_end ? `–${c.time_end.slice(0,5)}` : ""}</Status>
                       }
                     </div>
@@ -186,9 +188,9 @@ export default function AdminDashboard({ branchId }: { branchId: string }) {
         </Card>
 
         <Card>
-          <SectionTitle sub="Real-time">Live Attendance</SectionTitle>
+          <SectionTitle sub={t("admin.dashboard.liveAttendanceSub")}>{t("admin.dashboard.liveAttendanceTitle")}</SectionTitle>
           <div className="space-y-1">
-            {recentCoachAtt.length === 0 && recentMemberAtt.length === 0 && <p className="text-ink-mute text-sm">Belum ada absensi hari ini.</p>}
+            {recentCoachAtt.length === 0 && recentMemberAtt.length === 0 && <p className="text-ink-mute text-sm">{t("admin.dashboard.noAttendanceToday")}</p>}
             {recentCoachAtt.map((a) => (
               <div key={`c-${a.id}`} className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-paper-tint">
                 <span className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${a.is_manual ? "bg-manual-50 text-manual-500" : "bg-wave-50 text-wave-600"}`}>
@@ -196,7 +198,7 @@ export default function AdminDashboard({ branchId }: { branchId: string }) {
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="text-xs font-semibold text-ink truncate">{a.profile?.full_name}</div>
-                  <div className="text-[10px] text-ink-mute">Coach · {a.class?.name}</div>
+                  <div className="text-[10px] text-ink-mute">{t("admin.dashboard.coachAttendanceLine", { class: a.class?.name ?? "" })}</div>
                 </div>
                 <span className="text-[10px] font-mono text-ink-faint">{a.clock_in_time?.slice(0, 5)}</span>
               </div>
@@ -208,9 +210,9 @@ export default function AdminDashboard({ branchId }: { branchId: string }) {
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="text-xs font-semibold text-ink truncate">{a.member_name}</div>
-                  <div className="text-[10px] text-ink-mute">Member · {a.class_name}</div>
+                  <div className="text-[10px] text-ink-mute">{t("admin.dashboard.memberAttendanceLine", { class: a.class_name })}</div>
                 </div>
-                <span className="text-[10px] font-mono text-ink-faint text-ok-500">Hadir</span>
+                <span className="text-[10px] font-mono text-ink-faint text-ok-500">{t("admin.dashboard.presentLabel")}</span>
               </div>
             ))}
           </div>

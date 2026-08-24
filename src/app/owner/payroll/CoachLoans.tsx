@@ -187,7 +187,7 @@ export default function CoachLoans({ branches, userId, userName }: { branches: B
     if (remaining > 0) {
       await supabase.from("coach_loan_payments").insert({
         loan_id: detail.id, amount: remaining, installment_number: installmentCount + 1,
-        period_label: "Tulis-off", kind: "write_off", created_by: userId,
+        period_label: t("owner.coachLoans.writeOffPeriodLabel"), kind: "write_off", created_by: userId,
       });
     }
     const { error } = await supabase.from("coach_loans").update({ status: "written_off", closed_at: new Date().toISOString() }).eq("id", detail.id);

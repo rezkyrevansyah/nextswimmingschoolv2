@@ -8,7 +8,7 @@ A Next.js (App Router) web app for **Next Swimming School** — a multi-branch s
 
 ## Key docs
 
-- [docs/existing_db.sql](docs/existing_db.sql) — current full SQL schema reference
+- [supabase/schema.sql](supabase/schema.sql) — current full SQL schema reference
 - [docs/feedback-priorities.md](docs/feedback-priorities.md) — prioritized feedback/backlog
 - [docs/test-scenarios.md](docs/test-scenarios.md) — test scenario notes
 - `supabase/*.sql` — standalone migration scripts, one per feature, run manually in the Supabase SQL Editor
@@ -16,8 +16,7 @@ A Next.js (App Router) web app for **Next Swimming School** — a multi-branch s
 ## Tech stack
 
 - **Next.js** (App Router, version in package.json — read AGENTS.md first)
-- **Supabase** — auth, PostgreSQL, realtime, storage
-- **Cloudflare R2** — file storage (swap from Supabase Storage when ready)
+- **Supabase** — auth, PostgreSQL, realtime, storage (file storage migrated off Cloudflare R2 — see Supabase Storage setup below)
 - **React 19**, TypeScript
 - **Tailwind CSS v4** — config lives in `src/app/globals.css` using `@theme inline` syntax. There is NO `tailwind.config.ts`.
 - **Fonts**: Plus Jakarta Sans (`font-display`), Inter (`font-sans`), JetBrains Mono (`font-mono`) via `next/font/google` in `src/app/layout.tsx`
@@ -47,14 +46,20 @@ Custom animations: `waveShift`, `fadeUp`, `pulseFade`
 
 **NEVER use dynamic Tailwind class interpolation** (e.g., `` `bg-${color}-50` ``). Always write full explicit class strings so Tailwind includes them in the build.
 
-## Cloudflare R2 setup
+## Supabase Storage setup
 
-- Client: `src/utils/r2/client.ts` — S3Client pointed at R2 endpoint (server-only)
-- Helpers: `src/utils/r2/upload.ts` — `uploadBuffer`, `deleteFile`, `presignUpload`, `publicUrl`, `keys`
-- Route Handlers: `src/app/api/upload/` — one handler per upload type (avatar, selfie, payment-proof, cert, logo, class-photo, presign)
-- React hook: `src/hooks/useUpload.ts` — `useUpload()` wraps all handlers, exposes `upload.avatar(file)` etc.
-- **Never import `src/utils/r2/` in `"use client"` components** — always go through Route Handlers
-- Env vars needed: `R2_ACCOUNT_ID`, `R2_BUCKET_NAME`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_PUBLIC_URL`
+File storage was migrated off Cloudflare R2 onto native Supabase Storage. Two buckets:
+- `next-storage` (public) — avatars, logos, class photos, signatures, landing images
+- `next-storage-private` (private) — payment proofs, certifications, attendance selfies
+
+- Client: `src/utils/supabase-storage/client.ts` — `storage()` (wraps `getSupabaseAdmin().storage`), `BUCKET_PUBLIC`, `BUCKET_PRIVATE` (server-only)
+- Helpers: `src/utils/supabase-storage/upload.ts` — `uploadToBucket`, `deleteFile`, `presignUpload`, `publicUrl`, `signedUrl`, `keys`
+- Route Handlers: `src/app/api/upload/` — one handler per upload type (avatar, selfie, payment-proof, cert, logo, class-photo, signature, presign); `src/app/api/storage/` — general storage ops (delete, signed-url, stats, backup-list)
+- React hook: `src/hooks/useUpload.ts` — `useUpload()` wraps all upload handlers, exposes `upload.avatar(file)` etc.
+- React hook: `src/hooks/useSignedUrl.ts` — `useSignedUrl(key)` resolves a private-bucket key (e.g. `bills.proof_url`) into a short-lived signed URL for rendering (`<img src={url} />`)
+- **Never import `src/utils/supabase-storage/` in `"use client"` components** — always go through Route Handlers
+- Private-bucket fields store the raw storage key, not a URL — always resolve through `useSignedUrl` or `/api/storage/signed-url` before rendering
+- See `supabase/storage_policies.sql` for bucket RLS policies
 
 ## Supabase setup
 
@@ -74,7 +79,7 @@ src/
     (public)/            ← public landing pages
       layout.tsx
       page.tsx           ← landing page
-      _components/       ← landing sections (Hero, Programs, Ecosystem, etc.)
+      _components/       ← landing sections (Hero, Branches, Coaches, Programs, Testimonials, Partners, Faq, Footer, FloatingWhatsapp)
     login/page.tsx
     register/page.tsx
     owner/page.tsx       ← Owner panel (12 sub-pages via internal useState)
@@ -84,16 +89,22 @@ src/
     school/page.tsx      ← School panel (rapor + attendance/export tabs)
   i18n/                  ← dictionaries.ts + locales/{en,id}/ — see Locale section
   hooks/
-    useUpload.ts          ← R2 upload hook
+    useUpload.ts          ← Supabase Storage upload hook
+    useSignedUrl.ts       ← resolves a private-bucket key into a signed URL for rendering
   lib/
     data.ts              ← Notification type + WA_NUMBER/SCHOOL_EMAIL fallback constants
     utils.ts             ← fmtIDR, fmtDate, fmtDateLong, fmtTime, waLink, mailtoLink, cn
   components/
+    CardNav.tsx, BorderGlowCard.tsx, CircularGallery.tsx, DotField.tsx, LogoLoop.tsx, TextType.tsx
+                          ← standalone visual/animation components used mainly on the landing page (CircularGallery uses ogl/WebGL)
     ui/                  ← Icon, Btn, Card, Modal, Status, Avatar, FormFields, Logo, QRBox, Placeholder,
                             DatePicker, MonthYearPicker, TimePicker, MapPicker, PhotoLightbox, StarDisplay, LanguageSwitcher
     layout/              ← Sidebar, Topbar, MobileNav, Bell, BetaFeedback
     providers/           ← ToastProvider, ConfirmProvider, LocaleProvider
-supabase/                ← standalone SQL migration scripts, one per feature
+supabase/
+  schema.sql             ← current full SQL schema reference
+  storage_policies.sql   ← Supabase Storage bucket RLS policies
+  ...                    ← standalone migration scripts, one per feature
 ```
 
 ## Panel navigation pattern
@@ -148,7 +159,7 @@ Default language is **English**, with Bahasa Indonesia as a user-selectable opti
 - `src/i18n/dictionaries.ts` — `translate()`/`translateArray()`, `Locale` type, `dictionaries` map
 - `src/i18n/locales/{en,id}/*.ts` — one file per panel; `id` files are type-annotated against their `en` counterpart so a missing/mismatched key fails `tsc`
 - `src/components/providers/LocaleProvider.tsx` — persists to `localStorage` + `profiles.locale` (synced in the background)
-- Migration status: shared `ui`/`layout` components and Member panel's Shell+Home are fully migrated to `t()`; Owner/Admin/Coach/School panel bodies and the rest of Member's tabs are still hardcoded Indonesian pending further migration passes.
+- Migration status: shared `ui`/`layout` components, Member panel's Shell+Home, and locale dictionaries for Owner (`owner.ts`) and Coach (`coach.ts`) now exist and are wired into those panels; Admin/School panel bodies and the rest of Member's tabs are still hardcoded Indonesian pending further migration passes.
 
 ## Data
 

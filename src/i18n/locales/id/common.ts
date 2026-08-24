@@ -73,4 +73,10 @@ export const common: typeof CommonEn = {
     en: "EN",
     id: "ID",
   },
+  apiErrors: {
+    emailTaken: "Email sudah terdaftar",
+    emailTakenHint: "Gunakan email lain.",
+    genericTitle: "Gagal",
+    genericBody: "Terjadi kesalahan.",
+  },
 };

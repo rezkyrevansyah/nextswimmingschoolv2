@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
+import { useLocale } from "@/components/providers/LocaleProvider";
 import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
 import { Field, Input, Textarea } from "@/components/ui/FormFields";
@@ -24,6 +25,12 @@ export default function AdminClass({ branchId }: { branchId: string }) {
   const supabase = createClient();
   const toast = useToast();
   const confirm = useConfirm();
+  const { t, locale } = useLocale();
+  const localeTag = locale === "id" ? "id-ID" : "en-US";
+  const dayLabels: Record<string, string> = {
+    Senin: t("admin.classes.dayMon"), Selasa: t("admin.classes.dayTue"), Rabu: t("admin.classes.dayWed"),
+    Kamis: t("admin.classes.dayThu"), Jumat: t("admin.classes.dayFri"), Sabtu: t("admin.classes.daySat"), Minggu: t("admin.classes.daySun"),
+  };
   const [classes, setClasses] = useState<ClassRow[]>([]);
   const [coaches, setCoaches] = useState<CoachProfile[]>([]);
   const [saving, setSaving] = useState(false);
@@ -75,24 +82,24 @@ export default function AdminClass({ branchId }: { branchId: string }) {
     setCoachMutating(true);
     const { error } = await supabase.from("class_coaches").insert({ class_id: classId, coach_id: coachId, role: "assistant" });
     setCoachMutating(false);
-    if (error) return toast.error("Gagal menambah coach", error.message);
+    if (error) return toast.error(t("admin.classes.addCoachFailed"), error.message);
     const coach = coaches.find(c => c.id === coachId);
     const current = editTarget?.class_coaches ?? [];
     patchClassCoaches(classId, [...current, { coach_id: coachId, role: "assistant", profile: coach ? { id: coach.id, full_name: coach.full_name } : null }]);
     setAddCoachId("");
-    toast.success("Coach ditambahkan ke kelas");
+    toast.success(t("admin.classes.coachAddedToast"));
   };
 
   const removeClassCoach = async (classId: string, coachId: string) => {
-    const ok = await confirm({ title: "Hapus coach dari kelas?", body: "Coach akan berhenti dihandle kelas ini.", danger: true });
+    const ok = await confirm({ title: t("admin.classes.removeCoachConfirmTitle"), body: t("admin.classes.removeCoachConfirmBody"), danger: true });
     if (!ok) return;
     setCoachMutating(true);
     const { error } = await supabase.from("class_coaches").delete().eq("class_id", classId).eq("coach_id", coachId);
     setCoachMutating(false);
-    if (error) return toast.error("Gagal menghapus coach", error.message);
+    if (error) return toast.error(t("admin.classes.removeCoachFailed"), error.message);
     const current = editTarget?.class_coaches ?? [];
     patchClassCoaches(classId, current.filter(cc => cc.coach_id !== coachId));
-    toast.success("Coach dihapus dari kelas");
+    toast.success(t("admin.classes.coachRemovedToast"));
   };
 
   const setClassCoachRole = async (classId: string, coachId: string, role: "head" | "assistant") => {
@@ -102,7 +109,7 @@ export default function AdminClass({ branchId }: { branchId: string }) {
     }
     const { error } = await supabase.from("class_coaches").update({ role }).eq("class_id", classId).eq("coach_id", coachId);
     setCoachMutating(false);
-    if (error) return toast.error("Gagal mengubah peran coach", error.message);
+    if (error) return toast.error(t("admin.classes.changeRoleFailed"), error.message);
     const current = editTarget?.class_coaches ?? [];
     patchClassCoaches(classId, current.map(cc => role === "head"
       ? { ...cc, role: cc.coach_id === coachId ? "head" : "assistant" }
@@ -135,8 +142,8 @@ export default function AdminClass({ branchId }: { branchId: string }) {
   const isPrivate = form.class_type === "private";
 
   const saveClass = async () => {
-    if (!form.name) return toast.error("Nama kelas wajib diisi");
-    if (!isPrivate && form.schedule_days.length === 0) return toast.error("Hari sesi wajib diisi untuk kelas reguler");
+    if (!form.name) return toast.error(t("admin.classes.classNameRequired"));
+    if (!isPrivate && form.schedule_days.length === 0) return toast.error(t("admin.classes.scheduleDaysRequired"));
     setSaving(true);
     // Build schedule_times — use per-day slots; derive global time_start/time_end from first slot
     const days = isPrivate ? (form.schedule_days.length > 0 ? form.schedule_days : []) : form.schedule_days;
@@ -149,32 +156,32 @@ export default function AdminClass({ branchId }: { branchId: string }) {
       const updatePayload: Database["public"]["Tables"]["classes"]["Update"] = { name: form.name, class_type: form.class_type, schedule_days: days, schedule_times: (scheduleTimes.length > 0 ? scheduleTimes : null) as Json | null, time_start: firstSlot?.time_start || form.time_start || undefined, time_end: firstSlot?.time_end || form.time_end || undefined, capacity: isPrivate ? 1 : (Number(form.capacity) || 0), price_monthly: isPrivate ? 0 : (Number(form.price_monthly) || 0), price_per_session: isPrivate ? (Number(form.price_per_session) || null) : null, goals: form.goals.trim() || null, description: form.description.trim() || null };
       const { error } = await supabase.from("classes").update(updatePayload).eq("id", editTarget.id);
       setSaving(false);
-      if (error) return toast.error("Gagal update kelas", error.message);
-      toast.success("Kelas diperbarui");
+      if (error) return toast.error(t("admin.classes.updateClassFailed"), error.message);
+      toast.success(t("admin.classes.classUpdatedToast"));
     } else {
       const insertPayload: Database["public"]["Tables"]["classes"]["Insert"] = { name: form.name, class_type: form.class_type, schedule_days: days, schedule_times: (scheduleTimes.length > 0 ? scheduleTimes : null) as Json | null, time_start: firstSlot?.time_start || form.time_start || "", time_end: firstSlot?.time_end || form.time_end || "", capacity: isPrivate ? 1 : (Number(form.capacity) || 0), price_monthly: isPrivate ? 0 : (Number(form.price_monthly) || 0), price_per_session: isPrivate ? (Number(form.price_per_session) || null) : null, goals: form.goals.trim() || null, description: form.description.trim() || null, branch_id: branchId, status: "active", enrolled: 0 };
       const { error } = await supabase.from("classes").insert(insertPayload).select("id").single();
-      if (error) { setSaving(false); return toast.error("Gagal membuat kelas", error.message); }
+      if (error) { setSaving(false); return toast.error(t("admin.classes.createClassFailed"), error.message); }
       setSaving(false);
-      toast.success("Kelas dibuat");
+      toast.success(t("admin.classes.classCreatedToast"));
     }
     setOpenForm(false);
     load();
   };
 
   const archiveClass = async (c: ClassRow) => {
-    const yes = await confirm({ body: `Arsipkan kelas "${c.name}"?` });
+    const yes = await confirm({ body: t("admin.classes.archiveConfirmBody", { name: c.name }) });
     if (!yes) return;
     await supabase.from("classes").update({ status: "archived" }).eq("id", c.id);
-    toast.success("Kelas diarsipkan");
+    toast.success(t("admin.classes.classArchivedToast"));
     load();
   };
 
   const restoreClass = async (c: ClassRow) => {
-    const yes = await confirm({ body: `Aktifkan kembali kelas "${c.name}"?` });
+    const yes = await confirm({ body: t("admin.classes.restoreConfirmBody", { name: c.name }) });
     if (!yes) return;
     await supabase.from("classes").update({ status: "active" }).eq("id", c.id);
-    toast.success("Kelas diaktifkan kembali");
+    toast.success(t("admin.classes.classRestoredToast"));
     load();
   };
 
@@ -200,9 +207,9 @@ export default function AdminClass({ branchId }: { branchId: string }) {
   };
 
   const savePackage = async () => {
-    if (!packageClass || !pkgForm.sessions || !pkgForm.price) return toast.error("Jumlah sesi dan harga wajib diisi");
+    if (!packageClass || !pkgForm.sessions || !pkgForm.price) return toast.error(t("admin.classes.sessionsPriceRequired"));
     setSavingPkg(true);
-    const name = pkgForm.name.trim() || `Paket ${pkgForm.sessions} Sesi`;
+    const name = pkgForm.name.trim() || t("admin.classes.defaultPackageName", { sessions: pkgForm.sessions });
     const { error } = await supabase.from("class_packages").insert({
       class_id: packageClass.id,
       name,
@@ -211,8 +218,8 @@ export default function AdminClass({ branchId }: { branchId: string }) {
       sort_order: packages.length,
     });
     setSavingPkg(false);
-    if (error) return toast.error("Gagal menyimpan paket", error.message);
-    toast.success("Paket ditambahkan");
+    if (error) return toast.error(t("admin.classes.savePackageFailed"), error.message);
+    toast.success(t("admin.classes.packageAddedToast"));
     const { data } = await supabase.from("class_packages").select("id, name, sessions, price, sort_order, active").eq("class_id", packageClass.id).order("sort_order");
     setPackages((data ?? []) as ClassPackage[]);
     setPkgForm({ name: "", sessions: "", price: "" });
@@ -220,11 +227,11 @@ export default function AdminClass({ branchId }: { branchId: string }) {
   };
 
   const deletePackage = async (pkgId: string) => {
-    const yes = await confirm({ body: "Hapus paket ini?" });
+    const yes = await confirm({ body: t("admin.classes.deletePackageConfirmBody") });
     if (!yes) return;
     await supabase.from("class_packages").delete().eq("id", pkgId);
     setPackages(p => p.filter(x => x.id !== pkgId));
-    toast.success("Paket dihapus");
+    toast.success(t("admin.classes.packageDeletedToast"));
     load();
   };
 
@@ -260,20 +267,20 @@ export default function AdminClass({ branchId }: { branchId: string }) {
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <div><h2 className="font-display font-bold text-2xl">Manajemen Kelas</h2><p className="text-ink-mute text-sm mt-0.5">Buat kelas, atur jadwal, dan konfigurasi aspek penilaian.</p></div>
+        <div><h2 className="font-display font-bold text-2xl">{t("admin.classes.pageTitle")}</h2><p className="text-ink-mute text-sm mt-0.5">{t("admin.classes.pageSub")}</p></div>
         <div className="flex items-center gap-2">
           {archivedCount > 0 && (
             <Btn variant="ghost" icon="archive" onClick={() => setShowArchived(v => !v)}>
-              {showArchived ? "Lihat kelas aktif" : `Diarsipkan (${archivedCount})`}
+              {showArchived ? t("admin.classes.viewActiveBtn") : t("admin.classes.archivedCountBtn", { count: archivedCount })}
             </Btn>
           )}
-          {!showArchived && <Btn variant="primary" icon="plus" onClick={openCreate}>Tambah Kelas</Btn>}
+          {!showArchived && <Btn variant="primary" icon="plus" onClick={openCreate}>{t("admin.classes.addClassBtn")}</Btn>}
         </div>
       </div>
       {showArchived && (
         <div className="flex items-center gap-2 px-4 py-3 bg-archive-50 border border-archive-500/20 rounded-xl text-sm text-archive-600">
           <Icon name="archive" className="w-4 h-4 shrink-0" />
-          <span>Menampilkan {archivedCount} kelas yang diarsipkan. Kelas arsip tidak tampil di mana pun.</span>
+          <span>{t("admin.classes.archivedBannerText", { count: archivedCount })}</span>
         </div>
       )}
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -291,7 +298,7 @@ export default function AdminClass({ branchId }: { branchId: string }) {
                   : <Placeholder label={c.id} ratio="16/9" className="rounded-none border-0" />
                 }
                 <div className="absolute top-3 left-3 right-3 flex justify-between gap-2">
-                  {archived && <Status kind="archived">Diarsipkan</Status>}
+                  {archived && <Status kind="archived">{t("admin.classes.archivedBadge")}</Status>}
                 </div>
               </div>
               <div className="p-4">
@@ -299,8 +306,8 @@ export default function AdminClass({ branchId }: { branchId: string }) {
                 <div className="text-xs text-ink-mute mt-0.5 space-y-0.5">
                   {(c.schedule_days ?? []).length > 0
                     ? (c.schedule_days ?? []).map(day => {
-                        const t = getSlotTime(c, day);
-                        return <div key={day}>{day} · {t.time_start?.slice(0,5)}{t.time_end ? `–${t.time_end.slice(0,5)}` : ""}</div>;
+                        const slotT = getSlotTime(c, day);
+                        return <div key={day}>{dayLabels[day] ?? day} · {slotT.time_start?.slice(0,5)}{slotT.time_end ? `–${slotT.time_end.slice(0,5)}` : ""}</div>;
                       })
                     : <div>—</div>
                   }
@@ -310,7 +317,7 @@ export default function AdminClass({ branchId }: { branchId: string }) {
                 )}
                 <div className="mt-3">
                   <div className="flex justify-between text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-1">
-                    <span>Kapasitas</span>
+                    <span>{t("admin.classes.capacityLabel")}</span>
                     <span className={`font-mono ${pct >= 1 ? "text-danger-500" : pct > 0.7 ? "text-warn-600" : "text-ok-600"}`}>{c.enrolled}/{c.capacity}</span>
                   </div>
                   <div className="h-1.5 bg-paper-deep rounded-full overflow-hidden">
@@ -320,34 +327,34 @@ export default function AdminClass({ branchId }: { branchId: string }) {
                 <div className="mt-3 flex items-center gap-1.5">
                   {(c.coach_spreadsheets ?? []).length > 0 ? (
                     <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-ok-600">
-                      <Icon name="link" className="w-3 h-3" />{c.coach_spreadsheets!.length} spreadsheet
+                      <Icon name="link" className="w-3 h-3" />{t("admin.classes.spreadsheetCountSuffix", { count: c.coach_spreadsheets!.length })}
                     </span>
                   ) : (
                     <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-warn-500">
-                      <Icon name="warning" className="w-3 h-3" />Belum ada spreadsheet
+                      <Icon name="warning" className="w-3 h-3" />{t("admin.classes.noSpreadsheetYet")}
                     </span>
                   )}
                 </div>
                 <div className="mt-3 pt-3 border-t border-line flex items-center justify-between">
                   {c.class_type === "private" ? (
                     <div>
-                      <div className="text-xs text-ink-mute font-semibold">Private</div>
-                      <div className="text-xs text-ink-mute">{(c.packages ?? []).filter(p => p.active).length} paket aktif</div>
+                      <div className="text-xs text-ink-mute font-semibold">{t("admin.classes.privateLabel")}</div>
+                      <div className="text-xs text-ink-mute">{t("admin.classes.activePackagesCount", { count: (c.packages ?? []).filter(p => p.active).length })}</div>
                     </div>
                   ) : (
-                    <div className="font-display font-bold text-ocean-700">{fmtIDR(c.price_monthly)}<span className="text-xs text-ink-mute font-semibold">/bln</span></div>
+                    <div className="font-display font-bold text-ocean-700">{fmtIDR(c.price_monthly)}<span className="text-xs text-ink-mute font-semibold">{t("admin.classes.perMonthSuffix")}</span></div>
                   )}
                   <div className="flex gap-1">
                     {archived ? (
-                      <button onClick={() => restoreClass(c)} title="Aktifkan kembali" className="w-8 h-8 rounded-lg hover:bg-paper-tint text-ink-mute hover:text-ok-600 flex items-center justify-center"><Icon name="check" className="w-4 h-4" /></button>
+                      <button onClick={() => restoreClass(c)} title={t("admin.classes.restoreTitleAttr")} className="w-8 h-8 rounded-lg hover:bg-paper-tint text-ink-mute hover:text-ok-600 flex items-center justify-center"><Icon name="check" className="w-4 h-4" /></button>
                     ) : (
                       <>
                         {c.class_type === "private" && (
-                          <button onClick={() => openPackages(c)} title="Paket harga" className="w-8 h-8 rounded-lg hover:bg-paper-tint text-ink-mute hover:text-ocean-600 flex items-center justify-center"><Icon name="invoice" className="w-4 h-4" /></button>
+                          <button onClick={() => openPackages(c)} title={t("admin.classes.pricingPackagesTitleAttr")} className="w-8 h-8 rounded-lg hover:bg-paper-tint text-ink-mute hover:text-ocean-600 flex items-center justify-center"><Icon name="invoice" className="w-4 h-4" /></button>
                         )}
-                        <button onClick={() => openClassAtt(c)} title="Absensi member" className="w-8 h-8 rounded-lg hover:bg-paper-tint text-ink-mute hover:text-wave-600 flex items-center justify-center"><Icon name="calendar" className="w-4 h-4" /></button>
-                        <button onClick={() => openEdit(c)} title="Edit kelas" className="w-8 h-8 rounded-lg hover:bg-paper-tint text-ink-mute hover:text-ocean-600 flex items-center justify-center"><Icon name="edit" className="w-4 h-4" /></button>
-                        <button onClick={() => archiveClass(c)} title="Arsipkan" className="w-8 h-8 rounded-lg hover:bg-paper-tint text-ink-mute hover:text-danger-500 flex items-center justify-center"><Icon name="archive" className="w-4 h-4" /></button>
+                        <button onClick={() => openClassAtt(c)} title={t("admin.classes.memberAttendanceTitleAttr")} className="w-8 h-8 rounded-lg hover:bg-paper-tint text-ink-mute hover:text-wave-600 flex items-center justify-center"><Icon name="calendar" className="w-4 h-4" /></button>
+                        <button onClick={() => openEdit(c)} title={t("admin.classes.editClassTitleAttr")} className="w-8 h-8 rounded-lg hover:bg-paper-tint text-ink-mute hover:text-ocean-600 flex items-center justify-center"><Icon name="edit" className="w-4 h-4" /></button>
+                        <button onClick={() => archiveClass(c)} title={t("admin.classes.archiveTitleAttr")} className="w-8 h-8 rounded-lg hover:bg-paper-tint text-ink-mute hover:text-danger-500 flex items-center justify-center"><Icon name="archive" className="w-4 h-4" /></button>
                       </>
                     )}
                   </div>
@@ -359,14 +366,14 @@ export default function AdminClass({ branchId }: { branchId: string }) {
       </div>
 
       {/* Create / Edit class modal */}
-      <Modal open={openForm} onClose={() => setOpenForm(false)} title={editTarget ? `Edit Kelas — ${editTarget.name}` : "Tambah Kelas Baru"} size="lg"
-        footer={<><Btn variant="ghost" onClick={() => setOpenForm(false)}>Batal</Btn><Btn variant="primary" onClick={saveClass} disabled={saving}>{saving ? "Menyimpan…" : editTarget ? "Simpan perubahan" : "Simpan kelas"}</Btn></>}>
+      <Modal open={openForm} onClose={() => setOpenForm(false)} title={editTarget ? t("admin.classes.editModalTitleEdit", { name: editTarget.name }) : t("admin.classes.addModalTitleAdd")} size="lg"
+        footer={<><Btn variant="ghost" onClick={() => setOpenForm(false)}>{t("common.actions.cancel")}</Btn><Btn variant="primary" onClick={saveClass} disabled={saving}>{saving ? t("common.actions.saving") : editTarget ? t("admin.classes.saveChangesBtn") : t("admin.classes.saveClassBtn")}</Btn></>}>
         <div className="space-y-4">
           {/* Tipe kelas toggle — hanya saat create */}
           {!editTarget && (
-            <Field label="Tipe kelas" required>
+            <Field label={t("admin.classes.fieldClassType")} required>
               <div className="flex gap-2">
-                {[["reguler", "Reguler", "Kelas group, jadwal tetap"], ["private", "Private", "1-on-1, jadwal fleksibel"]].map(([val, label, desc]) => (
+                {[["reguler", t("admin.classes.typeRegularLabel"), t("admin.classes.typeRegularDesc")], ["private", t("admin.classes.typePrivateLabel"), t("admin.classes.typePrivateDesc")]].map(([val, label, desc]) => (
                   <button key={val} type="button" onClick={() => setForm(f => ({ ...f, class_type: val, capacity: val === "private" ? "1" : f.capacity }))}
                     className={`flex-1 p-3 rounded-xl border-2 text-left transition-colors ${form.class_type === val ? "border-ocean-500 bg-ocean-50" : "border-line hover:bg-paper-tint"}`}>
                     <div className={`font-bold text-sm ${form.class_type === val ? "text-ocean-700" : "text-ink"}`}>{label}</div>
@@ -379,15 +386,15 @@ export default function AdminClass({ branchId }: { branchId: string }) {
           {isPrivate && (
             <div className="bg-wave-50 border border-wave-100 rounded-xl p-3 text-sm text-wave-800 flex gap-2">
               <Icon name="info" className="w-4 h-4 mt-0.5 shrink-0 text-wave-500" />
-              <span>Kelas private kapasitas otomatis 1. Hari sesi bersifat preferensi — absensi bisa dicatat kapan saja oleh coach.</span>
+              <span>{t("admin.classes.privateNotice")}</span>
             </div>
           )}
           <div className="grid sm:grid-cols-2 gap-4">
-            <Field label="Nama kelas" required className="sm:col-span-2"><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder={isPrivate ? "Mis. Private — Coach Salwa" : "Mis. Tadpole — Pengenalan Air"} /></Field>
+            <Field label={t("admin.classes.fieldClassName")} required className="sm:col-span-2"><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder={isPrivate ? t("admin.classes.classNamePlaceholderPrivate") : t("admin.classes.classNamePlaceholderRegular")} /></Field>
             {!isPrivate && (
               <>
-                <Field label="Kapasitas" required><Input type="number" value={form.capacity} onChange={e => setForm(f => ({ ...f, capacity: e.target.value }))} placeholder="15" min="1" /></Field>
-                <Field label="Harga/bulan" required hint={form.price_monthly ? `Rp ${Number(form.price_monthly).toLocaleString("id-ID")}` : undefined}>
+                <Field label={t("admin.classes.fieldCapacity")} required><Input type="number" value={form.capacity} onChange={e => setForm(f => ({ ...f, capacity: e.target.value }))} placeholder="15" min="1" /></Field>
+                <Field label={t("admin.classes.fieldPricePerMonth")} required hint={form.price_monthly ? `Rp ${Number(form.price_monthly).toLocaleString("id-ID")}` : undefined}>
                   <Input type="text" inputMode="numeric" value={form.price_monthly ? Number(form.price_monthly).toLocaleString("id-ID") : ""}
                     onChange={e => setForm(f => ({ ...f, price_monthly: e.target.value.replace(/\D/g, "") }))}
                     className="font-mono" placeholder="550.000" />
@@ -395,7 +402,7 @@ export default function AdminClass({ branchId }: { branchId: string }) {
               </>
             )}
             {isPrivate && (
-              <Field label="Harga per sesi" hint={form.price_per_session ? `Rp ${Number(form.price_per_session).toLocaleString("id-ID")}` : "Rp per pertemuan"}>
+              <Field label={t("admin.classes.fieldPricePerSession")} hint={form.price_per_session ? `Rp ${Number(form.price_per_session).toLocaleString("id-ID")}` : t("admin.classes.pricePerSessionHint")}>
                 <Input type="text" inputMode="numeric" value={form.price_per_session ? Number(form.price_per_session).toLocaleString("id-ID") : ""}
                   onChange={e => setForm(f => ({ ...f, price_per_session: e.target.value.replace(/\D/g, "") }))}
                   className="font-mono" placeholder="150.000" />
@@ -405,13 +412,13 @@ export default function AdminClass({ branchId }: { branchId: string }) {
 
           {/* Hari & Jam */}
           <div className="block">
-            <span className="text-[13px] font-semibold text-ink-soft mb-1.5 block">{isPrivate ? "Preferensi hari latihan" : "Hari sesi"}{!isPrivate && <span className="text-danger-500 ml-0.5">*</span>}</span>
+            <span className="text-[13px] font-semibold text-ink-soft mb-1.5 block">{isPrivate ? t("admin.classes.sessionDaysLabelPref") : t("admin.classes.sessionDaysLabel")}{!isPrivate && <span className="text-danger-500 ml-0.5">*</span>}</span>
             {/* Day picker */}
             <div className="flex flex-wrap gap-2 mt-1">
               {DAY_OPTS.map(d => (
                 <button key={d} type="button" onClick={() => toggleDay(d)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-bold border ${form.schedule_days.includes(d) ? "bg-ocean-700 text-white border-ocean-700" : "border-line text-ink-soft hover:bg-paper-tint"}`}>
-                  {d.slice(0,3)}
+                  {(dayLabels[d] ?? d).slice(0,3)}
                 </button>
               ))}
             </div>
@@ -421,7 +428,7 @@ export default function AdminClass({ branchId }: { branchId: string }) {
               <div className="mt-3 rounded-xl border border-line overflow-hidden">
                 {/* Toggle mode */}
                 <div className="flex items-center justify-between px-3 py-2 bg-paper-tint border-b border-line">
-                  <span className="text-xs font-semibold text-ink-mute">Pengaturan jam</span>
+                  <span className="text-xs font-semibold text-ink-mute">{t("admin.classes.timeSettingsLabel")}</span>
                   <div className="flex rounded-lg border border-line overflow-hidden text-xs font-bold">
                     <button type="button"
                       onClick={() => setForm(f => ({
@@ -438,7 +445,7 @@ export default function AdminClass({ branchId }: { branchId: string }) {
                         })),
                       }))}
                       className={`px-2.5 py-1 transition-colors ${form.same_time_all ? "bg-ocean-700 text-white" : "text-ink-soft hover:bg-paper-deep"}`}>
-                      Sama semua hari
+                      {t("admin.classes.sameAllDaysBtn")}
                     </button>
                     <button type="button"
                       onClick={() => setForm(f => ({
@@ -451,7 +458,7 @@ export default function AdminClass({ branchId }: { branchId: string }) {
                         }),
                       }))}
                       className={`px-2.5 py-1 transition-colors ${!form.same_time_all ? "bg-ocean-700 text-white" : "text-ink-soft hover:bg-paper-deep"}`}>
-                      Beda per hari
+                      {t("admin.classes.differentPerDayBtn")}
                     </button>
                   </div>
                 </div>
@@ -459,7 +466,7 @@ export default function AdminClass({ branchId }: { branchId: string }) {
                 {form.same_time_all ? (
                   /* Mode: jam sama untuk semua hari */
                   <div className="px-3 py-3 flex gap-3 items-end flex-wrap">
-                    <Field label="Jam mulai" className="flex-1 min-w-[120px]">
+                    <Field label={t("admin.classes.fieldStartTime")} className="flex-1 min-w-[120px]">
                       <TimePicker value={form.time_start}
                         onChange={v => setForm(f => ({
                           ...f,
@@ -467,7 +474,7 @@ export default function AdminClass({ branchId }: { branchId: string }) {
                           schedule_times: f.schedule_times.map(s => ({ ...s, time_start: v })),
                         }))} />
                     </Field>
-                    <Field label="Jam selesai" className="flex-1 min-w-[120px]">
+                    <Field label={t("admin.classes.fieldEndTime")} className="flex-1 min-w-[120px]">
                       <TimePicker value={form.time_end}
                         onChange={v => setForm(f => ({
                           ...f,
@@ -475,7 +482,7 @@ export default function AdminClass({ branchId }: { branchId: string }) {
                           schedule_times: f.schedule_times.map(s => ({ ...s, time_end: v })),
                         }))} />
                     </Field>
-                    <div className="pb-1 text-xs text-ink-mute self-end">Berlaku untuk: {form.schedule_days.join(", ")}</div>
+                    <div className="pb-1 text-xs text-ink-mute self-end">{t("admin.classes.appliesTo", { days: form.schedule_days.map(d => dayLabels[d] ?? d).join(", ") })}</div>
                   </div>
                 ) : (
                   /* Mode: jam berbeda per hari */
@@ -484,7 +491,7 @@ export default function AdminClass({ branchId }: { branchId: string }) {
                       const slot = form.schedule_times.find(s => s.day === day) ?? { day, time_start: "", time_end: "" };
                       return (
                         <div key={day} className="px-3 py-2.5 flex items-center gap-3">
-                          <span className="w-12 text-xs font-bold text-ink-soft shrink-0">{day.slice(0,3)}</span>
+                          <span className="w-12 text-xs font-bold text-ink-soft shrink-0">{(dayLabels[day] ?? day).slice(0,3)}</span>
                           <div className="flex gap-2 flex-1">
                             <TimePicker value={slot.time_start} className="flex-1"
                               onChange={v => updateSlotTime(day, "time_start", v)} />
@@ -499,13 +506,13 @@ export default function AdminClass({ branchId }: { branchId: string }) {
                 )}
               </div>
             )}
-            <span className="text-xs text-ink-faint mt-1 block">{isPrivate ? "Opsional — hanya sebagai info" : "Pilih satu atau lebih hari, lalu atur jam per hari"}</span>
+            <span className="text-xs text-ink-faint mt-1 block">{isPrivate ? t("admin.classes.optionalInfoOnly") : t("admin.classes.pickDaysHint")}</span>
           </div>
-          <Field label="Tujuan kelas" hint="Tampil di coach page dan member page"><Textarea rows={2} value={form.goals} onChange={e => setForm(f => ({ ...f, goals: e.target.value }))} placeholder="Mis. Pengenalan air, membangun rasa percaya diri di air." /></Field>
-          <Field label="Deskripsi kelas" hint="Opsional — tampil di coach page dan member page"><Textarea rows={3} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Mis. Kelas ini dirancang untuk anak usia 4–6 tahun yang baru pertama kali belajar renang..." /></Field>
+          <Field label={t("admin.classes.fieldClassGoals")} hint={t("admin.classes.classGoalsHint")}><Textarea rows={2} value={form.goals} onChange={e => setForm(f => ({ ...f, goals: e.target.value }))} placeholder={t("admin.classes.classGoalsPlaceholder")} /></Field>
+          <Field label={t("admin.classes.fieldClassDescription")} hint={t("admin.classes.classDescriptionHint")}><Textarea rows={3} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder={t("admin.classes.classDescriptionPlaceholder")} /></Field>
           {editTarget && coaches.length > 0 && (
             <div>
-              <div className="text-xs font-bold uppercase tracking-widest text-ink-faint mb-2">Coach yang mengajar</div>
+              <div className="text-xs font-bold uppercase tracking-widest text-ink-faint mb-2">{t("admin.classes.teachingCoachesLabel")}</div>
               <div className="space-y-1.5">
                 {[...(editTarget.class_coaches ?? [])].sort((a, b) => (b.role === "head" ? 1 : 0) - (a.role === "head" ? 1 : 0)).map(cc => cc.profile && (
                   <div key={cc.coach_id} className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-ocean-50 text-xs">
@@ -513,11 +520,11 @@ export default function AdminClass({ branchId }: { branchId: string }) {
                     <span className="flex-1 font-semibold text-ocean-700 truncate">{cc.profile.full_name}</span>
                     <button type="button" disabled={coachMutating} onClick={() => setClassCoachRole(editTarget.id, cc.coach_id, "head")}
                       className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide transition-colors ${cc.role === "head" ? "bg-ocean-700 text-white" : "bg-white border border-line text-ink-mute"}`}>
-                      Head
+                      {t("admin.classes.headRoleBtn")}
                     </button>
                     <button type="button" disabled={coachMutating} onClick={() => setClassCoachRole(editTarget.id, cc.coach_id, "assistant")}
                       className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide transition-colors ${cc.role === "assistant" ? "bg-ocean-700 text-white" : "bg-white border border-line text-ink-mute"}`}>
-                      Wakil
+                      {t("admin.classes.assistantRoleBtn")}
                     </button>
                     <button type="button" disabled={coachMutating} onClick={() => removeClassCoach(editTarget.id, cc.coach_id)}
                       className="p-1 rounded-full text-danger-600 hover:bg-danger-50">
@@ -525,7 +532,7 @@ export default function AdminClass({ branchId }: { branchId: string }) {
                     </button>
                   </div>
                 ))}
-                {(editTarget.class_coaches?.length ?? 0) === 0 && <span className="text-xs text-warn-600 font-semibold">Belum ada coach assigned</span>}
+                {(editTarget.class_coaches?.length ?? 0) === 0 && <span className="text-xs text-warn-600 font-semibold">{t("admin.classes.noCoachAssigned")}</span>}
               </div>
               {(() => {
                 const assignedIds = new Set((editTarget.class_coaches ?? []).map(cc => cc.coach_id));
@@ -535,23 +542,23 @@ export default function AdminClass({ branchId }: { branchId: string }) {
                   <div className="flex items-center gap-2 mt-2">
                     <select value={addCoachId} onChange={e => setAddCoachId(e.target.value)} disabled={coachMutating}
                       className="flex-1 text-xs rounded-lg border border-line px-2 py-1.5 bg-paper-tint">
-                      <option value="">Pilih coach untuk ditambahkan…</option>
+                      <option value="">{t("admin.classes.selectCoachToAddPlaceholder")}</option>
                       {available.map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
                     </select>
-                    <Btn variant="soft" size="sm" disabled={!addCoachId || coachMutating} onClick={() => addClassCoach(editTarget.id, addCoachId)}>Tambah</Btn>
+                    <Btn variant="soft" size="sm" disabled={!addCoachId || coachMutating} onClick={() => addClassCoach(editTarget.id, addCoachId)}>{t("common.actions.add")}</Btn>
                   </div>
                 );
               })()}
-              <p className="text-[11px] text-ink-faint mt-1.5">Maks 1 head per kelas — set head baru otomatis menurunkan head lama.</p>
+              <p className="text-[11px] text-ink-faint mt-1.5">{t("admin.classes.maxOneHeadHint")}</p>
             </div>
           )}
           {editTarget && (
             <div className="border-t border-line pt-4 space-y-2">
-              <div className="text-xs font-bold uppercase tracking-widest text-ink-faint">Spreadsheet Program</div>
+              <div className="text-xs font-bold uppercase tracking-widest text-ink-faint">{t("admin.classes.programSpreadsheetLabel")}</div>
               {(editTarget.coach_spreadsheets ?? []).length === 0 ? (
                 <div className="flex items-center gap-2 p-3 rounded-xl bg-warn-50 border border-warn-200 text-sm text-warn-700">
                   <Icon name="warning" className="w-4 h-4 shrink-0 text-warn-500" />
-                  Belum ada coach yang mengisi spreadsheet program.
+                  {t("admin.classes.noCoachFilledSpreadsheet")}
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -560,10 +567,10 @@ export default function AdminClass({ branchId }: { branchId: string }) {
                       <Avatar name={s.coach?.full_name ?? "?"} size={28} />
                       <div className="flex-1 min-w-0">
                         <div className="text-xs text-ok-700 font-semibold truncate">{s.coach?.full_name ?? s.coach_id}</div>
-                        <div className="text-[10px] text-ink-faint font-mono">{new Date(s.updated_at).toLocaleDateString("id-ID")}</div>
+                        <div className="text-[10px] text-ink-faint font-mono">{new Date(s.updated_at).toLocaleDateString(localeTag)}</div>
                       </div>
                       <a href={s.spreadsheet_url} target="_blank" rel="noreferrer">
-                        <Btn variant="soft" size="sm" icon="link">Buka</Btn>
+                        <Btn variant="soft" size="sm" icon="link">{t("admin.classes.openBtn")}</Btn>
                       </a>
                     </div>
                   ))}
@@ -575,12 +582,12 @@ export default function AdminClass({ branchId }: { branchId: string }) {
       </Modal>
 
       {/* Per-class attendance modal */}
-      <Modal open={!!attClass} onClose={() => setAttClass(null)} title={`Absensi Member — ${attClass?.name ?? ""}`} size="lg"
-        footer={<Btn variant="ghost" onClick={() => setAttClass(null)}>Tutup</Btn>}>
+      <Modal open={!!attClass} onClose={() => setAttClass(null)} title={t("admin.classes.attendanceModalTitle", { name: attClass?.name ?? "" })} size="lg"
+        footer={<Btn variant="ghost" onClick={() => setAttClass(null)}>{t("common.actions.close")}</Btn>}>
         {loadingAtt2 ? (
-          <div className="py-8 text-center text-ink-mute text-sm">Memuat…</div>
+          <div className="py-8 text-center text-ink-mute text-sm">{t("admin.classes.loadingEllipsis")}</div>
         ) : attSessions.length === 0 ? (
-          <div className="py-8 text-center text-ink-mute text-sm">Belum ada data absensi untuk kelas ini.</div>
+          <div className="py-8 text-center text-ink-mute text-sm">{t("admin.classes.noAttendanceDataForClass")}</div>
         ) : (
           <div className="space-y-2 max-h-[60vh] overflow-y-auto">
             {attSessions.map(s => {
@@ -596,8 +603,8 @@ export default function AdminClass({ branchId }: { branchId: string }) {
                       return next;
                     })}>
                     <span className="flex-1 font-semibold text-sm text-ink">{fmtDate(s.date)}</span>
-                    <span className="text-xs font-bold text-ok-600">{hadirCount} hadir</span>
-                    <span className="text-xs text-ink-mute">{s.rows.length} total</span>
+                    <span className="text-xs font-bold text-ok-600">{t("admin.classes.presentCountSuffix", { count: hadirCount })}</span>
+                    <span className="text-xs text-ink-mute">{t("admin.classes.totalCountSuffix", { count: s.rows.length })}</span>
                     <Icon name="chevronD" className={`w-4 h-4 text-ink-faint transition-transform ${isOpen ? "rotate-180" : ""}`} />
                   </button>
                   {isOpen && (
@@ -605,14 +612,14 @@ export default function AdminClass({ branchId }: { branchId: string }) {
                       {s.rows.map(r => (
                         <div key={r.id} className="flex items-center gap-3 px-4 py-2.5">
                           <span className="flex-1 text-sm text-ink">{r.member?.profile?.full_name ?? "—"}</span>
-                          <span className="text-xs text-ink-mute capitalize">{r.method === "manual" ? "Manual" : r.method === "qr" ? "QR" : r.method ?? "—"}</span>
+                          <span className="text-xs text-ink-mute capitalize">{r.method === "manual" ? t("admin.classes.methodManual2") : r.method === "qr" ? t("admin.classes.methodQr2") : r.method ?? "—"}</span>
                           {r.status === "hadir"
-                            ? <Status kind="approved" dot={false}>Hadir</Status>
+                            ? <Status kind="approved" dot={false}>{t("admin.absensi.statusPresent")}</Status>
                             : r.status === "izin"
-                            ? <Status kind="excused" dot={false}>Izin</Status>
+                            ? <Status kind="excused" dot={false}>{t("admin.absensi.statusExcused")}</Status>
                             : r.status === "sakit"
-                            ? <Status kind="sick" dot={false}>Sakit</Status>
-                            : <Status kind="rejected" dot={false}>Tidak Hadir</Status>}
+                            ? <Status kind="sick" dot={false}>{t("admin.absensi.statusSick")}</Status>
+                            : <Status kind="rejected" dot={false}>{t("admin.absensi.statusAbsent")}</Status>}
                         </div>
                       ))}
                     </div>
@@ -625,21 +632,21 @@ export default function AdminClass({ branchId }: { branchId: string }) {
       </Modal>
 
       {/* Package management modal */}
-      <Modal open={!!packageClass} onClose={() => setPackageClass(null)} title={`Paket Harga — ${packageClass?.name ?? ""}`} size="sm"
-        footer={<Btn variant="ghost" onClick={() => setPackageClass(null)}>Tutup</Btn>}>
+      <Modal open={!!packageClass} onClose={() => setPackageClass(null)} title={t("admin.classes.pricingModalTitle", { name: packageClass?.name ?? "" })} size="sm"
+        footer={<Btn variant="ghost" onClick={() => setPackageClass(null)}>{t("common.actions.close")}</Btn>}>
         <div className="space-y-4">
           {packages.length === 0 ? (
-            <div className="text-center py-6 text-ink-mute text-sm">Belum ada paket. Tambahkan paket di bawah.</div>
+            <div className="text-center py-6 text-ink-mute text-sm">{t("admin.classes.noPackagesYet")}</div>
           ) : (
             <div className="space-y-2">
               {packages.map(pkg => (
                 <div key={pkg.id} className={`flex items-center gap-3 p-3 rounded-xl border ${pkg.active ? "border-line bg-white" : "border-line bg-paper-tint opacity-60"}`}>
                   <div className="flex-1 min-w-0">
                     <div className="font-semibold text-sm text-ink truncate">{pkg.name}</div>
-                    <div className="text-xs text-ink-mute">{pkg.sessions} sesi · {fmtIDR(pkg.price)}</div>
+                    <div className="text-xs text-ink-mute">{t("admin.classes.sessionsCountSuffix", { count: pkg.sessions })} · {fmtIDR(pkg.price)}</div>
                   </div>
                   <button onClick={() => togglePackageActive(pkg)} className={`text-xs px-2 py-1 rounded-lg font-bold shrink-0 ${pkg.active ? "bg-ok-50 text-ok-600" : "bg-paper-tint text-ink-mute"}`}>
-                    {pkg.active ? "Aktif" : "Nonaktif"}
+                    {pkg.active ? t("admin.classes.activeBadge2") : t("admin.classes.inactiveBadge2")}
                   </button>
                   <button onClick={() => deletePackage(pkg.id)} className="w-7 h-7 rounded-lg text-ink-mute hover:text-danger-500 hover:bg-danger-50 flex items-center justify-center shrink-0">
                     <Icon name="trash" className="w-3.5 h-3.5" />
@@ -649,19 +656,19 @@ export default function AdminClass({ branchId }: { branchId: string }) {
             </div>
           )}
           <div className="border-t border-line pt-4 space-y-3">
-            <div className="text-xs font-bold text-ink-mute uppercase tracking-widest">Tambah Paket</div>
-            <Field label="Nama paket" hint="Opsional — otomatis dari jumlah sesi jika kosong.">
-              <Input value={pkgForm.name} onChange={e => setPkgForm(f => ({ ...f, name: e.target.value }))} placeholder="Mis. Paket Hemat 10 Sesi" />
+            <div className="text-xs font-bold text-ink-mute uppercase tracking-widest">{t("admin.classes.addPackageLabel")}</div>
+            <Field label={t("admin.classes.fieldPackageName")} hint={t("admin.classes.packageNameHint")}>
+              <Input value={pkgForm.name} onChange={e => setPkgForm(f => ({ ...f, name: e.target.value }))} placeholder={t("admin.classes.packageNamePlaceholder")} />
             </Field>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Jumlah sesi" required>
+              <Field label={t("admin.classes.fieldSessionCount")} required>
                 <Input type="number" min={1} value={pkgForm.sessions} onChange={e => setPkgForm(f => ({ ...f, sessions: e.target.value }))} placeholder="10" />
               </Field>
-              <Field label="Harga paket" required>
+              <Field label={t("admin.classes.fieldPackagePrice")} required>
                 <Input type="number" min={0} value={pkgForm.price} onChange={e => setPkgForm(f => ({ ...f, price: e.target.value }))} placeholder="1200000" className="font-mono" />
               </Field>
             </div>
-            <Btn variant="primary" size="sm" icon="plus" onClick={savePackage} disabled={savingPkg}>{savingPkg ? "Menyimpan…" : "Tambah Paket"}</Btn>
+            <Btn variant="primary" size="sm" icon="plus" onClick={savePackage} disabled={savingPkg}>{savingPkg ? t("common.actions.saving") : t("admin.classes.addPackageBtn")}</Btn>
           </div>
         </div>
       </Modal>

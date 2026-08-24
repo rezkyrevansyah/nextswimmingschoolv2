@@ -71,4 +71,10 @@ export const common = {
     en: "EN",
     id: "ID",
   },
+  apiErrors: {
+    emailTaken: "Email already registered",
+    emailTakenHint: "Use a different email.",
+    genericTitle: "Failed",
+    genericBody: "An error occurred.",
+  },
 };

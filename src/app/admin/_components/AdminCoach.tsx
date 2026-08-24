@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
+import { useLocale } from "@/components/providers/LocaleProvider";
 import { useUpload } from "@/hooks/useUpload";
 import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
@@ -20,11 +21,10 @@ import { calcAge, parseUserApiError } from "../_utils";
 import type { Database } from "@/types/database";
 import { fmtDate, waLink } from "@/lib/utils";
 
-const MONTHS_LONG_ID = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
-function fmtMonthYear(val: string | null | undefined): string {
+function fmtMonthYear(val: string | null | undefined, monthsLong: string[]): string {
   if (!val) return "";
   const m = val.match(/^(\d{4})-(\d{2})/);
-  if (m) return `${MONTHS_LONG_ID[parseInt(m[2]) - 1]} ${m[1]}`;
+  if (m) return `${monthsLong[parseInt(m[2]) - 1]} ${m[1]}`;
   return val;
 }
 function toDbDate(ym: string): string { return ym ? `${ym}-01` : ym; }
@@ -43,6 +43,9 @@ const EMPTY_COACH_FORM = { full_name: "", nick_name: "", email: "", phone: "", p
 export default function AdminCoach({ branchId }: { branchId: string }) {
   const toast = useToast();
   const confirm = useConfirm();
+  const { t, tArray } = useLocale();
+  const monthsLong = tArray("common.months.long");
+  const genderLabel = (g: string | null | undefined) => g === "male" ? t("admin.approvement.genderMale") : g === "female" ? t("admin.approvement.genderFemale") : null;
   const { upload } = useUpload();
   const [coaches, setCoaches] = useState<CoachFull[]>([]);
   const [loading, setLoading] = useState(true);
@@ -131,14 +134,14 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
   };
 
   const createCoach = async () => {
-    if (!form.full_name || !form.email || !form.password) return toast.error("Nama, email, dan password wajib diisi");
+    if (!form.full_name || !form.email || !form.password) return toast.error(t("admin.coaches.nameEmailPasswordRequired"));
     setSaving(true);
     const res = await fetch("/api/admin/users", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...form, role: "coach", branch_id: branchId }),
     });
     const json = await res.json() as { user_id?: string; error?: string; code?: string };
-    if (!res.ok) { const [t, s, d] = parseUserApiError(json); toast.error(t, s, d); setSaving(false); return; }
+    if (!res.ok) { const [errT, errS, errD] = parseUserApiError(json, t); toast.error(errT, errS, errD); setSaving(false); return; }
 
     const uid = json.user_id!;
     const db = createClient();
@@ -194,7 +197,7 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
 
   const saveEdit = async () => {
     if (!detail) return;
-    if (!editForm.full_name) return toast.error("Nama wajib diisi");
+    if (!editForm.full_name) return toast.error(t("admin.coaches.nameRequired"));
     setEditSaving(true);
     const { error } = await createClient().from("profiles")
       .update({
@@ -213,7 +216,7 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
         bank_holder: editForm.bank_holder || null,
       })
       .eq("id", detail.id);
-    if (error) { setEditSaving(false); return toast.error("Gagal menyimpan", error.message); }
+    if (error) { setEditSaving(false); return toast.error(t("admin.approvement.saveFailedGeneric"), error.message); }
 
     // Upload avatar if changed
     if (editAvatarFile) {
@@ -226,7 +229,7 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
     }
 
     setEditSaving(false);
-    toast.success("Data coach diperbarui");
+    toast.success(t("admin.coaches.coachDataUpdatedToast"));
     setOpenEdit(false);
     setEditAvatarFile(null);
     setEditAvatarPreview(null);
@@ -235,7 +238,7 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
   };
 
   const addCert = async () => {
-    if (!detail) return toast.error("Data coach belum dimuat, coba refresh");
+    if (!detail) return toast.error(t("admin.coaches.coachDataNotLoadedError"));
     setSavingCert(true);
     const title = certForm.title.trim();
     const { data, error } = await createClient().from("certifications").insert({
@@ -246,12 +249,12 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
       no_expiry: certForm.no_expiry,
       status: "pending",
     }).select("id, name, title, status, valid_from, valid_until").single();
-    if (error || !data) { setSavingCert(false); return toast.error("Gagal menambah sertifikasi", error?.message ?? "Data tidak tersimpan"); }
+    if (error || !data) { setSavingCert(false); return toast.error(t("admin.coaches.addCertFailed"), error?.message ?? t("admin.coaches.dataNotSavedFallback")); }
     if (certPhotoFile) {
       try { await upload.cert(certPhotoFile, data.id); } catch { /* non-fatal */ }
     }
     setSavingCert(false);
-    toast.success("Sertifikasi ditambahkan");
+    toast.success(t("admin.coaches.certAddedToast"));
     setOpenAddCert(false);
     setCertForm({ title: "", issuer: "", issued_at: "", expires_at: "", no_expiry: false });
     setCertPhotoFile(null);
@@ -260,21 +263,21 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
 
   const deleteCert = async (certId: string) => {
     if (!detail) return;
-    const ok = await confirm({ body: "Hapus sertifikasi ini?" });
+    const ok = await confirm({ body: t("admin.coaches.deleteCertConfirmBody") });
     if (!ok) return;
     const { error } = await createClient().from("certifications").delete().eq("id", certId);
-    if (error) return toast.error("Gagal menghapus sertifikasi", error.message);
-    toast.success("Sertifikasi dihapus");
+    if (error) return toast.error(t("admin.coaches.deleteCertFailed"), error.message);
+    toast.success(t("admin.coaches.certDeletedToast"));
     setDetail(prev => prev ? { ...prev, certifications: (prev.certifications ?? []).filter(c => c.id !== certId) } : prev);
   };
 
   const doSuspend = async () => {
-    if (!suspendTarget || !suspendForm.reason || !suspendForm.until) return toast.error("Alasan dan tanggal berakhir wajib diisi");
+    if (!suspendTarget || !suspendForm.reason || !suspendForm.until) return toast.error(t("admin.coaches.reasonUntilRequired"));
     setSuspending(true);
     const { error } = await createClient().from("profiles").update({ suspend_until: suspendForm.until, suspend_reason: suspendForm.reason } satisfies Database["public"]["Tables"]["profiles"]["Update"]).eq("id", suspendTarget.id);
     setSuspending(false);
-    if (error) return toast.error("Gagal suspend coach", error.message);
-    toast.success(`${suspendTarget.full_name} di-suspend hingga ${fmtDate(suspendForm.until)}`);
+    if (error) return toast.error(t("admin.coaches.suspendFailed"), error.message);
+    toast.success(t("admin.coaches.suspendedUntilToast", { name: suspendTarget.full_name, date: fmtDate(suspendForm.until) }));
     setSuspendTarget(null);
     if (detail?.id === suspendTarget.id) setDetail(prev => prev ? { ...prev, suspend_until: suspendForm.until, suspend_reason: suspendForm.reason } : prev);
     load();
@@ -282,38 +285,38 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
 
   const liftSuspend = async (c: CoachFull) => {
     const { error } = await createClient().from("profiles").update({ suspend_until: null, suspend_reason: null } satisfies Database["public"]["Tables"]["profiles"]["Update"]).eq("id", c.id);
-    if (error) return toast.error("Gagal mengakhiri suspend", error.message);
-    toast.success("Suspend diakhiri");
+    if (error) return toast.error(t("admin.coaches.endSuspendFailed"), error.message);
+    toast.success(t("admin.coaches.suspendEndedToast"));
     if (detail?.id === c.id) setDetail(prev => prev ? { ...prev, suspend_until: null, suspend_reason: null } : prev);
     load();
   };
 
   const toggleArchive = async (c: CoachFull) => {
     const archiving = !c.is_archived;
-    const ok = await confirm({ body: archiving ? `Arsipkan coach ${c.full_name}? Coach tidak akan muncul di daftar aktif.` : `Aktifkan kembali coach ${c.full_name}?` });
+    const ok = await confirm({ body: archiving ? t("admin.coaches.archiveConfirmBody2", { name: c.full_name }) : t("admin.coaches.reactivateConfirmBody", { name: c.full_name }) });
     if (!ok) return;
     const { error } = await createClient().from("profiles").update({ is_archived: archiving } satisfies Database["public"]["Tables"]["profiles"]["Update"]).eq("id", c.id);
-    if (error) return toast.error("Gagal mengubah status", error.message);
-    toast.success(archiving ? "Coach diarsipkan" : "Coach diaktifkan kembali");
+    if (error) return toast.error(t("admin.coaches.changeStatusFailed"), error.message);
+    toast.success(archiving ? t("admin.coaches.coachArchivedToast") : t("admin.coaches.coachReactivatedToast"));
     if (detail?.id === c.id) { setDetail(prev => prev ? { ...prev, is_archived: archiving } : prev); }
     load();
   };
 
   const deleteCoach = async (c: CoachFull) => {
-    const ok = await confirm({ body: `Hapus permanen akun coach ${c.full_name}? Tindakan ini tidak bisa dibatalkan.`, danger: true, confirmLabel: "Hapus" });
+    const ok = await confirm({ body: t("admin.coaches.deleteCoachConfirmBody", { name: c.full_name }), danger: true, confirmLabel: t("common.actions.delete") });
     if (!ok) return;
     const res = await fetch(`/api/admin/users/${c.id}`, { method: "DELETE" });
     if (!res.ok) {
       const j = await res.json() as { error?: string };
-      return toast.error("Gagal menghapus coach", j.error);
+      return toast.error(t("admin.coaches.deleteCoachFailed"), j.error);
     }
-    toast.success("Coach dihapus");
+    toast.success(t("admin.coaches.coachDeletedToast"));
     setDetail(null);
     load();
   };
 
   const resetPassword = async () => {
-    if (!detail || !newPassword || newPassword.length < 6) return toast.error("Password minimal 6 karakter");
+    if (!detail || !newPassword || newPassword.length < 6) return toast.error(t("admin.schoolPanel.passwordMinLength"));
     setResetSaving(true);
     const res = await fetch(`/api/admin/users/${detail.id}`, {
       method: "PATCH", headers: { "Content-Type": "application/json" },
@@ -321,8 +324,8 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
     });
     const j = await res.json() as { error?: string };
     setResetSaving(false);
-    if (!res.ok) return toast.error("Gagal reset password", j.error);
-    toast.success("Password berhasil direset");
+    if (!res.ok) return toast.error(t("admin.coaches.resetPasswordFailed"), j.error);
+    toast.success(t("admin.coaches.passwordResetToast"));
     setOpenReset(false);
     setNewPassword("");
     setShowNewPassword(false);
@@ -370,10 +373,10 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
     const j = await res.json() as { error?: string; code?: string };
     setLinkSaving(false);
     if (!res.ok) {
-      if (j.code === "ALREADY_LINKED") return toast.error("Coach sudah terdaftar di cabang ini");
-      return toast.error("Gagal menghubungkan coach", j.error);
+      if (j.code === "ALREADY_LINKED") return toast.error(t("admin.coaches.alreadyLinkedToast"));
+      return toast.error(t("admin.coaches.linkCoachFailed"), j.error);
     }
-    toast.success(`${linkResult.full_name} berhasil ditambahkan ke cabang ini`);
+    toast.success(t("admin.coaches.linkedSuccessToast", { name: linkResult.full_name }));
     setOpenLink(false);
     setLinkSearch("");
     setLinkResult(null);
@@ -413,7 +416,7 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
       await supabase.from("class_coaches").delete().eq("coach_id", detail.id).in("class_id", toRemove);
     }
     setAssignSaving(false);
-    toast.success("Kelas berhasil diperbarui");
+    toast.success(t("admin.coaches.classesUpdatedToast"));
     setOpenAssign(false);
     // Update detail state immediately so panel reflects new assignment
     setDetail(prev => prev ? {
@@ -442,33 +445,33 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
     <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h2 className="font-display font-bold text-2xl">Manajemen Coach</h2>
-          <p className="text-ink-mute text-sm mt-0.5">Coach cabang Anda.</p>
+          <h2 className="font-display font-bold text-2xl">{t("admin.coaches.pageTitle")}</h2>
+          <p className="text-ink-mute text-sm mt-0.5">{t("admin.coaches.pageSub")}</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           {coaches.some(c => c.is_archived) && (
             <Btn variant="ghost" size="sm" onClick={() => setShowArchived(v => !v)}>
-              {showArchived ? "Sembunyikan Arsip" : `Tampilkan Arsip (${coaches.filter(c => c.is_archived).length})`}
+              {showArchived ? t("admin.coaches.hideArchivedBtn") : t("admin.coaches.showArchivedBtn", { count: coaches.filter(c => c.is_archived).length })}
             </Btn>
           )}
-          <Btn variant="soft" icon="link" onClick={() => { setLinkSearch(""); setLinkResult(null); setOpenLink(true); loadLinkCandidates(); }}>Link Coach Existing</Btn>
-          <Btn variant="primary" icon="plus" onClick={() => { setForm(EMPTY_COACH_FORM); setCreateAvatarFile(null); setCreateAvatarPreview(null); setOpenAdd(true); }}>Tambah Coach</Btn>
+          <Btn variant="soft" icon="link" onClick={() => { setLinkSearch(""); setLinkResult(null); setOpenLink(true); loadLinkCandidates(); }}>{t("admin.coaches.linkExistingCoachBtn")}</Btn>
+          <Btn variant="primary" icon="plus" onClick={() => { setForm(EMPTY_COACH_FORM); setCreateAvatarFile(null); setCreateAvatarPreview(null); setOpenAdd(true); }}>{t("admin.coaches.addCoachBtn")}</Btn>
         </div>
       </div>
 
       <Card padded={false}>
         {loading ? (
-          <div className="p-10 text-center text-ink-mute">Memuat data…</div>
+          <div className="p-10 text-center text-ink-mute">{t("admin.coaches.loadingData")}</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-[11px] uppercase tracking-widest text-ink-faint font-bold border-b border-line">
-                  <th className="text-left py-3 px-5 font-bold">Coach</th>
-                  <th className="text-left py-3 font-bold hidden sm:table-cell">Email</th>
-                  <th className="text-left py-3 font-bold">Status</th>
-                  <th className="text-left py-3 font-bold hidden md:table-cell">No HP</th>
-                  <th className="text-left py-3 font-bold hidden md:table-cell">Kelas</th>
+                  <th className="text-left py-3 px-5 font-bold">{t("admin.coaches.colCoach")}</th>
+                  <th className="text-left py-3 font-bold hidden sm:table-cell">{t("admin.coaches.colEmail")}</th>
+                  <th className="text-left py-3 font-bold">{t("admin.coaches.colStatus")}</th>
+                  <th className="text-left py-3 font-bold hidden md:table-cell">{t("admin.coaches.colPhone")}</th>
+                  <th className="text-left py-3 font-bold hidden md:table-cell">{t("admin.coaches.colClasses")}</th>
                   <th className="py-3 px-5" />
                 </tr>
               </thead>
@@ -493,7 +496,7 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
                       </td>
                       <td>
                         <Status kind={coachStatus(c) as "active" | "suspended" | "archived"}>
-                          {archived ? "Diarsipkan" : suspended ? "Suspend" : "Aktif"}
+                          {archived ? t("admin.coaches.statusArchived") : suspended ? t("admin.coaches.statusSuspend") : t("admin.coaches.statusActive")}
                         </Status>
                       </td>
                       <td className="text-sm text-ink-soft hidden md:table-cell">
@@ -501,14 +504,14 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
                       </td>
                       <td className="hidden md:table-cell">
                         {assignedClasses.length > 0
-                          ? <span className="text-xs font-semibold bg-ocean-50 text-ocean-700 px-2 py-0.5 rounded-full">{assignedClasses.length} kelas</span>
+                          ? <span className="text-xs font-semibold bg-ocean-50 text-ocean-700 px-2 py-0.5 rounded-full">{t("admin.coaches.classesCountBadge", { count: assignedClasses.length })}</span>
                           : <span className="text-xs text-ink-faint">—</span>}
                       </td>
                       <td className="px-5" onClick={e => e.stopPropagation()}>
                         <div className="flex items-center gap-1 justify-end">
-                          <Btn variant="ghost" size="sm" icon="eye" onClick={() => setDetail(c)}>Detail</Btn>
+                          <Btn variant="ghost" size="sm" icon="eye" onClick={() => setDetail(c)}>{t("admin.coaches.detailBtn")}</Btn>
                           {!archived && c.phone && (
-                            <a href={waLink(`Halo ${c.full_name}, saya dari admin Next Swimming School.`, c.phone)} target="_blank" rel="noreferrer">
+                            <a href={waLink(t("admin.coaches.welcomeWaMessage2", { name: c.full_name }), c.phone)} target="_blank" rel="noreferrer">
                               <Btn variant="ghost" size="sm" icon="whatsapp" className="text-ok-600">WA</Btn>
                             </a>
                           )}
@@ -519,7 +522,7 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
                 })}
                 {visibleCoaches.length === 0 && (
                   <tr><td colSpan={6} className="py-10 text-center text-ink-mute">
-                    {showArchived ? "Tidak ada coach diarsipkan." : "Belum ada coach di cabang ini."}
+                    {showArchived ? t("admin.coaches.noArchivedCoaches") : t("admin.coaches.noCoachesYet")}
                   </td></tr>
                 )}
               </tbody>
@@ -530,7 +533,7 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
         {!loading && totalPages > 1 && (
           <div className="px-5 py-3.5 border-t border-line flex items-center justify-between flex-wrap gap-3">
             <span className="text-xs text-ink-mute tabular-nums">
-              {visibleCoaches.length} coach · halaman {safePage + 1} dari {totalPages}
+              {t("admin.coaches.coachCountPageLabel", { count: visibleCoaches.length, page: safePage + 1, total: totalPages })}
             </span>
             <div className="flex items-center gap-1">
               <button type="button" disabled={safePage === 0} onClick={() => setPage(0)}
@@ -573,22 +576,22 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
             size="xl"
             open={!!detail}
             onClose={() => setDetail(null)}
-            title="Detail Coach"
+            title={t("admin.coaches.detailModalTitle")}
             footer={
               !archived ? (
                 <>
-                  <Btn variant="outline" size="sm" icon="edit" onClick={() => { setEditForm({ full_name: detail.full_name, nick_name: detail.nick_name ?? "", gender: detail.gender ?? "", birth_date: detail.birth_date ?? "", phone: detail.phone ?? "", specialization: detail.specialization ?? "", bio: detail.bio ?? "", address: detail.address ?? "", education_level: detail.education_level ?? "", education_institution: detail.education_institution ?? "", bank_name: detail.bank_name ?? "", bank_account: detail.bank_account ?? "", bank_holder: detail.bank_holder ?? "" }); setEditAvatarFile(null); setEditAvatarPreview(null); setOpenEdit(true); }}>Edit Data</Btn>
-                  <Btn variant="outline" size="sm" icon="lock" onClick={() => { setNewPassword(""); setOpenReset(true); }}>Reset Password</Btn>
+                  <Btn variant="outline" size="sm" icon="edit" onClick={() => { setEditForm({ full_name: detail.full_name, nick_name: detail.nick_name ?? "", gender: detail.gender ?? "", birth_date: detail.birth_date ?? "", phone: detail.phone ?? "", specialization: detail.specialization ?? "", bio: detail.bio ?? "", address: detail.address ?? "", education_level: detail.education_level ?? "", education_institution: detail.education_institution ?? "", bank_name: detail.bank_name ?? "", bank_account: detail.bank_account ?? "", bank_holder: detail.bank_holder ?? "" }); setEditAvatarFile(null); setEditAvatarPreview(null); setOpenEdit(true); }}>{t("admin.coaches.editDataBtn")}</Btn>
+                  <Btn variant="outline" size="sm" icon="lock" onClick={() => { setNewPassword(""); setOpenReset(true); }}>{t("admin.coaches.resetPasswordBtn")}</Btn>
                   {suspended
-                    ? <Btn variant="soft" size="sm" icon="check" onClick={() => liftSuspend(detail)}>Akhiri Suspend</Btn>
-                    : <Btn variant="ghost" size="sm" className="text-warn-600" onClick={() => { setSuspendTarget(detail); setSuspendForm({ reason: "", until: "" }); }}>Suspend Coach</Btn>
+                    ? <Btn variant="soft" size="sm" icon="check" onClick={() => liftSuspend(detail)}>{t("admin.coaches.endSuspendBtn")}</Btn>
+                    : <Btn variant="ghost" size="sm" className="text-warn-600" onClick={() => { setSuspendTarget(detail); setSuspendForm({ reason: "", until: "" }); }}>{t("admin.coaches.suspendCoachBtn")}</Btn>
                   }
-                  <Btn variant="ghost" size="sm" className="text-ink-mute" onClick={() => toggleArchive(detail)}>Arsipkan</Btn>
+                  <Btn variant="ghost" size="sm" className="text-ink-mute" onClick={() => toggleArchive(detail)}>{t("admin.coaches.archiveBtn2")}</Btn>
                 </>
               ) : (
                 <>
-                  <Btn variant="soft" size="sm" icon="check" onClick={() => toggleArchive(detail)}>Aktifkan Kembali</Btn>
-                  <Btn variant="ghost" size="sm" className="text-danger-600" onClick={() => deleteCoach(detail)}>Hapus Permanen</Btn>
+                  <Btn variant="soft" size="sm" icon="check" onClick={() => toggleArchive(detail)}>{t("admin.coaches.reactivateBtn")}</Btn>
+                  <Btn variant="ghost" size="sm" className="text-danger-600" onClick={() => deleteCoach(detail)}>{t("admin.coaches.deletePermanentlyBtn")}</Btn>
                 </>
               )
             }
@@ -604,9 +607,9 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
                     {detail.specialization && <div className="text-sm text-ocean-700 font-semibold mt-0.5">{detail.specialization}</div>}
                     <div className="flex items-center gap-2 mt-2 flex-wrap">
                       <Status kind={coachStatus(detail) as "active" | "suspended" | "archived"}>
-                        {archived ? "Diarsipkan" : suspended ? "Suspend" : "Aktif"}
+                        {archived ? t("admin.coaches.statusArchived") : suspended ? t("admin.coaches.statusSuspend") : t("admin.coaches.statusActive")}
                       </Status>
-                      {activeCerts.length > 0 && <span className="text-xs text-ok-700 bg-ok-50 px-2 py-0.5 rounded-full font-semibold">{activeCerts.length} Sertifikat</span>}
+                      {activeCerts.length > 0 && <span className="text-xs text-ok-700 bg-ok-50 px-2 py-0.5 rounded-full font-semibold">{t("admin.coaches.certsCountBadge", { count: activeCerts.length })}</span>}
                     </div>
                   </div>
                 </div>
@@ -614,26 +617,26 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
                 {/* Suspend banner */}
                 {suspended && (
                   <div className="p-3 rounded-xl bg-warn-50 border border-warn-200 space-y-1">
-                    <div className="flex items-center gap-2 text-warn-700 font-semibold text-sm"><Icon name="warning" className="w-4 h-4" />Sedang Disuspend</div>
-                    {detail.suspend_until && <div className="text-xs text-warn-600">Berakhir: {fmtDate(detail.suspend_until)}</div>}
-                    {detail.suspend_reason && <div className="text-xs text-warn-600">Alasan: {detail.suspend_reason}</div>}
+                    <div className="flex items-center gap-2 text-warn-700 font-semibold text-sm"><Icon name="warning" className="w-4 h-4" />{t("admin.coaches.currentlySuspendedLabel")}</div>
+                    {detail.suspend_until && <div className="text-xs text-warn-600">{t("admin.coaches.endsLabel")}: {fmtDate(detail.suspend_until)}</div>}
+                    {detail.suspend_reason && <div className="text-xs text-warn-600">{t("admin.coaches.reasonLabel2")}: {detail.suspend_reason}</div>}
                   </div>
                 )}
 
                 {/* Contact info */}
                 <div className="space-y-2">
-                  <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Kontak</div>
+                  <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("admin.coaches.contactLabel")}</div>
                   <div className="bg-paper-tint rounded-xl divide-y divide-line">
                     <div className="flex items-center justify-between px-4 py-3">
-                      <span className="text-xs text-ink-mute">Email</span>
+                      <span className="text-xs text-ink-mute">{t("admin.coaches.fieldEmail2")}</span>
                       <span className="text-sm font-mono text-ink">{detail.email}</span>
                     </div>
                     <div className="flex items-center justify-between px-4 py-3">
-                      <span className="text-xs text-ink-mute">No HP / WA</span>
+                      <span className="text-xs text-ink-mute">{t("admin.coaches.rowPhoneWa")}</span>
                       <div className="flex items-center gap-2">
                         <span className="text-sm text-ink">{detail.phone ?? "—"}</span>
                         {detail.phone && (
-                          <a href={waLink(`Halo ${detail.full_name}, saya dari admin Next Swimming School.`, detail.phone)} target="_blank" rel="noreferrer" className="text-ok-600 hover:text-ok-700">
+                          <a href={waLink(t("admin.coaches.welcomeWaMessage2", { name: detail.full_name }), detail.phone)} target="_blank" rel="noreferrer" className="text-ok-600 hover:text-ok-700">
                             <Icon name="whatsapp" className="w-4 h-4" />
                           </a>
                         )}
@@ -645,13 +648,13 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
                 {/* Extra profile info */}
                 {(detail.nick_name || detail.gender || detail.birth_date || detail.address || detail.education_level) && (
                   <div className="space-y-2">
-                    <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Info Pribadi</div>
+                    <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("admin.coaches.personalInfoLabel")}</div>
                     <div className="bg-paper-tint rounded-xl divide-y divide-line">
-                      {detail.nick_name && <div className="flex items-center justify-between px-4 py-2.5"><span className="text-xs text-ink-mute">Nama panggilan</span><span className="text-sm text-ink">{detail.nick_name}</span></div>}
-                      {detail.gender && <div className="flex items-center justify-between px-4 py-2.5"><span className="text-xs text-ink-mute">Jenis kelamin</span><span className="text-sm text-ink">{detail.gender === "male" ? "Laki-laki" : "Perempuan"}</span></div>}
-                      {detail.birth_date && <div className="flex items-center justify-between px-4 py-2.5"><span className="text-xs text-ink-mute">Tgl lahir</span><span className="text-sm text-ink">{fmtDate(detail.birth_date)} ({calcAge(detail.birth_date)} thn)</span></div>}
-                      {detail.education_level && <div className="flex items-center justify-between px-4 py-2.5"><span className="text-xs text-ink-mute">Pendidikan</span><span className="text-sm text-ink">{detail.education_level}{detail.education_institution ? ` — ${detail.education_institution}` : ""}</span></div>}
-                      {detail.address && <div className="flex items-center justify-between px-4 py-2.5"><span className="text-xs text-ink-mute shrink-0">Alamat</span><span className="text-sm text-ink text-right ml-4">{detail.address}</span></div>}
+                      {detail.nick_name && <div className="flex items-center justify-between px-4 py-2.5"><span className="text-xs text-ink-mute">{t("admin.coaches.rowNickname")}</span><span className="text-sm text-ink">{detail.nick_name}</span></div>}
+                      {detail.gender && <div className="flex items-center justify-between px-4 py-2.5"><span className="text-xs text-ink-mute">{t("admin.coaches.rowGender2")}</span><span className="text-sm text-ink">{genderLabel(detail.gender)}</span></div>}
+                      {detail.birth_date && <div className="flex items-center justify-between px-4 py-2.5"><span className="text-xs text-ink-mute">{t("admin.coaches.rowBirthDate2")}</span><span className="text-sm text-ink">{fmtDate(detail.birth_date)} ({t("admin.approvement.yearsSuffix", { n: calcAge(detail.birth_date) })})</span></div>}
+                      {detail.education_level && <div className="flex items-center justify-between px-4 py-2.5"><span className="text-xs text-ink-mute">{t("admin.coaches.rowEducation")}</span><span className="text-sm text-ink">{detail.education_level}{detail.education_institution ? ` — ${detail.education_institution}` : ""}</span></div>}
+                      {detail.address && <div className="flex items-center justify-between px-4 py-2.5"><span className="text-xs text-ink-mute shrink-0">{t("admin.coaches.rowAddress2")}</span><span className="text-sm text-ink text-right ml-4">{detail.address}</span></div>}
                     </div>
                   </div>
                 )}
@@ -674,12 +677,12 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
                   return (
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
-                        <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Kelas yang Dihandle</div>
-                        {!archived && <button onClick={() => openAssignModal(detail)} className="text-xs text-ocean-600 font-semibold hover:underline">Edit Assign</button>}
+                        <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("admin.coaches.classesHandledLabel")}</div>
+                        {!archived && <button onClick={() => openAssignModal(detail)} className="text-xs text-ocean-600 font-semibold hover:underline">{t("admin.coaches.editAssignBtn")}</button>}
                       </div>
                       {allClasses.length === 0 ? (
                         <div className="p-3 rounded-xl bg-warn-50 border border-warn-100 text-xs text-warn-700 flex items-center gap-2">
-                          <Icon name="warning" className="w-4 h-4 shrink-0" />Belum diassign ke kelas manapun
+                          <Icon name="warning" className="w-4 h-4 shrink-0" />{t("admin.coaches.notAssignedYet")}
                         </div>
                       ) : isMultiBranch ? (
                         /* Multi-branch: group by branch */
@@ -693,11 +696,11 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
                                   <Icon name="pin" className="w-3.5 h-3.5 text-ink-mute shrink-0" />
                                   <span className="text-xs font-bold text-ink">{cb.branches?.name ?? cb.branch_id}</span>
                                   {cb.branches?.city && <span className="text-xs text-ink-mute">· {cb.branches.city}</span>}
-                                  {cb.is_primary && <span className="text-[10px] font-bold text-ocean-600 bg-ocean-100 px-1.5 py-0.5 rounded ml-auto">Utama</span>}
-                                  {isCurrentBranch && !cb.is_primary && <span className="text-[10px] font-bold text-wave-700 bg-wave-50 px-1.5 py-0.5 rounded ml-auto">Cabang ini</span>}
+                                  {cb.is_primary && <span className="text-[10px] font-bold text-ocean-600 bg-ocean-100 px-1.5 py-0.5 rounded ml-auto">{t("admin.coaches.primaryBadge")}</span>}
+                                  {isCurrentBranch && !cb.is_primary && <span className="text-[10px] font-bold text-wave-700 bg-wave-50 px-1.5 py-0.5 rounded ml-auto">{t("admin.coaches.thisBranchBadge")}</span>}
                                 </div>
                                 {classes.length === 0 ? (
-                                  <div className="px-3 py-2.5 text-xs text-ink-faint italic">Tidak ada kelas di cabang ini</div>
+                                  <div className="px-3 py-2.5 text-xs text-ink-faint italic">{t("admin.coaches.noClassesInBranch")}</div>
                                 ) : (
                                   <div className="divide-y divide-line">
                                     {classes.map(cc => (
@@ -706,7 +709,7 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
                                         <div className="flex-1 min-w-0">
                                           <div className="flex items-center gap-1.5">
                                             <div className="font-semibold text-sm text-ink">{cc.class?.name}</div>
-                                            {cc.role === "head" && <span className="px-1.5 py-0.5 rounded-full bg-ocean-700 text-white text-[10px] font-bold uppercase tracking-wide shrink-0">Head</span>}
+                                            {cc.role === "head" && <span className="px-1.5 py-0.5 rounded-full bg-ocean-700 text-white text-[10px] font-bold uppercase tracking-wide shrink-0">{t("admin.classes.headRoleBtn")}</span>}
                                           </div>
                                           {cc.class?.schedule_days && (
                                             <div className="text-xs text-ink-mute mt-0.5">
@@ -729,7 +732,7 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
                             <div key={cc.class_id} className="px-4 py-3 bg-paper-tint rounded-xl">
                               <div className="flex items-center gap-1.5">
                                 <div className="font-semibold text-sm text-ink">{cc.class?.name}</div>
-                                {cc.role === "head" && <span className="px-1.5 py-0.5 rounded-full bg-ocean-700 text-white text-[10px] font-bold uppercase tracking-wide shrink-0">Head</span>}
+                                {cc.role === "head" && <span className="px-1.5 py-0.5 rounded-full bg-ocean-700 text-white text-[10px] font-bold uppercase tracking-wide shrink-0">{t("admin.classes.headRoleBtn")}</span>}
                               </div>
                               {cc.class?.schedule_days && (
                                 <div className="text-xs text-ink-mute mt-0.5">
@@ -747,7 +750,7 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
                 {/* Branches summary */}
                 {(detail.coach_branches?.length ?? 0) > 1 && (
                   <div className="space-y-2">
-                    <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Cabang Terdaftar</div>
+                    <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("admin.coaches.registeredBranchesLabel")}</div>
                     <div className="bg-paper-tint rounded-xl divide-y divide-line">
                       {detail.coach_branches!
                         .slice()
@@ -761,8 +764,8 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
                                 {cb.branches?.city && <span className="text-xs text-ink-mute ml-1.5">{cb.branches.city}</span>}
                               </div>
                               <div className="flex items-center gap-2">
-                                {cb.is_primary && <span className="text-[10px] font-bold text-ocean-600 bg-ocean-50 px-1.5 py-0.5 rounded">Utama</span>}
-                                <span className="text-xs text-ink-faint">{classCount} kelas · Sejak {fmtDate(cb.joined_at)}</span>
+                                {cb.is_primary && <span className="text-[10px] font-bold text-ocean-600 bg-ocean-50 px-1.5 py-0.5 rounded">{t("admin.coaches.primaryBadge")}</span>}
+                                <span className="text-xs text-ink-faint">{t("admin.coaches.classesCountSince", { count: classCount, date: fmtDate(cb.joined_at) })}</span>
                               </div>
                             </div>
                           );
@@ -773,11 +776,11 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
 
                 {/* QR & ID */}
                 <div className="space-y-2">
-                  <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">QR Coach</div>
+                  <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("admin.coaches.qrCoachLabel")}</div>
                   <div className="flex items-center gap-4 p-4 bg-paper-tint rounded-xl">
                     <QRBox size={80} />
                     <div>
-                      <div className="text-xs text-ink-mute mb-1">ID Coach</div>
+                      <div className="text-xs text-ink-mute mb-1">{t("admin.coaches.coachIdLabel")}</div>
                       <div className="font-mono text-sm font-bold text-ink bg-white px-2 py-1 rounded border border-line">{detail.id.slice(0, 8).toUpperCase()}</div>
                     </div>
                   </div>
@@ -786,7 +789,7 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
                 {/* Bio */}
                 {detail.bio && (
                   <div className="space-y-1">
-                    <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Bio</div>
+                    <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("admin.coaches.bioLabel")}</div>
                     <p className="text-sm text-ink leading-relaxed">{detail.bio}</p>
                   </div>
                 )}
@@ -794,10 +797,10 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
                 {/* Bank info */}
                 {detail.bank_name && (
                   <div className="space-y-2">
-                    <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Rekening</div>
+                    <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("admin.coaches.bankAccountLabel")}</div>
                     <div className="px-4 py-3 bg-paper-tint rounded-xl text-sm">
                       <div className="font-semibold text-ink">{detail.bank_name}</div>
-                      <div className="text-ink-mute">{detail.bank_account} · a/n {detail.bank_holder}</div>
+                      <div className="text-ink-mute">{detail.bank_account} · {t("admin.coaches.bankHolderPrefix")} {detail.bank_holder}</div>
                     </div>
                   </div>
                 )}
@@ -805,24 +808,24 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
                 {/* Certifications */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">Sertifikasi</div>
+                    <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("admin.coaches.certificationsLabel")}</div>
                     {!archived && (
-                      <button onClick={() => { setCertForm({ title: "", issuer: "", issued_at: "", expires_at: "", no_expiry: false }); setCertPhotoFile(null); setOpenAddCert(true); }} className="text-xs text-ocean-600 font-semibold hover:underline">+ Tambah</button>
+                      <button onClick={() => { setCertForm({ title: "", issuer: "", issued_at: "", expires_at: "", no_expiry: false }); setCertPhotoFile(null); setOpenAddCert(true); }} className="text-xs text-ocean-600 font-semibold hover:underline">{t("admin.coaches.addShortBtn")}</button>
                     )}
                   </div>
                   {(detail.certifications?.length ?? 0) === 0 ? (
-                    <div className="text-xs text-ink-mute italic">Belum ada sertifikasi.</div>
+                    <div className="text-xs text-ink-mute italic">{t("admin.coaches.noCertsYet")}</div>
                   ) : (
                     <div className="space-y-2">
                       {detail.certifications!.map((ct) => (
                         <div key={ct.id} className="flex items-center justify-between px-4 py-3 bg-paper-tint rounded-xl">
                           <div>
                             <div className="font-semibold text-sm text-ink">{ct.title ?? ct.name}</div>
-                            {ct.valid_from && <div className="text-xs text-ink-mute mt-0.5">{fmtMonthYear(ct.valid_from)}{ct.valid_until ? ` – ${fmtMonthYear(ct.valid_until)}` : " · Tidak kedaluwarsa"}</div>}
+                            {ct.valid_from && <div className="text-xs text-ink-mute mt-0.5">{fmtMonthYear(ct.valid_from, monthsLong)}{ct.valid_until ? ` – ${fmtMonthYear(ct.valid_until, monthsLong)}` : ` ${t("admin.coaches.noExpiryShort")}`}</div>}
                           </div>
                           <div className="flex items-center gap-2">
                             <Status kind={ct.status === "approved" ? "active" : ct.status === "pending" ? "pending" : "inactive"}>
-                              {ct.status === "approved" ? "Aktif" : ct.status === "pending" ? "Review" : "Ditolak"}
+                              {ct.status === "approved" ? t("admin.coaches.certStatusActive") : ct.status === "pending" ? t("admin.coaches.certStatusReview") : t("common.status.rejected")}
                             </Status>
                             {!archived && (
                               <button type="button" onClick={() => deleteCert(ct.id)} className="p-1 rounded hover:bg-danger-50 text-danger-400 hover:text-danger-600 transition-colors">
@@ -841,20 +844,20 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
       })()}
 
       {/* ── Link existing coach modal ── */}
-      <Modal open={openLink} onClose={() => { setOpenLink(false); setLinkSearch(""); setLinkResult(null); setLinkCandidates([]); }} title="Hubungkan Coach ke Cabang Ini" size="sm"
+      <Modal open={openLink} onClose={() => { setOpenLink(false); setLinkSearch(""); setLinkResult(null); setLinkCandidates([]); }} title={t("admin.coaches.linkModalTitle")} size="sm"
         footer={
           linkResult
-            ? <><Btn variant="ghost" onClick={() => { setOpenLink(false); setLinkSearch(""); setLinkResult(null); setLinkCandidates([]); }}>Batal</Btn><Btn variant="primary" icon="link" onClick={linkCoachToBranch} disabled={linkSaving}>{linkSaving ? "Menghubungkan…" : "Hubungkan"}</Btn></>
-            : <Btn variant="ghost" onClick={() => { setOpenLink(false); setLinkSearch(""); setLinkResult(null); setLinkCandidates([]); }}>Tutup</Btn>
+            ? <><Btn variant="ghost" onClick={() => { setOpenLink(false); setLinkSearch(""); setLinkResult(null); setLinkCandidates([]); }}>{t("common.actions.cancel")}</Btn><Btn variant="primary" icon="link" onClick={linkCoachToBranch} disabled={linkSaving}>{linkSaving ? t("admin.coaches.linkingBtn") : t("admin.coaches.linkBtn")}</Btn></>
+            : <Btn variant="ghost" onClick={() => { setOpenLink(false); setLinkSearch(""); setLinkResult(null); setLinkCandidates([]); }}>{t("common.actions.close")}</Btn>
         }>
         <div className="space-y-3">
-          <p className="text-sm text-ink-soft">Pilih coach yang sudah aktif di cabang lain. Coach akan bisa mengelola kelas di cabang ini dalam 1 akun yang sama.</p>
+          <p className="text-sm text-ink-soft">{t("admin.coaches.linkIntroText")}</p>
           {linkResult ? (
             <div className="flex items-center gap-3 p-3 rounded-xl bg-ok-50 border border-ok-200">
               <Avatar name={linkResult.full_name} size={40} />
               <div className="flex-1 min-w-0">
                 <div className="font-semibold text-ink text-sm">{linkResult.full_name}</div>
-                <div className="text-xs text-ok-700">Siap dihubungkan ke cabang ini</div>
+                <div className="text-xs text-ok-700">{t("admin.coaches.readyToLinkLabel")}</div>
               </div>
               <button type="button" onClick={() => setLinkResult(null)} className="p-1 rounded hover:bg-ok-100 text-ok-600 transition-colors shrink-0">
                 <Icon name="x" className="w-4 h-4" />
@@ -862,11 +865,11 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
             </div>
           ) : (
             <>
-              <Input placeholder="Cari nama atau no HP…" value={linkSearch} onChange={e => setLinkSearch(e.target.value)} autoComplete="off" />
+              <Input placeholder={t("admin.coaches.searchNameOrPhonePlaceholder")} value={linkSearch} onChange={e => setLinkSearch(e.target.value)} autoComplete="off" />
               {linkLoadingCandidates ? (
-                <div className="py-6 text-center text-sm text-ink-mute">Memuat…</div>
+                <div className="py-6 text-center text-sm text-ink-mute">{t("admin.classes.loadingEllipsis")}</div>
               ) : linkCandidates.length === 0 ? (
-                <div className="py-6 text-center text-sm text-ink-mute">Semua coach sudah terdaftar di cabang ini, atau belum ada coach lain di sistem.</div>
+                <div className="py-6 text-center text-sm text-ink-mute">{t("admin.coaches.allLinkedOrNoneHint")}</div>
               ) : (
                 <div className="max-h-72 overflow-y-auto space-y-1.5 pr-0.5">
                   {linkCandidates
@@ -900,8 +903,8 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
       </Modal>
 
       {/* ── Add coach modal ── */}
-      <Modal open={openAdd} onClose={() => setOpenAdd(false)} title="Tambah Coach" size="md"
-        footer={<><Btn variant="ghost" onClick={() => setOpenAdd(false)}>Batal</Btn><Btn variant="primary" onClick={createCoach} disabled={saving}>{saving ? "Membuat…" : "Buat Akun"}</Btn></>}>
+      <Modal open={openAdd} onClose={() => setOpenAdd(false)} title={t("admin.coaches.addCoachModalTitle")} size="md"
+        footer={<><Btn variant="ghost" onClick={() => setOpenAdd(false)}>{t("common.actions.cancel")}</Btn><Btn variant="primary" onClick={createCoach} disabled={saving}>{saving ? t("admin.coaches.creatingBtn2") : t("admin.coaches.createAccountBtn")}</Btn></>}>
         <div className="space-y-4">
           {/* Avatar picker */}
           <div className="flex flex-col items-center gap-2">
@@ -912,87 +915,87 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
               </div>
               <input type="file" accept="image/*" className="sr-only" onChange={e => { const f = e.target.files?.[0] ?? null; setCreateAvatarFile(f); setCreateAvatarPreview(f ? URL.createObjectURL(f) : null); }} />
             </label>
-            <p className="text-xs text-ink-faint">Foto profil (opsional)</p>
+            <p className="text-xs text-ink-faint">{t("admin.coaches.profilePhotoOptionalHint")}</p>
           </div>
 
           <div className="pt-1 border-t border-line">
-            <div className="text-xs font-bold text-ink-mute uppercase tracking-widest mb-3">Data Pribadi</div>
+            <div className="text-xs font-bold text-ink-mute uppercase tracking-widest mb-3">{t("admin.coaches.personalDataLabel")}</div>
             <div className="space-y-3">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <Field label="Nama lengkap" required><Input value={form.full_name} onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))} placeholder="Mis. Reza Fahlevi" /></Field>
-                <Field label="Nama panggilan" hint="Opsional"><Input value={form.nick_name} onChange={e => setForm(f => ({ ...f, nick_name: e.target.value }))} placeholder="Mis. Kak Reza" /></Field>
+                <Field label={t("admin.coaches.fieldFullName2")} required><Input value={form.full_name} onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))} placeholder={t("admin.coaches.fullNamePlaceholder")} /></Field>
+                <Field label={t("admin.coaches.fieldNickname")} hint={t("admin.izin.optionalHint2")}><Input value={form.nick_name} onChange={e => setForm(f => ({ ...f, nick_name: e.target.value }))} placeholder={t("admin.coaches.nicknamePlaceholder")} /></Field>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <Field label="Jenis kelamin">
+                <Field label={t("admin.coaches.fieldGender2")}>
                   <Select value={form.gender} onChange={e => setForm(f => ({ ...f, gender: e.target.value }))}>
-                    <option value="">Pilih…</option>
-                    <option value="male">Laki-laki</option>
-                    <option value="female">Perempuan</option>
+                    <option value="">{t("admin.coaches.selectEllipsis")}</option>
+                    <option value="male">{t("admin.approvement.genderMale")}</option>
+                    <option value="female">{t("admin.approvement.genderFemale")}</option>
                   </Select>
                 </Field>
-                <Field label="Tanggal lahir" hint="Opsional"><DatePicker value={form.birth_date} onChange={v => setForm(f => ({ ...f, birth_date: v }))} /></Field>
+                <Field label={t("admin.coaches.fieldBirthDate2")} hint={t("admin.izin.optionalHint2")}><DatePicker value={form.birth_date} onChange={v => setForm(f => ({ ...f, birth_date: v }))} /></Field>
               </div>
-              <Field label="Email" required><Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} /></Field>
-              <Field label="No HP / WA"><Input type="tel" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="08xxxxxxxxxx" /></Field>
-              <Field label="Alamat" hint="Opsional"><Textarea rows={2} value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} placeholder="Mis. Jl. Anggrek No. 12, Bekasi" /></Field>
+              <Field label={t("admin.coaches.fieldEmail2")} required><Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} /></Field>
+              <Field label={t("admin.coaches.fieldPhoneWa")}><Input type="tel" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="08xxxxxxxxxx" /></Field>
+              <Field label={t("admin.coaches.fieldAddress2")} hint={t("admin.izin.optionalHint2")}><Textarea rows={2} value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} placeholder={t("admin.coaches.addressPlaceholder")} /></Field>
             </div>
           </div>
 
           <div className="pt-1 border-t border-line">
-            <div className="text-xs font-bold text-ink-mute uppercase tracking-widest mb-3">Pendidikan (Opsional)</div>
+            <div className="text-xs font-bold text-ink-mute uppercase tracking-widest mb-3">{t("admin.coaches.educationLabel")}</div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Field label="Pendidikan terakhir">
+              <Field label={t("admin.coaches.fieldLastEducation")}>
                 <Select value={form.education_level} onChange={e => setForm(f => ({ ...f, education_level: e.target.value }))}>
-                  <option value="">Pilih…</option>
+                  <option value="">{t("admin.coaches.selectEllipsis")}</option>
                   {["TK","SD","SMP","SMA","D1","D2","D3","S1/D4","S2","S3"].map(l => <option key={l} value={l}>{l}</option>)}
                 </Select>
               </Field>
-              <Field label="Nama instansi"><Input value={form.education_institution} onChange={e => setForm(f => ({ ...f, education_institution: e.target.value }))} placeholder="Mis. Universitas Indonesia" /></Field>
+              <Field label={t("admin.coaches.fieldInstitutionName")}><Input value={form.education_institution} onChange={e => setForm(f => ({ ...f, education_institution: e.target.value }))} placeholder={t("admin.coaches.institutionPlaceholder")} /></Field>
             </div>
           </div>
 
           <div className="pt-1 border-t border-line">
-            <div className="text-xs font-bold text-ink-mute uppercase tracking-widest mb-3">Profil Pelatih</div>
+            <div className="text-xs font-bold text-ink-mute uppercase tracking-widest mb-3">{t("admin.coaches.coachProfileLabel")}</div>
             <div className="space-y-3">
-              <Field label="Spesialisasi" hint="Opsional"><Input value={form.specialization} onChange={e => setForm(f => ({ ...f, specialization: e.target.value }))} placeholder="Mis. Teknik renang anak" /></Field>
-              <Field label="Bio / Deskripsi" hint="Opsional"><Textarea rows={2} value={form.bio} onChange={e => setForm(f => ({ ...f, bio: e.target.value }))} placeholder="Mis. Berpengalaman 5 tahun melatih renang anak usia dini dengan pendekatan bermain." /></Field>
+              <Field label={t("admin.coaches.fieldSpecialization")} hint={t("admin.izin.optionalHint2")}><Input value={form.specialization} onChange={e => setForm(f => ({ ...f, specialization: e.target.value }))} placeholder={t("admin.coaches.specializationPlaceholder")} /></Field>
+              <Field label={t("admin.coaches.fieldBioDesc")} hint={t("admin.izin.optionalHint2")}><Textarea rows={2} value={form.bio} onChange={e => setForm(f => ({ ...f, bio: e.target.value }))} placeholder={t("admin.coaches.bioPlaceholder")} /></Field>
             </div>
           </div>
 
           <div className="pt-1 border-t border-line">
-            <div className="text-xs font-bold text-ink-mute uppercase tracking-widest mb-3">Informasi Rekening (Opsional)</div>
+            <div className="text-xs font-bold text-ink-mute uppercase tracking-widest mb-3">{t("admin.coaches.bankInfoLabel")}</div>
             <div className="space-y-3">
-              <Field label="Nama bank"><Input value={form.bank_name} onChange={e => setForm(f => ({ ...f, bank_name: e.target.value }))} placeholder="Mis. BCA, BRI, Mandiri" /></Field>
-              <Field label="Nomor rekening"><Input value={form.bank_account} onChange={e => setForm(f => ({ ...f, bank_account: e.target.value }))} placeholder="Mis. 1234567890" /></Field>
-              <Field label="Atas nama"><Input value={form.bank_holder} onChange={e => setForm(f => ({ ...f, bank_holder: e.target.value }))} placeholder="Mis. Reza Fahlevi" /></Field>
+              <Field label={t("admin.coaches.fieldBankName")}><Input value={form.bank_name} onChange={e => setForm(f => ({ ...f, bank_name: e.target.value }))} placeholder={t("admin.coaches.bankNamePlaceholder")} /></Field>
+              <Field label={t("admin.coaches.fieldAccountNumber")}><Input value={form.bank_account} onChange={e => setForm(f => ({ ...f, bank_account: e.target.value }))} placeholder={t("admin.coaches.accountNumberPlaceholder")} /></Field>
+              <Field label={t("admin.coaches.fieldAccountHolder")}><Input value={form.bank_holder} onChange={e => setForm(f => ({ ...f, bank_holder: e.target.value }))} placeholder={t("admin.coaches.accountHolderPlaceholder")} /></Field>
             </div>
           </div>
 
           <div className="pt-1 border-t border-line">
             <div className="flex items-center justify-between mb-2">
-              <div className="text-xs font-bold text-ink-mute uppercase tracking-widest">Sertifikasi (Opsional)</div>
-              <Btn variant="ghost" size="sm" icon="plus" onClick={() => setCreateCerts(cs => [...cs, { title: "", issuer: "", valid_from: "", valid_until: "", no_expiry: false }])}>Tambah</Btn>
+              <div className="text-xs font-bold text-ink-mute uppercase tracking-widest">{t("admin.coaches.certificationsOptionalLabel")}</div>
+              <Btn variant="ghost" size="sm" icon="plus" onClick={() => setCreateCerts(cs => [...cs, { title: "", issuer: "", valid_from: "", valid_until: "", no_expiry: false }])}>{t("common.actions.add")}</Btn>
             </div>
             {createCerts.map((c, i) => (
               <div key={i} className="relative border border-line rounded-xl p-3 mb-3 space-y-2">
                 <button type="button" onClick={() => setCreateCerts(cs => cs.filter((_, j) => j !== i))} className="absolute top-2 right-2 p-1 rounded hover:bg-danger-50 text-danger-500 transition-colors"><Icon name="x" className="w-4 h-4" /></button>
-                <Input placeholder="Mis. Lifeguard Level 2" value={c.title} onChange={e => setCreateCerts(cs => cs.map((x, j) => j === i ? { ...x, title: e.target.value } : x))} />
-                <Input placeholder="Mis. PMI / PRSI" value={c.issuer} onChange={e => setCreateCerts(cs => cs.map((x, j) => j === i ? { ...x, issuer: e.target.value } : x))} />
+                <Input placeholder={t("admin.coaches.certTitlePlaceholder")} value={c.title} onChange={e => setCreateCerts(cs => cs.map((x, j) => j === i ? { ...x, title: e.target.value } : x))} />
+                <Input placeholder={t("admin.coaches.certIssuerPlaceholder")} value={c.issuer} onChange={e => setCreateCerts(cs => cs.map((x, j) => j === i ? { ...x, issuer: e.target.value } : x))} />
                 <div className="grid grid-cols-2 gap-2">
-                  <div><label className="text-xs text-ink-mute mb-1 block">Berlaku dari</label><MonthYearPicker value={c.valid_from} onChange={v => setCreateCerts(cs => cs.map((x, j) => j === i ? { ...x, valid_from: v } : x))} /></div>
-                  <div><label className="text-xs text-ink-mute mb-1 block">Berlaku sampai</label><MonthYearPicker value={c.valid_until} disabled={c.no_expiry} onChange={v => setCreateCerts(cs => cs.map((x, j) => j === i ? { ...x, valid_until: v } : x))} /></div>
+                  <div><label className="text-xs text-ink-mute mb-1 block">{t("admin.coaches.validFromLabel")}</label><MonthYearPicker value={c.valid_from} onChange={v => setCreateCerts(cs => cs.map((x, j) => j === i ? { ...x, valid_from: v } : x))} /></div>
+                  <div><label className="text-xs text-ink-mute mb-1 block">{t("admin.coaches.validUntilLabel")}</label><MonthYearPicker value={c.valid_until} disabled={c.no_expiry} onChange={v => setCreateCerts(cs => cs.map((x, j) => j === i ? { ...x, valid_until: v } : x))} /></div>
                 </div>
                 <label className="flex items-center gap-2 text-sm text-ink-soft cursor-pointer">
                   <input type="checkbox" checked={c.no_expiry} onChange={e => setCreateCerts(cs => cs.map((x, j) => j === i ? { ...x, no_expiry: e.target.checked, valid_until: "" } : x))} className="rounded" />
-                  Tidak ada kedaluwarsa
+                  {t("admin.approvement.noExpiryLabel")}
                 </label>
               </div>
             ))}
           </div>
 
           <div className="pt-1 border-t border-line">
-            <div className="text-xs font-bold text-ink-mute uppercase tracking-widest mb-3">Akun</div>
-            <Field label="Password awal" required>
+            <div className="text-xs font-bold text-ink-mute uppercase tracking-widest mb-3">{t("admin.coaches.accountLabel")}</div>
+            <Field label={t("admin.coaches.fieldInitialPassword")} required>
               <div className="relative">
                 <Input type={showCoachPwd ? "text" : "password"} value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder="••••••••" className="pr-10" />
                 <button type="button" tabIndex={-1} onClick={() => setShowCoachPwd(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-mute hover:text-ink transition-colors">
@@ -1005,8 +1008,8 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
       </Modal>
 
       {/* ── Edit coach modal ── */}
-      <Modal open={openEdit} onClose={() => setOpenEdit(false)} title="Edit Data Coach" size="md"
-        footer={<><Btn variant="ghost" onClick={() => setOpenEdit(false)}>Batal</Btn><Btn variant="primary" onClick={saveEdit} disabled={editSaving}>{editSaving ? "Menyimpan…" : "Simpan"}</Btn></>}>
+      <Modal open={openEdit} onClose={() => setOpenEdit(false)} title={t("admin.coaches.editCoachModalTitle")} size="md"
+        footer={<><Btn variant="ghost" onClick={() => setOpenEdit(false)}>{t("common.actions.cancel")}</Btn><Btn variant="primary" onClick={saveEdit} disabled={editSaving}>{editSaving ? t("common.actions.saving") : t("common.actions.save")}</Btn></>}>
         <div className="space-y-4">
           {/* Avatar picker */}
           <div className="flex flex-col items-center gap-2">
@@ -1017,87 +1020,87 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
               </div>
               <input type="file" accept="image/*" className="sr-only" onChange={e => { const f = e.target.files?.[0] ?? null; setEditAvatarFile(f); setEditAvatarPreview(f ? URL.createObjectURL(f) : null); }} />
             </label>
-            <p className="text-xs text-ink-faint">Klik untuk ganti foto (opsional)</p>
+            <p className="text-xs text-ink-faint">{t("admin.coaches.clickToChangePhotoHint")}</p>
           </div>
 
           <div className="pt-1 border-t border-line">
-            <div className="text-xs font-bold text-ink-mute uppercase tracking-widest mb-3">Data Pribadi</div>
+            <div className="text-xs font-bold text-ink-mute uppercase tracking-widest mb-3">{t("admin.coaches.personalDataLabel")}</div>
             <div className="space-y-3">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <Field label="Nama lengkap" required><Input value={editForm.full_name} onChange={e => setEditForm(f => ({ ...f, full_name: e.target.value }))} /></Field>
-                <Field label="Nama panggilan" hint="Opsional"><Input value={editForm.nick_name} onChange={e => setEditForm(f => ({ ...f, nick_name: e.target.value }))} placeholder="Mis. Kak Reza" /></Field>
+                <Field label={t("admin.coaches.fieldFullName2")} required><Input value={editForm.full_name} onChange={e => setEditForm(f => ({ ...f, full_name: e.target.value }))} /></Field>
+                <Field label={t("admin.coaches.fieldNickname")} hint={t("admin.izin.optionalHint2")}><Input value={editForm.nick_name} onChange={e => setEditForm(f => ({ ...f, nick_name: e.target.value }))} placeholder={t("admin.coaches.nicknamePlaceholder")} /></Field>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <Field label="Jenis kelamin">
+                <Field label={t("admin.coaches.fieldGender2")}>
                   <Select value={editForm.gender} onChange={e => setEditForm(f => ({ ...f, gender: e.target.value }))}>
-                    <option value="">Pilih…</option>
-                    <option value="male">Laki-laki</option>
-                    <option value="female">Perempuan</option>
+                    <option value="">{t("admin.coaches.selectEllipsis")}</option>
+                    <option value="male">{t("admin.approvement.genderMale")}</option>
+                    <option value="female">{t("admin.approvement.genderFemale")}</option>
                   </Select>
                 </Field>
-                <Field label="Tanggal lahir" hint="Opsional"><DatePicker value={editForm.birth_date} onChange={v => setEditForm(f => ({ ...f, birth_date: v }))} /></Field>
+                <Field label={t("admin.coaches.fieldBirthDate2")} hint={t("admin.izin.optionalHint2")}><DatePicker value={editForm.birth_date} onChange={v => setEditForm(f => ({ ...f, birth_date: v }))} /></Field>
               </div>
-              <Field label="No HP / WA"><Input type="tel" value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))} placeholder="08xxxxxxxxxx" /></Field>
-              <Field label="Alamat" hint="Opsional"><Textarea rows={2} value={editForm.address} onChange={e => setEditForm(f => ({ ...f, address: e.target.value }))} placeholder="Mis. Jl. Anggrek No. 12, Bekasi" /></Field>
+              <Field label={t("admin.coaches.fieldPhoneWa")}><Input type="tel" value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))} placeholder="08xxxxxxxxxx" /></Field>
+              <Field label={t("admin.coaches.fieldAddress2")} hint={t("admin.izin.optionalHint2")}><Textarea rows={2} value={editForm.address} onChange={e => setEditForm(f => ({ ...f, address: e.target.value }))} placeholder={t("admin.coaches.addressPlaceholder")} /></Field>
             </div>
           </div>
 
           <div className="pt-1 border-t border-line">
-            <div className="text-xs font-bold text-ink-mute uppercase tracking-widest mb-3">Pendidikan (Opsional)</div>
+            <div className="text-xs font-bold text-ink-mute uppercase tracking-widest mb-3">{t("admin.coaches.educationLabel")}</div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Field label="Pendidikan terakhir">
+              <Field label={t("admin.coaches.fieldLastEducation")}>
                 <Select value={editForm.education_level} onChange={e => setEditForm(f => ({ ...f, education_level: e.target.value }))}>
-                  <option value="">Pilih…</option>
+                  <option value="">{t("admin.coaches.selectEllipsis")}</option>
                   {["TK","SD","SMP","SMA","D1","D2","D3","S1/D4","S2","S3"].map(l => <option key={l} value={l}>{l}</option>)}
                 </Select>
               </Field>
-              <Field label="Nama instansi"><Input value={editForm.education_institution} onChange={e => setEditForm(f => ({ ...f, education_institution: e.target.value }))} placeholder="Mis. Universitas Indonesia" /></Field>
+              <Field label={t("admin.coaches.fieldInstitutionName")}><Input value={editForm.education_institution} onChange={e => setEditForm(f => ({ ...f, education_institution: e.target.value }))} placeholder={t("admin.coaches.institutionPlaceholder")} /></Field>
             </div>
           </div>
 
           <div className="pt-1 border-t border-line">
-            <div className="text-xs font-bold text-ink-mute uppercase tracking-widest mb-3">Profil Pelatih</div>
+            <div className="text-xs font-bold text-ink-mute uppercase tracking-widest mb-3">{t("admin.coaches.coachProfileLabel")}</div>
             <div className="space-y-3">
-              <Field label="Spesialisasi" hint="Opsional"><Input value={editForm.specialization} onChange={e => setEditForm(f => ({ ...f, specialization: e.target.value }))} placeholder="Mis. Teknik renang anak" /></Field>
-              <Field label="Bio / Deskripsi" hint="Opsional"><Textarea rows={2} value={editForm.bio} onChange={e => setEditForm(f => ({ ...f, bio: e.target.value }))} placeholder="Mis. Berpengalaman 5 tahun melatih renang anak usia dini dengan pendekatan bermain." /></Field>
+              <Field label={t("admin.coaches.fieldSpecialization")} hint={t("admin.izin.optionalHint2")}><Input value={editForm.specialization} onChange={e => setEditForm(f => ({ ...f, specialization: e.target.value }))} placeholder={t("admin.coaches.specializationPlaceholder")} /></Field>
+              <Field label={t("admin.coaches.fieldBioDesc")} hint={t("admin.izin.optionalHint2")}><Textarea rows={2} value={editForm.bio} onChange={e => setEditForm(f => ({ ...f, bio: e.target.value }))} placeholder={t("admin.coaches.bioPlaceholder")} /></Field>
             </div>
           </div>
 
           <div className="pt-1 border-t border-line">
-            <div className="text-xs font-bold text-ink-mute uppercase tracking-widest mb-3">Informasi Rekening (Opsional)</div>
+            <div className="text-xs font-bold text-ink-mute uppercase tracking-widest mb-3">{t("admin.coaches.bankInfoLabel")}</div>
             <div className="space-y-3">
-              <Field label="Nama bank"><Input value={editForm.bank_name} onChange={e => setEditForm(f => ({ ...f, bank_name: e.target.value }))} placeholder="Mis. BCA, BRI, Mandiri" /></Field>
-              <Field label="Nomor rekening"><Input value={editForm.bank_account} onChange={e => setEditForm(f => ({ ...f, bank_account: e.target.value }))} placeholder="Mis. 1234567890" /></Field>
-              <Field label="Atas nama"><Input value={editForm.bank_holder} onChange={e => setEditForm(f => ({ ...f, bank_holder: e.target.value }))} placeholder="Mis. Reza Fahlevi" /></Field>
+              <Field label={t("admin.coaches.fieldBankName")}><Input value={editForm.bank_name} onChange={e => setEditForm(f => ({ ...f, bank_name: e.target.value }))} placeholder={t("admin.coaches.bankNamePlaceholder")} /></Field>
+              <Field label={t("admin.coaches.fieldAccountNumber")}><Input value={editForm.bank_account} onChange={e => setEditForm(f => ({ ...f, bank_account: e.target.value }))} placeholder={t("admin.coaches.accountNumberPlaceholder")} /></Field>
+              <Field label={t("admin.coaches.fieldAccountHolder")}><Input value={editForm.bank_holder} onChange={e => setEditForm(f => ({ ...f, bank_holder: e.target.value }))} placeholder={t("admin.coaches.accountHolderPlaceholder")} /></Field>
             </div>
           </div>
         </div>
       </Modal>
 
       {/* ── Suspend coach modal ── */}
-      <Modal open={!!suspendTarget} onClose={() => setSuspendTarget(null)} title={`Suspend Coach — ${suspendTarget?.full_name ?? ""}`} size="sm"
-        footer={<><Btn variant="ghost" onClick={() => setSuspendTarget(null)}>Batal</Btn><Btn variant="ghost" className="text-warn-600" onClick={doSuspend} disabled={suspending}>{suspending ? "Menyimpan…" : "Terapkan Suspend"}</Btn></>}>
+      <Modal open={!!suspendTarget} onClose={() => setSuspendTarget(null)} title={t("admin.coaches.suspendModalTitle", { name: suspendTarget?.full_name ?? "" })} size="sm"
+        footer={<><Btn variant="ghost" onClick={() => setSuspendTarget(null)}>{t("common.actions.cancel")}</Btn><Btn variant="ghost" className="text-warn-600" onClick={doSuspend} disabled={suspending}>{suspending ? t("common.actions.saving") : t("admin.coaches.applySuspendBtn")}</Btn></>}>
         <div className="space-y-4">
           <Card className="!p-3 bg-warn-50 border-warn-200">
-            <div className="flex items-start gap-2.5 text-sm text-warn-700"><Icon name="warning" className="w-5 h-5 shrink-0 mt-0.5" /><span>Coach tetap bisa login tapi tidak bisa melakukan aktivitas (Clock In, input rapor, dll) selama masa suspend.</span></div>
+            <div className="flex items-start gap-2.5 text-sm text-warn-700"><Icon name="warning" className="w-5 h-5 shrink-0 mt-0.5" /><span>{t("admin.coaches.suspendNoticeText")}</span></div>
           </Card>
-          <Field label="Alasan suspend" required>
-            <Textarea rows={2} value={suspendForm.reason} onChange={e => setSuspendForm(f => ({ ...f, reason: e.target.value }))} placeholder="Mis. Pelanggaran prosedur kehadiran." />
+          <Field label={t("admin.coaches.fieldSuspendReason")} required>
+            <Textarea rows={2} value={suspendForm.reason} onChange={e => setSuspendForm(f => ({ ...f, reason: e.target.value }))} placeholder={t("admin.coaches.suspendReasonPlaceholder")} />
           </Field>
-          <Field label="Suspend berakhir" required hint="Coach otomatis aktif kembali setelah tanggal ini">
+          <Field label={t("admin.coaches.fieldSuspendUntil")} required hint={t("admin.coaches.suspendUntilHint")}>
             <Input type="date" value={suspendForm.until} onChange={e => setSuspendForm(f => ({ ...f, until: e.target.value }))} min={new Date().toISOString().slice(0, 10)} />
           </Field>
         </div>
       </Modal>
 
       {/* ── Reset password modal ── */}
-      <Modal open={openReset} onClose={() => setOpenReset(false)} title={`Reset Password — ${detail?.full_name ?? ""}`} size="sm"
-        footer={<><Btn variant="ghost" onClick={() => setOpenReset(false)}>Batal</Btn><Btn variant="primary" onClick={resetPassword} disabled={resetSaving}>{resetSaving ? "Mereset…" : "Reset Password"}</Btn></>}>
+      <Modal open={openReset} onClose={() => setOpenReset(false)} title={t("admin.coaches.resetPasswordModalTitle", { name: detail?.full_name ?? "" })} size="sm"
+        footer={<><Btn variant="ghost" onClick={() => setOpenReset(false)}>{t("common.actions.cancel")}</Btn><Btn variant="primary" onClick={resetPassword} disabled={resetSaving}>{resetSaving ? t("admin.coaches.resettingBtn") : t("admin.coaches.resetPasswordBtn")}</Btn></>}>
         <div className="space-y-4">
           <Card className="!p-3 bg-ocean-50 border-ocean-100">
-            <div className="text-xs text-ocean-700">Password baru langsung aktif tanpa konfirmasi email. Sampaikan password baru ke coach.</div>
+            <div className="text-xs text-ocean-700">{t("admin.coaches.newPasswordNoticeText")}</div>
           </Card>
-          <Field label="Password baru" required hint="Minimal 6 karakter">
+          <Field label={t("admin.coaches.fieldNewPassword")} required hint={t("admin.coaches.minCharsHint")}>
             <div className="relative">
               <Input type={showNewPassword ? "text" : "password"} value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="••••••••" className="pr-10" />
               <button type="button" tabIndex={-1} onClick={() => setShowNewPassword(v => !v)}
@@ -1110,12 +1113,12 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
       </Modal>
 
       {/* ── Assign class modal ── */}
-      <Modal open={openAssign} onClose={() => setOpenAssign(false)} title={`Assign Kelas — ${detail?.full_name ?? ""}`} size="sm"
-        footer={<><Btn variant="ghost" onClick={() => setOpenAssign(false)}>Batal</Btn><Btn variant="primary" onClick={saveAssign} disabled={assignSaving}>{assignSaving ? "Menyimpan…" : "Simpan"}</Btn></>}>
+      <Modal open={openAssign} onClose={() => setOpenAssign(false)} title={t("admin.coaches.assignClassModalTitle", { name: detail?.full_name ?? "" })} size="sm"
+        footer={<><Btn variant="ghost" onClick={() => setOpenAssign(false)}>{t("common.actions.cancel")}</Btn><Btn variant="primary" onClick={saveAssign} disabled={assignSaving}>{assignSaving ? t("common.actions.saving") : t("common.actions.save")}</Btn></>}>
         <div className="space-y-3">
-          <p className="text-sm text-ink-mute">Pilih kelas yang akan dihandle oleh coach ini, lalu tentukan perannya (Head/Wakil). Maks 1 head per kelas — set head di sini otomatis menurunkan head lain di kelas yang sama.</p>
+          <p className="text-sm text-ink-mute">{t("admin.coaches.assignIntroText")}</p>
           {allClasses.length === 0 ? (
-            <div className="text-sm text-ink-mute py-4 text-center">Belum ada kelas aktif di cabang ini.</div>
+            <div className="text-sm text-ink-mute py-4 text-center">{t("admin.coaches.noActiveClassesInBranch")}</div>
           ) : (
             <div className="space-y-2">
               {allClasses.map(cls => {
@@ -1138,11 +1141,11 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
                       <div className="flex items-center gap-2 px-4 pb-3 pl-12">
                         <button type="button" onClick={() => setAssignRoles(r => ({ ...r, [cls.id]: "head" }))}
                           className={`px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wide transition-colors ${role === "head" ? "bg-ocean-700 text-white" : "bg-white border border-line text-ink-mute"}`}>
-                          Head
+                          {t("admin.classes.headRoleBtn")}
                         </button>
                         <button type="button" onClick={() => setAssignRoles(r => ({ ...r, [cls.id]: "assistant" }))}
                           className={`px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wide transition-colors ${role === "assistant" ? "bg-ocean-700 text-white" : "bg-white border border-line text-ink-mute"}`}>
-                          Wakil
+                          {t("admin.classes.assistantRoleBtn")}
                         </button>
                       </div>
                     )}
@@ -1155,44 +1158,44 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
       </Modal>
 
       {/* ── Coach credential popup ── */}
-      <Modal open={!!coachCredential} onClose={() => setCoachCredential(null)} title="Akun Coach Dibuat" size="sm"
-        footer={<><Btn variant="ghost" onClick={() => setCoachCredential(null)}>Tutup</Btn>{coachCredential?.phone && <Btn variant="wa" icon="whatsapp" onClick={() => { const num = coachCredential.phone!.replace(/^0/, "").replace(/\D/g, ""); const msg = encodeURIComponent(`Halo ${coachCredential.full_name}, akun coach Anda telah dibuat.\n\nEmail: ${coachCredential.email}\nPassword: ${coachCredential.password}\n\nSilakan login di aplikasi Next Swimming School.`); window.open(`https://wa.me/62${num}?text=${msg}`, "_blank"); }}>Kirim via WA</Btn>}</>}>
+      <Modal open={!!coachCredential} onClose={() => setCoachCredential(null)} title={t("admin.coaches.credentialModalTitle")} size="sm"
+        footer={<><Btn variant="ghost" onClick={() => setCoachCredential(null)}>{t("common.actions.close")}</Btn>{coachCredential?.phone && <Btn variant="wa" icon="whatsapp" onClick={() => { const num = coachCredential.phone!.replace(/^0/, "").replace(/\D/g, ""); const msg = encodeURIComponent(t("admin.coaches.coachAccountCreatedWaMessage", { name: coachCredential.full_name, email: coachCredential.email, password: coachCredential.password })); window.open(`https://wa.me/62${num}?text=${msg}`, "_blank"); }}>{t("admin.coaches.sendViaWaBtn")}</Btn>}</>}>
         <div className="space-y-3">
           <Card className="!p-4 bg-ok-50 border-ok-200">
-            <div className="flex items-center gap-2 text-ok-700 font-semibold text-sm"><Icon name="check" className="w-4 h-4" />Akun berhasil dibuat</div>
+            <div className="flex items-center gap-2 text-ok-700 font-semibold text-sm"><Icon name="check" className="w-4 h-4" />{t("admin.coaches.accountCreatedSuccessfully")}</div>
           </Card>
           <div className="space-y-2">
             <div className="flex items-center justify-between py-2.5 border-b border-line">
-              <span className="text-xs text-ink-mute uppercase tracking-widest font-bold">Nama</span>
+              <span className="text-xs text-ink-mute uppercase tracking-widest font-bold">{t("admin.coaches.nameLabel")}</span>
               <span className="font-semibold text-sm">{coachCredential?.full_name}</span>
             </div>
             <div className="flex items-center justify-between py-2.5 border-b border-line">
-              <span className="text-xs text-ink-mute uppercase tracking-widest font-bold">Email</span>
+              <span className="text-xs text-ink-mute uppercase tracking-widest font-bold">{t("admin.coaches.fieldEmail2")}</span>
               <span className="font-mono text-sm">{coachCredential?.email}</span>
             </div>
             <div className="flex items-center justify-between py-2.5">
-              <span className="text-xs text-ink-mute uppercase tracking-widest font-bold">Password</span>
+              <span className="text-xs text-ink-mute uppercase tracking-widest font-bold">{t("admin.coaches.fieldInitialPassword")}</span>
               <span className="font-mono text-sm bg-paper-deep px-2 py-0.5 rounded">{coachCredential?.password}</span>
             </div>
           </div>
-          <p className="text-xs text-ink-mute">Simpan atau kirim kredensial ini ke coach. Password tidak bisa dilihat lagi setelah modal ini ditutup.</p>
+          <p className="text-xs text-ink-mute">{t("admin.coaches.saveOrSendCredentialHint")}</p>
         </div>
       </Modal>
 
       {/* ── Add certification modal ── */}
-      <Modal open={openAddCert} onClose={() => { setOpenAddCert(false); setCertPhotoFile(null); }} title={`Tambah Sertifikasi — ${detail?.full_name ?? ""}`} size="sm"
-        footer={<><Btn variant="ghost" onClick={() => { setOpenAddCert(false); setCertPhotoFile(null); }}>Batal</Btn><Btn variant="primary" onClick={addCert} disabled={savingCert}>{savingCert ? "Menyimpan…" : "Simpan"}</Btn></>}>
+      <Modal open={openAddCert} onClose={() => { setOpenAddCert(false); setCertPhotoFile(null); }} title={t("admin.coaches.addCertModalTitle", { name: detail?.full_name ?? "" })} size="sm"
+        footer={<><Btn variant="ghost" onClick={() => { setOpenAddCert(false); setCertPhotoFile(null); }}>{t("common.actions.cancel")}</Btn><Btn variant="primary" onClick={addCert} disabled={savingCert}>{savingCert ? t("common.actions.saving") : t("common.actions.save")}</Btn></>}>
         <div className="space-y-4">
-          <Field label="Nama sertifikasi"><Input value={certForm.title} onChange={e => setCertForm(f => ({ ...f, title: e.target.value }))} placeholder="Mis. Renang Gaya Bebas Tingkat Lanjut" /></Field>
-          <Field label="Lembaga penerbit"><Input value={certForm.issuer} onChange={e => setCertForm(f => ({ ...f, issuer: e.target.value }))} placeholder="Mis. PRSI, FINA" /></Field>
-          <Field label="Berlaku dari"><MonthYearPicker value={certForm.issued_at} onChange={v => setCertForm(f => ({ ...f, issued_at: v }))} placeholder="Pilih bulan & tahun" /></Field>
-          <Field label="Berlaku sampai"><MonthYearPicker value={certForm.expires_at} onChange={v => setCertForm(f => ({ ...f, expires_at: v }))} placeholder="Pilih bulan & tahun" disabled={certForm.no_expiry} /></Field>
+          <Field label={t("admin.coaches.fieldCertName")}><Input value={certForm.title} onChange={e => setCertForm(f => ({ ...f, title: e.target.value }))} placeholder={t("admin.coaches.certNamePlaceholder")} /></Field>
+          <Field label={t("admin.coaches.fieldIssuingInstitution")}><Input value={certForm.issuer} onChange={e => setCertForm(f => ({ ...f, issuer: e.target.value }))} placeholder={t("admin.coaches.issuerPlaceholder2")} /></Field>
+          <Field label={t("admin.coaches.validFromLabel")}><MonthYearPicker value={certForm.issued_at} onChange={v => setCertForm(f => ({ ...f, issued_at: v }))} placeholder={t("common.monthYearPicker.placeholder")} /></Field>
+          <Field label={t("admin.coaches.validUntilLabel")}><MonthYearPicker value={certForm.expires_at} onChange={v => setCertForm(f => ({ ...f, expires_at: v }))} placeholder={t("common.monthYearPicker.placeholder")} disabled={certForm.no_expiry} /></Field>
           <label className="flex items-center gap-2 text-sm text-ink-soft cursor-pointer">
             <input type="checkbox" checked={certForm.no_expiry} onChange={e => setCertForm(f => ({ ...f, no_expiry: e.target.checked, expires_at: "" }))} className="rounded" />
-            Tidak ada kedaluwarsa
+            {t("admin.approvement.noExpiryLabel")}
           </label>
           <div>
-            <div className="text-sm font-semibold text-ink mb-1.5">Foto sertifikat <span className="text-ink-faint font-normal text-xs">(opsional, bantu proses verifikasi)</span></div>
+            <div className="text-sm font-semibold text-ink mb-1.5">{t("admin.coaches.certPhotoLabel")} <span className="text-ink-faint font-normal text-xs">{t("admin.coaches.certPhotoOptionalHint")}</span></div>
             {certPhotoFile && (
               <img src={URL.createObjectURL(certPhotoFile)} alt="Preview" className="w-full max-h-36 object-cover rounded-xl border border-line mb-2" />
             )}
@@ -1200,7 +1203,7 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
               <button type="button" onClick={() => certPhotoInputRef.current?.click()}
                 className="flex items-center gap-2 px-3 py-2 rounded-lg border border-line bg-paper-tint hover:bg-white hover:border-ocean-400 transition-colors text-sm font-semibold text-ink-soft hover:text-ink">
                 <Icon name="camera" className="w-4 h-4" />
-                {certPhotoFile ? "Ganti foto" : "Pilih foto"}
+                {certPhotoFile ? t("common.photoLightbox.changePhoto") : t("admin.coaches.choosePhotoBtn")}
               </button>
               {certPhotoFile && <span className="text-sm text-ink-mute truncate max-w-[160px]">{certPhotoFile.name}</span>}
               <input ref={certPhotoInputRef} type="file" accept="image/*" className="sr-only" onChange={e => setCertPhotoFile(e.target.files?.[0] ?? null)} />

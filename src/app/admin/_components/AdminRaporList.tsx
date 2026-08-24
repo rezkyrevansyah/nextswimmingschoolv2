@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
+import { useLocale } from "@/components/providers/LocaleProvider";
 import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
 import Avatar from "@/components/ui/Avatar";
@@ -44,6 +45,7 @@ const PAGE_SIZE = 15;
 export default function AdminRaporList({ branchId, periods }: { branchId: string; periods: RaporPeriod[] }) {
   const supabase = createClient();
   const toast = useToast();
+  const { t } = useLocale();
   const [selectedPeriodId, setSelectedPeriodId] = useState<string>("");
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
@@ -184,7 +186,7 @@ export default function AdminRaporList({ branchId, periods }: { branchId: string
     try {
       await downloadRaporPdf(toPrintStudent(s));
     } catch {
-      toast.error("Gagal download PDF", "Terjadi kesalahan. Coba lagi.");
+      toast.error(t("admin.rapor.downloadPdfFailed"), t("admin.rapor.tryAgainGeneric"));
     } finally {
       setDownloadingId(null);
     }
@@ -196,13 +198,13 @@ export default function AdminRaporList({ branchId, periods }: { branchId: string
     try {
       const zipName = `rapor-${(selectedPeriod?.label ?? "periode").replace(/[^a-zA-Z0-9]/g, "_")}-${new Date().toISOString().slice(0, 10)}`;
       const { success, failed } = await downloadRaporZip(targets.map(toPrintStudent), zipName);
-      if (failed === 0) toast.success(`${success} rapor berhasil diunduh`);
-      else if (success === 0) toast.error("Gagal mengunduh rapor", "Semua rapor gagal diproses, coba lagi.");
-      else toast.error(`${success} berhasil, ${failed} gagal`, "Sebagian rapor gagal diproses, coba lagi untuk yang gagal.");
+      if (failed === 0) toast.success(t("admin.rapor.reportsDownloadedToast", { count: success }));
+      else if (success === 0) toast.error(t("admin.rapor.downloadReportsFailedTitle"), t("admin.rapor.allReportsFailedBody"));
+      else toast.error(t("admin.rapor.partialSuccessTitle", { success, failed }), t("admin.rapor.partialSuccessBody"));
       setSelectMode(false);
       setSelected(new Set());
     } catch {
-      toast.error("Gagal mengunduh rapor", "Terjadi kesalahan. Coba lagi.");
+      toast.error(t("admin.rapor.downloadReportsFailedTitle"), t("admin.rapor.tryAgainGeneric"));
     } finally {
       setBulkDownloading(false);
     }
@@ -211,7 +213,7 @@ export default function AdminRaporList({ branchId, periods }: { branchId: string
   return (
     <div>
       <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
-        <SectionTitle sub={`${students.length} siswa · ${totalDone} rapor tersedia`}>Daftar Rapor Siswa</SectionTitle>
+        <SectionTitle sub={t("admin.rapor.listSummary", { count: students.length, done: totalDone })}>{t("admin.rapor.listTitle")}</SectionTitle>
         {periods.length > 0 && (
           <select
             value={effectivePeriodId}
@@ -219,14 +221,14 @@ export default function AdminRaporList({ branchId, periods }: { branchId: string
             className="text-xs font-semibold border border-line rounded-lg px-2.5 py-2 bg-white text-ink-soft outline-none cursor-pointer hover:border-ocean-400 transition"
           >
             {periods.map(p => (
-              <option key={p.id} value={p.id}>{p.label}{p.is_open ? " (aktif)" : ""}</option>
+              <option key={p.id} value={p.id}>{p.label}{p.is_open ? t("admin.rapor.activeSuffix") : ""}</option>
             ))}
           </select>
         )}
       </div>
 
       {!effectivePeriodId ? (
-        <Card><p className="text-ink-mute text-sm">Belum ada periode rapor untuk cabang ini.</p></Card>
+        <Card><p className="text-ink-mute text-sm">{t("admin.rapor.noPeriodsForBranch")}</p></Card>
       ) : (
         <Card padded={false}>
           <div className="px-4 sm:px-5 pt-4 pb-3 border-b border-line space-y-3">
@@ -239,27 +241,27 @@ export default function AdminRaporList({ branchId, periods }: { branchId: string
                     className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border border-line bg-white text-ink-soft hover:border-ocean-400 transition"
                   >
                     <Icon name="check" className="w-3.5 h-3.5" />
-                    Pilih & Download
+                    {t("admin.rapor.selectDownloadBtn")}
                   </button>
                 )
               ) : (
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-sm font-semibold text-ink-soft">{selected.size} dipilih</span>
+                  <span className="text-sm font-semibold text-ink-soft">{t("admin.rapor.selectedCountLabel", { count: selected.size })}</span>
                   <button type="button" onClick={() => setSelected(new Set(filteredSorted.filter(s => s.is_filled).map(s => s.id)))}
-                    className="text-xs font-semibold text-ocean-600 hover:underline">Pilih semua ({filteredSorted.filter(s => s.is_filled).length})</button>
+                    className="text-xs font-semibold text-ocean-600 hover:underline">{t("admin.rapor.selectAllBtn", { count: filteredSorted.filter(s => s.is_filled).length })}</button>
                   <button type="button" onClick={() => setSelected(new Set())}
-                    className="text-xs font-semibold text-ink-mute hover:underline">Batal pilih</button>
+                    className="text-xs font-semibold text-ink-mute hover:underline">{t("admin.rapor.cancelSelectBtn")}</button>
                   <Btn variant="primary" size="sm" icon="download" disabled={selected.size === 0 || bulkDownloading}
                     onClick={() => void handleDownloadZip(students.filter(s => selected.has(s.id) && s.is_filled))}>
-                    {bulkDownloading ? "Mengunduh…" : `Download ZIP (${selected.size})`}
+                    {bulkDownloading ? t("admin.rapor.downloadingBtn") : t("admin.rapor.downloadZipBtn", { count: selected.size })}
                   </Btn>
-                  <Btn variant="ghost" size="sm" onClick={() => { setSelectMode(false); setSelected(new Set()); }}>Selesai</Btn>
+                  <Btn variant="ghost" size="sm" onClick={() => { setSelectMode(false); setSelected(new Set()); }}>{t("admin.rapor.doneBtn")}</Btn>
                 </div>
               )}
               {totalDone > 0 && !selectMode && (
                 <Btn variant="soft" size="sm" icon="download" disabled={bulkDownloading}
                   onClick={() => void handleDownloadZip(filteredSorted.filter(s => s.is_filled))}>
-                  {bulkDownloading ? "Mengunduh…" : `Download Semua (${filteredSorted.filter(s => s.is_filled).length})`}
+                  {bulkDownloading ? t("admin.rapor.downloadingBtn") : t("admin.rapor.downloadAllBtn", { count: filteredSorted.filter(s => s.is_filled).length })}
                 </Btn>
               )}
             </div>
@@ -270,31 +272,31 @@ export default function AdminRaporList({ branchId, periods }: { branchId: string
                 <input
                   value={search}
                   onChange={e => { setSearch(e.target.value); setPage(0); }}
-                  placeholder="Cari nama, kelas, atau coach…"
+                  placeholder={t("admin.rapor.searchStudentsPlaceholder")}
                   className="flex-1 text-sm outline-none bg-transparent min-w-0"
                 />
               </div>
               <select value={filterClass} onChange={e => { setFilterClass(e.target.value); setPage(0); }} className="text-xs font-semibold border border-line rounded-lg px-2.5 py-2 bg-white text-ink-soft outline-none">
-                <option value="">Semua Kelas</option>
+                <option value="">{t("admin.rapor.allClasses")}</option>
                 {classList.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
               <select value={filterCoach} onChange={e => { setFilterCoach(e.target.value); setPage(0); }} className="text-xs font-semibold border border-line rounded-lg px-2.5 py-2 bg-white text-ink-soft outline-none">
-                <option value="">Semua Coach</option>
+                <option value="">{t("admin.rapor.allCoaches")}</option>
                 {coachList.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
               <select value={filterStatus} onChange={e => { setFilterStatus(e.target.value); setPage(0); }} className="text-xs font-semibold border border-line rounded-lg px-2.5 py-2 bg-white text-ink-soft outline-none">
-                <option value="">Semua Status</option>
-                <option value="done">Tersedia</option>
-                <option value="pending">Belum diisi</option>
+                <option value="">{t("admin.rapor.allStatuses")}</option>
+                <option value="done">{t("admin.rapor.statusAvailable")}</option>
+                <option value="pending">{t("admin.rapor.statusNotFilled")}</option>
               </select>
               {activeFilterCount > 0 && (
-                <button type="button" onClick={resetFilters} className="text-xs font-semibold text-danger-600 hover:underline">Reset filter</button>
+                <button type="button" onClick={resetFilters} className="text-xs font-semibold text-danger-600 hover:underline">{t("admin.rapor.resetFilterBtn")}</button>
               )}
             </div>
           </div>
 
           {loading ? (
-            <div className="p-10 text-center text-ink-mute">Memuat data…</div>
+            <div className="p-10 text-center text-ink-mute">{t("admin.rapor.loadingListData")}</div>
           ) : (
             <>
               <div className="overflow-x-auto">
@@ -309,11 +311,11 @@ export default function AdminRaporList({ branchId, periods }: { branchId: string
                           onChange={e => setSelected(e.target.checked ? new Set(filteredSorted.filter(s => s.is_filled).map(s => s.id)) : new Set())}
                         />
                       </th>}
-                      <th className="text-left py-3 px-5 font-bold">Siswa</th>
-                      <th className="text-left py-3 font-bold">Kelas</th>
-                      <th className="text-left py-3 font-bold">Coach</th>
-                      <th className="text-left py-3 font-bold">Status Rapor</th>
-                      <th className="text-right py-3 px-5 font-bold">Aksi</th>
+                      <th className="text-left py-3 px-5 font-bold">{t("admin.rapor.colStudent")}</th>
+                      <th className="text-left py-3 font-bold">{t("admin.rapor.colClassList")}</th>
+                      <th className="text-left py-3 font-bold">{t("admin.rapor.colCoachList")}</th>
+                      <th className="text-left py-3 font-bold">{t("admin.rapor.colReportStatus")}</th>
+                      <th className="text-right py-3 px-5 font-bold">{t("admin.rapor.colActions")}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-line">
@@ -347,12 +349,12 @@ export default function AdminRaporList({ branchId, periods }: { branchId: string
                           </td>
                           <td className="text-ink-soft text-sm">{s.class_name}</td>
                           <td className="text-ink-soft text-sm">{s.coach_name}</td>
-                          <td>{s.is_filled ? <Status kind="approved">Tersedia</Status> : <Status kind="pending">Belum diisi</Status>}</td>
+                          <td>{s.is_filled ? <Status kind="approved">{t("admin.rapor.statusAvailable")}</Status> : <Status kind="pending">{t("admin.rapor.statusNotFilled")}</Status>}</td>
                           <td className="text-right px-5">
                             <div className="inline-flex gap-1.5">
-                              <Btn variant="soft" size="sm" icon="eye" disabled={!s.is_filled} onClick={() => setOpen(s)}>Lihat</Btn>
+                              <Btn variant="soft" size="sm" icon="eye" disabled={!s.is_filled} onClick={() => setOpen(s)}>{t("admin.rapor.viewBtn")}</Btn>
                               <Btn variant="ghost" size="sm" icon="download" disabled={!s.is_filled || downloadingId === s.id} onClick={() => void handleDownloadOne(s)}>
-                                {downloadingId === s.id ? "Mengunduh…" : "Download PDF"}
+                                {downloadingId === s.id ? t("admin.rapor.downloadingBtn") : t("admin.rapor.downloadPdfBtn")}
                               </Btn>
                             </div>
                           </td>
@@ -363,7 +365,7 @@ export default function AdminRaporList({ branchId, periods }: { branchId: string
                       <tr>
                         <td colSpan={selectMode ? 6 : 5} className="py-14 text-center">
                           <Icon name="search" className="w-8 h-8 text-ink-faint mx-auto mb-3" />
-                          <div className="text-sm font-semibold text-ink-mute">Tidak ada siswa yang cocok</div>
+                          <div className="text-sm font-semibold text-ink-mute">{t("admin.rapor.noMatchingStudents")}</div>
                         </td>
                       </tr>
                     )}
@@ -373,7 +375,7 @@ export default function AdminRaporList({ branchId, periods }: { branchId: string
 
               {totalPages > 1 && (
                 <div className="flex items-center justify-between px-4 sm:px-5 py-3 border-t border-line">
-                  <span className="text-xs text-ink-mute">Halaman {safePage + 1} dari {totalPages}</span>
+                  <span className="text-xs text-ink-mute">{t("admin.rapor.pageOfLabel", { page: safePage + 1, total: totalPages })}</span>
                   <div className="flex gap-1.5">
                     <button type="button" disabled={safePage === 0} onClick={() => setPage(p => Math.max(0, p - 1))}
                       className="p-1.5 rounded-lg border border-line disabled:opacity-40 hover:border-ocean-400 transition">
@@ -395,15 +397,15 @@ export default function AdminRaporList({ branchId, periods }: { branchId: string
       <Modal
         open={!!open}
         onClose={() => setOpen(null)}
-        title={`Rapor — ${open?.full_name ?? ""}`}
+        title={t("admin.rapor.detailModalTitle", { name: open?.full_name ?? "" })}
         size="lg"
         footer={
           <div className="flex gap-2">
             <Btn variant="soft" size="sm" icon="download" disabled={downloadingId === open?.id}
               onClick={() => open && void handleDownloadOne(open)}>
-              {downloadingId === open?.id ? "Mengunduh…" : "Download PDF"}
+              {downloadingId === open?.id ? t("admin.rapor.downloadingBtn") : t("admin.rapor.downloadPdfBtn")}
             </Btn>
-            <Btn variant="primary" onClick={() => setOpen(null)}>Tutup</Btn>
+            <Btn variant="primary" onClick={() => setOpen(null)}>{t("common.actions.close")}</Btn>
           </div>
         }
       >
@@ -463,12 +465,12 @@ export default function AdminRaporList({ branchId, periods }: { branchId: string
               }
               {open.notes && (
                 <div>
-                  <div className="font-semibold text-ink text-sm mb-1">Catatan coach</div>
+                  <div className="font-semibold text-ink text-sm mb-1">{t("admin.rapor.coachNotesLabel")}</div>
                   <p className="text-sm text-ink-soft bg-paper-tint p-3 rounded-xl leading-relaxed">{open.notes}</p>
                 </div>
               )}
               {Object.keys(open.scores).length === 0 && !open.notes && (
-                <div className="text-center py-6 text-sm text-ink-mute">Coach belum mengisi nilai untuk periode ini.</div>
+                <div className="text-center py-6 text-sm text-ink-mute">{t("admin.rapor.noScoresFilledYet")}</div>
               )}
             </div>
           </div>

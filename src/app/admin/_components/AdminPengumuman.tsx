@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
+import { useLocale } from "@/components/providers/LocaleProvider";
 import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
 import { Field, Input, Select, Textarea } from "@/components/ui/FormFields";
@@ -18,17 +19,21 @@ interface Announcement {
   target_roles: string[];
 }
 
-const ANNOUNCEMENT_ROLE_LABELS = [
-  { value: "member", label: "Member" },
-  { value: "coach",  label: "Coach" },
-  { value: "admin",  label: "Admin Cabang" },
-  { value: "school", label: "Sekolah" },
-] as const;
+function buildRoleLabels(t: (key: string) => string) {
+  return [
+    { value: "member", label: t("admin.pengumuman.memberRole") },
+    { value: "coach",  label: t("admin.pengumuman.coachRole") },
+    { value: "admin",  label: t("admin.pengumuman.adminBranchRole") },
+    { value: "school", label: t("admin.pengumuman.schoolRole") },
+  ] as const;
+}
 
 export default function AdminPengumuman({ branchId }: { branchId: string }) {
   const supabase = createClient();
   const toast = useToast();
   const confirm = useConfirm();
+  const { t } = useLocale();
+  const ANNOUNCEMENT_ROLE_LABELS = buildRoleLabels(t);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState(true);
   const [openAdd, setOpenAdd] = useState(false);
@@ -70,9 +75,9 @@ export default function AdminPengumuman({ branchId }: { branchId: string }) {
   };
 
   const create = async () => {
-    if (!form.title || !form.body) return toast.error("Judul dan isi wajib diisi");
-    if (form.target === "class" && form.class_ids.length === 0) return toast.error("Pilih minimal satu kelas");
-    if (form.target_roles.length === 0) return toast.error("Pilih minimal satu penerima");
+    if (!form.title || !form.body) return toast.error(t("admin.pengumuman.titleBodyRequired"));
+    if (form.target === "class" && form.class_ids.length === 0) return toast.error(t("admin.pengumuman.selectAtLeastOneClass"));
+    if (form.target_roles.length === 0) return toast.error(t("admin.pengumuman.selectAtLeastOneRecipient"));
     setSaving(true);
     const user = (await supabase.auth.getUser()).data.user;
     const { data: ann, error } = await supabase.from("announcements").insert({
@@ -82,7 +87,7 @@ export default function AdminPengumuman({ branchId }: { branchId: string }) {
       valid_from: form.valid_from || new Date().toISOString().slice(0, 10),
       valid_until: form.valid_until || null, created_by: user?.id ?? "",
     }).select("id").single();
-    if (error || !ann) { setSaving(false); return toast.error("Gagal membuat pengumuman", error?.message); }
+    if (error || !ann) { setSaving(false); return toast.error(t("admin.pengumuman.createFailed"), error?.message); }
     if (form.target === "class" && form.class_ids.length > 0) {
       await supabase.from("announcement_classes").insert(form.class_ids.map(class_id => ({ announcement_id: ann.id, class_id })));
     }
@@ -128,11 +133,11 @@ export default function AdminPengumuman({ branchId }: { branchId: string }) {
     const uniqueIds = [...new Set(targetUserIds)];
     if (uniqueIds.length > 0) {
       await supabase.from("notifications").insert(
-        uniqueIds.map(uid => ({ user_id: uid, title: "Pengumuman baru", body: notifBody, icon: "bell", kind: "info", created_at: today }))
+        uniqueIds.map(uid => ({ user_id: uid, title: t("admin.pengumuman.newAnnouncementNotifTitle"), body: notifBody, icon: "bell", kind: "info", created_at: today }))
       );
     }
     setSaving(false);
-    toast.success("Pengumuman dibuat");
+    toast.success(t("admin.pengumuman.createdToast"));
     setOpenAdd(false);
     setForm({ title: "", body: "", target: "all", target_roles: ["member"], valid_from: "", valid_until: "", class_ids: [] });
     load();
@@ -141,31 +146,31 @@ export default function AdminPengumuman({ branchId }: { branchId: string }) {
   const deactivate = async (id: string) => {
     await supabase.from("announcements").update({ active: false }).eq("id", id);
     setAnnouncements(prev => prev.map(a => a.id === id ? { ...a, active: false } : a));
-    toast.success("Pengumuman dinonaktifkan");
+    toast.success(t("admin.pengumuman.deactivatedToast"));
   };
 
   const activate = async (id: string) => {
     await supabase.from("announcements").update({ active: true }).eq("id", id);
     setAnnouncements(prev => prev.map(a => a.id === id ? { ...a, active: true } : a));
-    toast.success("Pengumuman diaktifkan");
+    toast.success(t("admin.pengumuman.activatedToast"));
   };
 
   const deleteAnn = async (id: string) => {
-    const ok = await confirm({ body: "Hapus pengumuman ini? Tindakan tidak bisa dibatalkan." });
+    const ok = await confirm({ body: t("admin.pengumuman.deleteConfirmBody") });
     if (!ok) return;
     const { error } = await supabase.from("announcements").delete().eq("id", id);
-    if (error) return toast.error("Gagal menghapus", error.message);
+    if (error) return toast.error(t("admin.pengumuman.deleteFailed"), error.message);
     setAnnouncements(prev => prev.filter(a => a.id !== id));
-    toast.success("Pengumuman dihapus");
+    toast.success(t("admin.pengumuman.deletedToast"));
   };
 
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <div><h2 className="font-display font-bold text-2xl">Pengumuman</h2><p className="text-ink-mute text-sm mt-0.5">Tampil di home member page sebagai banner.</p></div>
-        <Btn variant="primary" icon="plus" onClick={() => { setForm({ title: "", body: "", target: "all", target_roles: ["member"], valid_from: "", valid_until: "", class_ids: [] }); setOpenAdd(true); }}>Buat Pengumuman</Btn>
+        <div><h2 className="font-display font-bold text-2xl">{t("admin.pengumuman.pageTitle")}</h2><p className="text-ink-mute text-sm mt-0.5">{t("admin.pengumuman.pageSub")}</p></div>
+        <Btn variant="primary" icon="plus" onClick={() => { setForm({ title: "", body: "", target: "all", target_roles: ["member"], valid_from: "", valid_until: "", class_ids: [] }); setOpenAdd(true); }}>{t("admin.pengumuman.createBtn")}</Btn>
       </div>
-      {loading ? <div className="text-ink-mute text-sm">Memuat…</div> : (
+      {loading ? <div className="text-ink-mute text-sm">{t("admin.pengumuman.loading")}</div> : (
         <div className="grid lg:grid-cols-2 gap-5">
           {announcements.map((a) => {
             const annClasses = (a as unknown as { announcement_classes?: { class_id: string; class?: { name: string } | null }[] }).announcement_classes;
@@ -174,10 +179,10 @@ export default function AdminPengumuman({ branchId }: { branchId: string }) {
                 <div className="flex items-start gap-3">
                   <span className="w-11 h-11 rounded-xl bg-ocean-50 text-ocean-700 flex items-center justify-center shrink-0"><Icon name="bell" className="w-5 h-5" /></span>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap"><h3 className="font-display font-bold text-ink">{a.title}</h3><Status kind={a.active ? "active" : "inactive"}>{a.active ? "Aktif" : "Nonaktif"}</Status></div>
+                    <div className="flex items-center gap-2 flex-wrap"><h3 className="font-display font-bold text-ink">{a.title}</h3><Status kind={a.active ? "active" : "inactive"}>{a.active ? t("admin.pengumuman.activeStatus") : t("admin.pengumuman.inactiveStatus")}</Status></div>
                     <div className="text-xs text-ink-mute mt-1 flex flex-wrap items-center gap-1.5">
-                      {a.valid_until && <span>Berlaku s/d {fmtDate(a.valid_until)} ·</span>}
-                      <span>Target: <b>{a.target_all ? "Semua" : annClasses && annClasses.length > 0 ? annClasses.map(ac => ac.class?.name ?? "").join(", ") : "Spesifik"}</b></span>
+                      {a.valid_until && <span>{t("admin.pengumuman.validUntilLine", { date: fmtDate(a.valid_until) })}</span>}
+                      <span>{t("admin.pengumuman.targetLabel")} <b>{a.target_all ? t("admin.pengumuman.targetAll") : annClasses && annClasses.length > 0 ? annClasses.map(ac => ac.class?.name ?? "").join(", ") : t("admin.pengumuman.targetSpecific")}</b></span>
                       {(a.target_roles ?? []).length > 0 && (
                         <div className="flex gap-1 flex-wrap">
                           {ANNOUNCEMENT_ROLE_LABELS.filter(r => (a.target_roles ?? []).includes(r.value)).map(r => (
@@ -189,25 +194,25 @@ export default function AdminPengumuman({ branchId }: { branchId: string }) {
                     <p className="text-sm text-ink-soft mt-3 leading-relaxed">{a.body}</p>
                     <div className="mt-4 flex gap-2">
                       {a.active
-                        ? <Btn variant="ghost" size="sm" onClick={() => deactivate(a.id)}>Nonaktifkan</Btn>
-                        : <Btn variant="soft" size="sm" icon="check" onClick={() => activate(a.id)}>Aktifkan</Btn>
+                        ? <Btn variant="ghost" size="sm" onClick={() => deactivate(a.id)}>{t("admin.pengumuman.deactivateBtn")}</Btn>
+                        : <Btn variant="soft" size="sm" icon="check" onClick={() => activate(a.id)}>{t("admin.pengumuman.activateBtn")}</Btn>
                       }
-                      <Btn variant="ghost" size="sm" className="text-danger-500" onClick={() => deleteAnn(a.id)}>Hapus</Btn>
+                      <Btn variant="ghost" size="sm" className="text-danger-500" onClick={() => deleteAnn(a.id)}>{t("common.actions.delete")}</Btn>
                     </div>
                   </div>
                 </div>
               </Card>
             );
           })}
-          {announcements.length === 0 && <p className="text-ink-mute">Belum ada pengumuman.</p>}
+          {announcements.length === 0 && <p className="text-ink-mute">{t("admin.pengumuman.emptyState")}</p>}
         </div>
       )}
-      <Modal open={openAdd} onClose={() => setOpenAdd(false)} title="Buat Pengumuman"
-        footer={<><Btn variant="ghost" onClick={() => setOpenAdd(false)}>Batal</Btn><Btn variant="primary" onClick={create} disabled={saving}>{saving ? "Menyimpan…" : "Publikasikan"}</Btn></>}>
+      <Modal open={openAdd} onClose={() => setOpenAdd(false)} title={t("admin.pengumuman.createBtn")}
+        footer={<><Btn variant="ghost" onClick={() => setOpenAdd(false)}>{t("common.actions.cancel")}</Btn><Btn variant="primary" onClick={create} disabled={saving}>{saving ? t("common.actions.saving") : t("admin.pengumuman.publishBtn")}</Btn></>}>
         <div className="space-y-4">
-          <Field label="Judul" required><Input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} /></Field>
-          <Field label="Isi pengumuman" required><Textarea rows={4} value={form.body} onChange={e => setForm(f => ({ ...f, body: e.target.value }))} /></Field>
-          <Field label="Penerima" required hint="Pilih role yang menerima pengumuman ini">
+          <Field label={t("admin.pengumuman.fieldTitle")} required><Input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} /></Field>
+          <Field label={t("admin.pengumuman.fieldBody")} required><Textarea rows={4} value={form.body} onChange={e => setForm(f => ({ ...f, body: e.target.value }))} /></Field>
+          <Field label={t("admin.pengumuman.fieldRecipients")} required hint={t("admin.pengumuman.fieldRecipientsHint")}>
             <div className="flex flex-wrap gap-2 mt-1">
               {ANNOUNCEMENT_ROLE_LABELS.map(({ value, label }) => (
                 <button key={value} type="button" onClick={() => toggleRole(value)}
@@ -218,17 +223,17 @@ export default function AdminPengumuman({ branchId }: { branchId: string }) {
             </div>
           </Field>
           <div className="grid sm:grid-cols-2 gap-4">
-            <Field label="Target anggota">
+            <Field label={t("admin.pengumuman.fieldMemberTarget")}>
               <Select value={form.target} onChange={e => setForm(f => ({ ...f, target: e.target.value, class_ids: [] }))}>
-                <option value="all">Semua member</option>
-                <option value="class">Per kelas (member)</option>
+                <option value="all">{t("admin.pengumuman.targetAllMembers")}</option>
+                <option value="class">{t("admin.pengumuman.targetPerClass")}</option>
               </Select>
             </Field>
-            <Field label="Berlaku mulai" hint="Kosong = hari ini"><Input type="date" value={form.valid_from} onChange={e => setForm(f => ({ ...f, valid_from: e.target.value }))} /></Field>
+            <Field label={t("admin.pengumuman.fieldValidFrom")} hint={t("admin.pengumuman.validFromHint")}><Input type="date" value={form.valid_from} onChange={e => setForm(f => ({ ...f, valid_from: e.target.value }))} /></Field>
           </div>
-          <Field label="Berlaku s/d" hint="Opsional — kosong = tampil sampai dihapus manual"><Input type="date" value={form.valid_until} onChange={e => setForm(f => ({ ...f, valid_until: e.target.value }))} /></Field>
+          <Field label={t("admin.pengumuman.fieldValidUntil")} hint={t("admin.pengumuman.validUntilHint")}><Input type="date" value={form.valid_until} onChange={e => setForm(f => ({ ...f, valid_until: e.target.value }))} /></Field>
           {form.target === "class" && (
-            <Field label="Pilih kelas" hint="Bisa pilih lebih dari satu">
+            <Field label={t("admin.pengumuman.fieldSelectClasses")} hint={t("admin.pengumuman.selectClassesHint")}>
               <div className="flex flex-wrap gap-2 mt-1">
                 {classes.map(c => (
                   <button key={c.id} type="button" onClick={() => toggleClass(c.id)}
@@ -236,7 +241,7 @@ export default function AdminPengumuman({ branchId }: { branchId: string }) {
                     {c.name}
                   </button>
                 ))}
-                {classes.length === 0 && <span className="text-sm text-ink-mute">Tidak ada kelas aktif</span>}
+                {classes.length === 0 && <span className="text-sm text-ink-mute">{t("admin.pengumuman.noActiveClasses")}</span>}
               </div>
             </Field>
           )}

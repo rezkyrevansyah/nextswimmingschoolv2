@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
+import { useLocale } from "@/components/providers/LocaleProvider";
 import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
 import { Field, Input, Select, Textarea } from "@/components/ui/FormFields";
@@ -16,6 +17,8 @@ import { logActivity } from "@/lib/activityLog";
 
 function AdminAbsensiMember({ branchId }: { branchId: string }) {
   const supabase = createClient();
+  const { t, locale } = useLocale();
+  const localeTag = locale === "id" ? "id-ID" : "en-US";
   const PAGE_SIZE = 30;
 
   const today = new Date().toISOString().split("T")[0];
@@ -35,7 +38,7 @@ function AdminAbsensiMember({ branchId }: { branchId: string }) {
   const monthOptions = Array.from({ length: 12 }, (_, i) => {
     const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - i);
     const value = d.toISOString().slice(0, 7);
-    const label = d.toLocaleDateString("id-ID", { month: "long", year: "numeric" });
+    const label = d.toLocaleDateString(localeTag, { month: "long", year: "numeric" });
     return { value, label };
   });
 
@@ -113,34 +116,34 @@ function AdminAbsensiMember({ branchId }: { branchId: string }) {
           {monthOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </Select>
         <Select value={filterClass} onChange={e => setFilterClass(e.target.value)}>
-          <option value="all">Semua Kelas</option>
+          <option value="all">{t("admin.absensi.allClassesOpt")}</option>
           {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
         </Select>
         <Select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
-          <option value="all">Semua Status</option>
-          <option value="hadir">Hadir</option>
-          <option value="telat">Telat</option>
-          <option value="izin">Izin</option>
-          <option value="sakit">Sakit</option>
-          <option value="tidak_hadir">Tidak Hadir</option>
+          <option value="all">{t("admin.absensi.allStatusesOpt")}</option>
+          <option value="hadir">{t("admin.absensi.statusPresent")}</option>
+          <option value="telat">{t("admin.absensi.statusLate")}</option>
+          <option value="izin">{t("admin.absensi.statusExcused")}</option>
+          <option value="sakit">{t("admin.absensi.statusSick")}</option>
+          <option value="tidak_hadir">{t("admin.absensi.statusAbsent")}</option>
         </Select>
-        <Input placeholder="Cari nama member…" value={filterName} onChange={e => setFilterName(e.target.value)} />
+        <Input placeholder={t("admin.absensi.searchMemberNamePlaceholder")} value={filterName} onChange={e => setFilterName(e.target.value)} />
       </div>
 
       <Card padded={false}>
         {loading && records.length === 0 ? (
-          <div className="p-10 text-center text-ink-mute">Memuat data…</div>
+          <div className="p-10 text-center text-ink-mute">{t("admin.absensi.loadingData")}</div>
         ) : (
           <>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-[11px] uppercase tracking-widest text-ink-faint font-bold border-b border-line">
-                    <th className="text-left py-3 px-5 font-bold">Tanggal</th>
-                    <th className="text-left py-3 font-bold">Member</th>
-                    <th className="text-left py-3 font-bold">Kelas</th>
-                    <th className="text-left py-3 font-bold">Status</th>
-                    <th className="text-left py-3 pr-5 font-bold hidden sm:table-cell">Metode</th>
+                    <th className="text-left py-3 px-5 font-bold">{t("admin.absensi.colDate")}</th>
+                    <th className="text-left py-3 font-bold">{t("admin.absensi.colMember")}</th>
+                    <th className="text-left py-3 font-bold">{t("admin.absensi.colClass")}</th>
+                    <th className="text-left py-3 font-bold">{t("admin.absensi.colStatus")}</th>
+                    <th className="text-left py-3 pr-5 font-bold hidden sm:table-cell">{t("admin.absensi.colMethod")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line">
@@ -151,22 +154,22 @@ function AdminAbsensiMember({ branchId }: { branchId: string }) {
                       <td className="py-3 text-ink-soft">{r.class?.name ?? "—"}</td>
                       <td className="py-3">
                         {r.status === "hadir"
-                          ? <Status kind="approved" dot={false}>Hadir</Status>
+                          ? <Status kind="approved" dot={false}>{t("admin.absensi.statusPresent")}</Status>
                           : r.status === "telat"
-                          ? <Status kind="telat" dot={false}>Telat</Status>
+                          ? <Status kind="telat" dot={false}>{t("admin.absensi.statusLate")}</Status>
                           : r.status === "izin"
-                          ? <Status kind="excused" dot={false}>Izin</Status>
+                          ? <Status kind="excused" dot={false}>{t("admin.absensi.statusExcused")}</Status>
                           : r.status === "sakit"
-                          ? <Status kind="sick" dot={false}>Sakit</Status>
-                          : <Status kind="rejected" dot={false}>Tidak Hadir</Status>}
+                          ? <Status kind="sick" dot={false}>{t("admin.absensi.statusSick")}</Status>
+                          : <Status kind="rejected" dot={false}>{t("admin.absensi.statusAbsent")}</Status>}
                       </td>
                       <td className="py-3 pr-5 hidden sm:table-cell text-ink-mute capitalize">
-                        {r.method === "manual" ? "Manual" : r.method === "qr" ? "QR Scan" : r.method ?? "—"}
+                        {r.method === "manual" ? t("admin.absensi.methodManual") : r.method === "qr" ? t("admin.absensi.methodQr") : r.method ?? "—"}
                       </td>
                     </tr>
                   ))}
                   {records.length === 0 && !loading && (
-                    <tr><td colSpan={5} className="py-10 text-center text-ink-mute">Tidak ada data absensi.</td></tr>
+                    <tr><td colSpan={5} className="py-10 text-center text-ink-mute">{t("admin.absensi.noAttendanceData")}</td></tr>
                   )}
                 </tbody>
               </table>
@@ -174,7 +177,7 @@ function AdminAbsensiMember({ branchId }: { branchId: string }) {
             {hasMore && (
               <div className="px-5 py-3 border-t border-line">
                 <Btn variant="ghost" onClick={loadMore} disabled={loading} className="w-full">
-                  {loading ? "Memuat…" : "Tampilkan lebih banyak"}
+                  {loading ? t("admin.absensi.loadingBtn") : t("admin.absensi.showMoreBtn")}
                 </Btn>
               </div>
             )}
@@ -189,6 +192,8 @@ function AdminAbsensiCoach({ branchId }: { branchId: string }) {
   const supabase = createClient();
   const toast = useToast();
   const confirm = useConfirm();
+  const { t, locale } = useLocale();
+  const localeTag = locale === "id" ? "id-ID" : "en-US";
 
   const today = new Date().toISOString().split("T")[0];
   const defaultMonth = today.slice(0, 7);
@@ -219,7 +224,7 @@ function AdminAbsensiCoach({ branchId }: { branchId: string }) {
   const monthOptions = Array.from({ length: 12 }, (_, i) => {
     const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - i);
     const value = d.toISOString().slice(0, 7);
-    const label = d.toLocaleDateString("id-ID", { month: "long", year: "numeric" });
+    const label = d.toLocaleDateString(localeTag, { month: "long", year: "numeric" });
     return { value, label };
   });
 
@@ -290,7 +295,7 @@ function AdminAbsensiCoach({ branchId }: { branchId: string }) {
         const dayName = d.toLocaleDateString("id-ID", { weekday: "long" });
         if (cls.schedule_days.includes(dayName) || cls.schedule_days.some(sd => DAY_MAP[sd] === d.getDay())) {
           const iso = d.toISOString().split("T")[0];
-          const label = d.toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+          const label = d.toLocaleDateString(localeTag, { weekday: "long", day: "numeric", month: "long", year: "numeric" });
           dates.push({ value: iso, label });
         }
       }
@@ -303,7 +308,7 @@ function AdminAbsensiCoach({ branchId }: { branchId: string }) {
   };
 
   const saveManual = async () => {
-    if (!form.coach_id || !form.class_id || !form.session_date) return toast.error("Coach, kelas, dan tanggal wajib diisi");
+    if (!form.coach_id || !form.class_id || !form.session_date) return toast.error(t("admin.absensi.coachDateRequired"));
     setSaving(true);
     const user = (await supabase.auth.getUser()).data.user;
     const clockInTime = form.clock_in_time || new Date().toTimeString().slice(0, 8);
@@ -318,9 +323,9 @@ function AdminAbsensiCoach({ branchId }: { branchId: string }) {
         status: manualStatus,
       }).eq("id", editTarget.id);
       setSaving(false);
-      if (error) return toast.error("Gagal menyimpan", error.message);
-      toast.success("Absensi diperbarui");
-      logActivity(supabase, { userId: user?.id ?? "unknown", userRole: "admin", userName: user?.user_metadata?.full_name ?? "Admin", branchId, entityType: "coach_attendances", entityId: editTarget.id, action: "update", label: `Absensi manual coach tanggal ${form.session_date} diperbarui`, meta: { coach_id: form.coach_id, session_date: form.session_date, status: manualStatus } });
+      if (error) return toast.error(t("admin.absensi.saveFailed"), error.message);
+      toast.success(t("admin.absensi.attendanceUpdatedToast"));
+      logActivity(supabase, { userId: user?.id ?? "unknown", userRole: "admin", userName: user?.user_metadata?.full_name ?? "Admin", branchId, entityType: "coach_attendances", entityId: editTarget.id, action: "update", label: t("admin.absensi.activityManualUpdated", { date: form.session_date }), meta: { coach_id: form.coach_id, session_date: form.session_date, status: manualStatus } });
     } else {
       const { error } = await supabase.from("coach_attendances").insert({
         branch_id: branchId, coach_id: form.coach_id, class_id: form.class_id,
@@ -330,9 +335,9 @@ function AdminAbsensiCoach({ branchId }: { branchId: string }) {
         manual_note: form.note || null, status: manualStatus,
       });
       setSaving(false);
-      if (error) return toast.error("Gagal menyimpan", error.message);
-      toast.success("Absensi manual disimpan");
-      logActivity(supabase, { userId: user?.id ?? "unknown", userRole: "admin", userName: user?.user_metadata?.full_name ?? "Admin", branchId, entityType: "coach_attendances", entityId: form.coach_id, action: "create", label: `Absensi manual coach tanggal ${form.session_date} ditambahkan`, meta: { coach_id: form.coach_id, session_date: form.session_date, status: manualStatus } });
+      if (error) return toast.error(t("admin.absensi.saveFailed"), error.message);
+      toast.success(t("admin.absensi.attendanceSavedToast"));
+      logActivity(supabase, { userId: user?.id ?? "unknown", userRole: "admin", userName: user?.user_metadata?.full_name ?? "Admin", branchId, entityType: "coach_attendances", entityId: form.coach_id, action: "create", label: t("admin.absensi.activityManualAdded", { date: form.session_date }), meta: { coach_id: form.coach_id, session_date: form.session_date, status: manualStatus } });
     }
     setOpenManual(false);
     setEditTarget(null);
@@ -357,13 +362,13 @@ function AdminAbsensiCoach({ branchId }: { branchId: string }) {
         const d = new Date(todayD); d.setDate(todayD.getDate() - daysBack);
         if (cls.schedule_days.some(sd => DAY_MAP[sd] === d.getDay())) {
           const iso = d.toISOString().split("T")[0];
-          dates.push({ value: iso, label: d.toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric" }) });
+          dates.push({ value: iso, label: d.toLocaleDateString(localeTag, { weekday: "long", day: "numeric", month: "long", year: "numeric" }) });
         }
       }
     }
     if (r.session_date && !dates.find(d => d.value === r.session_date)) {
       const d = new Date(r.session_date);
-      dates.push({ value: r.session_date, label: d.toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric" }) });
+      dates.push({ value: r.session_date, label: d.toLocaleDateString(localeTag, { weekday: "long", day: "numeric", month: "long", year: "numeric" }) });
     }
     setSessionDates(dates);
     setForm({ coach_id: r.coach_id, class_id: r.class_id, session_date: r.session_date, clock_in_time: r.clock_in_time?.slice(0, 5) ?? "", note: r.manual_note ?? "" });
@@ -372,11 +377,11 @@ function AdminAbsensiCoach({ branchId }: { branchId: string }) {
   };
 
   const deleteRecord = async (r: AttendanceRow) => {
-    const ok = await confirm({ title: "Hapus absensi?", body: `Hapus absensi ${r.profile?.full_name} tanggal ${fmtDate(r.session_date)}?`, confirmLabel: "Hapus", danger: true });
+    const ok = await confirm({ title: t("admin.absensi.deleteConfirmTitle"), body: t("admin.absensi.deleteConfirmBody", { name: r.profile?.full_name ?? "", date: fmtDate(r.session_date) }), confirmLabel: t("common.actions.delete"), danger: true });
     if (!ok) return;
     const { error } = await supabase.from("coach_attendances").delete().eq("id", r.id);
-    if (error) return toast.error("Gagal menghapus", error.message);
-    toast.success("Absensi dihapus");
+    if (error) return toast.error(t("admin.absensi.deleteFailed"), error.message);
+    toast.success(t("admin.absensi.attendanceDeletedToast"));
     setPage(0);
     loadRecords(0, false);
   };
@@ -386,20 +391,20 @@ function AdminAbsensiCoach({ branchId }: { branchId: string }) {
       {/* Filters */}
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <Select value={filterCoach} onChange={e => setFilterCoach(e.target.value)}>
-          <option value="all">Semua Coach</option>
+          <option value="all">{t("admin.absensi.allCoachesOpt")}</option>
           {coaches.map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
         </Select>
         <Select value={filterClass2} onChange={e => setFilterClass2(e.target.value)}>
-          <option value="all">Semua Kelas</option>
+          <option value="all">{t("admin.absensi.allClassesOpt")}</option>
           {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
         </Select>
         <div className="flex items-center gap-2">
           <Input type="date" value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)} className="flex-1" />
-          <span className="text-ink-mute text-xs shrink-0">s.d.</span>
+          <span className="text-ink-mute text-xs shrink-0">{t("admin.absensi.toDateSeparator")}</span>
           <Input type="date" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)} className="flex-1" />
         </div>
         <div className="flex justify-end">
-          <Btn variant="primary" icon="plus" onClick={() => { setEditTarget(null); setForm({ coach_id: "", class_id: "", session_date: "", clock_in_time: "", note: "" }); setManualStatus("present"); setCoachClassIds(new Set()); setSessionDates([]); setOpenManual(true); }}>Absensi Manual</Btn>
+          <Btn variant="primary" icon="plus" onClick={() => { setEditTarget(null); setForm({ coach_id: "", class_id: "", session_date: "", clock_in_time: "", note: "" }); setManualStatus("present"); setCoachClassIds(new Set()); setSessionDates([]); setOpenManual(true); }}>{t("admin.absensi.manualAttendanceBtn")}</Btn>
         </div>
       </div>
       {/* Quick month filter */}
@@ -418,14 +423,14 @@ function AdminAbsensiCoach({ branchId }: { branchId: string }) {
       </div>
 
       <Card padded={false}>
-        {loading && records.length === 0 ? <div className="p-10 text-center text-ink-mute">Memuat data…</div> : (
+        {loading && records.length === 0 ? <div className="p-10 text-center text-ink-mute">{t("admin.absensi.loadingData")}</div> : (
           <>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead><tr className="text-[11px] uppercase tracking-widest text-ink-faint font-bold border-b border-line">
-                  <th className="text-left py-3 px-5 font-bold">Tanggal</th><th className="text-left py-3 font-bold">Coach</th>
-                  <th className="text-left py-3 font-bold">Kelas</th><th className="text-left py-3 font-bold">Clock-in</th>
-                  <th className="text-left py-3 font-bold hidden sm:table-cell">Jarak</th><th className="text-left py-3 font-bold hidden sm:table-cell">Metode</th>
+                  <th className="text-left py-3 px-5 font-bold">{t("admin.absensi.colDate")}</th><th className="text-left py-3 font-bold">{t("admin.absensi.colCoach")}</th>
+                  <th className="text-left py-3 font-bold">{t("admin.absensi.colClass")}</th><th className="text-left py-3 font-bold">{t("admin.absensi.colClockIn")}</th>
+                  <th className="text-left py-3 font-bold hidden sm:table-cell">{t("admin.absensi.colDistance")}</th><th className="text-left py-3 font-bold hidden sm:table-cell">{t("admin.absensi.colMethod")}</th>
                   <th className="text-left py-3 pr-5 font-bold"></th>
                 </tr></thead>
                 <tbody className="divide-y divide-line">
@@ -438,65 +443,65 @@ function AdminAbsensiCoach({ branchId }: { branchId: string }) {
                       <td className="font-mono hidden sm:table-cell">{r.distance_meters != null ? `${r.distance_meters} m` : "—"}</td>
                       <td className="hidden sm:table-cell">
                         <div className="flex flex-col gap-1">
-                          {r.is_manual ? <Status kind="manual">Manual</Status> : <Status kind="active">Selfie + GPS</Status>}
-                          {r.status === "late" && <Status kind="late">Telat</Status>}
+                          {r.is_manual ? <Status kind="manual">{t("admin.absensi.methodManual")}</Status> : <Status kind="active">{t("admin.absensi.methodSelfieGps")}</Status>}
+                          {r.status === "late" && <Status kind="late">{t("admin.absensi.statusLate")}</Status>}
                         </div>
                       </td>
                       <td className="pr-5">
                         <div className="flex items-center gap-1">
-                          <button onClick={() => openEdit(r)} className="p-1.5 rounded hover:bg-paper-tint text-ink-mute hover:text-ink" title="Edit"><Icon name="edit" className="w-4 h-4" /></button>
-                          <button onClick={() => deleteRecord(r)} className="p-1.5 rounded hover:bg-danger-50 text-ink-mute hover:text-danger-600" title="Hapus"><Icon name="trash" className="w-4 h-4" /></button>
+                          <button onClick={() => openEdit(r)} className="p-1.5 rounded hover:bg-paper-tint text-ink-mute hover:text-ink" title={t("common.actions.edit")}><Icon name="edit" className="w-4 h-4" /></button>
+                          <button onClick={() => deleteRecord(r)} className="p-1.5 rounded hover:bg-danger-50 text-ink-mute hover:text-danger-600" title={t("common.actions.delete")}><Icon name="trash" className="w-4 h-4" /></button>
                         </div>
                       </td>
                     </tr>
                   ))}
-                  {records.length === 0 && !loading && <tr><td colSpan={7} className="py-10 text-center text-ink-mute">Belum ada absensi</td></tr>}
+                  {records.length === 0 && !loading && <tr><td colSpan={7} className="py-10 text-center text-ink-mute">{t("admin.absensi.noAttendanceYet")}</td></tr>}
                 </tbody>
               </table>
             </div>
             {hasMore && (
               <div className="px-5 py-3 border-t border-line">
-                <Btn variant="ghost" onClick={loadMore} disabled={loading} className="w-full">{loading ? "Memuat…" : "Tampilkan lebih banyak"}</Btn>
+                <Btn variant="ghost" onClick={loadMore} disabled={loading} className="w-full">{loading ? t("admin.absensi.loadingBtn") : t("admin.absensi.showMoreBtn")}</Btn>
               </div>
             )}
           </>
         )}
       </Card>
-      <Modal open={openManual} onClose={() => { setOpenManual(false); setEditTarget(null); }} title={editTarget ? "Edit Absensi Coach" : "Absensi Manual Coach"}
-        footer={<><Btn variant="ghost" onClick={() => setOpenManual(false)}>Batal</Btn><Btn variant="primary" onClick={saveManual} disabled={saving}>{saving ? "Menyimpan…" : "Simpan absensi"}</Btn></>}>
+      <Modal open={openManual} onClose={() => { setOpenManual(false); setEditTarget(null); }} title={editTarget ? t("admin.absensi.editModalTitle") : t("admin.absensi.addModalTitle")}
+        footer={<><Btn variant="ghost" onClick={() => setOpenManual(false)}>{t("common.actions.cancel")}</Btn><Btn variant="primary" onClick={saveManual} disabled={saving}>{saving ? t("common.actions.saving") : t("admin.absensi.saveAttendanceBtn")}</Btn></>}>
         <div className="space-y-4">
           <Card className="!p-3 bg-manual-50 border-manual-500/20">
-            <div className="flex items-start gap-2.5 text-sm"><Icon name="info" className="w-5 h-5 text-manual-500 shrink-0" /><span>Absensi manual diberi label <b>&quot;Manual — oleh Admin&quot;</b> untuk transparansi.</span></div>
+            <div className="flex items-start gap-2.5 text-sm"><Icon name="info" className="w-5 h-5 text-manual-500 shrink-0" /><span>{t("admin.absensi.manualNoticePrefix")} <b>{t("admin.absensi.manualNoticeBold")}</b> {t("admin.absensi.manualNoticeSuffix")}</span></div>
           </Card>
           <div className="grid sm:grid-cols-2 gap-4">
-            <Field label="Coach" required>
+            <Field label={t("admin.absensi.colCoach")} required>
               <Select value={form.coach_id} onChange={e => onCoachChange(e.target.value)}>
-                <option value="">Pilih coach…</option>
+                <option value="">{t("admin.absensi.selectCoachPlaceholder")}</option>
                 {coaches.map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
               </Select>
             </Field>
-            <Field label="Kelas" required>
+            <Field label={t("admin.absensi.colClass")} required>
               <Select value={form.class_id} onChange={e => onClassChange(e.target.value)} disabled={!form.coach_id}>
-                <option value="">{form.coach_id ? "Pilih kelas…" : "Pilih coach dulu"}</option>
+                <option value="">{form.coach_id ? t("admin.absensi.selectClassPlaceholder") : t("admin.absensi.selectCoachFirstPlaceholder")}</option>
                 {classes.filter(c => coachClassIds.has(c.id)).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </Select>
             </Field>
-            <Field label="Sesi / tanggal" required>
+            <Field label={t("admin.absensi.fieldSessionDate")} required>
               <Select value={form.session_date} onChange={e => setForm(f => ({ ...f, session_date: e.target.value }))} disabled={!form.class_id}>
-                <option value="">{form.class_id ? "Pilih sesi…" : "Pilih kelas dulu"}</option>
+                <option value="">{form.class_id ? t("admin.absensi.selectSessionPlaceholder") : t("admin.absensi.selectClassFirstPlaceholder")}</option>
                 {sessionDates.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
               </Select>
             </Field>
-            <Field label="Jam clock-in"><TimePicker value={form.clock_in_time} onChange={v => setForm(f => ({ ...f, clock_in_time: v }))} /></Field>
+            <Field label={t("admin.absensi.fieldClockInTime")}><TimePicker value={form.clock_in_time} onChange={v => setForm(f => ({ ...f, clock_in_time: v }))} /></Field>
           </div>
-          <Field label="Status kehadiran">
+          <Field label={t("admin.absensi.fieldAttendanceStatus")}>
             <Select value={manualStatus} onChange={e => setManualStatus(e.target.value as "present" | "late" | "absent")}>
-              <option value="present">Hadir (Tepat Waktu)</option>
-              <option value="late">Telat</option>
-              <option value="absent">Tidak Hadir</option>
+              <option value="present">{t("admin.absensi.statusPresentOnTime")}</option>
+              <option value="late">{t("admin.absensi.statusLate")}</option>
+              <option value="absent">{t("admin.absensi.statusAbsent")}</option>
             </Select>
           </Field>
-          <Field label="Catatan / alasan"><Textarea rows={3} value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} placeholder="Mis. Coach lupa clock-in, sudah konfirmasi via WA." /></Field>
+          <Field label={t("admin.absensi.fieldNoteReason")}><Textarea rows={3} value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} placeholder={t("admin.absensi.notePlaceholder")} /></Field>
         </div>
       </Modal>
     </div>
@@ -504,16 +509,17 @@ function AdminAbsensiCoach({ branchId }: { branchId: string }) {
 }
 
 export default function AdminAbsensi({ branchId }: { branchId: string }) {
+  const { t } = useLocale();
   const [sub, setSub] = useState<"coach" | "member">("coach");
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="font-display font-bold text-2xl">Absensi</h2>
-        <p className="text-ink-mute text-sm mt-0.5">Data absensi coach dan member · SSDP cabang.</p>
+        <h2 className="font-display font-bold text-2xl">{t("admin.absensi.pageTitle")}</h2>
+        <p className="text-ink-mute text-sm mt-0.5">{t("admin.absensi.pageSub")}</p>
       </div>
       {/* Sub-tab bar */}
       <div className="flex gap-1 bg-paper-tint rounded-xl p-1 w-fit">
-        {([["coach", "Coach"], ["member", "Member"]] as const).map(([id, label]) => (
+        {([["coach", t("admin.absensi.subTabCoach")], ["member", t("admin.absensi.subTabMember")]] as const).map(([id, label]) => (
           <button key={id} type="button" onClick={() => setSub(id)}
             className={`px-5 py-2 text-sm font-bold rounded-lg transition-colors ${sub === id ? "bg-white text-ocean-700 shadow-sm" : "text-ink-mute hover:text-ink-soft"}`}>
             {label}

@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
+import { useLocale } from "@/components/providers/LocaleProvider";
 import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
 import { Field, Input, Select } from "@/components/ui/FormFields";
@@ -47,6 +48,8 @@ interface CalEventExt extends CalEvent { isHoliday?: boolean; holidayId?: string
 export default function AdminClassActivity({ branchId }: { branchId: string }) {
   const supabase = createClient();
   const toast = useToast();
+  const { t, tArray, locale } = useLocale();
+  const dayLabels = tArray("common.days.short"); // Sun-first
   const [events, setEvents] = useState<CalEventExt[]>([]);
   const [weekOffset, setWeekOffset] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -138,7 +141,7 @@ export default function AdminClassActivity({ branchId }: { branchId: string }) {
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const addHoliday = async () => {
-    if (!holidayForm.class_id || !holidayForm.holiday_date) return toast.error("Kelas dan tanggal wajib diisi");
+    if (!holidayForm.class_id || !holidayForm.holiday_date) return toast.error(t("admin.classActivity.classDateRequired"));
     setSavingH(true);
     const user = (await supabase.auth.getUser()).data.user;
     const { error } = await supabase.from("class_holidays").upsert({
@@ -149,8 +152,8 @@ export default function AdminClassActivity({ branchId }: { branchId: string }) {
       created_by: user?.id,
     }, { onConflict: "class_id,holiday_date" });
     setSavingH(false);
-    if (error) return toast.error("Gagal menyimpan", error.message);
-    toast.success("Kelas ditandai libur");
+    if (error) return toast.error(t("admin.classActivity.saveFailed"), error.message);
+    toast.success(t("admin.classActivity.classMarkedHolidayToast"));
     setOpenHoliday(false);
     setHolidayForm({ class_id: "", holiday_date: "", reason: "" });
     load();
@@ -158,12 +161,13 @@ export default function AdminClassActivity({ branchId }: { branchId: string }) {
 
   const removeHoliday = async (holidayId: string) => {
     const { error } = await supabase.from("class_holidays").delete().eq("id", holidayId);
-    if (error) return toast.error("Gagal batalkan", error.message);
-    toast.success("Status libur dibatalkan");
+    if (error) return toast.error(t("admin.classActivity.cancelFailed"), error.message);
+    toast.success(t("admin.classActivity.holidayCancelledToast"));
     load();
   };
 
-  const weekLabel = `${weekDates[0].getDate()} ${weekDates[0].toLocaleDateString("id-ID", { month: "short" })} – ${weekDates[6].getDate()} ${weekDates[6].toLocaleDateString("id-ID", { month: "short", year: "numeric" })}`;
+  const localeTag = locale === "id" ? "id-ID" : "en-US";
+  const weekLabel = `${weekDates[0].getDate()} ${weekDates[0].toLocaleDateString(localeTag, { month: "short" })} – ${weekDates[6].getDate()} ${weekDates[6].toLocaleDateString(localeTag, { month: "short", year: "numeric" })}`;
 
   // Total calendar height in px
   const totalHours = CAL_END - CAL_START;
@@ -172,9 +176,9 @@ export default function AdminClassActivity({ branchId }: { branchId: string }) {
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div><h2 className="font-display font-bold text-2xl">Class Activity</h2><p className="text-ink-mute text-sm mt-0.5">Kalender semua kelas aktif minggu ini.</p></div>
+        <div><h2 className="font-display font-bold text-2xl">{t("admin.classActivity.pageTitle")}</h2><p className="text-ink-mute text-sm mt-0.5">{t("admin.classActivity.pageSub")}</p></div>
         <div className="flex gap-2 items-center flex-wrap">
-          <Btn variant="soft" size="sm" icon="flag" onClick={() => setOpenHoliday(true)}>Tandai Libur</Btn>
+          <Btn variant="soft" size="sm" icon="flag" onClick={() => setOpenHoliday(true)}>{t("admin.classActivity.markHolidayBtn")}</Btn>
           <button onClick={() => setWeekOffset(w => w - 1)} className="w-8 h-8 rounded-lg border border-line hover:bg-paper-tint flex items-center justify-center text-ink-mute"><Icon name="chevron-left" className="w-4 h-4" /></button>
           <div className="font-display font-bold text-ink px-2 text-sm">{weekLabel}</div>
           <button onClick={() => setWeekOffset(w => w + 1)} className="w-8 h-8 rounded-lg border border-line hover:bg-paper-tint flex items-center justify-center text-ink-mute"><Icon name="chevron-right" className="w-4 h-4" /></button>
@@ -198,7 +202,7 @@ export default function AdminClassActivity({ branchId }: { branchId: string }) {
         </div>
       )}
 
-      {loading ? <div className="p-10 text-center text-ink-mute">Memuat kalender…</div> : (
+      {loading ? <div className="p-10 text-center text-ink-mute">{t("admin.classActivity.loadingCalendar")}</div> : (
         <Card padded={false} className="overflow-hidden">
           <div className="overflow-x-auto">
             <div className="min-w-[700px]">
@@ -210,7 +214,7 @@ export default function AdminClassActivity({ branchId }: { branchId: string }) {
                   const isToday = date.toDateString() === new Date().toDateString();
                   return (
                     <div key={d} className={`border-b-0 p-3 text-center ${i < 6 ? "border-r border-line" : ""}`}>
-                      <div className="text-[10px] font-bold text-ink-faint uppercase tracking-widest">{d.slice(0, 3)}</div>
+                      <div className="text-[10px] font-bold text-ink-faint uppercase tracking-widest">{dayLabels[(i + 1) % 7]}</div>
                       <div className={`font-display font-bold text-lg mt-0.5 w-8 h-8 rounded-full flex items-center justify-center mx-auto ${isToday ? "bg-ocean-600 text-white" : "text-ink"}`}>
                         {date.getDate()}
                       </div>
@@ -306,7 +310,7 @@ export default function AdminClassActivity({ branchId }: { branchId: string }) {
                             </div>
                             {heightPx >= 44 && (
                               <div className="text-[10px] opacity-75 truncate leading-tight mt-0.5">
-                                {ev.isHoliday ? "Libur" : ev.isSub ? `Pengganti: ${ev.coach}` : ev.coach}
+                                {ev.isHoliday ? t("admin.classActivity.holidayShort") : ev.isSub ? t("admin.classActivity.substituteLabel", { coach: ev.coach }) : ev.coach}
                               </div>
                             )}
                             {heightPx >= 56 && (
@@ -325,20 +329,20 @@ export default function AdminClassActivity({ branchId }: { branchId: string }) {
       )}
 
       {/* Tandai Libur Modal */}
-      <Modal open={openHoliday} onClose={() => setOpenHoliday(false)} title="Tandai Kelas Libur" size="sm"
-        footer={<><Btn variant="ghost" onClick={() => setOpenHoliday(false)}>Batal</Btn><Btn variant="primary" onClick={addHoliday} disabled={savingH}>{savingH ? "Menyimpan…" : "Tandai Libur"}</Btn></>}>
+      <Modal open={openHoliday} onClose={() => setOpenHoliday(false)} title={t("admin.classActivity.markHolidayModalTitle")} size="sm"
+        footer={<><Btn variant="ghost" onClick={() => setOpenHoliday(false)}>{t("common.actions.cancel")}</Btn><Btn variant="primary" onClick={addHoliday} disabled={savingH}>{savingH ? t("common.actions.saving") : t("admin.classActivity.markHolidayBtn")}</Btn></>}>
         <div className="space-y-4">
-          <Field label="Kelas" required>
+          <Field label={t("admin.classActivity.fieldClass")} required>
             <Select value={holidayForm.class_id} onChange={e => setHolidayForm(f => ({ ...f, class_id: e.target.value }))}>
-              <option value="">Pilih kelas…</option>
+              <option value="">{t("admin.classActivity.selectClassPlaceholder")}</option>
               {allClasses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </Select>
           </Field>
-          <Field label="Tanggal libur" required>
+          <Field label={t("admin.classActivity.fieldHolidayDate")} required>
             <Input type="date" value={holidayForm.holiday_date} onChange={e => setHolidayForm(f => ({ ...f, holiday_date: e.target.value }))} />
           </Field>
-          <Field label="Alasan (opsional)">
-            <Input value={holidayForm.reason} onChange={e => setHolidayForm(f => ({ ...f, reason: e.target.value }))} placeholder="Mis. Libur nasional, kolam tutup" />
+          <Field label={t("admin.classActivity.fieldReasonOptional")}>
+            <Input value={holidayForm.reason} onChange={e => setHolidayForm(f => ({ ...f, reason: e.target.value }))} placeholder={t("admin.classActivity.reasonPlaceholder")} />
           </Field>
         </div>
       </Modal>
