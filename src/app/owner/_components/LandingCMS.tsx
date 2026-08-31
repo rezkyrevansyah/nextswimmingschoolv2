@@ -925,6 +925,8 @@ function VideoTab() {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     youtube_video_url: "",
+    youtube_video_url_2: "",
+    youtube_video_url_3: "",
     youtube_section_title: "",
     youtube_section_subtitle: "",
   });
@@ -933,12 +935,14 @@ function VideoTab() {
     setLoading(true);
     const { data } = await supabase
       .from("landing_config")
-      .select("youtube_video_url, youtube_section_title, youtube_section_subtitle")
+      .select("youtube_video_url, youtube_video_url_2, youtube_video_url_3, youtube_section_title, youtube_section_subtitle")
       .eq("id", 1)
       .single();
     if (data) {
       setForm({
         youtube_video_url: data.youtube_video_url ?? "",
+        youtube_video_url_2: (data as unknown as { youtube_video_url_2?: string }).youtube_video_url_2 ?? "",
+        youtube_video_url_3: (data as unknown as { youtube_video_url_3?: string }).youtube_video_url_3 ?? "",
         youtube_section_title: data.youtube_section_title ?? "",
         youtube_section_subtitle: data.youtube_section_subtitle ?? "",
       });
@@ -956,6 +960,8 @@ function VideoTab() {
       .from("landing_config")
       .update({
         youtube_video_url: form.youtube_video_url.trim() || null,
+        youtube_video_url_2: form.youtube_video_url_2.trim() || null,
+        youtube_video_url_3: form.youtube_video_url_3.trim() || null,
         youtube_section_title: form.youtube_section_title.trim() || null,
         youtube_section_subtitle: form.youtube_section_subtitle.trim() || null,
       })
@@ -992,6 +998,24 @@ function VideoTab() {
               value={form.youtube_video_url}
               onChange={(e) => setForm({ ...form, youtube_video_url: e.target.value })}
               placeholder="Contoh: https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+            />
+          </Field>
+
+          <Field label="YouTube Video URL 2 (Opsional)" hint="Video kedua — ditampilkan di sisi kanan carousel">
+            <Input
+              type="url"
+              value={form.youtube_video_url_2}
+              onChange={(e) => setForm({ ...form, youtube_video_url_2: e.target.value })}
+              placeholder="Contoh: https://www.youtube.com/watch?v=..."
+            />
+          </Field>
+
+          <Field label="YouTube Video URL 3 (Opsional)" hint="Video ketiga — carousel otomatis aktif jika 3 video diisi">
+            <Input
+              type="url"
+              value={form.youtube_video_url_3}
+              onChange={(e) => setForm({ ...form, youtube_video_url_3: e.target.value })}
+              placeholder="Contoh: https://www.youtube.com/watch?v=..."
             />
           </Field>
 

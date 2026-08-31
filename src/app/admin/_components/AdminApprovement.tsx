@@ -273,7 +273,7 @@ export default function AdminApprovement({ branchId }: { branchId: string }) {
           <p className="text-ink-mute text-sm mt-0.5">{t("admin.approvement.pageSub")}</p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          {registrations.length > 0 && (
+          {(registrations.length + certs.length) > 0 && (
             <span className="text-xs font-bold bg-danger-500 text-white px-2 py-0.5 rounded-full">
               {t("admin.approvement.pendingSuffix", { count: registrations.length + certs.length })}
             </span>

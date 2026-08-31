@@ -432,7 +432,7 @@ export default function PayslipGenerator({
         footer={
           <div className="flex gap-2 justify-end w-full">
             <Btn variant="ghost" onClick={() => setShowGenModal(false)}>{t("common.actions.cancel")}</Btn>
-            <Btn variant="primary" onClick={savePayslip} disabled={savingSlip || !genInvoiceId}>
+            <Btn variant="primary" onClick={savePayslip} disabled={savingSlip || !genInvoiceId || netPreview < 0}>
               {savingSlip ? t("common.actions.saving") : t("owner.payslip.saveAsDraft")}
             </Btn>
           </div>
@@ -503,10 +503,16 @@ export default function PayslipGenerator({
                 {includedLoanTotal > 0 && <div className="flex justify-between text-danger-700"><span>{t("owner.payslip.loanInstallmentLabel")}</span><span className="font-mono">- {fmtIDR(includedLoanTotal)}</span></div>}
                 {otherDeductionAmount > 0 && <div className="flex justify-between text-danger-700"><span>{t("owner.payslip.otherDeductionLabel")}</span><span className="font-mono">- {fmtIDR(otherDeductionAmount)}</span></div>}
                 <div className="flex justify-between font-bold text-base pt-1.5 border-t border-line">
-                  <span className="text-ok-900">{t("owner.payslip.netSalaryLabel")}</span>
-                  <span className="font-mono text-ok-700">{fmtIDR(netPreview)}</span>
+                  <span className={netPreview < 0 ? "text-danger-700" : "text-ok-900"}>{t("owner.payslip.netSalaryLabel")}</span>
+                  <span className={`font-mono ${netPreview < 0 ? "text-danger-700" : "text-ok-700"}`}>{fmtIDR(netPreview)}</span>
                 </div>
               </div>
+              {netPreview < 0 && (
+                <div className="flex items-center gap-2 text-xs text-danger-700 bg-danger-50 border border-danger-200 rounded-lg px-3 py-2">
+                  <Icon name="warning" className="w-4 h-4 shrink-0" />
+                  Potongan melebihi gaji kotor! Periksa kembali nilai potongan sebelum menyimpan.
+                </div>
+              )}
 
               <Field label={t("owner.payslip.fieldNotes")}><Textarea value={genNotes} onChange={e => setGenNotes(e.target.value)} rows={2} placeholder={t("owner.payslip.fieldNotesPlaceholder")} /></Field>
             </>

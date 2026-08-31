@@ -19,6 +19,7 @@ interface LeaveRow {
   date_from: string; date_to: string; status: string;
   coach_id?: string | null;
   member_id?: string | null;
+  member_profile_id?: string | null;
   profile?: { full_name: string; role: string } | null;
   leave_classes?: { class: { name: string } | null }[];
   substitute_profile?: { full_name: string } | null;
@@ -70,7 +71,7 @@ export default function AdminIzin({ branchId }: { branchId: string }) {
       data = (d as Record<string, unknown>[] | null) ?? null;
     } else {
       const { data: d } = await supabase.from("member_leaves")
-        .select("id, member_id, type, reason, date_from, date_to, status, member:members(branch_id, profile:profiles(full_name))")
+        .select("id, member_id, type, reason, date_from, date_to, status, member:members(branch_id, profile_id, profile:profiles(full_name))")
         .order("created_at", { ascending: false });
       data = (d as Record<string, unknown>[] | null)?.filter(
         l => (l.member as { branch_id?: string } | null)?.branch_id === branchId
@@ -81,6 +82,7 @@ export default function AdminIzin({ branchId }: { branchId: string }) {
       profile: tab === "coach"
         ? (l.coach as { full_name?: string; role?: string } | null)
         : ((l.member as { profile?: { full_name?: string } } | null)?.profile ?? null),
+      member_profile_id: (l.member as { profile_id?: string } | null)?.profile_id ?? null,
     })) as unknown as LeaveRow[]);
     setLoading(false);
   }, [branchId, tab]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -159,15 +161,17 @@ export default function AdminIzin({ branchId }: { branchId: string }) {
       if (leave) { setRejectTarget(leave); setRejectReason(""); return; }
     }
     const table = tab === "coach" ? "coach_leaves" : "member_leaves";
-    const { error } = await supabase.from(table as "coach_leaves").update({ status, reviewed_at: new Date().toISOString() }).eq("id", id);
+    const adminId = (await supabase.auth.getUser()).data.user?.id ?? null;
+    const { error } = await supabase.from(table as "coach_leaves").update({ status, reviewed_at: new Date().toISOString(), reviewed_by: adminId }).eq("id", id);
     if (error) return toast.error(t("admin.izin.updateStatusFailed"), error.message);
     // Auto-create member attendance records when member leave approved
     if (status === "approved" && tab === "member") {
       await autoCreateMemberAttendances(id);
       const leave = leaves.find(l => l.id === id);
-      if (leave?.member_id) {
+      const notifUserId = leave?.member_profile_id ?? leave?.member_id;
+      if (leave && notifUserId) {
         await supabase.from("notifications").insert({
-          user_id: leave.member_id,
+          user_id: notifUserId,
           title: t("admin.izin.leaveApprovedNotifTitle"),
           body: t("admin.izin.leaveApprovedNotifBody", { from: fmtDate(leave.date_from), to: fmtDate(leave.date_to) }),
           icon: "check",
@@ -183,7 +187,8 @@ export default function AdminIzin({ branchId }: { branchId: string }) {
     if (!rejectTarget) return;
     if (!rejectReason.trim()) return toast.error(t("admin.izin.reasonRequired2"));
     setRejecting(true);
-    const upd: Database["public"]["Tables"]["coach_leaves"]["Update"] = { status: "rejected" as Database["public"]["Enums"]["leave_status"], reviewed_at: new Date().toISOString(), reject_reason: rejectReason.trim() };
+    const adminId = (await supabase.auth.getUser()).data.user?.id ?? null;
+    const upd: Database["public"]["Tables"]["coach_leaves"]["Update"] = { status: "rejected" as Database["public"]["Enums"]["leave_status"], reviewed_at: new Date().toISOString(), reject_reason: rejectReason.trim(), reviewed_by: adminId };
     const table = tab === "coach" ? "coach_leaves" : "member_leaves";
     const { error } = await supabase.from(table as "coach_leaves").update(upd).eq("id", rejectTarget.id);
     setRejecting(false);
@@ -200,9 +205,10 @@ export default function AdminIzin({ branchId }: { branchId: string }) {
         kind: "warn",
       });
     }
-    if (tab === "member" && rejectTarget.member_id) {
+    const rejectNotifUserId = rejectTarget.member_profile_id ?? rejectTarget.member_id;
+    if (tab === "member" && rejectNotifUserId) {
       await supabase.from("notifications").insert({
-        user_id: rejectTarget.member_id,
+        user_id: rejectNotifUserId,
         title: t("admin.izin.leaveRejectedNotifTitle"),
         body: rejectReason.trim()
           ? t("admin.izin.leaveRejectedNotifBodyWithReason", { from: fmtDate(rejectTarget.date_from), to: fmtDate(rejectTarget.date_to), reason: rejectReason.trim() })

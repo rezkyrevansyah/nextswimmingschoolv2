@@ -124,8 +124,28 @@ export async function generatePayslip(
   supabase: SupabaseClient<any>,
   params: GeneratePayslipParams
 ): Promise<{ id: string } | { error: string }> {
+  if (!params.period_label || !params.period_label.trim()) {
+    return { error: "Label periode tidak boleh kosong." };
+  }
+
   const totalDeductions = params.deductions.reduce((sum, d) => sum + d.amount, 0);
   const netAmount = params.gross_amount - totalDeductions;
+
+  if (netAmount < 0) {
+    return { error: "Total potongan melebihi gaji kotor. Periksa kembali nilai potongan." };
+  }
+
+  // Guard: prevent duplicate payslip for the same invoice
+  if (params.invoice_id) {
+    const { data: existing } = await supabase
+      .from("payslips")
+      .select("id, status")
+      .eq("invoice_id", params.invoice_id)
+      .maybeSingle();
+    if (existing) {
+      return { error: `Payslip sudah ada untuk invoice ini (status: ${existing.status}). Tidak bisa membuat duplikat.` };
+    }
+  }
 
   const { data: payslip, error: payslipError } = await supabase
     .from("payslips")

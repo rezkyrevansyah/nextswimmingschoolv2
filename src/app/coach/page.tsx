@@ -14,6 +14,7 @@ import StarDisplay from "@/components/ui/StarDisplay";
 import Placeholder from "@/components/ui/Placeholder";
 import Modal from "@/components/ui/Modal";
 import PhotoLightbox from "@/components/ui/PhotoLightbox";
+import QRBox from "@/components/ui/QRBox";
 import MonthYearPicker from "@/components/ui/MonthYearPicker";
 import DatePicker from "@/components/ui/DatePicker";
 import MobileNav from "@/components/layout/MobileNav";
@@ -155,6 +156,7 @@ interface ProfileData {
   suspend_until: string | null;
   suspend_reason: string | null;
   user_no: string | null;
+  qr_code: string | null;
   certifications?: { id: string; title: string; issuer: string | null; valid_from: string | null; valid_until: string | null; photo_url: string | null; status: string; reject_reason: string | null }[];
 }
 
@@ -3712,6 +3714,11 @@ function CoachProfile({ profile, onRefresh, onLogout, onAvatarChange }: { profil
             {profile?.nick_name && <div className="text-sm text-ink-mute">({profile.nick_name})</div>}
             <div className="text-sm text-ocean-700 font-semibold mt-0.5">{profile?.specialization ?? t("coach.home.defaultCoachName")}</div>
           </div>
+          {profile?.qr_code && (
+            <div className="shrink-0">
+              <QRBox value={profile.qr_code} size={72} downloadable />
+            </div>
+          )}
         </div>
         {uploading && (
           <div className="mt-2 text-xs text-ink-mute font-semibold animate-pulse">{t("coach.profile.uploadingPhoto")}</div>
@@ -4072,7 +4079,7 @@ export default function CoachPage() {
 
   const loadProfile = useCallback(async (userId: string) => {
     const { data, error } = await supabase.from("profiles")
-      .select("id, full_name, nick_name, email, phone, gender, birth_date, specialization, bio, address, education_level, education_institution, bank_name, bank_account, bank_holder, avatar_url, is_profile_complete, suspend_until, suspend_reason, user_no")
+      .select("id, full_name, nick_name, email, phone, gender, birth_date, specialization, bio, address, education_level, education_institution, bank_name, bank_account, bank_holder, avatar_url, is_profile_complete, suspend_until, suspend_reason, user_no, qr_code")
       .eq("id", userId).single();
     if (error) return null;
     // Load certifications separately to avoid FK join ambiguity errors
@@ -4080,10 +4087,10 @@ export default function CoachPage() {
       .select("id, title, issuer, valid_from, valid_until, photo_url, status, reject_reason")
       .eq("coach_id", userId);
     if (data) {
-      const combined = { ...data, certifications: certs ?? [] };
+      const combined = { ...(data as unknown as Record<string, unknown>), certifications: certs ?? [] };
       setProfile(combined as unknown as ProfileData);
     }
-    return data ? { ...data, certifications: certs ?? [] } as unknown as ProfileData : null;
+    return data ? { ...(data as unknown as Record<string, unknown>), certifications: certs ?? [] } as unknown as ProfileData : null;
   }, [supabase]);
 
   const loadSpreadsheets = useCallback(async (coachId: string, classIds: string[]) => {

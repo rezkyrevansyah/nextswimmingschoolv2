@@ -128,6 +128,7 @@ export default function AdminCompetition({ branchId }: { branchId: string }) {
     award: "participant",
     custom_award_label: "",
     notes: "",
+    competition_id: "",
   });
   const [certFile, setCertFile] = useState<File | null>(null);
   const [savingPart, setSavingPart] = useState(false);
@@ -139,6 +140,13 @@ export default function AdminCompetition({ branchId }: { branchId: string }) {
 
   // Lightbox
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+
+  // Awards tab (member-centric view)
+  const [activeTab, setActiveTab] = useState<"competitions" | "awards">("competitions");
+  const [awardMemberId, setAwardMemberId] = useState("");
+  const [awardMemberSearch, setAwardMemberSearch] = useState("");
+  const [memberParticipations, setMemberParticipations] = useState<ParticipationRow[]>([]);
+  const [memberParticipationsLoading, setMemberParticipationsLoading] = useState(false);
 
   // ── Load Competitions ──────────────────────────────────────────────────────
   const loadCompetitions = useCallback(async () => {
@@ -217,6 +225,31 @@ export default function AdminCompetition({ branchId }: { branchId: string }) {
   useEffect(() => {
     loadOptions();
   }, [loadOptions]);
+
+  // ── Load Member Participations (for awards tab) ───────────────────────────
+  const loadMemberParticipations = useCallback(async (memberId: string) => {
+    if (!memberId) { setMemberParticipations([]); return; }
+    setMemberParticipationsLoading(true);
+    const { data, error } = await supabase
+      .from("competition_participations")
+      .select(`
+        id, competition_id, member_id, branch_id, coach_id, category, stroke, distance_meters, age_group,
+        time_seconds, time_formatted, rank, result_status, award, custom_award_label, certificate_url, photo_url, notes, created_at,
+        competition:competitions(id, name, start_date, level),
+        member:members(id, profile:profiles(full_name, avatar_url)),
+        branch:branches(name),
+        coach:profiles!competition_participations_coach_id_fkey(full_name)
+      `)
+      .eq("member_id", memberId)
+      .order("created_at", { ascending: false });
+    setMemberParticipationsLoading(false);
+    if (error) { toast.error("Gagal memuat penghargaan: " + error.message); return; }
+    setMemberParticipations((data as unknown as ParticipationRow[]) ?? []);
+  }, [supabase, toast]);
+
+  useEffect(() => {
+    loadMemberParticipations(awardMemberId);
+  }, [awardMemberId, loadMemberParticipations]);
 
   // ── Load Competition Details ──────────────────────────────────────────────
   const loadParticipations = useCallback(async (compId: string) => {
@@ -377,10 +410,10 @@ export default function AdminCompetition({ branchId }: { branchId: string }) {
   };
 
   // ── Participation Handlers ────────────────────────────────────────────────
-  const openAddParticipant = () => {
+  const openAddParticipant = (prefilledMemberId?: string) => {
     setEditPart(null);
     setPartForm({
-      member_id: "",
+      member_id: prefilledMemberId ?? "",
       coach_id: "",
       category: "",
       age_group: "",
@@ -390,6 +423,7 @@ export default function AdminCompetition({ branchId }: { branchId: string }) {
       award: "participant",
       custom_award_label: "",
       notes: "",
+      competition_id: "",
     });
     setCertFile(null);
     setOpenPartForm(true);
@@ -408,6 +442,7 @@ export default function AdminCompetition({ branchId }: { branchId: string }) {
       award: p.award || "participant",
       custom_award_label: p.custom_award_label ?? "",
       notes: p.notes ?? "",
+      competition_id: p.competition_id ?? "",
     });
     setCertFile(null);
     setOpenPartForm(true);
@@ -415,7 +450,11 @@ export default function AdminCompetition({ branchId }: { branchId: string }) {
 
   const handleSaveParticipant = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedComp) return;
+    const effectiveCompId = selectedComp?.id ?? partForm.competition_id;
+    if (!effectiveCompId) {
+      toast.error("Pilih perlombaan terlebih dahulu.");
+      return;
+    }
     if (!partForm.member_id || !partForm.category.trim()) {
       toast.error("Member dan kategori/nomor lomba wajib diisi.");
       return;
@@ -459,7 +498,8 @@ export default function AdminCompetition({ branchId }: { branchId: string }) {
 
       toast.success("Hasil peserta berhasil diperbarui.");
       setOpenPartForm(false);
-      loadParticipations(selectedComp.id);
+      if (selectedComp) loadParticipations(selectedComp.id);
+      if (awardMemberId) loadMemberParticipations(awardMemberId);
       loadCompetitions();
     } else {
       const selectedMember = membersList.find(m => m.id === partForm.member_id);
@@ -468,7 +508,7 @@ export default function AdminCompetition({ branchId }: { branchId: string }) {
       const { data: newPart, error } = await supabase
         .from("competition_participations")
         .insert({
-          competition_id: selectedComp.id,
+          competition_id: effectiveCompId,
           member_id: partForm.member_id,
           branch_id: targetBranchId,
           coach_id: partForm.coach_id || null,
@@ -501,7 +541,8 @@ export default function AdminCompetition({ branchId }: { branchId: string }) {
 
       toast.success("Peserta perlombaan berhasil ditambahkan.");
       setOpenPartForm(false);
-      loadParticipations(selectedComp.id);
+      if (selectedComp) loadParticipations(selectedComp.id);
+      if (awardMemberId) loadMemberParticipations(awardMemberId);
       loadCompetitions();
     }
     setSavingPart(false);
@@ -523,6 +564,7 @@ export default function AdminCompetition({ branchId }: { branchId: string }) {
     } else {
       toast.success("Peserta berhasil dihapus dari perlombaan.");
       if (selectedComp) loadParticipations(selectedComp.id);
+      if (awardMemberId) loadMemberParticipations(awardMemberId);
       loadCompetitions();
     }
   };
@@ -552,12 +594,146 @@ export default function AdminCompetition({ branchId }: { branchId: string }) {
 
   return (
     <div className="space-y-6">
+      {/* ── Tab Switcher ── */}
+      <div className="flex gap-1 p-1 bg-paper-tint rounded-xl w-fit border border-line">
+        <button
+          onClick={() => setActiveTab("competitions")}
+          className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors ${activeTab === "competitions" ? "bg-white shadow-card text-ocean-700" : "text-ink-soft hover:text-ink"}`}
+        >
+          Perlombaan
+        </button>
+        <button
+          onClick={() => setActiveTab("awards")}
+          className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors ${activeTab === "awards" ? "bg-white shadow-card text-ocean-700" : "text-ink-soft hover:text-ink"}`}
+        >
+          Penghargaan Peserta
+        </button>
+      </div>
+
       {/* ── Summary Stats ── */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Stat label="Total Perlombaan" value={totalComps} icon="flag" tone="ocean" sub="Kejurda, O2SN, Cup" />
         <Stat label="Total Keikutsertaan" value={totalParticipations} icon="users" tone="wave" sub="Total nomor lomba diikuti" />
         <Stat label="Total Prestasi / Medali" value={totalMedals} icon="star" tone="warn" sub="Emas, Perak, Perunggu, Custom" />
       </div>
+
+      {/* ── AWARDS TAB: Member-centric view ── */}
+      {activeTab === "awards" && (
+        <div className="space-y-4">
+          <Card className="p-5 space-y-4">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div>
+                <div className="font-bold text-ink-strong">Pilih Peserta</div>
+                <p className="text-xs text-ink-mute">Pilih peserta terlebih dahulu untuk melihat atau menambah penghargaannya.</p>
+              </div>
+            </div>
+            <div className="max-w-sm">
+              <Input
+                placeholder="Ketik nama peserta..."
+                value={awardMemberSearch}
+                onChange={e => setAwardMemberSearch(e.target.value)}
+              />
+            </div>
+            {awardMemberSearch.length >= 1 && (
+              <div className="border border-line rounded-xl overflow-hidden max-h-52 overflow-y-auto shadow-card">
+                {membersList
+                  .filter(m => m.full_name.toLowerCase().includes(awardMemberSearch.toLowerCase()))
+                  .slice(0, 20)
+                  .map(m => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => { setAwardMemberId(m.id); setAwardMemberSearch(m.full_name); }}
+                      className={`w-full text-left px-4 py-2.5 text-sm flex items-center gap-3 hover:bg-paper-tint transition-colors border-b border-line last:border-0 ${awardMemberId === m.id ? "bg-ocean-50/60 font-semibold" : ""}`}
+                    >
+                      <Avatar name={m.full_name} size={28} />
+                      <span>{m.full_name}</span>
+                      {m.branch_name && <span className="text-xs text-ink-mute ml-auto">{m.branch_name}</span>}
+                    </button>
+                  ))}
+              </div>
+            )}
+            {awardMemberId && (
+              <div className="flex items-center gap-2 text-xs text-ok-700 bg-ok-50 border border-ok-200 rounded-lg px-3 py-2 w-fit">
+                <Icon name="check" className="w-3.5 h-3.5" />
+                Menampilkan penghargaan: <strong>{awardMemberSearch}</strong>
+              </div>
+            )}
+          </Card>
+
+          {awardMemberId && (
+            <Card>
+              <div className="p-5 flex items-center justify-between flex-wrap gap-2 border-b border-line">
+                <div>
+                  <div className="font-bold text-ink-strong">Riwayat Penghargaan</div>
+                  <p className="text-xs text-ink-mute">{memberParticipations.length} entri · semua perlombaan</p>
+                </div>
+                <Btn variant="primary" size="sm" icon="plus" onClick={() => openAddParticipant(awardMemberId)}>
+                  Tambah Penghargaan
+                </Btn>
+              </div>
+              {memberParticipationsLoading ? (
+                <div className="py-8 text-center text-ink-mute text-sm">Memuat data...</div>
+              ) : memberParticipations.length === 0 ? (
+                <div className="py-8 text-center text-ink-mute text-sm border-dashed border-0">
+                  Belum ada penghargaan untuk peserta ini.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-line text-left text-[11px] font-bold uppercase tracking-wider text-ink-faint">
+                        <th className="py-2.5 px-4">Perlombaan</th>
+                        <th className="py-2.5 px-4">Kategori</th>
+                        <th className="py-2.5 px-4">Waktu</th>
+                        <th className="py-2.5 px-4 text-center">Peringkat</th>
+                        <th className="py-2.5 px-4 text-center">Penghargaan</th>
+                        <th className="py-2.5 px-4 text-right">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-line">
+                      {memberParticipations.map(p => {
+                        const awardInfo = AWARD_LABELS[p.award] || AWARD_LABELS.participant;
+                        const comp = (p as unknown as { competition?: { name: string; start_date: string; level: string } }).competition;
+                        return (
+                          <tr key={p.id} className="hover:bg-paper-tint/60 transition-colors">
+                            <td className="py-2.5 px-4">
+                              <div className="font-medium text-ink-strong">{comp?.name ?? "—"}</div>
+                              {comp?.start_date && <div className="text-xs text-ink-mute">{fmtDate(comp.start_date)}</div>}
+                            </td>
+                            <td className="py-2.5 px-4">
+                              <div className="font-medium">{p.category}</div>
+                              {p.age_group && <div className="text-xs text-ink-mute">{p.age_group}</div>}
+                            </td>
+                            <td className="py-2.5 px-4 font-mono text-ocean-700 font-bold">
+                              {p.time_formatted || (p.time_seconds ? `${p.time_seconds}s` : "—")}
+                            </td>
+                            <td className="py-2.5 px-4 text-center font-bold">{p.rank ? `#${p.rank}` : "—"}</td>
+                            <td className="py-2.5 px-4 text-center">
+                              <span className={`px-2 py-0.5 rounded-full text-xs border ${awardInfo.style}`}>
+                                {awardInfo.icon} {p.award === "custom" && p.custom_award_label ? p.custom_award_label : awardInfo.label}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-4 text-right">
+                              <div className="flex items-center justify-end gap-1">
+                                <Btn variant="ghost" size="sm" icon="edit" onClick={() => openEditParticipant(p)} />
+                                <Btn variant="ghost" size="sm" icon="trash" onClick={() => handleRemoveParticipant(p)} />
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* ── COMPETITIONS TAB ── */}
+      {activeTab === "competitions" && <>
 
       {/* ── Actions Header & Filter ── */}
       <Card className="p-5 space-y-4">
@@ -652,6 +828,8 @@ export default function AdminCompetition({ branchId }: { branchId: string }) {
           </div>
         )}
       </Card>
+
+      </> /* end competitions tab */}
 
       {/* ── Modal: Create / Edit Competition ── */}
       {openCompForm && (
@@ -760,7 +938,7 @@ export default function AdminCompetition({ branchId }: { branchId: string }) {
                   {selectedComp.organizer && ` | 🏢 ${selectedComp.organizer}`}
                 </div>
               </div>
-              <Btn variant="primary" size="sm" icon="plus" onClick={openAddParticipant}>
+              <Btn variant="primary" size="sm" icon="plus" onClick={() => openAddParticipant()}>
                 Tambah Hasil Member
               </Btn>
             </div>
@@ -866,10 +1044,30 @@ export default function AdminCompetition({ branchId }: { branchId: string }) {
           title={editPart ? "Edit Hasil Member" : "Tambah Hasil Member"}
         >
           <form onSubmit={handleSaveParticipant} className="space-y-4">
+            {/* Competition selector — shown only when opened from awards tab (no selectedComp) */}
+            {!selectedComp && !editPart && (
+              <Field label="Perlombaan" required>
+                <Select
+                  value={partForm.competition_id}
+                  onChange={e => setPartForm(prev => ({ ...prev, competition_id: e.target.value }))}
+                  required
+                >
+                  <option value="">-- Pilih perlombaan --</option>
+                  {competitions.map(c => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} — {c.start_date ? fmtDate(c.start_date) : ""}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            )}
+
             <Field label="Pilih Member" required>
-              {editPart ? (
+              {(editPart || (activeTab === "awards" && awardMemberId && !editPart && partForm.member_id === awardMemberId)) ? (
                 <div className="p-2.5 bg-paper-tint rounded-lg font-bold text-ink-strong">
-                  {(editPart.member?.profile as any)?.full_name}
+                  {editPart
+                    ? (editPart.member?.profile as { full_name: string } | null)?.full_name
+                    : awardMemberSearch}
                 </div>
               ) : (
                 <div className="space-y-2">

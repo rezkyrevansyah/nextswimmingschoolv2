@@ -10,6 +10,7 @@ import Status from "@/components/ui/Status";
 import Avatar from "@/components/ui/Avatar";
 import LanguageSwitcher from "@/components/ui/LanguageSwitcher";
 import Modal from "@/components/ui/Modal";
+import QRBox from "@/components/ui/QRBox";
 import MonthYearPicker from "@/components/ui/MonthYearPicker";
 import Sidebar, { type NavItem } from "@/components/layout/Sidebar";
 import Topbar from "@/components/layout/Topbar";
@@ -35,6 +36,7 @@ interface StaffProfile {
   bank_account?: string | null;
   bank_holder?: string | null;
   avatar_url?: string | null;
+  qr_code?: string | null;
 }
 
 interface BranchInfo {
@@ -182,7 +184,7 @@ export default function StaffPage() {
       setUser(authUser);
       const { data: prof } = await supabase
         .from("profiles")
-        .select("id, full_name, email, phone, branch_id, bank_name, bank_account, bank_holder, avatar_url")
+        .select("id, full_name, email, phone, branch_id, bank_name, bank_account, bank_holder, avatar_url, qr_code")
         .eq("id", authUser.id)
         .single();
 
@@ -197,6 +199,7 @@ export default function StaffPage() {
           bank_account: prof.bank_account,
           bank_holder: prof.bank_holder,
           avatar_url: prof.avatar_url,
+          qr_code: (prof as unknown as { qr_code?: string | null }).qr_code ?? null,
         };
         setProfile(staffProf);
         setProfileForm({
@@ -848,6 +851,18 @@ export default function StaffPage() {
           {/* TAB 5: PROFILE */}
           {active === "profile" && (
             <div className="max-w-2xl space-y-5">
+              {profile?.qr_code && (
+                <Card>
+                  <div className="flex items-center gap-4">
+                    <QRBox value={profile.qr_code} size={80} downloadable />
+                    <div>
+                      <div className="font-display font-bold text-base text-ink">{profile.full_name}</div>
+                      <div className="text-xs text-ink-mute mt-0.5">Staff · ID Card QR</div>
+                      <div className="text-[10px] font-mono text-ink-faint mt-1 break-all">{profile.qr_code}</div>
+                    </div>
+                  </div>
+                </Card>
+              )}
               <Card className="space-y-4">
                 <SectionTitle sub="Atur informasi diri dan rekening bank untuk pencairan gaji oleh owner.">
                   Data Diri & Rekening Bank

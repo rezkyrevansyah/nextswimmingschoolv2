@@ -139,6 +139,8 @@ export default function AdminRapor({ branchId }: { branchId: string }) {
     if (!form.label || !form.date_from || !form.date_to) return toast.error(t("admin.rapor.allFieldsRequired"));
     setSaving(true);
     const user = (await supabase.auth.getUser()).data.user;
+    // Close any existing open period in this branch before opening a new one
+    await supabase.from("rapor_periods").update({ is_open: false }).eq("branch_id", branchId).eq("is_open", true);
     const { error } = await supabase.from("rapor_periods").insert({ branch_id: branchId, label: form.label, date_from: form.date_from, date_to: form.date_to, is_open: true, created_by: user?.id ?? "" });
     setSaving(false);
     if (error) return toast.error(t("admin.rapor.createPeriodFailed"), error.message);

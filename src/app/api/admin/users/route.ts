@@ -39,6 +39,8 @@ export async function POST(req: NextRequest) {
     class_id?: string;
     total_sessions?: number | null;
     custom_role_label?: string;
+    // Admin-specific: auto-create a paired staff account
+    auto_staff?: { email: string; password: string } | null;
   };
 
   const { email, password, full_name, role, branch_id, phone } = body;
@@ -175,5 +177,51 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ user_id: userId, member_id: memberId });
+  // For admin accounts: optionally auto-create a paired staff account
+  let staffWarning: string | null = null;
+  let staffUserId: string | null = null;
+  if (role === "admin" && body.auto_staff?.email && body.auto_staff?.password) {
+    const { data: staffAuth, error: staffAuthError } = await db.auth.admin.createUser({
+      email: body.auto_staff.email,
+      password: body.auto_staff.password,
+      email_confirm: true,
+      user_metadata: { full_name, role: "staff", branch_id, phone },
+    });
+
+    if (staffAuthError) {
+      staffWarning = `Admin berhasil dibuat. Akun Staff gagal: ${staffAuthError.message}`;
+    } else {
+      staffUserId = staffAuth.user.id;
+      const { data: staffNo } = await db.rpc("generate_user_no", { p_role: "staff" });
+      const staffProfile = {
+        id: staffAuth.user.id,
+        role: "staff" as const,
+        full_name,
+        email: body.auto_staff.email,
+        phone: phone || null,
+        branch_id: branch_id || null,
+        is_profile_complete: false,
+        user_no: staffNo,
+        custom_role_label: body.custom_role_label || null,
+        linked_admin_id: userId,
+      };
+      const { error: staffInsertError } = await db.from("profiles").insert(staffProfile);
+      if (staffInsertError) {
+        if (staffInsertError.code === "23505") {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const { id: _id, ...staffUpdateData } = staffProfile;
+          await db.from("profiles").update(staffUpdateData).eq("id", staffAuth.user.id);
+        } else {
+          staffWarning = `Admin berhasil dibuat. Profil Staff gagal disimpan: ${staffInsertError.message}`;
+        }
+      }
+    }
+  }
+
+  return NextResponse.json({
+    user_id: userId,
+    member_id: memberId,
+    staff_user_id: staffUserId,
+    ...(staffWarning ? { staff_warning: staffWarning } : {}),
+  });
 }

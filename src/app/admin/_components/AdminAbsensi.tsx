@@ -74,7 +74,7 @@ function AdminAbsensiMember({ branchId }: { branchId: string }) {
       .lte("session_date", dateTo)
       .order("session_date", { ascending: false })
       .order("created_at", { ascending: false })
-      .range(pg * PAGE_SIZE, pg * PAGE_SIZE + PAGE_SIZE);
+      .range(pg * PAGE_SIZE, pg * PAGE_SIZE + PAGE_SIZE - 1);
 
     if (filterStatus !== "all") q = q.eq("status", filterStatus as "hadir" | "telat" | "izin" | "sakit" | "tidak_hadir");
 
@@ -237,7 +237,7 @@ function AdminAbsensiCoach({ branchId }: { branchId: string }) {
       .lte("session_date", filterDateTo)
       .order("session_date", { ascending: false })
       .order("clock_in_time", { ascending: false })
-      .range(pg * PAGE_SIZE_COACH, pg * PAGE_SIZE_COACH + PAGE_SIZE_COACH);
+      .range(pg * PAGE_SIZE_COACH, pg * PAGE_SIZE_COACH + PAGE_SIZE_COACH - 1);
 
     if (filterCoach !== "all") q = q.eq("coach_id", filterCoach);
     if (filterClass2 !== "all") q = q.eq("class_id", filterClass2);

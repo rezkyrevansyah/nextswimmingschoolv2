@@ -49,7 +49,7 @@ export default async function LandingPage() {
     .order("sort_order");
   const { data: footerConfig } = await supabase
     .from("landing_config")
-    .select("footer_tagline, footer_address, footer_wa_number, contact_email, copyright_text, social_instagram, social_tiktok, social_youtube, floating_wa_message, youtube_video_url, youtube_section_title, youtube_section_subtitle")
+    .select("footer_tagline, footer_address, footer_wa_number, contact_email, copyright_text, social_instagram, social_tiktok, social_youtube, floating_wa_message, youtube_video_url, youtube_video_url_2, youtube_video_url_3, youtube_section_title, youtube_section_subtitle")
     .eq("id", 1)
     .single();
 
@@ -69,6 +69,8 @@ export default async function LandingPage() {
       <WhyNext items={whyNextItems ?? []} />
       <VideoSection
         videoUrl={footerConfig?.youtube_video_url}
+        videoUrl2={footerConfig?.youtube_video_url_2}
+        videoUrl3={footerConfig?.youtube_video_url_3}
         title={footerConfig?.youtube_section_title}
         subtitle={footerConfig?.youtube_section_subtitle}
       />

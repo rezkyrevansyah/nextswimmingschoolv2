@@ -210,7 +210,14 @@ export default function AdminClass({ branchId }: { branchId: string }) {
         }
       });
       if (coachRows.length > 0) {
-        await supabase.from("class_coaches").insert(coachRows);
+        const { error: coachErr } = await supabase.from("class_coaches").insert(coachRows);
+        if (coachErr) {
+          setSaving(false);
+          toast.error(`${t("admin.classes.classCreatedToast")} — Coach assignment failed`, coachErr.message);
+          setOpenForm(false);
+          load();
+          return;
+        }
       }
 
       setSaving(false);

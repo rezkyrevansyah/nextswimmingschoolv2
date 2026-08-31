@@ -27,6 +27,7 @@ import OwnerAccountsMaster from "./_components/OwnerAccountsMaster";
 import PayslipGenerator from "./payroll/PayslipGenerator";
 import CoachLoans from "./payroll/CoachLoans";
 import AdminCompetition from "../admin/_components/AdminCompetition";
+import OwnerDatabaseManager from "./_components/OwnerDatabaseManager";
 
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -5151,6 +5152,7 @@ function buildNavItems(t: (key: string) => string): NavItem[] {
     { section: t("owner.nav.sectionSystem") },
     { id: "storage",   label: t("owner.nav.storage"),   icon: "archive"   },
     { id: "activity",  label: t("owner.nav.activity"),  icon: "clipboard" },
+    { id: "database",  label: "Database Manager",        icon: "archive"   },
   ];
 }
 
@@ -5171,6 +5173,7 @@ function buildTitles(t: (key: string) => string): Record<string, [string, string
     landing:   [t("owner.titles.landing.title"),   t("owner.titles.landing.sub")],
     storage:   [t("owner.titles.storage.title"),   t("owner.titles.storage.sub")],
     activity:  [t("owner.titles.activity.title"),  t("owner.titles.activity.sub")],
+    database:  ["Database Manager", "Browse, delete, export & monitor database secara realtime"],
   };
 }
 
@@ -5266,6 +5269,7 @@ export default function OwnerPage() {
     landing:   <LandingCMS />,
     storage:   <OwnerStorage userId={userId} userName={ownerName} />,
     activity:  <OwnerActivityLog branches={branches} />,
+    database:  <OwnerDatabaseManager />,
   };
 
   const navItems = useMemo(() => buildNavItems(t), [t]);

@@ -113,7 +113,7 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
     const coachIds = (cbData ?? []).map((r: { coach_id: string }) => r.coach_id);
     if (coachIds.length === 0) { setCoaches([]); setLoading(false); return; }
     const { data, error } = await createClient().from("profiles")
-      .select("id, full_name, nick_name, email, phone, gender, birth_date, specialization, bio, address, education_level, education_institution, bank_name, bank_account, bank_holder, avatar_url, suspend_until, suspend_reason, is_archived, certifications!certifications_coach_id_fkey(id, name, title, status, valid_from, valid_until), class_coaches(class_id, role, class:classes(id, name, branch_id, time_start, time_end, schedule_days, branches(name, city))), coach_branches!coach_branches_coach_id_fkey(branch_id, branches(name, city), is_primary, joined_at)")
+      .select("id, full_name, nick_name, email, phone, gender, birth_date, specialization, bio, address, education_level, education_institution, bank_name, bank_account, bank_holder, avatar_url, qr_code, suspend_until, suspend_reason, is_archived, certifications!certifications_coach_id_fkey(id, name, title, status, valid_from, valid_until), class_coaches(class_id, role, class:classes(id, name, branch_id, time_start, time_end, schedule_days, branches(name, city))), coach_branches!coach_branches_coach_id_fkey(branch_id, branches(name, city), is_primary, joined_at)")
       .eq("role", "coach").in("id", coachIds).order("full_name");
     if (error) return;
     if (data) setCoaches(data as unknown as CoachFull[]);
@@ -778,7 +778,7 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
                 <div className="space-y-2">
                   <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("admin.coaches.qrCoachLabel")}</div>
                   <div className="flex items-center gap-4 p-4 bg-paper-tint rounded-xl">
-                    <QRBox size={80} />
+                    <QRBox value={(detail as unknown as { qr_code?: string }).qr_code ?? detail.id} size={100} downloadable />
                     <div>
                       <div className="text-xs text-ink-mute mb-1">{t("admin.coaches.coachIdLabel")}</div>
                       <div className="font-mono text-sm font-bold text-ink bg-white px-2 py-1 rounded border border-line">{detail.id.slice(0, 8).toUpperCase()}</div>

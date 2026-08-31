@@ -46,6 +46,9 @@ export default function OwnerAccountsMaster({ branches }: { branches: { id: stri
   const [form, setForm] = useState(EMPTY_FORM);
   const [showPwd, setShowPwd] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [autoCreateStaff, setAutoCreateStaff] = useState(false);
+  const [staffEmail, setStaffEmail] = useState("");
+  const [staffPassword, setStaffPassword] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -84,7 +87,13 @@ export default function OwnerAccountsMaster({ branches }: { branches: { id: stri
     staff: t("owner.accounts.roleStaff"),
   })[role] ?? role;
 
-  const openCreate = () => { setForm(EMPTY_FORM); setShowAdd(true); };
+  const openCreate = () => {
+    setForm(EMPTY_FORM);
+    setAutoCreateStaff(false);
+    setStaffEmail("");
+    setStaffPassword("");
+    setShowAdd(true);
+  };
 
   const saveNewAccount = async () => {
     if (!form.full_name || !form.email || !form.password || !form.branch_id) {
@@ -107,14 +116,20 @@ export default function OwnerAccountsMaster({ branches }: { branches: { id: stri
           school_id: form.member_type === "school_affiliate" ? (form.school_id || undefined) : undefined,
           total_sessions: form.member_type === "private" ? (Number(form.total_sessions) || undefined) : undefined,
         } : {}),
+        ...(form.role === "admin" && autoCreateStaff && staffEmail && staffPassword
+          ? { auto_staff: { email: staffEmail, password: staffPassword } }
+          : {}),
       }),
     });
-    const json = await res.json() as { error?: string; code?: string; user_id?: string };
+    const json = await res.json() as { error?: string; code?: string; user_id?: string; staff_warning?: string };
     if (!res.ok) {
       const isEmailTaken = json.code === "EMAIL_TAKEN";
       toast.error(isEmailTaken ? t("owner.accounts.emailTaken") : t("owner.accounts.createFailed"), json.error);
       setSaving(false);
       return;
+    }
+    if (json.staff_warning) {
+      toast.error("Perhatian", json.staff_warning);
     }
     // Schools are represented by their own `schools` row (profile_id + branch_id + name),
     // which /api/admin/users doesn't create — set it up here so the account isn't left half-built.
@@ -264,6 +279,43 @@ export default function OwnerAccountsMaster({ branches }: { branches: { id: stri
                 placeholder={t("owner.accounts.customRoleLabelPlaceholder")}
               />
             </Field>
+          )}
+          {form.role === "admin" && (
+            <div className="rounded-xl border border-line bg-paper-tint p-4 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-ink">Buat akun Staff otomatis</p>
+                  <p className="text-xs text-ink-mute mt-0.5">Admin juga mendapat akun Staff terpisah untuk absen &amp; payslip</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAutoCreateStaff(v => !v)}
+                  className={`w-10 h-6 rounded-full transition-colors shrink-0 ${autoCreateStaff ? "bg-ocean-600" : "bg-line"}`}
+                >
+                  <span className={`block w-4 h-4 bg-white rounded-full shadow transition-transform mx-1 ${autoCreateStaff ? "translate-x-4" : "translate-x-0"}`} />
+                </button>
+              </div>
+              {autoCreateStaff && (
+                <>
+                  <Field label="Email akun Staff" required>
+                    <Input
+                      type="email"
+                      value={staffEmail}
+                      onChange={e => setStaffEmail(e.target.value)}
+                      placeholder="staff@example.com"
+                    />
+                  </Field>
+                  <Field label="Password akun Staff" required>
+                    <Input
+                      type="password"
+                      value={staffPassword}
+                      onChange={e => setStaffPassword(e.target.value)}
+                      placeholder="Min 8 karakter"
+                    />
+                  </Field>
+                </>
+              )}
+            </div>
           )}
           {form.role === "member" && (
             <>

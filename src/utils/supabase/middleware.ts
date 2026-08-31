@@ -52,7 +52,7 @@ export const updateSession = async (request: NextRequest) => {
   }
 
   // Block suspended members — redirect to /login with ?suspended=1
-  if (user && pathname === "/member") {
+  if (user && pathname.startsWith("/member")) {
     const { data: member } = await supabase
       .from("members")
       .select("status, suspend_until")
