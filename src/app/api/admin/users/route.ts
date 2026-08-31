@@ -205,12 +205,14 @@ export async function POST(req: NextRequest) {
         custom_role_label: body.custom_role_label || null,
         linked_admin_id: userId,
       };
-      const { error: staffInsertError } = await db.from("profiles").insert(staffProfile);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: staffInsertError } = await db.from("profiles").insert(staffProfile as any);
       if (staffInsertError) {
         if (staffInsertError.code === "23505") {
           // eslint-disable-next-line @typescript-eslint/no-unused-vars
           const { id: _id, ...staffUpdateData } = staffProfile;
-          await db.from("profiles").update(staffUpdateData).eq("id", staffAuth.user.id);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await db.from("profiles").update(staffUpdateData as any).eq("id", staffAuth.user.id);
         } else {
           staffWarning = `Admin berhasil dibuat. Profil Staff gagal disimpan: ${staffInsertError.message}`;
         }

@@ -47,11 +47,11 @@ export default async function LandingPage() {
     .from("landing_faqs")
     .select("id, question, answer")
     .order("sort_order");
-  const { data: footerConfig } = await supabase
-    .from("landing_config")
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: footerConfig } = await (supabase.from("landing_config") as any)
     .select("footer_tagline, footer_address, footer_wa_number, contact_email, copyright_text, social_instagram, social_tiktok, social_youtube, floating_wa_message, youtube_video_url, youtube_video_url_2, youtube_video_url_3, youtube_section_title, youtube_section_subtitle")
     .eq("id", 1)
-    .single();
+    .single() as { data: { footer_tagline: string | null; footer_address: string | null; footer_wa_number: string | null; contact_email: string | null; copyright_text: string | null; social_instagram: string | null; social_tiktok: string | null; social_youtube: string | null; floating_wa_message: string | null; youtube_video_url: string | null; youtube_video_url_2: string | null; youtube_video_url_3: string | null; youtube_section_title: string | null; youtube_section_subtitle: string | null } | null };
 
   const branches = (branchEntries ?? []).map((row) => {
     const linked = row.linked as { name: string | null; city: string | null; address: string | null; phone: string | null; logo_url: string | null } | null;

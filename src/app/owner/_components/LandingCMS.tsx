@@ -956,8 +956,8 @@ function VideoTab() {
 
   const save = async () => {
     setSaving(true);
-    const { error } = await supabase
-      .from("landing_config")
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase.from("landing_config") as any)
       .update({
         youtube_video_url: form.youtube_video_url.trim() || null,
         youtube_video_url_2: form.youtube_video_url_2.trim() || null,
