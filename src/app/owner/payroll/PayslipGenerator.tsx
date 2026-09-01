@@ -818,11 +818,31 @@ export default function PayslipGenerator({
 
     if (!error) {
       await publishPayslipWithLoanClosure(supabase, p.id);
-      // If linked to staff, mark staff_salaries as paid/approved
-      await supabase
-        .from("staff_salaries")
-        .update({ status: "paid", paid_at: new Date().toISOString() })
-        .eq("staff_id", p.coach_id);
+      if (p.coach?.role === "staff") {
+        // Staff payslip — mark the matching staff_salaries period as paid too, so
+        // the two views of "this staff's pay this period" stay consistent. Scoped
+        // to both staff_id AND period (not just staff_id) so publishing one period's
+        // payslip doesn't retroactively mark every other period "paid" as well.
+        const monthPeriod = p.period_label.trim().match(/^\d{4}-\d{2}$/)
+          ? p.period_label.trim()
+          : `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
+        await supabase
+          .from("staff_salaries")
+          .update({ status: "paid", paid_at: new Date().toISOString() })
+          .eq("staff_id", p.coach_id)
+          .eq("period_month", monthPeriod);
+      } else if (p.invoice_id) {
+        // Coach payslip linked to a coach_invoices row — publishing the payslip is
+        // the real "money sent" event, so make sure the invoice reflects that too.
+        // Without this, invoices created by the "manual coach fee" generator mode
+        // (which inserts them directly at status "approved") never reach "paid" and
+        // are permanently invisible to the Financial tab's expense totals.
+        await supabase
+          .from("coach_invoices")
+          .update({ status: "paid", paid_at: new Date().toISOString() })
+          .eq("id", p.invoice_id)
+          .neq("status", "paid");
+      }
     }
     setPublishingId(null);
 

@@ -2125,6 +2125,8 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
   const [bills, setBills] = useState<OwnerFinancialBill[]>([]);
   const [expenses, setExpenses] = useState<OwnerFinancialExpense[]>([]);
   const [manualTxns, setManualTxns] = useState<ManualTxnRow[]>([]);
+  const [paidStaffSalaries, setPaidStaffSalaries] = useState<{ id: string; total_salary: number; paid_at: string | null; created_at: string }[]>([]);
+  const [paidStaffReimbursements, setPaidStaffReimbursements] = useState<{ id: string; amount: number; paid_at: string | null; created_at: string }[]>([]);
   const [loadingBills, setLoadingBills] = useState(true);
   const [loadingExpenses, setLoadingExpenses] = useState(true);
 
@@ -2172,7 +2174,7 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
   });
   const [editSalaryModal, setEditSalaryModal] = useState<{ staff: any; salary: StaffSalaryRow | null } | null>(null);
-  const [salaryForm, setSalaryForm] = useState({ base_salary: "", allowances: "", deductions: "", notes: "" });
+  const [salaryForm, setSalaryForm] = useState({ base_salary: "", allowances: "", reimburse: "", deductions: "", notes: "" });
   const [savingSalary, setSavingSalary] = useState(false);
   const [markingStaffSalaryId, setMarkingStaffSalaryId] = useState<string | null>(null);
   // Attendance-based base salary helper — lets the owner compute the base
@@ -2275,8 +2277,9 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
     setSavingSalary(true);
     const base = Number(salaryForm.base_salary || 0);
     const allowances = Number(salaryForm.allowances || 0);
+    const reimburse = Number(salaryForm.reimburse || 0);
     const deductions = Number(salaryForm.deductions || 0);
-    const total = base + allowances - deductions;
+    const total = base + allowances + reimburse - deductions;
 
     const payload = {
       staff_id: editSalaryModal.staff.id,
@@ -2285,7 +2288,7 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
       base_salary: base,
       allowances: allowances,
       deductions: deductions,
-      reimburse_amount: 0,
+      reimburse_amount: reimburse,
       total_salary: total,
       notes: salaryForm.notes.trim() || null,
       status: editSalaryModal.salary?.status ?? "approved",
@@ -2396,6 +2399,16 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
       .then(({ data }) => { if (data) setExpenses(data as unknown as OwnerFinancialExpense[]); setLoadingExpenses(false); });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Staff payroll cost (salaries + reimbursements) — loaded unconditionally (not
+  // gated behind the staff_payroll sub-tab) because Overview/Expenses/Moneyflow
+  // need it across all periods for the headline totals to actually be accurate.
+  useEffect(() => {
+    supabase.from("staff_salaries").select("id, total_salary, paid_at, created_at").eq("status", "paid")
+      .then(({ data }) => { if (data) setPaidStaffSalaries(data); });
+    supabase.from("staff_reimbursements").select("id, amount, paid_at, created_at").eq("status", "paid")
+      .then(({ data }) => { if (data) setPaidStaffReimbursements(data); });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const loadManualTxns = useCallback(async () => {
@@ -2498,7 +2511,12 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
   const manualExpense = useMemo(() => manualTxns.filter(t => t.kind === "expense"), [manualTxns]);
   const paidBills = useMemo(() => bills.filter(b => b.status === "paid"), [bills]);
   const totalIncome = useMemo(() => paidBills.reduce((s, b) => s + b.total, 0) + manualIncome.reduce((s, t) => s + t.amount, 0), [paidBills, manualIncome]);
-  const totalExpenses = useMemo(() => expenses.filter(e => e.status === "paid").reduce((s, e) => s + e.total_amount, 0) + manualExpense.reduce((s, t) => s + t.amount, 0), [expenses, manualExpense]);
+  const totalExpenses = useMemo(() =>
+    expenses.filter(e => e.status === "paid").reduce((s, e) => s + e.total_amount, 0)
+    + manualExpense.reduce((s, t) => s + t.amount, 0)
+    + paidStaffSalaries.reduce((s, sal) => s + sal.total_salary, 0)
+    + paidStaffReimbursements.reduce((s, r) => s + r.amount, 0),
+    [expenses, manualExpense, paidStaffSalaries, paidStaffReimbursements]);
   const netAmount = totalIncome - totalExpenses;
 
   // ── Chart period selector ────────────────────────────────────────────────────
@@ -2515,11 +2533,13 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
       const income = paidBills.filter(b => (b.paid_at ?? b.created_at).startsWith(key)).reduce((s, b) => s + b.total, 0)
         + manualIncome.filter(t => t.occurred_at.startsWith(key)).reduce((s, t) => s + t.amount, 0);
       const expense = expenses.filter(e => e.status === "paid" && (e.paid_at ?? e.created_at).startsWith(key)).reduce((s, e) => s + e.total_amount, 0)
-        + manualExpense.filter(t => t.occurred_at.startsWith(key)).reduce((s, t) => s + t.amount, 0);
+        + manualExpense.filter(t => t.occurred_at.startsWith(key)).reduce((s, t) => s + t.amount, 0)
+        + paidStaffSalaries.filter(sal => (sal.paid_at ?? sal.created_at).startsWith(key)).reduce((s, sal) => s + sal.total_salary, 0)
+        + paidStaffReimbursements.filter(r => (r.paid_at ?? r.created_at).startsWith(key)).reduce((s, r) => s + r.amount, 0);
       months.push({ label, key, income, expense, net: income - expense });
     }
     return months;
-  }, [paidBills, expenses, manualIncome, manualExpense, chartMonths]);
+  }, [paidBills, expenses, manualIncome, manualExpense, paidStaffSalaries, paidStaffReimbursements, chartMonths]);
 
   const barMax = useMemo(() => Math.max(1, ...barChartData.map(m => Math.max(m.income, m.expense))), [barChartData]);
 
@@ -2605,11 +2625,13 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
       const income = paidBills.filter(b => (b.paid_at ?? b.created_at).startsWith(key)).reduce((s, b) => s + b.total, 0)
         + manualIncome.filter(t => t.occurred_at.startsWith(key)).reduce((s, t) => s + t.amount, 0);
       const expense = expenses.filter(e => e.status === "paid" && (e.paid_at ?? e.created_at).startsWith(key)).reduce((s, e) => s + e.total_amount, 0)
-        + manualExpense.filter(t => t.occurred_at.startsWith(key)).reduce((s, t) => s + t.amount, 0);
+        + manualExpense.filter(t => t.occurred_at.startsWith(key)).reduce((s, t) => s + t.amount, 0)
+        + paidStaffSalaries.filter(sal => (sal.paid_at ?? sal.created_at).startsWith(key)).reduce((s, sal) => s + sal.total_salary, 0)
+        + paidStaffReimbursements.filter(r => (r.paid_at ?? r.created_at).startsWith(key)).reduce((s, r) => s + r.amount, 0);
       months.push({ label, key, income, expense, net: income - expense });
     }
     return months.filter(m => m.income > 0 || m.expense > 0);
-  }, [paidBills, expenses, manualIncome, manualExpense]);
+  }, [paidBills, expenses, manualIncome, manualExpense, paidStaffSalaries, paidStaffReimbursements]);
 
   // ── Sub-tab nav ──────────────────────────────────────────────────────────────
   const FTABS: { id: FinancialTab; label: string; icon: string }[] = [
@@ -3420,6 +3442,7 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
                                   setSalaryForm({
                                     base_salary: sal ? String(sal.base_salary) : "",
                                     allowances: sal ? String(sal.allowances) : "",
+                                    reimburse: sal?.reimburse_amount ? String(sal.reimburse_amount) : "",
                                     deductions: sal ? String(sal.deductions) : "",
                                     notes: sal?.notes ?? "",
                                   });
@@ -3768,6 +3791,16 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
             />
           </Field>
 
+          <Field label="Reimburse Disetujui (Rp)" hint="Isi manual jika staff punya klaim reimburse yang belum masuk gaji ini">
+            <Input
+              type="number"
+              value={salaryForm.reimburse}
+              onChange={e => setSalaryForm(f => ({ ...f, reimburse: e.target.value }))}
+              placeholder="0"
+              className="font-mono"
+            />
+          </Field>
+
           <Field label="Potongan (Rp)">
             <Input
               type="number"
@@ -3791,7 +3824,7 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
             <span className="font-semibold text-ink-mute">Estimasi Total Bersih:</span>
             <span className="font-mono font-bold text-ocean-700 text-sm">
               {fmtIDR(
-                Math.max(0, (Number(salaryForm.base_salary) || 0) + (Number(salaryForm.allowances) || 0) - (Number(salaryForm.deductions) || 0))
+                Math.max(0, (Number(salaryForm.base_salary) || 0) + (Number(salaryForm.allowances) || 0) + (Number(salaryForm.reimburse) || 0) - (Number(salaryForm.deductions) || 0))
               )}
             </span>
           </div>

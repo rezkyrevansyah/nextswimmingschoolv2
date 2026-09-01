@@ -138,7 +138,7 @@ export default function CoachLoans({ branches, userId, userName }: { branches: B
 
     setSaving(true);
     const coach = coaches.find(c => c.id === form.coach_id);
-    const { error } = await supabase.from("coach_loans").insert({
+    const { data: newLoan, error } = await supabase.from("coach_loans").insert({
       coach_id: form.coach_id,
       branch_id: form.branch_id,
       principal_amount: principal,
@@ -148,9 +148,23 @@ export default function CoachLoans({ branches, userId, userName }: { branches: B
       notes: form.notes.trim() || null,
       status: "active",
       created_by: userId,
-    });
+    }).select("id").single();
     setSaving(false);
     if (error) return toast.error(t("owner.coachLoans.saveFailed"), error.message);
+    // Record the disbursement as a cash outflow — loans are otherwise invisible to
+    // the Financial tab's expense totals (they only ever showed up, partially, once
+    // repaid via a payslip deduction, which itself wasn't counted either).
+    await supabase.from("manual_transactions").insert({
+      branch_id: form.branch_id,
+      kind: "expense",
+      category: "Coach Loan",
+      description: t("owner.coachLoans.disbursementTxnDescription", { coach: coach?.full_name ?? "coach" }),
+      amount: principal,
+      occurred_at: new Date().toISOString().split("T")[0],
+      notes: newLoan ? `coach_loan:${newLoan.id}` : null,
+      created_by: userId,
+      created_by_role: "owner",
+    });
     toast.success(t("owner.coachLoans.created"));
     logActivity(supabase, {
       userId, userRole: "owner", userName, entityType: "coach_loans", entityId: form.coach_id,

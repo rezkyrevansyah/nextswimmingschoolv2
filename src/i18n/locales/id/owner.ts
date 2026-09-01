@@ -544,6 +544,7 @@ export const owner: typeof OwnerEn = {
     saveFailed: "Gagal menyimpan pinjaman",
     created: "Pinjaman berhasil ditambahkan",
     activityCreated: "Pinjaman baru untuk {coach} sebesar {amount} ({tenor} bulan)",
+    disbursementTxnDescription: "Pinjaman coach dicairkan untuk {coach}",
     addModalTitle: "Tambah Pinjaman",
     fieldCoach: "Coach",
     selectCoachPlaceholder: "— Pilih coach —",

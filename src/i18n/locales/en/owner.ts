@@ -542,6 +542,7 @@ export const owner = {
     saveFailed: "Failed to save loan",
     created: "Loan added successfully",
     activityCreated: "New loan for {coach} of {amount} ({tenor} months)",
+    disbursementTxnDescription: "Coach loan disbursed to {coach}",
     addModalTitle: "Add Loan",
     fieldCoach: "Coach",
     selectCoachPlaceholder: "— Select coach —",
