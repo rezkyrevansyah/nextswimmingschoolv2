@@ -234,6 +234,85 @@ export async function generatePayslip(
   return { id: payslip.id };
 }
 
+export interface UpdatePayslipParams {
+  id: string;
+  period_label: string;
+  gross_amount: number;
+  deductions: DeductionInput[];
+  notes: string | null;
+  created_by: string;
+}
+
+export async function updatePayslip(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: SupabaseClient<any>,
+  params: UpdatePayslipParams
+): Promise<{ id: string } | { error: string }> {
+  if (!params.period_label || !params.period_label.trim()) {
+    return { error: "Label periode tidak boleh kosong." };
+  }
+
+  const totalDeductions = params.deductions.reduce((sum, d) => sum + d.amount, 0);
+  const netAmount = params.gross_amount - totalDeductions;
+
+  if (netAmount < 0) {
+    return { error: "Total potongan melebihi gaji kotor. Periksa kembali nilai potongan." };
+  }
+
+  // 1. Remove previous loan payments & deductions for this draft payslip
+  await supabase.from("coach_loan_payments").delete().eq("payslip_id", params.id);
+  await supabase.from("payslip_deductions").delete().eq("payslip_id", params.id);
+
+  // 2. Update payslip main record
+  const { error: updateError } = await supabase
+    .from("payslips")
+    .update({
+      period_label: params.period_label,
+      gross_amount: params.gross_amount,
+      deductions: totalDeductions,
+      net_amount: netAmount,
+      notes: params.notes,
+    })
+    .eq("id", params.id);
+
+  if (updateError) return { error: updateError.message };
+
+  // 3. Re-insert deductions
+  for (const d of params.deductions) {
+    let loanPaymentId: string | null = null;
+    if (d.type === "loan" && d.loan_id && d.installment_number != null) {
+      const { data: paymentRow, error: paymentError } = await supabase
+        .from("coach_loan_payments")
+        .insert({
+          loan_id: d.loan_id,
+          payslip_id: params.id,
+          amount: d.amount,
+          installment_number: d.installment_number,
+          period_label: d.period_label ?? params.period_label,
+          kind: "installment",
+          created_by: params.created_by,
+        })
+        .select("id")
+        .single();
+      if (!paymentError && paymentRow) {
+        loanPaymentId = paymentRow.id;
+      }
+    }
+
+    await supabase.from("payslip_deductions").insert({
+      payslip_id: params.id,
+      type: d.type,
+      label: d.label,
+      amount: d.amount,
+      loan_id: d.loan_id ?? null,
+      loan_payment_id: loanPaymentId,
+      meta: d.meta ?? null,
+    });
+  }
+
+  return { id: params.id };
+}
+
 export async function publishPayslipWithLoanClosure(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: SupabaseClient<any>,

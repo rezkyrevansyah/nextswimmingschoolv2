@@ -82,6 +82,17 @@ interface ExpenseRow {
   created_at: string;
 }
 
+function fmtClockTime(val: string | null | undefined): string {
+  if (!val) return "—";
+  if (val.includes("T") || val.includes("-")) {
+    const d = new Date(val);
+    if (!isNaN(d.getTime())) {
+      return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")}`;
+    }
+  }
+  return val.slice(0, 8);
+}
+
 export default function StaffPage() {
   const router = useRouter();
   const toast = useToast();
@@ -231,6 +242,7 @@ export default function StaffPage() {
     if (!user || !profile) return;
     setClockLoading(true);
     const now = new Date();
+    const isoTimestamp = now.toISOString();
     const timeStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;
     const today = now.toISOString().slice(0, 10);
 
@@ -240,7 +252,7 @@ export default function StaffPage() {
         staff_id: user.id,
         branch_id: profile.branch_id ?? "",
         attendance_date: today,
-        clock_in_time: timeStr,
+        clock_in_time: isoTimestamp,
         status: "present",
         note: clockNotes.trim() || null,
       })
@@ -264,12 +276,13 @@ export default function StaffPage() {
     if (!todayAttendance) return;
     setClockLoading(true);
     const now = new Date();
+    const isoTimestamp = now.toISOString();
     const timeStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;
 
     const { error } = await supabase
       .from("staff_attendances")
       .update({
-        clock_out_time: timeStr,
+        clock_out_time: isoTimestamp,
         note: clockNotes.trim() ? `${todayAttendance.note ? todayAttendance.note + " | " : ""}${clockNotes.trim()}` : todayAttendance.note,
       })
       .eq("id", todayAttendance.id);
@@ -280,7 +293,7 @@ export default function StaffPage() {
       return;
     }
 
-    setTodayAttendance(prev => prev ? { ...prev, clock_out_time: timeStr } : null);
+    setTodayAttendance(prev => prev ? { ...prev, clock_out_time: isoTimestamp } : null);
     setClockNotes("");
     toast.success(t("staff.actions.clockOutSuccessTitle"), t("staff.actions.clockOutSuccessBody", { time: timeStr }));
     if (user) await loadData(user.id);
@@ -568,8 +581,8 @@ export default function StaffPage() {
                     <p className="text-sm text-ink-soft max-w-md">
                       {todayAttendance
                         ? todayAttendance.clock_out_time
-                          ? t("staff.home.dutySubtextDone", { in: todayAttendance.clock_in_time ?? "-", out: todayAttendance.clock_out_time })
-                          : t("staff.home.dutySubtextActive", { in: todayAttendance.clock_in_time ?? "-" })
+                          ? t("staff.home.dutySubtextDone", { in: fmtClockTime(todayAttendance.clock_in_time), out: fmtClockTime(todayAttendance.clock_out_time) })
+                          : t("staff.home.dutySubtextActive", { in: fmtClockTime(todayAttendance.clock_in_time) })
                         : t("staff.home.dutySubtextNotYet")}
                     </p>
                   </div>
@@ -699,8 +712,8 @@ export default function StaffPage() {
                     {filteredAttendances.map(att => (
                       <tr key={att.id} className="hover:bg-paper-tint">
                         <td className="py-3 px-4 font-semibold text-ink">{fmtDate(att.attendance_date)}</td>
-                        <td className="py-3 px-4 font-mono text-ink-soft">{att.clock_in_time ?? "—"}</td>
-                        <td className="py-3 px-4 font-mono text-ink-soft">{att.clock_out_time ?? "—"}</td>
+                        <td className="py-3 px-4 font-mono text-ink-soft">{fmtClockTime(att.clock_in_time)}</td>
+                        <td className="py-3 px-4 font-mono text-ink-soft">{fmtClockTime(att.clock_out_time)}</td>
                         <td className="py-3 px-4">
                           <span className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase ${
                             att.status === "present" ? "bg-ok-50 text-ok-700" :
