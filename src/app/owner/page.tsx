@@ -3084,11 +3084,11 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
           {/* Metrics */}
           <div className="grid sm:grid-cols-3 gap-4">
             <Stat
-              label="Total Siap Ditransfer (Approved)"
-              value={fmtIDR(detailedInvoices.filter(i => i.status === "approved").reduce((s, i) => s + i.total_amount, 0))}
+              label="Total Belum Ditransfer"
+              value={fmtIDR(detailedInvoices.filter(i => i.status !== "paid").reduce((s, i) => s + i.total_amount, 0))}
               icon="wallet"
               tone="warn"
-              sub={`${detailedInvoices.filter(i => i.status === "approved").length} invoice siap bayar`}
+              sub={`${detailedInvoices.filter(i => i.status !== "paid").length} invoice belum lunas`}
             />
             <Stat
               label="Total Sudah Dibayar (Paid)"
