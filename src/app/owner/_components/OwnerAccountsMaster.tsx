@@ -47,6 +47,7 @@ export default function OwnerAccountsMaster({ branches }: { branches: { id: stri
   const [showPwd, setShowPwd] = useState(false);
   const [saving, setSaving] = useState(false);
   const [autoCreateStaff, setAutoCreateStaff] = useState(false);
+  const [staffFullName, setStaffFullName] = useState("");
   const [staffEmail, setStaffEmail] = useState("");
   const [staffPassword, setStaffPassword] = useState("");
 
@@ -70,14 +71,6 @@ export default function OwnerAccountsMaster({ branches }: { branches: { id: stri
   }, [supabase]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  const filtered = accounts
-    .filter(a => showArchived || !a.is_archived)
-    .filter(a => {
-      if (!search.trim()) return true;
-      const s = search.trim().toLowerCase();
-      return a.full_name.toLowerCase().includes(s) || (a.email ?? "").toLowerCase().includes(s);
-    });
-
   const roleLabel = (role: string) => ({
     owner: t("owner.accounts.roleOwner"),
     admin: t("owner.accounts.roleAdmin"),
@@ -87,9 +80,22 @@ export default function OwnerAccountsMaster({ branches }: { branches: { id: stri
     staff: t("owner.accounts.roleStaff"),
   })[role] ?? role;
 
+  const filtered = accounts
+    .filter(a => showArchived || !a.is_archived)
+    .filter(a => {
+      if (!search.trim()) return true;
+      const s = search.trim().toLowerCase();
+      const nameMatch = (a.full_name ?? "").toLowerCase().includes(s);
+      const emailMatch = (a.email ?? "").toLowerCase().includes(s);
+      const roleMatch = roleLabel(a.role).toLowerCase().includes(s);
+      const branchMatch = (a.branch?.name ?? "").toLowerCase().includes(s);
+      return nameMatch || emailMatch || roleMatch || branchMatch;
+    });
+
   const openCreate = () => {
     setForm(EMPTY_FORM);
     setAutoCreateStaff(false);
+    setStaffFullName("");
     setStaffEmail("");
     setStaffPassword("");
     setShowAdd(true);
@@ -117,7 +123,7 @@ export default function OwnerAccountsMaster({ branches }: { branches: { id: stri
           total_sessions: form.member_type === "private" ? (Number(form.total_sessions) || undefined) : undefined,
         } : {}),
         ...(form.role === "admin" && autoCreateStaff && staffEmail && staffPassword
-          ? { auto_staff: { email: staffEmail, password: staffPassword } }
+          ? { auto_staff: { email: staffEmail, password: staffPassword, full_name: staffFullName.trim() || undefined } }
           : {}),
       }),
     });
@@ -194,27 +200,32 @@ export default function OwnerAccountsMaster({ branches }: { branches: { id: stri
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
-                {filtered.map(a => (
-                  <tr key={a.id} className="hover:bg-paper-tint cursor-pointer" onClick={() => setSelected(a)}>
-                    <td className="py-3.5 px-5">
-                      <div className="flex items-center gap-3">
-                        <Avatar name={a.full_name} size={36} />
-                        <div className="font-semibold truncate max-w-[160px] sm:max-w-none">{a.full_name}</div>
-                      </div>
-                    </td>
-                    <td className="text-ink-soft">
-                      {roleLabel(a.role)}
-                      {a.custom_role_label && <span className="text-ink-faint"> · {a.custom_role_label}</span>}
-                    </td>
-                    <td className="text-ink-mute hidden sm:table-cell">{a.email ?? "—"}</td>
-                    <td className="text-ink-soft hidden md:table-cell">{a.branch?.name ?? "—"}</td>
-                    <td>
-                      {a.is_archived
-                        ? <Status kind="archived">{t("owner.accountDetail.inactiveBadge")}</Status>
-                        : <Status kind="active">{t("owner.accountDetail.activeBadge")}</Status>}
-                    </td>
-                  </tr>
-                ))}
+                {filtered.map(a => {
+                  const displayName = a.full_name?.trim() || a.email?.split("@")[0] || roleLabel(a.role) || "—";
+                  return (
+                    <tr key={a.id} className="hover:bg-paper-tint cursor-pointer" onClick={() => setSelected(a)}>
+                      <td className="py-3.5 px-5">
+                        <div className="flex items-center gap-3">
+                          <Avatar name={displayName} size={36} />
+                          <div className="font-semibold truncate max-w-[160px] sm:max-w-none">{displayName}</div>
+                        </div>
+                      </td>
+                      <td className="text-ink-soft">
+                        {roleLabel(a.role)}
+                        {a.custom_role_label && !a.custom_role_label.includes("@") && (
+                          <span className="text-ink-faint"> · {a.custom_role_label}</span>
+                        )}
+                      </td>
+                      <td className="text-ink-mute hidden sm:table-cell">{a.email ?? "—"}</td>
+                      <td className="text-ink-soft hidden md:table-cell">{a.branch?.name ?? "—"}</td>
+                      <td>
+                        {a.is_archived
+                          ? <Status kind="archived">{t("owner.accountDetail.inactiveBadge")}</Status>
+                          : <Status kind="active">{t("owner.accountDetail.activeBadge")}</Status>}
+                      </td>
+                    </tr>
+                  );
+                })}
                 {filtered.length === 0 && (
                   <tr><td colSpan={5} className="text-center py-10 text-ink-mute">{t("owner.accounts.empty")}</td></tr>
                 )}
@@ -257,13 +268,13 @@ export default function OwnerAccountsMaster({ branches }: { branches: { id: stri
             </Select>
           </Field>
           <Field label={t("owner.accounts.fieldFullName")} required>
-            <Input value={form.full_name} onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))} />
+            <Input value={form.full_name} onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))} autoComplete="off" />
           </Field>
           <Field label={t("owner.accounts.fieldEmail")} required>
-            <Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
+            <Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} autoComplete="off" />
           </Field>
           <Field label={t("owner.accounts.fieldPhone")}>
-            <Input type="tel" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="08xxxxxxxxxx" />
+            <Input type="tel" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="08xxxxxxxxxx" autoComplete="off" />
           </Field>
           <Field label={t("owner.accounts.fieldBranch")} required>
             <Select value={form.branch_id} onChange={e => setForm(f => ({ ...f, branch_id: e.target.value }))}>
@@ -277,6 +288,7 @@ export default function OwnerAccountsMaster({ branches }: { branches: { id: stri
                 value={form.custom_role_label}
                 onChange={e => setForm(f => ({ ...f, custom_role_label: e.target.value }))}
                 placeholder={t("owner.accounts.customRoleLabelPlaceholder")}
+                autoComplete="off"
               />
             </Field>
           )}
@@ -297,12 +309,21 @@ export default function OwnerAccountsMaster({ branches }: { branches: { id: stri
               </div>
               {autoCreateStaff && (
                 <>
+                  <Field label="Nama Staff" hint="Opsional, contoh: Dewi (Staff)">
+                    <Input
+                      value={staffFullName}
+                      onChange={e => setStaffFullName(e.target.value)}
+                      placeholder="Nama staff..."
+                      autoComplete="off"
+                    />
+                  </Field>
                   <Field label="Email akun Staff" required>
                     <Input
                       type="email"
                       value={staffEmail}
                       onChange={e => setStaffEmail(e.target.value)}
                       placeholder="staff@example.com"
+                      autoComplete="off"
                     />
                   </Field>
                   <Field label="Password akun Staff" required>
@@ -311,6 +332,7 @@ export default function OwnerAccountsMaster({ branches }: { branches: { id: stri
                       value={staffPassword}
                       onChange={e => setStaffPassword(e.target.value)}
                       placeholder="Min 8 karakter"
+                      autoComplete="new-password"
                     />
                   </Field>
                 </>

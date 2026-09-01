@@ -6,9 +6,9 @@ import { waLink, mailtoLink } from "@/lib/utils";
 import { useLocale } from "@/components/providers/LocaleProvider";
 
 interface FooterConfig {
-  footer_tagline: string;
+  footer_tagline: string | null;
   footer_address: string | null;
-  footer_wa_number: string;
+  footer_wa_number: string | null;
   contact_email: string | null;
   copyright_text: string | null;
   social_instagram: string | null;

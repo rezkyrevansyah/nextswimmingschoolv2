@@ -186,6 +186,7 @@ export default function AdminRaporList({ branchId, periods }: { branchId: string
   const totalDone = students.filter(s => s.is_filled).length;
 
   const toPrintStudent = (s: Student) => ({
+    member_id: s.id, period_id: effectivePeriodId,
     full_name: s.full_name, avatar_url: s.avatar_url ?? undefined,
     member_no: s.member_no ?? undefined, birth_date: s.birth_date ?? undefined,
     level: s.level ?? undefined,

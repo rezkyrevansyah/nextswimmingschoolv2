@@ -17,11 +17,19 @@ const nextConfig: NextConfig = {
     ];
   },
   images: {
+    dangerouslyAllowSVG: true,
+    contentDispositionType: "attachment",
+    contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
     remotePatterns: [
       // Supabase Storage public bucket URLs
       {
         protocol: "https",
         hostname: "**.supabase.co",
+      },
+      // YouTube video thumbnails (click-to-play facade in VideoSection)
+      {
+        protocol: "https",
+        hostname: "i.ytimg.com",
       },
     ],
   },

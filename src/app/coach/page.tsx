@@ -24,7 +24,7 @@ import BetaFeedback, { BETA_FEEDBACK_ENABLED } from "@/components/layout/BetaFee
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
 import { useLocale } from "@/components/providers/LocaleProvider";
-import { fmtIDR, fmtDate, fmtDateLong, waLink, mailtoLink, countTextStats } from "@/lib/utils";
+import { fmtIDR, fmtDate, fmtDateLong, waLink, mailtoLink, countTextStats, toLocalDateStr } from "@/lib/utils";
 import { downloadRaporPdf, printSingleRaporPopup, fmtSwimTime, type PrintCriterion, type PrintBestTime } from "@/lib/printRapor";
 import { buildBestTimeMatrix, findUnmatchedRecordedTimes, parseSwimTimeInput, type LevelDistance, type LevelStroke, type MatrixCell, type RecordedBestTime } from "@/lib/raporLevels";
 import { resolveRaporSigner, buildSchoolRaporSignatures } from "@/lib/rapor";
@@ -304,7 +304,7 @@ function ClockInFlow({ back, coachId, branchId, classes, preselectedClassId, onS
   const submit = async () => {
     if (!classId) return toast.error(t("coach.clockIn.selectClassFirst"));
     setSubmitting(true);
-    const today = new Date().toISOString().split("T")[0];
+    const today = toLocalDateStr();
     const nowTime = new Date().toTimeString().slice(0, 8);
 
     // Determine late status: coach late if > 15 minutes after class start
@@ -748,7 +748,14 @@ function QRScanner({ coachId, classes, onClose }: {
       return;
     }
 
-    const typedMember = member as { id: string; status: string; suspend_until: string | null; profile: { full_name: string } | null };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rawProfile = Array.isArray((member as any).profile) ? (member as any).profile[0] : (member as any).profile;
+    const typedMember = {
+      id: (member as any).id as string,
+      status: (member as any).status as string,
+      suspend_until: (member as any).suspend_until as string | null,
+      profile: rawProfile as { full_name: string } | null,
+    };
     const name = typedMember.profile?.full_name ?? "Member";
 
     // Block suspended members
@@ -1414,7 +1421,11 @@ function CoachAbsensi({ setOverlay, coachId, branchId, classes, holidayClassIds,
         if (suspendUntil && suspendUntil >= today) return false;
         return true;
       });
-      const rows = active.map(m => ({ id: "", member_id: m.id as string, session_date: date, status: "hadir", member: (m as { profile: { full_name: string; birth_date: string | null } | null }).profile }));
+      const rows = active.map(m => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const rawProfile = Array.isArray((m as any).profile) ? (m as any).profile[0] : (m as any).profile;
+        return { id: "", member_id: (m as any).id as string, session_date: date, status: "hadir", member: rawProfile };
+      });
       setMemberAtt(rows as unknown as MemberAttRow[]);
       const init: Record<string, string> = {};
       active.forEach(m => { init[m.id as string] = "hadir"; });
@@ -2308,15 +2319,39 @@ function CoachInvoice({ coachId, branchId, profile }: { coachId: string; branchI
 
     if (invError || !inv) { toast.error(t("coach.invoice.generateInvoiceFailed"), invError?.message); setGenerating(false); return; }
 
-    // Link sessions to invoice
+    // Claim attendance sessions atomically — only rows still unclaimed
+    // (invoice_id IS NULL) get this invoice_id. This prevents two concurrent
+    // invoice submissions (double-tap, two tabs) from both billing the same
+    // session: whichever request's UPDATE lands second simply claims nothing
+    // for that row.
     const selectedSessions = sessions.filter(s => selected.has(s.id));
+    let claimedSessions = selectedSessions;
     if (selectedSessions.length > 0) {
-      await supabase.from("coach_invoice_items").insert(selectedSessions.map(s => ({
+      const { data: claimed } = await supabase
+        .from("coach_attendances")
+        .update({ invoice_id: inv.id })
+        .in("id", [...selected])
+        .is("invoice_id", null)
+        .select("id");
+      const claimedIds = new Set((claimed ?? []).map((c: { id: string }) => c.id));
+      claimedSessions = selectedSessions.filter(s => claimedIds.has(s.id));
+      const lostCount = selectedSessions.length - claimedSessions.length;
+      if (lostCount > 0) {
+        toast.error(t("coach.invoice.sessionsAlreadyClaimedTitle"), t("coach.invoice.sessionsAlreadyClaimedBody", { count: lostCount }));
+      }
+    }
+    if (claimedSessions.length > 0) {
+      await supabase.from("coach_invoice_items").insert(claimedSessions.map(s => ({
         invoice_id: inv.id, item_type: "class", attendance_id: s.id, class_id: s.class_id, rate: s.rate_per_session, session_count: 1,
       })));
     }
-    // Mark attendances as invoiced
-    if (selected.size > 0) await supabase.from("coach_attendances").update({ invoice_id: inv.id }).in("id", [...selected]);
+    // Recompute total from what was actually claimed — a lost race means
+    // fewer sessions than originally previewed.
+    const claimedSessionsTotal = claimedSessions.reduce((a, s) => a + s.rate_per_session, 0);
+    const finalTotal = claimedSessionsTotal + extraTotal + reimburseTotal;
+    if (finalTotal !== total) {
+      await supabase.from("coach_invoices").update({ total_amount: finalTotal }).eq("id", inv.id);
+    }
 
     if (extraItems.length > 0) {
       await supabase.from("coach_invoice_items").insert(extraItems.map(e => ({
@@ -2337,7 +2372,7 @@ function CoachInvoice({ coachId, branchId, profile }: { coachId: string; branchI
       await supabase.from("notifications").insert(ownerProfiles.map((op: { id: string }) => ({
         user_id: op.id,
         title: t("coach.invoice.ownerNewInvoiceTitle"),
-        body: t("coach.invoice.ownerNewInvoiceBody", { name: profile?.full_name ?? t("coach.home.defaultCoachName"), num, period: periodLabel, amount: fmtIDR(total) }),
+        body: t("coach.invoice.ownerNewInvoiceBody", { name: profile?.full_name ?? t("coach.home.defaultCoachName"), num, period: periodLabel, amount: fmtIDR(finalTotal) }),
         icon: "invoice",
         kind: "info",
       })));
@@ -2379,12 +2414,14 @@ function CoachInvoice({ coachId, branchId, profile }: { coachId: string; branchI
           <div className="relative">
             <div className="flex items-center gap-2 text-wave-200 text-[11px] uppercase tracking-widest font-bold">
               <span className="w-2 h-2 rounded-full bg-ok-400 animate-pulse" />
-              {t("coach.invoice.activePeriodLabel", { label: activePeriod.label })}
+              {t("coach.invoice.activePeriodLabel")}
             </div>
             <h2 className="font-display font-bold text-2xl mt-0.5">{activePeriod.label}</h2>
-            <p className="text-white/80 text-sm mt-1">
-              {t("coach.invoice.deadlineNotice", { date: fmtDateLong(activePeriod.date_to) })} · {t("coach.invoice.selectSessionsHint")}
-            </p>
+            <div className="flex items-center gap-1.5 text-white/80 text-sm mt-2">
+              <Icon name="clock" className="w-3.5 h-3.5 shrink-0" />
+              {t("coach.invoice.deadlineNotice", { date: fmtDateLong(activePeriod.date_to) })}
+            </div>
+            <p className="text-white/60 text-xs mt-1">{t("coach.invoice.selectSessionsHint")}</p>
           </div>
         </div>
       ) : (
@@ -2400,16 +2437,19 @@ function CoachInvoice({ coachId, branchId, profile }: { coachId: string; branchI
 
       {activePeriod && (
         <>
-          <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center justify-between gap-3 flex-wrap bg-white border border-line rounded-2xl px-4 py-2.5">
             <Input type="month" value={monthFilter} onChange={e => setMonthFilter(e.target.value)} className="!w-36 sm:!w-44 font-mono" />
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               <Btn variant="outline" size="sm" icon="plus" onClick={() => setShowReimburseModal(true)}>{t("coach.invoice.expensesBtn")}</Btn>
-              <button onClick={() => setSelected(new Set(sessions.map(s => s.id)))} className="text-sm font-bold text-ocean-600 hover:text-ocean-700">{t("coach.invoice.selectAllBtn")}</button>
+              <Btn variant="ghost" size="sm" onClick={() => setSelected(new Set(sessions.map(s => s.id)))}>{t("coach.invoice.selectAllBtn")}</Btn>
             </div>
           </div>
       {loading ? <div className="text-center text-ink-mute p-6">{t("coach.invoice.loadingSessions")}</div> : (
         <>
           <Card padded={false}>
+            <div className="px-5 py-4 border-b border-line">
+              <SectionTitle sub={t("coach.invoice.sessionsCountLabel", { count: sessions.length })}>{t("coach.invoice.classSessionsTitle")}</SectionTitle>
+            </div>
             {sessions.length === 0 ? <div className="p-6 text-center text-ink-mute">{t("coach.invoice.noUninvoicedSessions")}</div> : (
               <div className="divide-y divide-line">
                 {sessions.map((s) => (
@@ -2440,7 +2480,7 @@ function CoachInvoice({ coachId, branchId, profile }: { coachId: string; branchI
             ) : (
               <>
                 <div className="flex items-end gap-2">
-                  <div className="flex-1">
+                  <div className="w-28 shrink-0">
                     <Field label={t("coach.invoice.fieldExtraSessionCount")} hint={t("coach.invoice.extraRateHint", { rate: fmtIDR(extraRatePerSession) })}>
                       <Input type="number" inputMode="numeric" min={1} value={extraSessionCount} onChange={e => setExtraSessionCount(e.target.value)} placeholder="1" />
                     </Field>
@@ -2991,7 +3031,7 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
               <label className={`cursor-pointer inline-flex items-center justify-center font-semibold transition-colors text-xs px-3 py-1.5 rounded-lg gap-1.5 border border-line text-ink-soft hover:bg-paper-tint hover:border-line-strong ${(sigUploading || fileUploading) ? "opacity-50 pointer-events-none" : ""}`}>
                 <input
                   type="file"
-                  accept="image/jpeg,image/png,image/webp"
+                  accept="image/jpeg,image/png,image/webp,image/svg+xml"
                   className="hidden"
                   disabled={sigUploading || fileUploading}
                   onChange={async (ev) => {
@@ -3249,6 +3289,7 @@ function CoachRapor({ coachId, branchId, coachName, branchName }: { coachId: str
               const coachSig = signer?.signature_url ?? signatureUrl;
               const signatures = buildSchoolRaporSignatures(memSchool, signer?.full_name ?? coachName, coachSig, ownerSettings);
               const raporData = {
+                member_id: viewing.member_id, period_id: period.id,
                 full_name: viewing.member?.profile?.full_name ?? "",
                 member_no: viewing.member?.member_no ?? undefined,
                 avatar_url: viewing.member?.profile?.avatar_url ?? undefined,
@@ -4111,8 +4152,16 @@ export default function CoachPage() {
       .in("class_id", classIds);
     if (all) {
       const map = new Map<string, CoachSpreadsheetRow[]>();
-      (all as (CoachSpreadsheetRow & { class_id: string })[]).forEach(r => {
-        map.set(r.class_id, [...(map.get(r.class_id) ?? []), r]);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (all as any[]).forEach((r: any) => {
+        const rawCoach = Array.isArray(r.coach) ? r.coach[0] : r.coach;
+        const item: CoachSpreadsheetRow = {
+          coach_id: r.coach_id,
+          spreadsheet_url: r.spreadsheet_url,
+          updated_at: r.updated_at,
+          coach: rawCoach ?? null,
+        };
+        map.set(r.class_id, [...(map.get(r.class_id) ?? []), item]);
       });
       setClassSpreadsheets(map);
     }
@@ -4144,7 +4193,7 @@ export default function CoachPage() {
 
     // Load today's holidays for these classes
     if (classIds.length > 0) {
-      const today = new Date().toISOString().slice(0, 10);
+      const today = toLocalDateStr();
       const { data: hols } = await supabase.from("class_holidays").select("class_id").in("class_id", classIds).eq("holiday_date", today);
       if (hols) setHolidayClassIds(new Set((hols as { class_id: string }[]).map((h) => h.class_id)));
     }
@@ -4169,11 +4218,15 @@ export default function CoachPage() {
         .select("branch_id, branches(name), is_primary")
         .eq("coach_id", p.id);
       if (cbData && cbData.length > 0) {
-        const mapped = (cbData as { branch_id: string; branches: { name: string } | null; is_primary: boolean }[]).map(cb => ({
-          branch_id: cb.branch_id,
-          name: cb.branches?.name ?? cb.branch_id,
-          is_primary: cb.is_primary,
-        }));
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const mapped = (cbData as any[]).map((cb: any) => {
+          const rawBranch = Array.isArray(cb.branches) ? cb.branches[0] : cb.branches;
+          return {
+            branch_id: cb.branch_id as string,
+            name: (rawBranch?.name as string) ?? (cb.branch_id as string),
+            is_primary: Boolean(cb.is_primary),
+          };
+        });
         setCoachBranches(mapped);
         // Default to primary branch, or first, or fallback to auth metadata
         const primaryId = mapped.find(b => b.is_primary)?.branch_id ?? mapped[0]?.branch_id ?? (u.user_metadata?.branch_id as string ?? "");

@@ -28,7 +28,7 @@ export async function POST() {
   const { error } = await db.from("profiles").insert({
     id: user.id,
     role: "owner",
-    full_name: user.user_metadata?.full_name ?? "Owner",
+    full_name: (user.user_metadata?.full_name as string | undefined)?.trim() || "Owner",
     email: user.email ?? null,
     phone: user.user_metadata?.phone ?? null,
     user_no: userNo,

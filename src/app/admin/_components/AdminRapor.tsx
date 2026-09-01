@@ -175,6 +175,10 @@ export default function AdminRapor({ branchId }: { branchId: string }) {
   };
 
   const reopenPeriod = async (id: string) => {
+    // Close any other currently-open period first — only one period should
+    // ever be "active" at a time, otherwise coaches/admins see a
+    // non-deterministic active period.
+    await supabase.from("rapor_periods").update({ is_open: false }).eq("branch_id", branchId).eq("is_open", true);
     await supabase.from("rapor_periods").update({ is_open: true }).eq("id", id);
     toast.success(t("admin.rapor.periodReopenedToast"));
     load();

@@ -1,18 +1,64 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import Icon from "@/components/ui/Icon";
 
-function getYouTubeEmbedUrl(url: string | null | undefined): string | null {
+function extractYouTubeId(url: string | null | undefined): string | null {
   if (!url) return null;
   const str = url.trim();
   const regExp = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/|youtube\.com\/shorts\/)([^"&?\/\s]{11})/;
   const match = str.match(regExp);
-  if (match && match[1]) {
-    return `https://www.youtube.com/embed/${match[1]}?autoplay=0&rel=0`;
-  }
-  if (str.startsWith("https://www.youtube.com/embed/")) return str;
+  if (match && match[1]) return match[1];
+  const embedMatch = str.match(/youtube\.com\/embed\/([^"&?\/\s]{11})/);
+  if (embedMatch && embedMatch[1]) return embedMatch[1];
   return null;
+}
+
+/**
+ * Click-to-play YouTube facade — shows a static thumbnail (`i.ytimg.com`,
+ * no player JS) until clicked, so the section never pays for YouTube's
+ * embed player on page load. Keyed by video id at the call site so
+ * switching the active video resets back to a thumbnail.
+ */
+function YouTubeFacade({ videoId, title, sizes }: { videoId: string; title?: string | null; sizes: string }) {
+  const [playing, setPlaying] = useState(false);
+
+  if (playing) {
+    return (
+      <iframe
+        src={`https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0`}
+        title={title || "Next Swimming School Video"}
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+        allowFullScreen
+        className="w-full h-full border-0"
+      />
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => setPlaying(true)}
+      aria-label={title ? `Putar video: ${title}` : "Putar video"}
+      className="group relative block w-full h-full"
+    >
+      <Image
+        src={`https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`}
+        alt=""
+        fill
+        sizes={sizes}
+        className="object-cover"
+      />
+      <span className="absolute inset-0 flex items-center justify-center bg-black/25 transition-colors group-hover:bg-black/35">
+        <span className="flex items-center justify-center w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-white/95 shadow-xl transition-transform group-hover:scale-110">
+          <svg viewBox="0 0 24 24" className="w-6 h-6 sm:w-7 sm:h-7 text-ocean-700 ml-0.5" fill="currentColor">
+            <path d="M8 5v14l11-7z" />
+          </svg>
+        </span>
+      </span>
+    </button>
+  );
 }
 
 export default function VideoSection({
@@ -29,9 +75,9 @@ export default function VideoSection({
   subtitle?: string | null;
 }) {
   const videos = [
-    getYouTubeEmbedUrl(videoUrl),
-    getYouTubeEmbedUrl(videoUrl2),
-    getYouTubeEmbedUrl(videoUrl3),
+    extractYouTubeId(videoUrl),
+    extractYouTubeId(videoUrl2),
+    extractYouTubeId(videoUrl3),
   ].filter(Boolean) as string[];
 
   const [active, setActive] = useState(0);
@@ -60,13 +106,7 @@ export default function VideoSection({
         <div className="max-w-5xl mx-auto px-4 sm:px-6 relative z-10">
           {header}
           <div className="relative rounded-3xl overflow-hidden shadow-2xl border-4 border-white bg-slate-950 aspect-video ring-1 ring-slate-900/10">
-            <iframe
-              src={videos[0]}
-              title={title || "Next Swimming School Video"}
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-              allowFullScreen
-              className="w-full h-full border-0"
-            />
+            <YouTubeFacade key={videos[0]} videoId={videos[0]} title={title} sizes="(min-width: 1024px) 800px, 100vw" />
           </div>
         </div>
       </section>
@@ -97,7 +137,7 @@ export default function VideoSection({
 
           {/* Cards row */}
           <div className="flex-1 flex items-center justify-center gap-3 sm:gap-4">
-            {/* Left side card (hidden on mobile) */}
+            {/* Left side card (hidden on mobile) — thumbnail only, never plays inline */}
             {videos.length === 3 && (
               <button
                 onClick={prev}
@@ -105,26 +145,16 @@ export default function VideoSection({
                 aria-hidden="true"
                 className="hidden sm:block shrink-0 w-[26%] aspect-video rounded-2xl overflow-hidden opacity-40 hover:opacity-60 transition-opacity shadow-card relative ring-1 ring-slate-900/10"
               >
-                <iframe
-                  src={videos[leftIdx]}
-                  className="absolute inset-0 w-full h-full pointer-events-none"
-                  tabIndex={-1}
-                />
+                <Image src={`https://i.ytimg.com/vi/${videos[leftIdx]}/hqdefault.jpg`} alt="" fill sizes="200px" className="object-cover" />
               </button>
             )}
 
             {/* Center (active) card */}
             <div className="flex-1 max-w-[640px] relative rounded-3xl overflow-hidden shadow-2xl border-4 border-white bg-slate-950 aspect-video ring-2 ring-ocean-400/40">
-              <iframe
-                src={videos[active]}
-                title={title || "Next Swimming School Video"}
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                allowFullScreen
-                className="w-full h-full border-0"
-              />
+              <YouTubeFacade key={videos[active]} videoId={videos[active]} title={title} sizes="640px" />
             </div>
 
-            {/* Right side card (hidden on mobile) */}
+            {/* Right side card (hidden on mobile) — thumbnail only, never plays inline */}
             {videos.length >= 2 && (
               <button
                 onClick={next}
@@ -132,11 +162,7 @@ export default function VideoSection({
                 aria-hidden="true"
                 className="hidden sm:block shrink-0 w-[26%] aspect-video rounded-2xl overflow-hidden opacity-40 hover:opacity-60 transition-opacity shadow-card relative ring-1 ring-slate-900/10"
               >
-                <iframe
-                  src={videos[rightIdx]}
-                  className="absolute inset-0 w-full h-full pointer-events-none"
-                  tabIndex={-1}
-                />
+                <Image src={`https://i.ytimg.com/vi/${videos[rightIdx]}/hqdefault.jpg`} alt="" fill sizes="200px" className="object-cover" />
               </button>
             )}
           </div>

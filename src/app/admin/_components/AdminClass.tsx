@@ -1,6 +1,7 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { createClient } from "@/utils/supabase/client";
+import { useUpload } from "@/hooks/useUpload";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
 import { useLocale } from "@/components/providers/LocaleProvider";
@@ -23,6 +24,7 @@ const DAY_OPTS = ["Senin","Selasa","Rabu","Kamis","Jumat","Sabtu","Minggu"];
 
 export default function AdminClass({ branchId }: { branchId: string }) {
   const supabase = createClient();
+  const { upload } = useUpload();
   const toast = useToast();
   const confirm = useConfirm();
   const { t, locale } = useLocale();
@@ -40,6 +42,9 @@ export default function AdminClass({ branchId }: { branchId: string }) {
   const [openForm, setOpenForm] = useState(false);
   const [editTarget, setEditTarget] = useState<ClassRow | null>(null);
   const [form, setForm] = useState(EMPTY_CLASS_FORM);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
 
   // Per-class attendance modal
   const [attClass, setAttClass] = useState<ClassRow | null>(null);
@@ -106,10 +111,13 @@ export default function AdminClass({ branchId }: { branchId: string }) {
 
   const setClassCoachRole = async (classId: string, coachId: string, role: "head" | "assistant") => {
     setCoachMutating(true);
-    if (role === "head") {
+    // Promote the target to head FIRST, then demote everyone else — if the
+    // second call fails partway through, the class still has a head coach
+    // (possibly two, briefly) instead of ending up with zero.
+    const { error } = await supabase.from("class_coaches").update({ role }).eq("class_id", classId).eq("coach_id", coachId);
+    if (role === "head" && !error) {
       await supabase.from("class_coaches").update({ role: "assistant" }).eq("class_id", classId).neq("coach_id", coachId);
     }
-    const { error } = await supabase.from("class_coaches").update({ role }).eq("class_id", classId).eq("coach_id", coachId);
     setCoachMutating(false);
     if (error) return toast.error(t("admin.classes.changeRoleFailed"), error.message);
     const current = editTarget?.class_coaches ?? [];
@@ -118,15 +126,34 @@ export default function AdminClass({ branchId }: { branchId: string }) {
       : (cc.coach_id === coachId ? { ...cc, role: "assistant" } : cc)));
   };
 
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPhotoFile(file);
+    setPhotoPreview(URL.createObjectURL(file));
+  };
+
+  const handleRemovePhoto = () => {
+    setPhotoFile(null);
+    setPhotoPreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
   const openCreate = () => {
     setEditTarget(null);
     setForm(EMPTY_CLASS_FORM);
+    setPhotoFile(null);
+    setPhotoPreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
     setNewHeadCoachId("");
     setNewAssistantCoachIds([]);
     setOpenForm(true);
   };
   const openEdit = (c: ClassRow) => {
     setEditTarget(c);
+    setPhotoFile(null);
+    setPhotoPreview(c.photo_url ?? null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
     const slots = c.schedule_times ?? [];
     // Detect if all slots share the same time (or no per-day slots set)
     const uniqueTimes = new Set(slots.map(s => `${s.time_start}|${s.time_end}`));
@@ -159,6 +186,9 @@ export default function AdminClass({ branchId }: { branchId: string }) {
     if (isPrivate && form.location_type === "external" && !form.external_location_name.trim()) {
       return toast.error(t("admin.classes.externalLocationNameRequired"));
     }
+    if (!isPrivate && (!Number(form.capacity) || Number(form.capacity) <= 0)) {
+      return toast.error(t("admin.classes.capacityRequired"));
+    }
     setSaving(true);
     // Build schedule_times — use per-day slots; derive global time_start/time_end from first slot
     const days = isPrivate ? (form.schedule_days.length > 0 ? form.schedule_days : []) : form.schedule_days;
@@ -173,6 +203,18 @@ export default function AdminClass({ branchId }: { branchId: string }) {
     const mapsUrl = locType === "external" ? (form.google_maps_url.trim() || null) : null;
 
     if (editTarget) {
+      let nextPhotoUrl = editTarget.photo_url ?? null;
+      if (photoFile) {
+        try {
+          nextPhotoUrl = await upload.classPhoto(photoFile, editTarget.id);
+        } catch (err) {
+          toast.error(t("admin.classes.updateClassFailed"), (err as Error).message);
+        }
+      } else if (!photoPreview && editTarget.photo_url) {
+        nextPhotoUrl = null;
+        await supabase.from("classes").update({ photo_url: null }).eq("id", editTarget.id);
+      }
+
       const updatePayload: Database["public"]["Tables"]["classes"]["Update"] = {
         name: form.name, class_type: form.class_type,
         location_type: locType, external_location_name: extName, external_location_address: extAddr, google_maps_url: mapsUrl,
@@ -180,7 +222,8 @@ export default function AdminClass({ branchId }: { branchId: string }) {
         time_start: firstSlot?.time_start || form.time_start || undefined, time_end: firstSlot?.time_end || form.time_end || undefined,
         capacity: isPrivate ? 1 : (Number(form.capacity) || 0), price_monthly: isPrivate ? 0 : (Number(form.price_monthly) || 0),
         price_per_session: isPrivate ? (Number(form.price_per_session) || null) : null,
-        goals: form.goals.trim() || null, description: form.description.trim() || null
+        goals: form.goals.trim() || null, description: form.description.trim() || null,
+        photo_url: nextPhotoUrl,
       };
       const { error } = await supabase.from("classes").update(updatePayload).eq("id", editTarget.id);
       setSaving(false);
@@ -194,10 +237,20 @@ export default function AdminClass({ branchId }: { branchId: string }) {
         time_start: firstSlot?.time_start || form.time_start || "", time_end: firstSlot?.time_end || form.time_end || "",
         capacity: isPrivate ? 1 : (Number(form.capacity) || 0), price_monthly: isPrivate ? 0 : (Number(form.price_monthly) || 0),
         price_per_session: isPrivate ? (Number(form.price_per_session) || null) : null,
-        goals: form.goals.trim() || null, description: form.description.trim() || null, branch_id: branchId, status: "active", enrolled: 0
+        goals: form.goals.trim() || null, description: form.description.trim() || null, branch_id: branchId, status: "active", enrolled: 0,
+        photo_url: null,
       };
       const { data: newClass, error } = await supabase.from("classes").insert(insertPayload).select("id").single();
       if (error) { setSaving(false); return toast.error(t("admin.classes.createClassFailed"), error.message); }
+
+      // Upload class cover photo if selected
+      if (photoFile && newClass?.id) {
+        try {
+          await upload.classPhoto(photoFile, newClass.id);
+        } catch (photoErr) {
+          toast.error("Gagal mengupload foto kelas", (photoErr as Error).message);
+        }
+      }
 
       // Assign initial Head & Assistant coaches if selected
       const coachRows: { class_id: string; coach_id: string; role: "head" | "assistant" }[] = [];
@@ -437,6 +490,61 @@ export default function AdminClass({ branchId }: { branchId: string }) {
       <Modal open={openForm} onClose={() => setOpenForm(false)} title={editTarget ? t("admin.classes.editModalTitleEdit", { name: editTarget.name }) : t("admin.classes.addModalTitleAdd")} size="lg"
         footer={<><Btn variant="ghost" onClick={() => setOpenForm(false)}>{t("common.actions.cancel")}</Btn><Btn variant="primary" onClick={saveClass} disabled={saving}>{saving ? t("common.actions.saving") : editTarget ? t("admin.classes.saveChangesBtn") : t("admin.classes.saveClassBtn")}</Btn></>}>
         <div className="space-y-4">
+          {/* Optional Class Background / Cover Photo Upload */}
+          <Field label={t("admin.classes.fieldPhoto")} hint={t("admin.classes.photoHint")}>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/svg+xml,image/*"
+              className="hidden"
+              onChange={handlePhotoChange}
+            />
+            {photoPreview ? (
+              <div className="relative rounded-2xl overflow-hidden border border-line bg-paper-tint group aspect-video max-h-52 w-full flex items-center justify-center">
+                <img
+                  src={photoPreview}
+                  alt="Class cover preview"
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 p-4">
+                  <Btn
+                    type="button"
+                    variant="primary"
+                    size="sm"
+                    icon="edit"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    {t("admin.classes.changePhotoBtn")}
+                  </Btn>
+                  <Btn
+                    type="button"
+                    variant="danger"
+                    size="sm"
+                    icon="trash"
+                    onClick={handleRemovePhoto}
+                  >
+                    {t("admin.classes.removePhotoBtn")}
+                  </Btn>
+                </div>
+              </div>
+            ) : (
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                className="border-2 border-dashed border-line hover:border-ocean-400 rounded-2xl p-5 text-center cursor-pointer transition-colors bg-paper-tint hover:bg-ocean-50/40 group"
+              >
+                <div className="w-10 h-10 rounded-xl bg-paper-deep text-ink-mute group-hover:text-ocean-600 group-hover:bg-white flex items-center justify-center mx-auto mb-2 transition-colors">
+                  <Icon name="upload" className="w-5 h-5" />
+                </div>
+                <p className="text-xs font-bold text-ink group-hover:text-ocean-700 transition-colors">
+                  {t("admin.classes.uploadPhotoBtn")}
+                </p>
+                <p className="text-[11px] text-ink-mute mt-0.5">
+                  {t("admin.classes.photoHint")}
+                </p>
+              </div>
+            )}
+          </Field>
+
           {/* Tipe kelas toggle — hanya saat create */}
           {!editTarget && (
             <Field label={t("admin.classes.fieldClassType")} required>

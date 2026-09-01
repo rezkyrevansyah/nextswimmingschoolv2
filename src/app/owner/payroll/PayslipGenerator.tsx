@@ -18,6 +18,7 @@ import {
   loansToDeductFor,
   generatePayslip,
   publishPayslipWithLoanClosure,
+  deletePayslipCascade,
   type TaxSetting,
   type LoanCandidate,
   type DeductionInput,
@@ -305,8 +306,12 @@ export default function PayslipGenerator({
   const deletePayslip = async (p: OwnerPayslipRow) => {
     const ok = await confirm({ title: t("owner.payslip.deleteConfirmTitle"), body: t("owner.payslip.deleteConfirmBody"), confirmLabel: t("owner.payslip.deleteConfirmLabel"), danger: true });
     if (!ok) return;
-    const { error } = await supabase.from("payslips").delete().eq("id", p.id);
-    if (error) return toast.error(t("owner.payslip.deleteFailed"), error.message);
+    // Draft payslips can carry loan-installment/deduction rows that reference
+    // this payslip without ON DELETE CASCADE — delete those first so the
+    // payslip itself can actually be removed (and the loan schedule isn't
+    // left advanced for an installment that was never paid out).
+    const cascadeError = await deletePayslipCascade(supabase, p.id);
+    if (cascadeError) return toast.error(t("owner.payslip.deleteFailed"), cascadeError.error);
     toast.success(t("owner.payslip.deleted"));
     logActivity(supabase, { userId, userRole: "owner", userName, branchId: p.branch_id, entityType: "payslips", entityId: p.id, entityLabel: p.coach?.full_name ?? undefined, action: "delete", label: t("owner.payslip.activityDeleted", { coach: p.coach?.full_name ?? "coach", period: p.period_label }) });
     setPayslips(prev => prev.filter(s => s.id !== p.id));
@@ -371,11 +376,11 @@ export default function PayslipGenerator({
         </div>
 
         <div className="flex gap-2 flex-wrap mb-4">
-          <select value={branchFilter} onChange={e => setBranchFilter(e.target.value)} className="text-sm rounded-xl border border-line bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
+          <select value={branchFilter} onChange={e => setBranchFilter(e.target.value)} className="text-sm rounded-xl border border-line bg-white pl-3.5 pr-8 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
             <option value="all">{t("owner.payslip.filterAllBranches")}</option>
             {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
-          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="text-sm rounded-xl border border-line bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
+          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="text-sm rounded-xl border border-line bg-white pl-3.5 pr-8 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
             <option value="all">{t("owner.payslip.filterAllStatus")}</option>
             <option value="draft">{t("owner.payslip.statusDraft")}</option>
             <option value="published">{t("owner.payslip.statusPublished")}</option>
@@ -485,8 +490,13 @@ export default function PayslipGenerator({
                         <div className="text-xs text-ink-soft">{t("owner.payslip.installmentOf", { number: c.next.installmentNumber, total: c.loan.tenor_months, reason: c.loan.reason ? ` · ${c.loan.reason}` : "" })}</div>
                       </div>
                       <div className="w-32">
-                        <Input type="number" inputMode="numeric" min={0} disabled={!genLoanIncluded[c.loan.id]}
-                          value={genLoanAmounts[c.loan.id] ?? ""} onChange={e => setGenLoanAmounts(prev => ({ ...prev, [c.loan.id]: e.target.value.replace(/\D/g, "") }))}
+                        <Input type="number" inputMode="numeric" min={0} max={c.next.remainingBefore} disabled={!genLoanIncluded[c.loan.id]}
+                          value={genLoanAmounts[c.loan.id] ?? ""}
+                          onChange={e => {
+                            const digits = e.target.value.replace(/\D/g, "");
+                            const clamped = digits ? String(Math.min(Number(digits), c.next.remainingBefore)) : "";
+                            setGenLoanAmounts(prev => ({ ...prev, [c.loan.id]: clamped }));
+                          }}
                           className="font-mono text-sm" />
                       </div>
                     </div>

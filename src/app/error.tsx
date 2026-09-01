@@ -4,6 +4,7 @@ import * as Sentry from "@sentry/nextjs";
 import Logo from "@/components/ui/Logo";
 import Btn from "@/components/ui/Btn";
 import Icon from "@/components/ui/Icon";
+import MonoFontScope from "@/components/layout/MonoFontScope";
 
 export default function Error({
   error,
@@ -30,9 +31,11 @@ export default function Error({
         notifikasi. Coba muat ulang halaman atau kembali ke beranda.
       </p>
       {error.digest && (
-        <p className="text-xs text-ink-faint font-mono mb-6">
-          Error ID: {error.digest}
-        </p>
+        <MonoFontScope>
+          <p className="text-xs text-ink-faint font-mono mb-6">
+            Error ID: {error.digest}
+          </p>
+        </MonoFontScope>
       )}
       <div className="flex gap-3 flex-wrap justify-center">
         <Btn variant="primary" onClick={reset}>

@@ -35,12 +35,17 @@ export async function GET(req: NextRequest) {
     .order("status");
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  const rows = (data ?? []).map(r => ({
-    member_id: r.member_id,
-    full_name: r.member?.profile?.full_name ?? "—",
-    status: r.status,
-    method: r.method ?? "",
-  }));
+  const rows = (data ?? []).map(r => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const m = (Array.isArray(r.member) ? r.member[0] : r.member) as any;
+    const p = (Array.isArray(m?.profile) ? m?.profile[0] : m?.profile) as any;
+    return {
+      member_id: r.member_id,
+      full_name: p?.full_name ?? "—",
+      status: r.status,
+      method: r.method ?? "",
+    };
+  });
 
   return NextResponse.json({ rows });
 }

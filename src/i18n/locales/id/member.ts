@@ -121,6 +121,10 @@ export const member: typeof MemberEn = {
     pendingApprovalHint: "Pengajuan akan menunggu persetujuan admin.",
     toastSuccessTitle: "Pengajuan izin berhasil dikirim",
     toastSuccessBody: "Menunggu persetujuan admin.",
+    errorNoClassTitle: "Pilih minimal satu kelas",
+    errorNoClassBody: "Tentukan kelas mana saja yang izin ini berlaku.",
+    errorDateRangeTitle: "Rentang tanggal tidak valid",
+    errorDateRangeBody: "Tanggal selesai harus sama atau setelah tanggal mulai.",
   },
   rapor: {
     tabRapor: "Rapor",

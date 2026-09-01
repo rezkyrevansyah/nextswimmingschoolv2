@@ -326,6 +326,8 @@ class GalleryApp {
   isDown = false;
   start = 0;
   raf = 0;
+  visible = true;
+  intersectionObserver: IntersectionObserver | null = null;
   boundOnResize!: () => void;
   boundOnWheel!: (e: WheelEvent) => void;
   boundOnTouchDown!: (e: MouseEvent | TouchEvent) => void;
@@ -448,6 +450,13 @@ class GalleryApp {
     }
   }
   update() {
+    // Skip all work (and stop rescheduling) once the gallery is scrolled
+    // out of view — this was previously an unconditional WebGL render every
+    // frame for the entire page lifetime, regardless of scroll position.
+    if (!this.visible) {
+      this.raf = 0;
+      return;
+    }
     this.scroll.current = lerp(this.scroll.current, this.scroll.target, this.scroll.ease);
     const direction = this.scroll.current > this.scroll.last ? "right" : "left";
     if (this.medias) {
@@ -457,38 +466,69 @@ class GalleryApp {
     this.scroll.last = this.scroll.current;
     this.raf = window.requestAnimationFrame(this.update.bind(this));
   }
+  onVisibilityChange(isVisible: boolean) {
+    const wasVisible = this.visible;
+    this.visible = isVisible;
+    if (isVisible && !wasVisible && !this.raf) {
+      this.raf = window.requestAnimationFrame(this.update.bind(this));
+    }
+  }
   addEventListeners() {
-    this.boundOnResize = this.onResize.bind(this);
+    this.boundOnResize = debounce(this.onResize.bind(this), 200);
     this.boundOnWheel = this.onWheel.bind(this);
-    this.boundOnTouchDown = this.onTouchDown.bind(this);
+    this.boundOnTouchDown = this.onDragStart.bind(this);
     this.boundOnTouchMove = this.onTouchMove.bind(this);
-    this.boundOnTouchUp = this.onTouchUp.bind(this);
+    this.boundOnTouchUp = this.onDragEnd.bind(this);
     this.boundOnKeyDown = this.onKeyDown.bind(this);
 
     window.addEventListener("resize", this.boundOnResize);
-    window.addEventListener("wheel", this.boundOnWheel);
-    window.addEventListener("mousedown", this.boundOnTouchDown);
-    window.addEventListener("mousemove", this.boundOnTouchMove);
-    window.addEventListener("mouseup", this.boundOnTouchUp);
-    window.addEventListener("touchstart", this.boundOnTouchDown);
-    window.addEventListener("touchmove", this.boundOnTouchMove);
-    window.addEventListener("touchend", this.boundOnTouchUp);
+    // Scoped to the gallery's own container (not `window`) — previously any
+    // wheel/mouse/touch input anywhere on the page fed into this gallery's
+    // scroll math the moment this section mounted, even far off-screen.
+    this.container.addEventListener("wheel", this.boundOnWheel, { passive: true });
+    this.container.addEventListener("mousedown", this.boundOnTouchDown);
+    this.container.addEventListener("touchstart", this.boundOnTouchDown, { passive: true });
     this.container.addEventListener("keydown", this.boundOnKeyDown);
+
+    this.intersectionObserver =
+      typeof IntersectionObserver !== "undefined"
+        ? new IntersectionObserver(([entry]) => this.onVisibilityChange(entry.isIntersecting), { rootMargin: "300px" })
+        : null;
+    this.intersectionObserver?.observe(this.container);
+  }
+  // A drag/swipe can move the pointer outside the gallery's own bounds —
+  // window-level move/up listeners are attached only while a drag is
+  // actually in progress, so the gallery still tracks it, without keeping
+  // page-wide listeners registered the rest of the time.
+  onDragStart(e: MouseEvent | TouchEvent) {
+    this.onTouchDown(e);
+    window.addEventListener("mousemove", this.boundOnTouchMove);
+    window.addEventListener("touchmove", this.boundOnTouchMove, { passive: true });
+    window.addEventListener("mouseup", this.boundOnTouchUp);
+    window.addEventListener("touchend", this.boundOnTouchUp);
+  }
+  onDragEnd() {
+    this.onTouchUp();
+    window.removeEventListener("mousemove", this.boundOnTouchMove);
+    window.removeEventListener("touchmove", this.boundOnTouchMove);
+    window.removeEventListener("mouseup", this.boundOnTouchUp);
+    window.removeEventListener("touchend", this.boundOnTouchUp);
   }
   destroy() {
     window.cancelAnimationFrame(this.raf);
     window.removeEventListener("resize", this.boundOnResize);
-    window.removeEventListener("wheel", this.boundOnWheel);
-    window.removeEventListener("mousedown", this.boundOnTouchDown);
     window.removeEventListener("mousemove", this.boundOnTouchMove);
-    window.removeEventListener("mouseup", this.boundOnTouchUp);
-    window.removeEventListener("touchstart", this.boundOnTouchDown);
     window.removeEventListener("touchmove", this.boundOnTouchMove);
+    window.removeEventListener("mouseup", this.boundOnTouchUp);
     window.removeEventListener("touchend", this.boundOnTouchUp);
+    this.container.removeEventListener("wheel", this.boundOnWheel);
+    this.container.removeEventListener("mousedown", this.boundOnTouchDown);
+    this.container.removeEventListener("touchstart", this.boundOnTouchDown);
+    this.container.removeEventListener("keydown", this.boundOnKeyDown);
+    this.intersectionObserver?.disconnect();
     if (this.renderer?.gl?.canvas?.parentNode) {
       this.renderer.gl.canvas.parentNode.removeChild(this.renderer.gl.canvas);
     }
-    this.container.removeEventListener("keydown", this.boundOnKeyDown);
   }
 }
 

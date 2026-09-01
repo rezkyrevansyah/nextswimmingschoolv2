@@ -136,8 +136,20 @@ const CardNav: React.FC<CardNavProps> = ({
       }
     };
 
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    // Debounced — each resize tick otherwise forces a synchronous reflow
+    // (calculateHeight reads offsetHeight/scrollHeight) plus a full GSAP
+    // timeline rebuild, which can stack up badly during a window drag-resize.
+    let resizeTimer: ReturnType<typeof setTimeout>;
+    const debouncedResize = () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(handleResize, 150);
+    };
+
+    window.addEventListener('resize', debouncedResize);
+    return () => {
+      clearTimeout(resizeTimer);
+      window.removeEventListener('resize', debouncedResize);
+    };
   }, [isExpanded]);
 
   const closeMenu = () => {

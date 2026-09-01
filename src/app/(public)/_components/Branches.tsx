@@ -1,5 +1,6 @@
 "use client";
 
+import SmartImage from "@/components/ui/SmartImage";
 import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
 import BorderGlowCard from "@/components/BorderGlowCard";
@@ -39,9 +40,15 @@ export default function Branches({ branches }: { branches: BranchDisplayItem[] }
         <div className="mt-12 grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {withName.map((b) => (
             <BorderGlowCard key={b.id}>
-              <div className="aspect-[4/3] bg-ocean-50">
+              <div className="relative aspect-[4/3] bg-ocean-50">
                 {b.photo_url ? (
-                  <img src={b.photo_url} alt={b.name ?? ""} className="w-full h-full object-cover" />
+                  <SmartImage
+                    src={b.photo_url}
+                    alt={b.name ?? ""}
+                    fill
+                    sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
+                    className="object-cover"
+                  />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center">
                     <Icon name="pin" className="w-10 h-10 text-ocean-200" />

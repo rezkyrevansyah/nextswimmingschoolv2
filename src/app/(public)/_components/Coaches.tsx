@@ -1,7 +1,9 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { useRef } from "react";
 import { useLocale } from "@/components/providers/LocaleProvider";
+import { useInViewport } from "@/hooks/useInViewport";
 
 const CircularGallery = dynamic(() => import("@/components/CircularGallery"), { ssr: false });
 
@@ -14,6 +16,11 @@ interface CoachItem {
 export default function Coaches({ coaches }: { coaches: CoachItem[] }) {
   const { t } = useLocale();
   const withPhoto = coaches.filter((c) => c.photo_url);
+  const galleryRef = useRef<HTMLDivElement>(null);
+  // Delay fetching/mounting the WebGL gallery chunk until the user is
+  // actually approaching this section — it sits 4 sections below the fold,
+  // so there's no reason to pay for ogl + a WebGL context on initial load.
+  const isNear = useInViewport(galleryRef, "400px");
 
   if (withPhoto.length === 0) return null;
 
@@ -28,15 +35,17 @@ export default function Coaches({ coaches }: { coaches: CoachItem[] }) {
         </h2>
         <p className="mt-3 text-white/70">{t("landing.coaches.subtitle")}</p>
       </div>
-      <div className="mt-12 h-[400px] sm:h-[500px]">
-        <CircularGallery
-          items={withPhoto.map((c) => ({ image: c.photo_url!, text: c.name }))}
-          bend={2}
-          textColor="#E5F7FE"
-          borderRadius={0.06}
-          font="bold 22px 'Plus Jakarta Sans', sans-serif"
-          scrollEase={0.04}
-        />
+      <div ref={galleryRef} className="mt-12 h-[400px] sm:h-[500px]">
+        {isNear && (
+          <CircularGallery
+            items={withPhoto.map((c) => ({ image: c.photo_url!, text: c.name }))}
+            bend={2}
+            textColor="#E5F7FE"
+            borderRadius={0.06}
+            font="bold 22px 'Plus Jakarta Sans', sans-serif"
+            scrollEase={0.04}
+          />
+        )}
       </div>
     </section>
   );

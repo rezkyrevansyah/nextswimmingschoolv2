@@ -57,6 +57,7 @@ const DotField = memo(function DotField({
   const rebuildRef = useRef<(() => void) | null>(null);
   const glowId = useId();
   const reducedMotionRef = useRef(false);
+  const visibleRef = useRef(true);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -253,7 +254,11 @@ const DotField = memo(function DotField({
 
       ctx!.fill();
 
-      rafRef.current = requestAnimationFrame(tick);
+      // Only keep scheduling frames while the field is actually on/near
+      // screen — this is a full-grid canvas redraw every frame, and the Hero
+      // never unmounts as the user scrolls, so without this it would burn
+      // CPU for the entire session regardless of scroll position.
+      rafRef.current = visibleRef.current ? requestAnimationFrame(tick) : null;
     }
 
     doResize();
@@ -262,6 +267,21 @@ const DotField = memo(function DotField({
     const parentEl = canvas.parentElement;
     const resizeObserver = parentEl && "ResizeObserver" in window ? new ResizeObserver(() => doResize()) : null;
     if (resizeObserver && parentEl) resizeObserver.observe(parentEl);
+
+    const intersectionObserver =
+      parentEl && "IntersectionObserver" in window
+        ? new IntersectionObserver(
+            ([entry]) => {
+              const wasVisible = visibleRef.current;
+              visibleRef.current = entry.isIntersecting;
+              if (entry.isIntersecting && !wasVisible && !reducedMotionRef.current && rafRef.current === null) {
+                rafRef.current = requestAnimationFrame(tick);
+              }
+            },
+            { rootMargin: "200px" }
+          )
+        : null;
+    if (intersectionObserver && parentEl) intersectionObserver.observe(parentEl);
 
     // Layout (fonts, GSAP reveal, reflow) can keep nudging the section's
     // height for a few frames after mount, faster than a single resize
@@ -291,6 +311,7 @@ const DotField = memo(function DotField({
       window.removeEventListener("resize", scheduleResize);
       window.removeEventListener("mousemove", onMouseMove);
       resizeObserver?.disconnect();
+      intersectionObserver?.disconnect();
     };
   }, []);
 

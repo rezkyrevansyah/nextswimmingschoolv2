@@ -17,7 +17,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { buildRaporHtmlStandalone, sanitizeFilename } from "@/lib/printRapor";
-import type { PrintStudent, RaporAssets } from "@/lib/printRapor";
+import type { PrintStudent, PrintBestTime, RaporAssets } from "@/lib/printRapor";
+import { resolveRaporSigner, buildSchoolRaporSignatures } from "@/lib/rapor";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import path from "path";
 import fs from "fs";
 
@@ -118,6 +120,128 @@ async function generatePdf(html: string): Promise<Buffer> {
   }
 }
 
+// ── Server-side rapor data loader (authoritative — never trust client data) ───
+
+/**
+ * Re-derives the full rapor payload for one member/period straight from the
+ * database and checks the caller is actually allowed to see it. The client
+ * only ever supplies member_id + period_id — every grade, note, and
+ * signature in the resulting PDF comes from this function, never from the
+ * request body, so a caller cannot forge scores or signatures by hand-crafting
+ * the POST payload.
+ */
+async function loadAuthorizedRaporStudent(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: SupabaseClient<any>,
+  userId: string,
+  memberId: string,
+  periodId: string
+): Promise<{ student: PrintStudent } | { error: string; status: number }> {
+  const { data: caller } = await supabase
+    .from("profiles")
+    .select("id, role, branch_id")
+    .eq("id", userId)
+    .single();
+  if (!caller) return { error: "Profile not found", status: 403 };
+
+  const { data: period } = await supabase
+    .from("rapor_periods")
+    .select("id, label, branch_id")
+    .eq("id", periodId)
+    .single();
+  if (!period) return { error: "Period not found", status: 404 };
+
+  const { data: member } = await supabase
+    .from("members")
+    .select(`
+      id, member_no, branch_id, profile_id, school_id,
+      profile:profiles(full_name, avatar_url, birth_date),
+      school:schools(
+        id, name, logo_url, profile_id, show_coach_sig, show_head_sig, show_school_sig, coach_sig_title, head_sig_title,
+        school_signatures(id, name, title, image_url, is_active)
+      ),
+      member_classes(
+        classes(
+          id, name, rapor_signer_coach_id,
+          class_coaches(coach_id, role, profile:profiles(full_name, signature_url))
+        )
+      ),
+      rapor_entries(
+        id, scores, notes, personality, motivation, learning_achievements, level, level_id, period_id,
+        rapor_levels(id, name, rapor_level_criteria(id, label, kind, options, sort_order), rapor_level_strokes(name, sort_order), rapor_level_distances(distance, sort_order))
+      )
+    `)
+    .eq("id", memberId)
+    .single();
+  if (!member) return { error: "Member not found", status: 404 };
+
+  const m = member as unknown as {
+    id: string; member_no: string | null; branch_id: string; profile_id: string; school_id: string | null;
+    profile: { full_name: string; avatar_url: string | null; birth_date: string | null } | null;
+    school: { id: string; name: string; logo_url: string | null; profile_id: string | null; show_coach_sig?: boolean; show_head_sig?: boolean; show_school_sig?: boolean; coach_sig_title?: string; head_sig_title?: string; school_signatures?: { name: string; title: string; image_url: string; is_active: boolean }[] } | null;
+    member_classes: { classes: { id: string; name: string; rapor_signer_coach_id: string | null; class_coaches: { coach_id: string; role: string; profile: { full_name: string; signature_url: string | null } | null }[] } | null }[];
+    rapor_entries: { id: string; scores: Record<string, number | string>; notes: string | null; personality: string | null; motivation: string | null; learning_achievements: string | null; level: string | null; period_id: string; rapor_levels: { id: string; name: string; rapor_level_criteria: { id: string; label: string; kind: string; options: string[] | null; sort_order: number }[]; rapor_level_strokes: { name: string; sort_order: number }[]; rapor_level_distances: { distance: number; sort_order: number }[] } | null }[];
+  };
+
+  const cls = m.member_classes?.[0]?.classes ?? null;
+  const isAssignedCoach = !!cls?.class_coaches?.some(cc => cc.coach_id === userId);
+
+  // Authorization: who may view/print this member's rapor.
+  const authorized =
+    caller.role === "owner" ||
+    (caller.role === "admin" && caller.branch_id === m.branch_id) ||
+    (caller.role === "coach" && isAssignedCoach) ||
+    (caller.role === "school" && m.school_id && m.school?.profile_id === userId) ||
+    (caller.role === "member" && m.profile_id === userId);
+  if (!authorized) return { error: "Forbidden", status: 403 };
+
+  const entry = m.rapor_entries.find(e => e.period_id === periodId) ?? null;
+  const signer = resolveRaporSigner(cls?.class_coaches ?? [], cls?.rapor_signer_coach_id);
+
+  const { data: btRows } = await supabase
+    .from("member_best_times")
+    .select("stroke, distance, time_seconds")
+    .eq("member_id", memberId)
+    .eq("branch_id", m.branch_id);
+  const bestTimes: PrintBestTime[] = ((btRows ?? []) as { stroke: string; distance: number; time_seconds: number }[])
+    .map(r => ({ stroke: r.stroke, distance: r.distance, time_seconds: r.time_seconds }));
+
+  const { data: ownerSettings } = await supabase.from("owner_settings").select("*").eq("id", "default").maybeSingle();
+
+  const criteria = [...(entry?.rapor_levels?.rapor_level_criteria ?? [])]
+    .sort((a, b) => a.sort_order - b.sort_order)
+    .map(c => ({ id: c.id, label: c.label, kind: c.kind as "score_10" | "score_100" | "choice" | "text" }));
+  const levelStrokes = [...(entry?.rapor_levels?.rapor_level_strokes ?? [])].sort((a, b) => a.sort_order - b.sort_order).map(s => s.name);
+  const levelDistances = [...(entry?.rapor_levels?.rapor_level_distances ?? [])].sort((a, b) => a.sort_order - b.sort_order).map(d => d.distance);
+  const coachSig = signer?.signature_url ?? null;
+  const signatures = buildSchoolRaporSignatures(m.school, signer?.full_name ?? "—", coachSig, ownerSettings);
+
+  return {
+    student: {
+      full_name: m.profile?.full_name ?? "—",
+      member_no: m.member_no,
+      birth_date: m.profile?.birth_date,
+      avatar_url: m.profile?.avatar_url,
+      class_name: cls?.name ?? "—",
+      coach_name: signer?.full_name ?? "—",
+      coach_signature_url: coachSig,
+      school_logo_url: m.school?.logo_url ?? null,
+      signatures,
+      period_label: period.label,
+      scores: entry?.scores ?? {},
+      notes: entry?.notes ?? null,
+      personality: entry?.personality ?? null,
+      motivation: entry?.motivation ?? null,
+      learning_achievements: entry?.learning_achievements ?? null,
+      criteria,
+      best_times: bestTimes,
+      level_strokes: levelStrokes,
+      level_distances: levelDistances,
+      level: entry?.level ?? null,
+    },
+  };
+}
+
 // ── Route handler ─────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
@@ -128,12 +252,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  let student: PrintStudent;
+  let body: PrintStudent;
   try {
-    student = await req.json() as PrintStudent;
+    body = await req.json() as PrintStudent;
   } catch {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
+
+  if (!body.member_id || !body.period_id) {
+    return NextResponse.json({ error: "member_id and period_id are required" }, { status: 400 });
+  }
+
+  const result = await loadAuthorizedRaporStudent(supabase, user.id, body.member_id, body.period_id);
+  if ("error" in result) {
+    return NextResponse.json({ error: result.error }, { status: result.status });
+  }
+  const student = result.student;
 
   let pdfBuffer: Buffer;
   try {

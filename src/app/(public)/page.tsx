@@ -19,42 +19,58 @@ export const metadata: Metadata = {
 
 export default async function LandingPage() {
   const supabase = await createClient();
-  const { data: partners } = await supabase
-    .from("landing_partners")
-    .select("id, name, logo_url, website_url")
-    .order("sort_order");
-  const { data: programs } = await supabase
-    .from("landing_programs")
-    .select("id, name, description, class_type, photo_url")
-    .order("sort_order");
-  const { data: coaches } = await supabase
-    .from("landing_coaches")
-    .select("id, name, photo_url")
-    .order("sort_order");
-  const { data: whyNextItems } = await supabase
-    .from("landing_why_next")
-    .select("id, icon, title, description")
-    .order("sort_order");
-  const { data: testimonials } = await supabase
-    .from("landing_testimonials_v2")
-    .select("id, name, role, body_text, avatar_url, rating")
-    .order("sort_order");
-  const { data: branchEntries } = await supabase
-    .from("landing_branches")
-    .select("id, branch_id, name, address, city, phone, photo_url, lat, lng, linked:public_branches!branch_id(name, city, address, phone, logo_url)")
-    .order("sort_order");
-  const { data: faqs } = await supabase
-    .from("landing_faqs")
-    .select("id, question, answer")
-    .order("sort_order");
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: footerConfig } = await (supabase.from("landing_config") as any)
-    .select("footer_tagline, footer_address, footer_wa_number, contact_email, copyright_text, social_instagram, social_tiktok, social_youtube, floating_wa_message, youtube_video_url, youtube_video_url_2, youtube_video_url_3, youtube_section_title, youtube_section_subtitle")
-    .eq("id", 1)
-    .single() as { data: { footer_tagline: string | null; footer_address: string | null; footer_wa_number: string | null; contact_email: string | null; copyright_text: string | null; social_instagram: string | null; social_tiktok: string | null; social_youtube: string | null; floating_wa_message: string | null; youtube_video_url: string | null; youtube_video_url_2: string | null; youtube_video_url_3: string | null; youtube_section_title: string | null; youtube_section_subtitle: string | null } | null };
+
+  // Fired in parallel — these are all independent reads, so there's no
+  // reason to make the client wait for 8 sequential round-trips before any
+  // HTML can stream.
+  const [
+    { data: partners },
+    { data: programs },
+    { data: coaches },
+    { data: whyNextItems },
+    { data: testimonials },
+    { data: branchEntries },
+    { data: faqs },
+    { data: footerConfig },
+  ] = await Promise.all([
+    supabase
+      .from("landing_partners")
+      .select("id, name, logo_url, website_url")
+      .order("sort_order"),
+    supabase
+      .from("landing_programs")
+      .select("id, name, description, class_type, photo_url")
+      .order("sort_order"),
+    supabase
+      .from("landing_coaches")
+      .select("id, name, photo_url")
+      .order("sort_order"),
+    supabase
+      .from("landing_why_next")
+      .select("id, icon, title, description")
+      .order("sort_order"),
+    supabase
+      .from("landing_testimonials_v2")
+      .select("id, name, role, body_text, avatar_url, rating")
+      .order("sort_order"),
+    supabase
+      .from("landing_branches")
+      .select("id, branch_id, name, address, city, phone, photo_url, lat, lng, linked:public_branches!branch_id(name, city, address, phone, logo_url)")
+      .order("sort_order"),
+    supabase
+      .from("landing_faqs")
+      .select("id, question, answer")
+      .order("sort_order"),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (supabase.from("landing_config") as any)
+      .select("footer_tagline, footer_address, footer_wa_number, contact_email, copyright_text, social_instagram, social_tiktok, social_youtube, floating_wa_message, youtube_video_url, youtube_video_url_2, youtube_video_url_3, youtube_section_title, youtube_section_subtitle")
+      .eq("id", 1)
+      .single() as Promise<{ data: { footer_tagline: string | null; footer_address: string | null; footer_wa_number: string | null; contact_email: string | null; copyright_text: string | null; social_instagram: string | null; social_tiktok: string | null; social_youtube: string | null; floating_wa_message: string | null; youtube_video_url: string | null; youtube_video_url_2: string | null; youtube_video_url_3: string | null; youtube_section_title: string | null; youtube_section_subtitle: string | null } | null }>,
+  ]);
 
   const branches = (branchEntries ?? []).map((row) => {
-    const linked = row.linked as { name: string | null; city: string | null; address: string | null; phone: string | null; logo_url: string | null } | null;
+    const rawLinked = Array.isArray(row.linked) ? row.linked[0] : row.linked;
+    const linked = rawLinked as { name: string | null; city: string | null; address: string | null; phone: string | null; logo_url: string | null } | null | undefined;
     return row.branch_id
       ? { id: row.id, name: linked?.name ?? null, city: linked?.city ?? null, address: linked?.address ?? null, phone: linked?.phone ?? null, photo_url: row.photo_url || linked?.logo_url || null, lat: row.lat, lng: row.lng }
       : { id: row.id, name: row.name, city: row.city, address: row.address, phone: row.phone, photo_url: row.photo_url, lat: row.lat, lng: row.lng };

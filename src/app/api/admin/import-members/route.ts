@@ -54,6 +54,7 @@ export async function POST(req: NextRequest) {
   const db = getSupabaseAdmin();
   let success = 0;
   const failed: { row: number; email: string; error: string }[] = [];
+  const classWarnings: { row: number; email: string; warning: string }[] = [];
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
@@ -84,7 +85,12 @@ export async function POST(req: NextRequest) {
     const userId = authData.user.id;
 
     // Structured account ID (NEXT.xxx.SW.yy) — atomic sequence, generated once per row.
-    const { data: userNo } = await db.rpc("generate_user_no", { p_role: "member" });
+    const { data: userNo, error: userNoError } = await db.rpc("generate_user_no", { p_role: "member" });
+    if (userNoError || !userNo) {
+      await db.auth.admin.deleteUser(userId);
+      failed.push({ row: rowNum, email: row.email, error: userNoError?.message ?? "Gagal membuat nomor akun" });
+      continue;
+    }
 
     // 2. Insert profile (with fallback update on 23505)
     const profileData = {
@@ -143,18 +149,27 @@ export async function POST(req: NextRequest) {
       continue;
     }
 
-    // 4. Assign to class (non-fatal)
+    // 4. Assign to class (non-fatal — member row already exists either way)
     if (row.class_id && memberRow) {
-      await db.from("member_classes").insert({
-        member_id: memberRow.id,
-        class_id: row.class_id,
-        joined_at: new Date().toISOString(),
-      });
-      // Ignore class assignment errors — member is still created successfully
+      const { data: classRow } = await db.from("classes").select("capacity").eq("id", row.class_id).single();
+      const { count: enrolledCount } = await db
+        .from("member_classes")
+        .select("member_id", { count: "exact", head: true })
+        .eq("class_id", row.class_id);
+      const capacity = classRow?.capacity ?? 0;
+      if (capacity > 0 && (enrolledCount ?? 0) >= capacity) {
+        classWarnings.push({ row: rowNum, email: row.email, warning: "Kelas sudah penuh — member dibuat tanpa penugasan kelas" });
+      } else {
+        await db.from("member_classes").insert({
+          member_id: memberRow.id,
+          class_id: row.class_id,
+          joined_at: new Date().toISOString(),
+        });
+      }
     }
 
     success++;
   }
 
-  return NextResponse.json({ success, failed });
+  return NextResponse.json({ success, failed, classWarnings });
 }

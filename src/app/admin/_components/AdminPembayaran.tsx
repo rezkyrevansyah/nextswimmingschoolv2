@@ -129,9 +129,10 @@ export default function AdminPembayaran({ branchId }: { branchId: string }) {
     if (!addForm.member_id || !addForm.period_label || !addForm.amount) return toast.error(t("admin.pembayaran.memberPeriodAmountRequired"));
     const selectedMember = addMembers.find(m => m.id === addForm.member_id);
     if (selectedMember?.type === "school_affiliate") return toast.error(t("admin.pembayaran.schoolAffiliateNoManualBill"));
-    setSaving(true);
     const amount = Number(addForm.amount) || 0;
     const discount = Number(addForm.discount) || 0;
+    if (discount > amount) return toast.error(t("admin.pembayaran.discountExceedsAmount"));
+    setSaving(true);
     const total = amount - discount;
     const isSessionPack = addForm.type === "session_pack";
     const row: Database["public"]["Tables"]["bills"]["Insert"] = {
@@ -177,14 +178,20 @@ export default function AdminPembayaran({ branchId }: { branchId: string }) {
         .from("members").select("id, member_classes(class:classes(id, price_monthly))")
         .eq("branch_id", branchId).eq("status", "active").eq("type", "reguler");
       if (mErr || !members) { toast.error(t("admin.pembayaran.loadMembersFailed"), mErr?.message); setGenerating(false); return; }
-      const { data: existing } = await supabase.from("bills").select("member_id").eq("branch_id", branchId).eq("period_label", label);
-      const existingIds = new Set((existing ?? []).map(b => b.member_id));
+      // Key existing bills by (member_id, class_id) — not member_id alone —
+      // so a member enrolled in more than one class still gets billed for
+      // every class, not just whichever one happened to be billed first.
+      const { data: existing } = await supabase.from("bills").select("member_id, class_id").eq("branch_id", branchId).eq("period_label", label);
+      const existingKeys = new Set((existing ?? []).map(b => `${b.member_id}:${b.class_id ?? ""}`));
       const rows: Database["public"]["Tables"]["bills"]["Insert"][] = [];
       for (const m of members as unknown as { id: string; member_classes: { class: { id: string; price_monthly: number } | null }[] }[]) {
-        if (existingIds.has(m.id)) continue;
-        const cls = m.member_classes?.[0]?.class;
-        const amount = cls?.price_monthly ?? 0;
-        rows.push({ member_id: m.id, branch_id: branchId, class_id: cls?.id ?? null, type: "monthly" as Database["public"]["Enums"]["bill_type"], period_label: label, amount, discount: 0, status: "unpaid" as Database["public"]["Enums"]["payment_status"] });
+        const classes = (m.member_classes ?? []).map(mc => mc.class).filter((c): c is { id: string; price_monthly: number } => !!c);
+        if (classes.length === 0) continue;
+        for (const cls of classes) {
+          const key = `${m.id}:${cls.id}`;
+          if (existingKeys.has(key)) continue;
+          rows.push({ member_id: m.id, branch_id: branchId, class_id: cls.id, type: "monthly" as Database["public"]["Enums"]["bill_type"], period_label: label, amount: cls.price_monthly ?? 0, discount: 0, status: "unpaid" as Database["public"]["Enums"]["payment_status"] });
+        }
       }
       if (rows.length === 0) { toast.success(t("admin.pembayaran.allRegularMembersHaveBills")); setGenerating(false); return; }
       const { error } = await supabase.from("bills").insert(rows);

@@ -10,6 +10,7 @@ import { Card } from "@/components/ui/Card";
 import Modal from "@/components/ui/Modal";
 import type { ScheduleSlot } from "../_types";
 import { getSlotTime } from "../_utils";
+import { toLocalDateStr } from "@/lib/utils";
 
 const DAY_NAMES = ["Senin","Selasa","Rabu","Kamis","Jumat","Sabtu","Minggu"];
 const DAY_IDX: Record<string, number> = { Senin: 0, Selasa: 1, Rabu: 2, Kamis: 3, Jumat: 4, Sabtu: 5, Minggu: 6 };
@@ -62,8 +63,8 @@ export default function AdminClassActivity({ branchId }: { branchId: string }) {
   const [savingH, setSavingH] = useState(false);
 
   const weekDates = getWeekDates(weekOffset);
-  const weekStart = weekDates[0].toISOString().slice(0, 10);
-  const weekEnd   = weekDates[6].toISOString().slice(0, 10);
+  const weekStart = toLocalDateStr(weekDates[0]);
+  const weekEnd   = toLocalDateStr(weekDates[6]);
 
   const load = useCallback(async () => {
     if (!branchId) return;

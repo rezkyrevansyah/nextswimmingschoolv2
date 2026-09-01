@@ -349,13 +349,15 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
     // Group by coach, collect all their branches
     const byCoach = new Map<string, { id: string; full_name: string; phone: string | null; avatar_url: string | null; branches: { name: string; city: string | null }[] }>();
     for (const row of allLinks) {
-      const p = row.profile as { id: string; full_name: string; phone: string | null; avatar_url: string | null } | null;
+      const rawProfile = Array.isArray(row.profile) ? row.profile[0] : row.profile;
+      const p = rawProfile as { id: string; full_name: string; phone: string | null; avatar_url: string | null } | null | undefined;
       if (!p) continue;
       if (alreadyLinked.has(p.id)) continue; // skip coaches already in this branch
       if (!byCoach.has(p.id)) {
         byCoach.set(p.id, { id: p.id, full_name: p.full_name, phone: p.phone, avatar_url: p.avatar_url, branches: [] });
       }
-      const br = row.branches as { name: string; city: string | null } | null;
+      const rawBranches = Array.isArray(row.branches) ? row.branches[0] : row.branches;
+      const br = rawBranches as { name: string; city: string | null } | null | undefined;
       if (br) byCoach.get(p.id)!.branches.push(br);
     }
     const candidates = Array.from(byCoach.values()).sort((a, b) => a.full_name.localeCompare(b.full_name));

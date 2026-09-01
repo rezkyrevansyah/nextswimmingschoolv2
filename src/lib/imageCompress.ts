@@ -9,7 +9,7 @@
 const SKIP_BELOW_BYTES = 300 * 1024;
 
 export async function compressImage(file: File, maxDimension = 1600, quality = 0.8): Promise<File> {
-  if (!file.type.startsWith("image/") || file.type === "image/gif") return file;
+  if (!file.type.startsWith("image/") || file.type === "image/gif" || file.type === "image/svg+xml") return file;
   if (file.size < SKIP_BELOW_BYTES) return file;
 
   const bitmap = await createImageBitmap(file).catch(() => null);

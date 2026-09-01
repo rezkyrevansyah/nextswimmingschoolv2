@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import Logo from "@/components/ui/Logo";
 import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
-import { Field, Input, Select, Textarea } from "@/components/ui/FormFields";
+import { Field, Input, Select } from "@/components/ui/FormFields";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import Status from "@/components/ui/Status";
 import Avatar from "@/components/ui/Avatar";
@@ -92,7 +92,7 @@ export default function StaffPage() {
 
   const [active, setActive] = useState<TabId>("home");
   const [mobileNav, setMobileNav] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [, setLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<StaffProfile | null>(null);
   const [branch, setBranch] = useState<BranchInfo | null>(null);
@@ -249,13 +249,13 @@ export default function StaffPage() {
 
     setClockLoading(false);
     if (error) {
-      toast.error("Gagal melakukan absensi masuk", error.message);
+      toast.error(t("staff.actions.clockInFailed"), error.message);
       return;
     }
 
     setTodayAttendance(data as unknown as StaffAttendance);
     setClockNotes("");
-    toast.success("Absen Masuk Berhasil!", `Tercatat pukul ${timeStr}`);
+    toast.success(t("staff.actions.clockInSuccessTitle"), t("staff.actions.clockInSuccessBody", { time: timeStr }));
     await loadData(user.id);
   };
 
@@ -276,24 +276,24 @@ export default function StaffPage() {
 
     setClockLoading(false);
     if (error) {
-      toast.error("Gagal melakukan absensi pulang", error.message);
+      toast.error(t("staff.actions.clockOutFailed"), error.message);
       return;
     }
 
     setTodayAttendance(prev => prev ? { ...prev, clock_out_time: timeStr } : null);
     setClockNotes("");
-    toast.success("Absen Pulang Berhasil!", `Tercatat pukul ${timeStr}. Selamat beristirahat!`);
+    toast.success(t("staff.actions.clockOutSuccessTitle"), t("staff.actions.clockOutSuccessBody", { time: timeStr }));
     if (user) await loadData(user.id);
   };
 
   // Handle Leave / Sakit
   const handleRecordLeave = async (status: "izin" | "sakit") => {
     if (!user || !profile) return;
-    const label = status === "izin" ? "Izin" : "Sakit";
+    const label = status === "izin" ? t("staff.home.leaveBtn") : t("staff.home.sickBtn");
     const yes = await confirm({
-      title: `Catat Kehadiran: ${label}`,
-      body: `Apakah Anda ingin mencatat status ${label} untuk hari ini?`,
-      confirmLabel: `Ya, Catat ${label}`,
+      title: t("staff.actions.leaveConfirmTitle", { type: label }),
+      body: t("staff.actions.leaveConfirmBody", { type: label }),
+      confirmLabel: t("staff.actions.leaveConfirmBtn", { type: label }),
     });
     if (!yes) return;
 
@@ -312,19 +312,19 @@ export default function StaffPage() {
       .single();
 
     setClockLoading(false);
-    if (error) return toast.error(`Gagal mencatat ${label}`, error.message);
+    if (error) return toast.error(t("staff.actions.recordLeaveFailed", { type: label }), error.message);
     setTodayAttendance(data as unknown as StaffAttendance);
     setClockNotes("");
-    toast.success(`Status ${label} tercatat`);
+    toast.success(t("staff.actions.recordLeaveSuccess", { type: label }));
     await loadData(user.id);
   };
 
   // Handle Save Expense Reimburse
   const handleSaveExpense = async () => {
-    if (!profile?.branch_id || !user) return toast.error("Center tidak terdefinisi pada profil Anda");
-    if (!expenseForm.description.trim()) return toast.error("Keterangan pengeluaran wajib diisi");
+    if (!profile?.branch_id || !user) return toast.error(t("staff.expenses.branchUndefinedError"));
+    if (!expenseForm.description.trim()) return toast.error(t("staff.expenses.descriptionRequired"));
     const amountNum = Number(expenseForm.amount);
-    if (!amountNum || amountNum <= 0) return toast.error("Nominal pengeluaran tidak valid");
+    if (!amountNum || amountNum <= 0) return toast.error(t("staff.expenses.invalidAmount"));
 
     setSavingExpense(true);
 
@@ -337,7 +337,7 @@ export default function StaffPage() {
     const activePeriodId = periodRows?.[0]?.id;
     if (!activePeriodId) {
       setSavingExpense(false);
-      return toast.error("Pengiriman reimburse ditutup", "Saat ini tidak ada periode pengiriman yang dibuka oleh manajemen.");
+      return toast.error(t("staff.expenses.periodClosedTitle"), t("staff.expenses.periodClosedBody"));
     }
 
     let proofUrl = expenseForm.proof_url;
@@ -346,7 +346,7 @@ export default function StaffPage() {
         const uploaded = await upload.paymentProof(expenseProofFile, `staff-${user.id}-${Date.now()}`);
         if (uploaded) proofUrl = uploaded;
       } catch (err) {
-        toast.error("Gagal mengupload bukti pengeluaran", err instanceof Error ? err.message : undefined);
+        toast.error(t("staff.expenses.uploadProofFailed"), err instanceof Error ? err.message : undefined);
         setSavingExpense(false);
         return;
       }
@@ -368,11 +368,11 @@ export default function StaffPage() {
 
     setSavingExpense(false);
     if (error) {
-      toast.error("Gagal mengajukan reimburse", error.message);
+      toast.error(t("staff.expenses.submitFailed"), error.message);
       return;
     }
 
-    toast.success("Klaim reimburse berhasil diajukan", "Menunggu konfirmasi dari Manajemen / Owner");
+    toast.success(t("staff.expenses.submitSuccessTitle"), t("staff.expenses.submitSuccessSub"));
     setShowExpenseModal(false);
     setExpenseForm({
       description: "",
@@ -402,7 +402,7 @@ export default function StaffPage() {
       .eq("id", user.id);
 
     setSavingProfile(false);
-    if (error) return toast.error("Gagal menyimpan profil", error.message);
+    if (error) return toast.error(t("staff.profile.saveFailed"), error.message);
 
     setProfile(prev => prev ? ({
       ...prev,
@@ -413,7 +413,7 @@ export default function StaffPage() {
       bank_holder: profileForm.bank_holder.trim() || null,
     }) : null);
 
-    toast.success("Profil & rekening bank berhasil diperbarui");
+    toast.success(t("staff.profile.saveSuccess"));
   };
 
   // Payslip Print Preview
@@ -424,7 +424,7 @@ export default function StaffPage() {
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Slip Gaji - ${profile?.full_name ?? "Staff"} - ${sal.period_month}</title>
+        <title>${t("staff.payslip.printDocTitle", { name: profile?.full_name ?? "Staff", period: sal.period_month })}</title>
         <style>
           body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 40px; color: #1e293b; }
           .header { text-align: center; border-bottom: 2px solid #0284c7; padding-bottom: 20px; margin-bottom: 30px; }
@@ -443,30 +443,30 @@ export default function StaffPage() {
       </head>
       <body>
         <div class="header">
-          <div class="title">SLIP GAJI STAFF</div>
-          <div class="subtitle">Next Swimming School · Center ${branch?.name ?? ""}</div>
+          <div class="title">${t("staff.payslip.printHeaderTitle")}</div>
+          <div class="subtitle">${t("staff.payslip.printHeaderSub", { branch: branch?.name ?? "" })}</div>
         </div>
         <table class="info-table">
-          <tr><td class="label">Nama Staff:</td><td><strong>${profile?.full_name ?? "-"}</strong></td><td class="label">Periode Gaji:</td><td><strong>${sal.period_month}</strong></td></tr>
-          <tr><td class="label">Center / Cabang:</td><td>${branch?.name ?? "-"}</td><td class="label">Status:</td><td><strong style="color: #16a34a;">${sal.status.toUpperCase()}</strong></td></tr>
-          <tr><td class="label">Rekening Bank:</td><td colspan="3">${profile?.bank_name ?? "-"} ${profile?.bank_account ?? ""} a/n ${profile?.bank_holder ?? ""}</td></tr>
+          <tr><td class="label">${t("staff.payslip.printStaffName")}</td><td><strong>${profile?.full_name ?? "-"}</strong></td><td class="label">${t("staff.payslip.printPeriod")}</td><td><strong>${sal.period_month}</strong></td></tr>
+          <tr><td class="label">${t("staff.payslip.printCenter")}</td><td>${branch?.name ?? "-"}</td><td class="label">${t("staff.payslip.printStatus")}</td><td><strong style="color: #16a34a;">${sal.status.toUpperCase()}</strong></td></tr>
+          <tr><td class="label">${t("staff.payslip.printBankAccount")}</td><td colspan="3">${profile?.bank_name ?? "-"} ${profile?.bank_account ?? ""} a/n ${profile?.bank_holder ?? ""}</td></tr>
         </table>
         <table class="data-table">
           <thead>
-            <tr><th>Komponen Pembayaran</th><th style="text-align: right;">Nominal</th></tr>
+            <tr><th>${t("staff.payslip.printComponentHeader")}</th><th style="text-align: right;">${t("staff.payslip.printAmountHeader")}</th></tr>
           </thead>
           <tbody>
-            <tr><td>Gaji Pokok Bulanan</td><td style="text-align: right;">${fmtIDR(sal.base_salary)}</td></tr>
-            ${sal.allowances > 0 ? `<tr><td>Tunjangan / Bonus</td><td style="text-align: right; color: #16a34a;">+ ${fmtIDR(sal.allowances)}</td></tr>` : ""}
-            ${sal.reimburse_amount > 0 ? `<tr><td>Klaim Reimburse Operasional Disetujui</td><td style="text-align: right; color: #16a34a;">+ ${fmtIDR(sal.reimburse_amount)}</td></tr>` : ""}
-            ${sal.deductions > 0 ? `<tr><td>Potongan</td><td style="text-align: right; color: #dc2626;">- ${fmtIDR(sal.deductions)}</td></tr>` : ""}
-            <tr class="total-row"><td>TOTAL GAJI BERSIH (TAKE HOME PAY)</td><td style="text-align: right;">${fmtIDR(sal.total_salary)}</td></tr>
+            <tr><td>${t("staff.payslip.printBaseSalary")}</td><td style="text-align: right;">${fmtIDR(sal.base_salary)}</td></tr>
+            ${sal.allowances > 0 ? `<tr><td>${t("staff.payslip.printAllowances")}</td><td style="text-align: right; color: #16a34a;">+ ${fmtIDR(sal.allowances)}</td></tr>` : ""}
+            ${sal.reimburse_amount > 0 ? `<tr><td>${t("staff.payslip.printReimburse")}</td><td style="text-align: right; color: #16a34a;">+ ${fmtIDR(sal.reimburse_amount)}</td></tr>` : ""}
+            ${sal.deductions > 0 ? `<tr><td>${t("staff.payslip.printDeductions")}</td><td style="text-align: right; color: #dc2626;">- ${fmtIDR(sal.deductions)}</td></tr>` : ""}
+            <tr class="total-row"><td>${t("staff.payslip.printTotalTakeHomePay")}</td><td style="text-align: right;">${fmtIDR(sal.total_salary)}</td></tr>
           </tbody>
         </table>
-        ${sal.notes ? `<div style="font-size: 13px; color: #64748b; margin-bottom: 20px;"><em>Catatan: ${sal.notes}</em></div>` : ""}
+        ${sal.notes ? `<div style="font-size: 13px; color: #64748b; margin-bottom: 20px;"><em>${t("staff.payslip.printNotePrefix", { note: sal.notes })}</em></div>` : ""}
         <div class="footer">
-          <div class="signature-box">Penerima (Staff)<div class="signature-line">${profile?.full_name ?? "Staff"}</div></div>
-          <div class="signature-box">Manajemen / Owner<div class="signature-line">Next Swimming School</div></div>
+          <div class="signature-box">${t("staff.payslip.printReceiverLabel")}<div class="signature-line">${profile?.full_name ?? "Staff"}</div></div>
+          <div class="signature-box">${t("staff.payslip.printManagementLabel")}<div class="signature-line">Next Swimming School</div></div>
         </div>
         <script>window.print();</script>
       </body>
@@ -476,20 +476,20 @@ export default function StaffPage() {
   };
 
   const navItems: NavItem[] = useMemo(() => [
-    { id: "home", label: "Beranda", icon: "home" },
-    { id: "absen", label: "Presensi Harian", icon: "check" },
-    { id: "payslip", label: "Slip Gaji", icon: "wallet" },
-    { id: "expenses", label: "Reimburse / Biaya", icon: "invoice" },
-    { id: "profile", label: "Profil & Rekening", icon: "user" },
-  ], []);
+    { id: "home", label: t("staff.nav.home"), icon: "home" },
+    { id: "absen", label: t("staff.nav.absen"), icon: "check" },
+    { id: "payslip", label: t("staff.nav.payslip"), icon: "wallet" },
+    { id: "expenses", label: t("staff.nav.expenses"), icon: "invoice" },
+    { id: "profile", label: t("staff.nav.profile"), icon: "user" },
+  ], [t]);
 
-  const pageTitles: Record<TabId, [string, string]> = {
-    home: ["Beranda Staff", `Selamat datang, ${profile?.full_name ?? "Staff"}!`],
-    absen: ["Presensi Harian", "Catat dan tinjau riwayat kehadiran Anda."],
-    payslip: ["Slip Gaji", "Riwayat slip gaji bulanan yang diterbitkan oleh manajemen."],
-    expenses: ["Klaim Reimburse", "Ajukan pengeluaran operasional dengan bukti struk."],
-    profile: ["Profil & Rekening Bank", "Informasi akun dan detail rekening untuk transfer gaji."],
-  };
+  const pageTitles: Record<TabId, [string, string]> = useMemo(() => ({
+    home: [t("staff.titles.home.title"), t("staff.titles.home.sub", { name: profile?.full_name ?? "Staff" })],
+    absen: [t("staff.titles.absen.title"), t("staff.titles.absen.sub")],
+    payslip: [t("staff.titles.payslip.title"), t("staff.titles.payslip.sub")],
+    expenses: [t("staff.titles.expenses.title"), t("staff.titles.expenses.sub")],
+    profile: [t("staff.titles.profile.title"), t("staff.titles.profile.sub")],
+  }), [t, profile?.full_name]);
 
   const [title, sub] = pageTitles[active];
 
@@ -515,7 +515,7 @@ export default function StaffPage() {
           <div className="flex items-center gap-2.5">
             <Logo size={36} />
             <div className="min-w-0">
-              <div className="font-display font-extrabold text-[14px] text-ocean-700 leading-tight">Staff Panel</div>
+              <div className="font-display font-extrabold text-[14px] text-ocean-700 leading-tight">{t("staff.shell.brandTitle")}</div>
               <div className="text-[10px] text-ink-mute tracking-wide truncate">{branch?.name ?? "Next Swimming"}</div>
             </div>
           </div>
@@ -535,7 +535,7 @@ export default function StaffPage() {
         <Topbar
           title={title}
           sub={sub}
-          search="Cari riwayat..."
+          search={t("staff.shell.searchPlaceholder")}
           onMenu={() => setMobileNav(true)}
           right={
             <>
@@ -556,19 +556,21 @@ export default function StaffPage() {
                   <div className="space-y-2">
                     <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-ocean-100 text-ocean-800 text-xs font-bold uppercase tracking-wider">
                       <span className="w-2 h-2 rounded-full bg-ocean-600 animate-ping" />
-                      Presensi Hari Ini · {fmtDateLong(new Date().toISOString().slice(0, 10))}
+                      {t("staff.home.todayPresensiBadge", { date: fmtDateLong(new Date().toISOString().slice(0, 10)) })}
                     </div>
                     <h3 className="font-display font-extrabold text-2xl sm:text-3xl text-ink">
                       {todayAttendance
                         ? todayAttendance.clock_out_time
-                          ? "✓ Presensi Hari Ini Selesai"
-                          : "● Sedang Bertugas (Sudah Masuk)"
-                        : "Silakan Lakukan Absen Masuk"}
+                          ? t("staff.home.statusDone")
+                          : t("staff.home.statusActive")
+                        : t("staff.home.statusNotYet")}
                     </h3>
                     <p className="text-sm text-ink-soft max-w-md">
                       {todayAttendance
-                        ? `Masuk: ${todayAttendance.clock_in_time ?? "-"} ${todayAttendance.clock_out_time ? `· Pulang: ${todayAttendance.clock_out_time}` : ""}`
-                        : "Pastikan Anda mencatat jam masuk saat tiba di center dan jam pulang saat selesai bertugas."}
+                        ? todayAttendance.clock_out_time
+                          ? t("staff.home.dutySubtextDone", { in: todayAttendance.clock_in_time ?? "-", out: todayAttendance.clock_out_time })
+                          : t("staff.home.dutySubtextActive", { in: todayAttendance.clock_in_time ?? "-" })
+                        : t("staff.home.dutySubtextNotYet")}
                     </p>
                   </div>
 
@@ -584,14 +586,14 @@ export default function StaffPage() {
                           disabled={clockLoading}
                           className="shadow-lg shadow-ocean-500/20 py-3.5 px-6 font-bold"
                         >
-                          {clockLoading ? "Memproses..." : "Absen Masuk (Clock-In)"}
+                          {clockLoading ? t("staff.home.clockInProcessing") : t("staff.home.clockInBtn")}
                         </Btn>
                         <div className="flex gap-2">
                           <Btn variant="outline" size="sm" onClick={() => handleRecordLeave("sakit")} disabled={clockLoading}>
-                            Sakit
+                            {t("staff.home.sickBtn")}
                           </Btn>
                           <Btn variant="outline" size="sm" onClick={() => handleRecordLeave("izin")} disabled={clockLoading}>
-                            Izin
+                            {t("staff.home.leaveBtn")}
                           </Btn>
                         </div>
                       </>
@@ -604,11 +606,11 @@ export default function StaffPage() {
                         disabled={clockLoading}
                         className="bg-ok-600 hover:bg-ok-700 shadow-lg shadow-ok-500/20 py-3.5 px-6 font-bold"
                       >
-                        {clockLoading ? "Memproses..." : "Absen Pulang (Clock-Out)"}
+                        {clockLoading ? t("staff.home.clockInProcessing") : t("staff.home.clockOutBtn")}
                       </Btn>
                     ) : (
                       <div className="px-4 py-2.5 rounded-xl bg-ok-100 text-ok-800 font-bold text-sm flex items-center gap-2">
-                        <Icon name="check" className="w-5 h-5 text-ok-600" /> Presensi Hari Ini Lengkap
+                        <Icon name="check" className="w-5 h-5 text-ok-600" /> {t("staff.home.completedBadge")}
                       </div>
                     )}
                   </div>
@@ -619,7 +621,7 @@ export default function StaffPage() {
                     <Input
                       value={clockNotes}
                       onChange={e => setClockNotes(e.target.value)}
-                      placeholder="Catatan kehadiran (opsional, misal: jaga loket / maintenance kolam)..."
+                      placeholder={t("staff.home.clockNotesPlaceholder")}
                       className="text-xs bg-white"
                     />
                   </div>
@@ -629,41 +631,41 @@ export default function StaffPage() {
               {/* Quick Summary Grid */}
               <div className="grid sm:grid-cols-3 gap-4">
                 <Card>
-                  <div className="text-xs font-bold uppercase tracking-wider text-ink-mute">Kehadiran Bulan Ini</div>
+                  <div className="text-xs font-bold uppercase tracking-wider text-ink-mute">{t("staff.home.statMonthAttendanceTitle")}</div>
                   <div className="mt-2 flex items-baseline gap-2">
                     <span className="font-display font-extrabold text-3xl text-ocean-700">{monthPresentCount}</span>
-                    <span className="text-xs text-ink-mute">Hari Hadir</span>
+                    <span className="text-xs text-ink-mute">{t("staff.home.daysPresentSuffix")}</span>
                   </div>
                   <button onClick={() => setActive("absen")} className="mt-3 text-xs font-semibold text-ocean-600 hover:underline inline-flex items-center gap-1">
-                    Lihat riwayat presensi →
+                    {t("staff.home.viewAttendanceHistory")}
                   </button>
                 </Card>
 
                 <Card>
-                  <div className="text-xs font-bold uppercase tracking-wider text-ink-mute">Slip Gaji Terakhir</div>
+                  <div className="text-xs font-bold uppercase tracking-wider text-ink-mute">{t("staff.home.statLatestPayslipTitle")}</div>
                   <div className="mt-2">
                     {latestSalary ? (
                       <div>
                         <div className="font-display font-extrabold text-2xl text-ink">{fmtIDR(latestSalary.total_salary)}</div>
-                        <div className="text-xs text-ok-600 font-semibold mt-0.5">Periode: {latestSalary.period_month} ({latestSalary.status.toUpperCase()})</div>
+                        <div className="text-xs text-ok-600 font-semibold mt-0.5">{t("staff.home.periodLabel", { period: latestSalary.period_month, status: latestSalary.status.toUpperCase() })}</div>
                       </div>
                     ) : (
-                      <div className="text-sm text-ink-mute">Belum ada slip gaji</div>
+                      <div className="text-sm text-ink-mute">{t("staff.home.noPayslipYet")}</div>
                     )}
                   </div>
                   <button onClick={() => setActive("payslip")} className="mt-3 text-xs font-semibold text-ocean-600 hover:underline inline-flex items-center gap-1">
-                    Lihat rincian slip gaji →
+                    {t("staff.home.viewPayslipDetail")}
                   </button>
                 </Card>
 
                 <Card>
-                  <div className="text-xs font-bold uppercase tracking-wider text-ink-mute">Klaim Reimburse / Biaya</div>
+                  <div className="text-xs font-bold uppercase tracking-wider text-ink-mute">{t("staff.home.statExpensesTitle")}</div>
                   <div className="mt-2">
                     <div className="font-display font-extrabold text-2xl text-ink">{expenses.length}</div>
-                    <div className="text-xs text-ink-mute">Total pengajuan tercatat</div>
+                    <div className="text-xs text-ink-mute">{t("staff.home.totalClaimsSubmitted")}</div>
                   </div>
                   <button onClick={() => { setActive("expenses"); setShowExpenseModal(true); }} className="mt-3 text-xs font-semibold text-ocean-600 hover:underline inline-flex items-center gap-1">
-                    + Ajukan reimburse baru →
+                    {t("staff.home.submitNewExpense")}
                   </button>
                 </Card>
               </div>
@@ -674,8 +676,8 @@ export default function StaffPage() {
           {active === "absen" && (
             <Card className="space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <SectionTitle sub="Rekap kehadiran harian yang tercatat di sistem.">
-                  Riwayat Presensi Staff
+                <SectionTitle sub={t("staff.attendance.sub")}>
+                  {t("staff.attendance.title")}
                 </SectionTitle>
                 <div className="w-48">
                   <MonthYearPicker value={selectedMonth} onChange={setSelectedMonth} />
@@ -686,11 +688,11 @@ export default function StaffPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="text-[11px] uppercase tracking-widest text-ink-faint font-bold border-b border-line">
-                      <th className="text-left py-3 px-4">Tanggal</th>
-                      <th className="text-left py-3 px-4">Jam Masuk</th>
-                      <th className="text-left py-3 px-4">Jam Pulang</th>
-                      <th className="text-left py-3 px-4">Status</th>
-                      <th className="text-left py-3 px-4">Catatan</th>
+                      <th className="text-left py-3 px-4">{t("staff.attendance.colDate")}</th>
+                      <th className="text-left py-3 px-4">{t("staff.attendance.colClockIn")}</th>
+                      <th className="text-left py-3 px-4">{t("staff.attendance.colClockOut")}</th>
+                      <th className="text-left py-3 px-4">{t("staff.attendance.colStatus")}</th>
+                      <th className="text-left py-3 px-4">{t("staff.attendance.colNotes")}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-line">
@@ -705,7 +707,9 @@ export default function StaffPage() {
                             att.status === "sakit" ? "bg-amber-50 text-amber-700" :
                             att.status === "izin" ? "bg-warn-50 text-warn-700" : "bg-danger-50 text-danger-700"
                           }`}>
-                            {att.status === "present" ? "Hadir" : att.status === "sakit" ? "Sakit" : att.status === "izin" ? "Izin" : "Absen"}
+                            {att.status === "present" ? t("staff.attendance.statusPresent") :
+                             att.status === "sakit" ? t("staff.attendance.statusSick") :
+                             att.status === "izin" ? t("staff.attendance.statusLeave") : t("staff.attendance.statusAbsent")}
                           </span>
                         </td>
                         <td className="py-3 px-4 text-xs text-ink-mute">{att.note ?? "—"}</td>
@@ -714,7 +718,7 @@ export default function StaffPage() {
                     {filteredAttendances.length === 0 && (
                       <tr>
                         <td colSpan={5} className="py-10 text-center text-ink-mute">
-                          Tidak ada data presensi pada bulan {selectedMonth}.
+                          {t("staff.attendance.empty", { month: selectedMonth })}
                         </td>
                       </tr>
                     )}
@@ -727,22 +731,22 @@ export default function StaffPage() {
           {/* TAB 3: PAYSLIP */}
           {active === "payslip" && (
             <Card className="space-y-4">
-              <SectionTitle sub="Slip gaji bulanan yang telah diterbitkan oleh Owner / Manajemen.">
-                Daftar Slip Gaji Bulanan
+              <SectionTitle sub={t("staff.payslip.sub")}>
+                {t("staff.payslip.title")}
               </SectionTitle>
 
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="text-[11px] uppercase tracking-widest text-ink-faint font-bold border-b border-line">
-                      <th className="text-left py-3 px-4">Periode</th>
-                      <th className="text-right py-3 px-4">Gaji Pokok</th>
-                      <th className="text-right py-3 px-4">Tunjangan</th>
-                      <th className="text-right py-3 px-4">Reimburse</th>
-                      <th className="text-right py-3 px-4">Potongan</th>
-                      <th className="text-right py-3 px-4">Total Gaji Bersih</th>
-                      <th className="text-center py-3 px-4">Status</th>
-                      <th className="text-right py-3 px-4">Aksi</th>
+                      <th className="text-left py-3 px-4">{t("staff.payslip.colPeriod")}</th>
+                      <th className="text-right py-3 px-4">{t("staff.payslip.colBaseSalary")}</th>
+                      <th className="text-right py-3 px-4">{t("staff.payslip.colAllowances")}</th>
+                      <th className="text-right py-3 px-4">{t("staff.payslip.colReimburse")}</th>
+                      <th className="text-right py-3 px-4">{t("staff.payslip.colDeductions")}</th>
+                      <th className="text-right py-3 px-4">{t("staff.payslip.colTotalSalary")}</th>
+                      <th className="text-center py-3 px-4">{t("staff.payslip.colStatus")}</th>
+                      <th className="text-right py-3 px-4">{t("staff.payslip.colAction")}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-line">
@@ -759,12 +763,13 @@ export default function StaffPage() {
                             sal.status === "paid" ? "bg-ok-50 text-ok-700" :
                             sal.status === "approved" ? "bg-ocean-50 text-ocean-700" : "bg-paper-deep text-ink-mute"
                           }`}>
-                            {sal.status === "paid" ? "Lunas" : sal.status === "approved" ? "Disetujui" : "Draft"}
+                            {sal.status === "paid" ? t("staff.payslip.statusPaid") :
+                             sal.status === "approved" ? t("staff.payslip.statusApproved") : t("staff.payslip.statusDraft")}
                           </span>
                         </td>
                         <td className="py-3.5 px-4 text-right">
                           <Btn variant="outline" size="sm" icon="print" onClick={() => handlePrintPayslip(sal)}>
-                            Cetak Slip
+                            {t("staff.payslip.printBtn")}
                           </Btn>
                         </td>
                       </tr>
@@ -772,7 +777,7 @@ export default function StaffPage() {
                     {salaries.length === 0 && (
                       <tr>
                         <td colSpan={8} className="py-10 text-center text-ink-mute">
-                          Belum ada data slip gaji yang diterbitkan oleh manajemen.
+                          {t("staff.payslip.empty")}
                         </td>
                       </tr>
                     )}
@@ -786,11 +791,11 @@ export default function StaffPage() {
           {active === "expenses" && (
             <Card className="space-y-4">
               <div className="flex items-center justify-between flex-wrap gap-3">
-                <SectionTitle sub="Pengajuan reimburse biaya operasional staff.">
-                  Daftar Klaim Reimburse & Pengeluaran
+                <SectionTitle sub={t("staff.expenses.sub")}>
+                  {t("staff.expenses.title")}
                 </SectionTitle>
                 <Btn variant="primary" icon="plus" size="sm" onClick={() => setShowExpenseModal(true)}>
-                  Ajukan Reimburse Baru
+                  {t("staff.expenses.submitNewBtn")}
                 </Btn>
               </div>
 
@@ -798,11 +803,11 @@ export default function StaffPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="text-[11px] uppercase tracking-widest text-ink-faint font-bold border-b border-line">
-                      <th className="text-left py-3 px-4">Tanggal Kirim</th>
-                      <th className="text-left py-3 px-4">Keterangan</th>
-                      <th className="text-right py-3 px-4">Nominal</th>
-                      <th className="text-center py-3 px-4">Bukti Nota</th>
-                      <th className="text-center py-3 px-4">Status</th>
+                      <th className="text-left py-3 px-4">{t("staff.expenses.colSubmitDate")}</th>
+                      <th className="text-left py-3 px-4">{t("staff.expenses.colDescription")}</th>
+                      <th className="text-right py-3 px-4">{t("staff.expenses.colAmount")}</th>
+                      <th className="text-center py-3 px-4">{t("staff.expenses.colProof")}</th>
+                      <th className="text-center py-3 px-4">{t("staff.expenses.colStatus")}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-line">
@@ -819,7 +824,7 @@ export default function StaffPage() {
                               rel="noreferrer"
                               className="text-xs font-bold text-ocean-600 hover:underline inline-flex items-center gap-1"
                             >
-                              <Icon name="link" className="w-3.5 h-3.5" /> Buka Bukti
+                              <Icon name="link" className="w-3.5 h-3.5" /> {t("staff.expenses.viewProof")}
                             </a>
                           ) : (
                             <span className="text-xs text-ink-mute">—</span>
@@ -827,7 +832,10 @@ export default function StaffPage() {
                         </td>
                         <td className="py-3.5 px-4 text-center">
                           <Status kind={exp.status === "paid" ? "paid" : exp.status === "approved" ? "approved" : exp.status === "rejected" ? "rejected" : exp.status === "cancelled" ? "inactive" : "pending"}>
-                            {exp.status === "paid" ? "Lunas" : exp.status === "approved" ? "Disetujui" : exp.status === "rejected" ? "Ditolak" : exp.status === "cancelled" ? "Dibatalkan" : "Menunggu"}
+                            {exp.status === "paid" ? t("staff.expenses.statusPaid") :
+                             exp.status === "approved" ? t("staff.expenses.statusApproved") :
+                             exp.status === "rejected" ? t("staff.expenses.statusRejected") :
+                             exp.status === "cancelled" ? t("staff.expenses.statusCancelled") : t("staff.expenses.statusPending")}
                           </Status>
                           {exp.status === "rejected" && exp.rejection_reason && (
                             <div className="text-[10px] text-danger-500 mt-0.5">{exp.rejection_reason}</div>
@@ -838,7 +846,7 @@ export default function StaffPage() {
                     {expenses.length === 0 && (
                       <tr>
                         <td colSpan={5} className="py-10 text-center text-ink-mute">
-                          Belum ada pengajuan reimburse pengeluaran.
+                          {t("staff.expenses.empty")}
                         </td>
                       </tr>
                     )}
@@ -857,60 +865,60 @@ export default function StaffPage() {
                     <QRBox value={profile.qr_code} size={80} downloadable />
                     <div>
                       <div className="font-display font-bold text-base text-ink">{profile.full_name}</div>
-                      <div className="text-xs text-ink-mute mt-0.5">Staff · ID Card QR</div>
+                      <div className="text-xs text-ink-mute mt-0.5">{t("staff.profile.idCardSubtitle")}</div>
                       <div className="text-[10px] font-mono text-ink-faint mt-1 break-all">{profile.qr_code}</div>
                     </div>
                   </div>
                 </Card>
               )}
               <Card className="space-y-4">
-                <SectionTitle sub="Atur informasi diri dan rekening bank untuk pencairan gaji oleh owner.">
-                  Data Diri & Rekening Bank
+                <SectionTitle sub={t("staff.profile.sub")}>
+                  {t("staff.profile.title")}
                 </SectionTitle>
 
                 <div className="space-y-3">
-                  <Field label="Nama Lengkap" required>
+                  <Field label={t("staff.profile.fieldFullName")} required>
                     <Input
                       value={profileForm.full_name}
                       onChange={e => setProfileForm(f => ({ ...f, full_name: e.target.value }))}
                     />
                   </Field>
 
-                  <Field label="Nomor WhatsApp / HP">
+                  <Field label={t("staff.profile.fieldPhone")}>
                     <Input
                       type="tel"
                       value={profileForm.phone}
                       onChange={e => setProfileForm(f => ({ ...f, phone: e.target.value }))}
-                      placeholder="0812xxxxxxxx"
+                      placeholder={t("staff.profile.fieldPhonePlaceholder")}
                       className="font-mono"
                     />
                   </Field>
 
                   <div className="pt-4 border-t border-line space-y-3">
                     <div className="text-xs font-bold uppercase tracking-widest text-ink-faint">
-                      Rekening Bank (Untuk Transfer Gaji & Reimburse)
+                      {t("staff.profile.bankSectionTitle")}
                     </div>
                     <div className="grid sm:grid-cols-3 gap-3">
-                      <Field label="Nama Bank">
+                      <Field label={t("staff.profile.fieldBankName")}>
                         <Input
                           value={profileForm.bank_name}
                           onChange={e => setProfileForm(f => ({ ...f, bank_name: e.target.value }))}
-                          placeholder="BCA / Mandiri / BSI"
+                          placeholder={t("staff.profile.fieldBankNamePlaceholder")}
                         />
                       </Field>
-                      <Field label="Nomor Rekening">
+                      <Field label={t("staff.profile.fieldBankAccount")}>
                         <Input
                           value={profileForm.bank_account}
                           onChange={e => setProfileForm(f => ({ ...f, bank_account: e.target.value }))}
-                          placeholder="1234567890"
+                          placeholder={t("staff.profile.fieldBankAccountPlaceholder")}
                           className="font-mono"
                         />
                       </Field>
-                      <Field label="Atas Nama (Pemilik)">
+                      <Field label={t("staff.profile.fieldBankHolder")}>
                         <Input
                           value={profileForm.bank_holder}
                           onChange={e => setProfileForm(f => ({ ...f, bank_holder: e.target.value }))}
-                          placeholder="Nama di buku tabungan"
+                          placeholder={t("staff.profile.fieldBankHolderPlaceholder")}
                         />
                       </Field>
                     </div>
@@ -919,7 +927,7 @@ export default function StaffPage() {
 
                 <div className="pt-3">
                   <Btn variant="primary" onClick={handleSaveProfile} disabled={savingProfile}>
-                    {savingProfile ? "Menyimpan..." : "Simpan Perubahan"}
+                    {savingProfile ? t("staff.profile.savingBtn") : t("staff.profile.saveBtn")}
                   </Btn>
                 </div>
               </Card>
@@ -932,27 +940,27 @@ export default function StaffPage() {
       <Modal
         open={showExpenseModal}
         onClose={() => setShowExpenseModal(false)}
-        title="Ajukan Klaim Reimburse / Pengeluaran"
+        title={t("staff.expenses.modalTitle")}
         size="sm"
         footer={
           <>
-            <Btn variant="ghost" onClick={() => setShowExpenseModal(false)}>Batal</Btn>
+            <Btn variant="ghost" onClick={() => setShowExpenseModal(false)}>{t("staff.expenses.cancelBtn")}</Btn>
             <Btn variant="primary" onClick={handleSaveExpense} disabled={savingExpense || uploading}>
-              {savingExpense || uploading ? "Menyimpan..." : "Kirim Pengajuan"}
+              {savingExpense || uploading ? t("staff.expenses.savingBtn") : t("staff.expenses.submitBtn")}
             </Btn>
           </>
         }
       >
         <div className="space-y-3">
-          <Field label="Keterangan Pengeluaran" required>
+          <Field label={t("staff.expenses.fieldDescription")} required>
             <Input
               value={expenseForm.description}
               onChange={e => setExpenseForm(f => ({ ...f, description: e.target.value }))}
-              placeholder="Contoh: Beli perlengkapan kebersihan kolam"
+              placeholder={t("staff.expenses.fieldDescriptionPlaceholder")}
             />
           </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Nominal (Rp)" required>
+            <Field label={t("staff.expenses.fieldAmount")} required>
               <Input
                 type="number"
                 value={expenseForm.amount}
@@ -961,7 +969,7 @@ export default function StaffPage() {
                 className="font-mono"
               />
             </Field>
-            <Field label="Tanggal Nota">
+            <Field label={t("staff.expenses.fieldDate")}>
               <Input
                 type="date"
                 value={expenseForm.occurred_at}
@@ -969,15 +977,15 @@ export default function StaffPage() {
               />
             </Field>
           </div>
-          <Field label="Kategori">
+          <Field label={t("staff.expenses.fieldCategory")}>
             <Select value={expenseForm.category} onChange={e => setExpenseForm(f => ({ ...f, category: e.target.value }))}>
-              <option value="Operasional">Operasional</option>
-              <option value="Perlengkapan">Perlengkapan / Maintenance</option>
-              <option value="Konsumsi">Konsumsi / Rapat</option>
-              <option value="Lainnya">Lainnya</option>
+              <option value="Operasional">{t("staff.expenses.catOperational")}</option>
+              <option value="Perlengkapan">{t("staff.expenses.catEquipment")}</option>
+              <option value="Konsumsi">{t("staff.expenses.catConsumption")}</option>
+              <option value="Lainnya">{t("staff.expenses.catOther")}</option>
             </Select>
           </Field>
-          <Field label="Bukti Foto Nota / Struk Pembayaran" hint="Upload foto kwitansi/nota">
+          <Field label={t("staff.expenses.fieldProof")} hint={t("staff.expenses.fieldProofHint")}>
             <input
               type="file"
               accept="image/*"

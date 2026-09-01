@@ -48,3 +48,6 @@ next-env.d.ts
 /playwright-report
 /test-results
 /tests/.auth
+
+# local DB backups (contain PII — never commit)
+/backups/

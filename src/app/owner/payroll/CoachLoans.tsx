@@ -243,12 +243,12 @@ export default function CoachLoans({ branches, userId, userName }: { branches: B
 
       <div className="flex gap-2 flex-wrap">
         {branches.length > 1 && (
-          <select value={branchFilter} onChange={e => setBranchFilter(e.target.value)} className="text-sm rounded-xl border border-line bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
+          <select value={branchFilter} onChange={e => setBranchFilter(e.target.value)} className="text-sm rounded-xl border border-line bg-white pl-3.5 pr-8 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
             <option value="all">{t("owner.coachLoans.filterAllBranches")}</option>
             {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
         )}
-        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="text-sm rounded-xl border border-line bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
+        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="text-sm rounded-xl border border-line bg-white pl-3.5 pr-8 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
           <option value="all">{t("owner.coachLoans.filterAllStatus")}</option>
           <option value="active">{statusLabel("active")}</option>
           <option value="paid_off">{statusLabel("paid_off")}</option>

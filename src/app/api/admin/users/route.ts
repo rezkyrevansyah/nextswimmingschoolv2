@@ -40,7 +40,12 @@ export async function POST(req: NextRequest) {
     total_sessions?: number | null;
     custom_role_label?: string;
     // Admin-specific: auto-create a paired staff account
-    auto_staff?: { email: string; password: string } | null;
+    auto_staff?: { email: string; password: string; full_name?: string } | null;
+    // When approving a public registration: link + close out the
+    // registrations row in the same request as account creation, so the two
+    // can't drift apart if one half fails.
+    registration_id?: string;
+    proof_url?: string | null;
   };
 
   const { email, password, full_name, role, branch_id, phone } = body;
@@ -59,6 +64,20 @@ export async function POST(req: NextRequest) {
   }
 
   const db = getSupabaseAdmin();
+
+  if (body.registration_id) {
+    const { data: existingReg } = await db
+      .from("registrations")
+      .select("id, status, member_id")
+      .eq("id", body.registration_id)
+      .single();
+    if (existingReg?.member_id) {
+      return NextResponse.json(
+        { error: "Pendaftaran ini sudah disetujui sebelumnya dan sudah punya akun member.", code: "ALREADY_APPROVED" },
+        { status: 409 }
+      );
+    }
+  }
 
   const { data: authData, error: authError } = await db.auth.admin.createUser({
     email,
@@ -85,7 +104,11 @@ export async function POST(req: NextRequest) {
   const userId = authData.user.id;
 
   // Structured account ID (NEXT.xxx.ROLE.yy) — atomic per-role sequence, generated once.
-  const { data: userNo } = await db.rpc("generate_user_no", { p_role: role });
+  const { data: userNo, error: userNoError } = await db.rpc("generate_user_no", { p_role: role });
+  if (userNoError || !userNo) {
+    await db.auth.admin.deleteUser(userId);
+    return NextResponse.json({ error: userNoError?.message ?? "Gagal membuat nomor akun" }, { status: 500 });
+  }
 
   // Profile row: try insert first. If trigger already created a minimal row,
   // fall back to an explicit update so all fields (branch_id, role, etc.) are set.
@@ -169,6 +192,22 @@ export async function POST(req: NextRequest) {
     memberId = memberRow?.id ?? null;
 
     if (body.class_id && memberRow) {
+      const { data: classRow } = await db.from("classes").select("capacity").eq("id", body.class_id).single();
+      const { count: enrolledCount } = await db
+        .from("member_classes")
+        .select("member_id", { count: "exact", head: true })
+        .eq("class_id", body.class_id);
+      const capacity = classRow?.capacity ?? 0;
+      if (capacity > 0 && (enrolledCount ?? 0) >= capacity) {
+        // Member account is already created — don't roll it back over a full
+        // class, just leave them unassigned so the admin can pick another
+        // class/schedule instead of losing the whole registration.
+        return NextResponse.json({
+          user_id: userId,
+          member_id: memberId,
+          class_assignment_error: "Kelas sudah penuh — member dibuat tanpa penugasan kelas. Silakan tetapkan kelas lain secara manual.",
+        });
+      }
       await db.from("member_classes").insert({
         member_id: memberRow.id,
         class_id: body.class_id,
@@ -177,15 +216,30 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Approving a public registration: close it out in the same request as
+  // account creation so the two never drift out of sync (previously this was
+  // a separate client-side update that could fail independently, leaving an
+  // account created but the registration stuck "pending").
+  if (body.registration_id && role === "member") {
+    await db.from("registrations").update({
+      status: "approved",
+      reviewed_by: user.id,
+      reviewed_at: new Date().toISOString(),
+      proof_url: body.proof_url ?? undefined,
+      member_id: memberId,
+    }).eq("id", body.registration_id);
+  }
+
   // For admin accounts: optionally auto-create a paired staff account
   let staffWarning: string | null = null;
   let staffUserId: string | null = null;
   if (role === "admin" && body.auto_staff?.email && body.auto_staff?.password) {
+    const staffName = body.auto_staff.full_name?.trim() || `Staff - ${full_name}`;
     const { data: staffAuth, error: staffAuthError } = await db.auth.admin.createUser({
       email: body.auto_staff.email,
       password: body.auto_staff.password,
       email_confirm: true,
-      user_metadata: { full_name, role: "staff", branch_id, phone },
+      user_metadata: { full_name: staffName, role: "staff", branch_id, phone },
     });
 
     if (staffAuthError) {
@@ -196,13 +250,13 @@ export async function POST(req: NextRequest) {
       const staffProfile = {
         id: staffAuth.user.id,
         role: "staff" as const,
-        full_name,
+        full_name: staffName,
         email: body.auto_staff.email,
         phone: phone || null,
         branch_id: branch_id || null,
         is_profile_complete: false,
         user_no: staffNo,
-        custom_role_label: body.custom_role_label || null,
+        custom_role_label: null,
         linked_admin_id: userId,
       };
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

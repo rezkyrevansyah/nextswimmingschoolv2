@@ -119,6 +119,10 @@ export const member = {
     pendingApprovalHint: "Requests will await admin approval.",
     toastSuccessTitle: "Leave request submitted successfully",
     toastSuccessBody: "Awaiting admin approval.",
+    errorNoClassTitle: "Select at least one class",
+    errorNoClassBody: "Choose the class(es) this leave applies to.",
+    errorDateRangeTitle: "Invalid date range",
+    errorDateRangeBody: "End date must be on or after the start date.",
   },
   rapor: {
     tabRapor: "Report Card",

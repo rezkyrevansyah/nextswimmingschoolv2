@@ -66,7 +66,15 @@ export interface MemberOption {
   full_name: string;
   branch_name?: string;
   branch_id: string;
+  type: string;
+  member_no: string | null;
 }
+
+const MEMBER_TYPE_LABELS: Record<string, string> = {
+  reguler: "Reguler",
+  private: "Private",
+  school_affiliate: "Afiliasi Sekolah",
+};
 
 export interface CoachOption {
   id: string;
@@ -121,6 +129,8 @@ export default function AdminCompetition({ branchId }: { branchId: string }) {
     member_id: "",
     coach_id: "",
     category: "",
+    stroke: "",
+    distance_meters: "",
     age_group: "",
     time_raw: "",
     rank: "",
@@ -148,6 +158,13 @@ export default function AdminCompetition({ branchId }: { branchId: string }) {
   const [memberParticipations, setMemberParticipations] = useState<ParticipationRow[]>([]);
   const [memberParticipationsLoading, setMemberParticipationsLoading] = useState(false);
 
+  // Participant picker (Awards tab) — search + filter + pagination over membersList
+  const [pickerSearch, setPickerSearch] = useState("");
+  const [pickerTypeFilter, setPickerTypeFilter] = useState<"all" | "reguler" | "private" | "school_affiliate">("all");
+  const [pickerBranchFilter, setPickerBranchFilter] = useState("all");
+  const [pickerPage, setPickerPage] = useState(0);
+  const PICKER_PAGE_SIZE = 10;
+
   // ── Load Competitions ──────────────────────────────────────────────────────
   const loadCompetitions = useCallback(async () => {
     setLoading(true);
@@ -162,10 +179,14 @@ export default function AdminCompetition({ branchId }: { branchId: string }) {
       return;
     }
 
-    // Load participation counts
-    const { data: parts } = await supabase
+    // Load participation counts — scoped to this branch, same as loadOptions,
+    // so a branch admin doesn't see other branches' participants/medals
+    // folded into these counts.
+    let partsQuery = supabase
       .from("competition_participations")
       .select("competition_id, award");
+    if (branchId) partsQuery = partsQuery.eq("branch_id", branchId);
+    const { data: parts } = await partsQuery;
 
     const countsMap: Record<string, { total: number; medals: number }> = {};
     (parts ?? []).forEach(p => {
@@ -184,7 +205,7 @@ export default function AdminCompetition({ branchId }: { branchId: string }) {
 
     setCompetitions(enriched);
     setLoading(false);
-  }, [supabase, toast]);
+  }, [supabase, toast, branchId]);
 
   useEffect(() => {
     loadCompetitions();
@@ -194,7 +215,7 @@ export default function AdminCompetition({ branchId }: { branchId: string }) {
   const loadOptions = useCallback(async () => {
     let q = supabase
       .from("members")
-      .select("id, branch_id, profile:profiles(full_name), branch:branches(name)")
+      .select("id, branch_id, type, member_no, profile:profiles(full_name), branch:branches(name)")
       .eq("status", "active");
 
     if (branchId) {
@@ -213,6 +234,8 @@ export default function AdminCompetition({ branchId }: { branchId: string }) {
           branch_id: m.branch_id,
           full_name: (m.profile as any)?.full_name ?? "Tanpa Nama",
           branch_name: (m.branch as any)?.name ?? "",
+          type: m.type,
+          member_no: m.member_no,
         }))
       );
     }
@@ -416,6 +439,8 @@ export default function AdminCompetition({ branchId }: { branchId: string }) {
       member_id: prefilledMemberId ?? "",
       coach_id: "",
       category: "",
+      stroke: "",
+      distance_meters: "",
       age_group: "",
       time_raw: "",
       rank: "",
@@ -435,6 +460,8 @@ export default function AdminCompetition({ branchId }: { branchId: string }) {
       member_id: p.member_id,
       coach_id: p.coach_id ?? "",
       category: p.category,
+      stroke: p.stroke ?? "",
+      distance_meters: p.distance_meters != null ? String(p.distance_meters) : "",
       age_group: p.age_group ?? "",
       time_raw: p.time_formatted || (p.time_seconds ? `${p.time_seconds}` : ""),
       rank: p.rank ? `${p.rank}` : "",
@@ -470,6 +497,8 @@ export default function AdminCompetition({ branchId }: { branchId: string }) {
           member_id: partForm.member_id,
           coach_id: partForm.coach_id || null,
           category: partForm.category.trim(),
+          stroke: partForm.stroke.trim() || null,
+          distance_meters: partForm.distance_meters ? parseInt(partForm.distance_meters, 10) : null,
           age_group: partForm.age_group.trim() || null,
           time_seconds: parsedTime.seconds,
           time_formatted: parsedTime.formatted || null,
@@ -513,6 +542,8 @@ export default function AdminCompetition({ branchId }: { branchId: string }) {
           branch_id: targetBranchId,
           coach_id: partForm.coach_id || null,
           category: partForm.category.trim(),
+          stroke: partForm.stroke.trim() || null,
+          distance_meters: partForm.distance_meters ? parseInt(partForm.distance_meters, 10) : null,
           age_group: partForm.age_group.trim() || null,
           time_seconds: parsedTime.seconds,
           time_formatted: parsedTime.formatted || null,
@@ -592,6 +623,30 @@ export default function AdminCompetition({ branchId }: { branchId: string }) {
     ).slice(0, 30);
   }, [membersList, memberSearch]);
 
+  // Participant picker (Awards tab) — branches present in membersList, for the branch filter (owner/unscoped view only)
+  const pickerBranchOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    membersList.forEach(m => { if (m.branch_id && m.branch_name) seen.set(m.branch_id, m.branch_name); });
+    return [...seen.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [membersList]);
+
+  const pickerFilteredMembers = useMemo(() => {
+    const q = pickerSearch.trim().toLowerCase();
+    return membersList.filter(m => {
+      const matchSearch = !q || m.full_name.toLowerCase().includes(q) || (m.member_no ?? "").toLowerCase().includes(q);
+      const matchType = pickerTypeFilter === "all" || m.type === pickerTypeFilter;
+      const matchBranch = pickerBranchFilter === "all" || m.branch_id === pickerBranchFilter;
+      return matchSearch && matchType && matchBranch;
+    });
+  }, [membersList, pickerSearch, pickerTypeFilter, pickerBranchFilter]);
+
+  const pickerTotalPages = Math.max(1, Math.ceil(pickerFilteredMembers.length / PICKER_PAGE_SIZE));
+  const pickerSafePage = Math.min(pickerPage, pickerTotalPages - 1);
+  const pickerPaginatedMembers = pickerFilteredMembers.slice(pickerSafePage * PICKER_PAGE_SIZE, (pickerSafePage + 1) * PICKER_PAGE_SIZE);
+
+  /* eslint-disable-next-line react-hooks/set-state-in-effect -- reset pagination when picker filters change */
+  useEffect(() => { setPickerPage(0); }, [pickerSearch, pickerTypeFilter, pickerBranchFilter]);
+
   return (
     <div className="space-y-6">
       {/* ── Tab Switcher ── */}
@@ -620,44 +675,108 @@ export default function AdminCompetition({ branchId }: { branchId: string }) {
       {/* ── AWARDS TAB: Member-centric view ── */}
       {activeTab === "awards" && (
         <div className="space-y-4">
-          <Card className="p-5 space-y-4">
+          <Card className={awardMemberId ? "p-5 space-y-3" : "p-5 space-y-4"}>
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div>
                 <div className="font-bold text-ink-strong">Pilih Peserta</div>
                 <p className="text-xs text-ink-mute">Pilih peserta terlebih dahulu untuk melihat atau menambah penghargaannya.</p>
               </div>
             </div>
-            <div className="max-w-sm">
-              <Input
-                placeholder="Ketik nama peserta..."
-                value={awardMemberSearch}
-                onChange={e => setAwardMemberSearch(e.target.value)}
-              />
-            </div>
-            {awardMemberSearch.length >= 1 && (
-              <div className="border border-line rounded-xl overflow-hidden max-h-52 overflow-y-auto shadow-card">
-                {membersList
-                  .filter(m => m.full_name.toLowerCase().includes(awardMemberSearch.toLowerCase()))
-                  .slice(0, 20)
-                  .map(m => (
-                    <button
-                      key={m.id}
-                      type="button"
-                      onClick={() => { setAwardMemberId(m.id); setAwardMemberSearch(m.full_name); }}
-                      className={`w-full text-left px-4 py-2.5 text-sm flex items-center gap-3 hover:bg-paper-tint transition-colors border-b border-line last:border-0 ${awardMemberId === m.id ? "bg-ocean-50/60 font-semibold" : ""}`}
-                    >
-                      <Avatar name={m.full_name} size={28} />
-                      <span>{m.full_name}</span>
-                      {m.branch_name && <span className="text-xs text-ink-mute ml-auto">{m.branch_name}</span>}
-                    </button>
-                  ))}
-              </div>
-            )}
-            {awardMemberId && (
+
+            {awardMemberId ? (
               <div className="flex items-center gap-2 text-xs text-ok-700 bg-ok-50 border border-ok-200 rounded-lg px-3 py-2 w-fit">
                 <Icon name="check" className="w-3.5 h-3.5" />
                 Menampilkan penghargaan: <strong>{awardMemberSearch}</strong>
+                <button type="button" onClick={() => setAwardMemberId("")} className="ml-2 font-semibold underline hover:text-ok-900">
+                  Ganti Peserta
+                </button>
               </div>
+            ) : (
+              <>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Input
+                    placeholder="Cari nama atau nomor anggota..."
+                    value={pickerSearch}
+                    onChange={e => setPickerSearch(e.target.value)}
+                    className="!w-56"
+                  />
+                  <Select value={pickerTypeFilter} onChange={e => setPickerTypeFilter(e.target.value as typeof pickerTypeFilter)} className="!w-44">
+                    <option value="all">Semua tipe member</option>
+                    <option value="reguler">Reguler</option>
+                    <option value="private">Private</option>
+                    <option value="school_affiliate">Afiliasi Sekolah</option>
+                  </Select>
+                  {!branchId && pickerBranchOptions.length > 0 && (
+                    <Select value={pickerBranchFilter} onChange={e => setPickerBranchFilter(e.target.value)} className="!w-44">
+                      <option value="all">Semua cabang</option>
+                      {pickerBranchOptions.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                    </Select>
+                  )}
+                </div>
+
+                <div className="border border-line rounded-xl overflow-hidden overflow-x-auto">
+                  <table className="w-full text-sm min-w-[500px]">
+                    <thead>
+                      <tr className="text-[11px] uppercase tracking-widest text-ink-faint font-bold border-b border-line bg-paper-tint">
+                        <th className="text-left py-2.5 px-4">Nama</th>
+                        <th className="text-left py-2.5 px-4">No. Anggota</th>
+                        <th className="text-left py-2.5 px-4">Tipe</th>
+                        {!branchId && <th className="text-left py-2.5 px-4">Cabang</th>}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-line">
+                      {pickerPaginatedMembers.map(m => (
+                        <tr
+                          key={m.id}
+                          onClick={() => { setAwardMemberId(m.id); setAwardMemberSearch(m.full_name); }}
+                          className="hover:bg-paper-tint cursor-pointer transition-colors"
+                        >
+                          <td className="py-2.5 px-4">
+                            <div className="flex items-center gap-2.5">
+                              <Avatar name={m.full_name} size={28} />
+                              <span className="font-medium text-ink-strong">{m.full_name}</span>
+                            </div>
+                          </td>
+                          <td className="py-2.5 px-4 text-ink-mute font-mono text-xs">{m.member_no ?? "—"}</td>
+                          <td className="py-2.5 px-4 text-ink-soft">{MEMBER_TYPE_LABELS[m.type] ?? m.type}</td>
+                          {!branchId && <td className="py-2.5 px-4 text-ink-soft">{m.branch_name || "—"}</td>}
+                        </tr>
+                      ))}
+                      {pickerPaginatedMembers.length === 0 && (
+                        <tr>
+                          <td colSpan={branchId ? 3 : 4} className="text-center py-8 text-ink-mute text-sm">
+                            Tidak ada member yang cocok dengan filter ini.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {pickerTotalPages > 1 && (
+                  <div className="flex items-center justify-between gap-2 text-xs text-ink-mute">
+                    <span>{pickerFilteredMembers.length} member · hal. {pickerSafePage + 1}/{pickerTotalPages}</span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        disabled={pickerSafePage === 0}
+                        onClick={() => setPickerPage(p => p - 1)}
+                        className="px-2.5 py-1 rounded-lg border border-line text-ink-soft disabled:opacity-40 disabled:cursor-not-allowed hover:bg-paper-tint transition"
+                      >
+                        ‹ Sebelumnya
+                      </button>
+                      <button
+                        type="button"
+                        disabled={pickerSafePage >= pickerTotalPages - 1}
+                        onClick={() => setPickerPage(p => p + 1)}
+                        className="px-2.5 py-1 rounded-lg border border-line text-ink-soft disabled:opacity-40 disabled:cursor-not-allowed hover:bg-paper-tint transition"
+                      >
+                        Selanjutnya ›
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </Card>
 
@@ -679,45 +798,59 @@ export default function AdminCompetition({ branchId }: { branchId: string }) {
                   Belum ada penghargaan untuk peserta ini.
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
+                <div className="overflow-x-auto border border-line rounded-2xl">
+                  <table className="w-full text-sm min-w-[720px]">
                     <thead>
-                      <tr className="border-b border-line text-left text-[11px] font-bold uppercase tracking-wider text-ink-faint">
-                        <th className="py-2.5 px-4">Perlombaan</th>
-                        <th className="py-2.5 px-4">Kategori</th>
-                        <th className="py-2.5 px-4">Waktu</th>
-                        <th className="py-2.5 px-4 text-center">Peringkat</th>
-                        <th className="py-2.5 px-4 text-center">Penghargaan</th>
-                        <th className="py-2.5 px-4 text-right">Aksi</th>
+                      <tr className="border-b border-line bg-paper-tint text-left text-[11px] font-bold uppercase tracking-wider text-ink-faint">
+                        <th className="py-3 px-4 min-w-[200px]">Perlombaan</th>
+                        <th className="py-3 px-4 min-w-[140px]">Kategori</th>
+                        <th className="py-3 px-4 w-32 whitespace-nowrap">Waktu</th>
+                        <th className="py-3 px-4 text-center w-24 whitespace-nowrap">Peringkat</th>
+                        <th className="py-3 px-4 text-center w-36 whitespace-nowrap">Penghargaan</th>
+                        <th className="py-3 px-4 text-right w-24 whitespace-nowrap">Aksi</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-line">
+                    <tbody className="divide-y divide-line bg-white">
                       {memberParticipations.map(p => {
                         const awardInfo = AWARD_LABELS[p.award] || AWARD_LABELS.participant;
                         const comp = (p as unknown as { competition?: { name: string; start_date: string; level: string } }).competition;
                         return (
                           <tr key={p.id} className="hover:bg-paper-tint/60 transition-colors">
-                            <td className="py-2.5 px-4">
-                              <div className="font-medium text-ink-strong">{comp?.name ?? "—"}</div>
-                              {comp?.start_date && <div className="text-xs text-ink-mute">{fmtDate(comp.start_date)}</div>}
+                            <td className="py-3 px-4 min-w-[200px]">
+                              <div className="font-bold text-ink-strong line-clamp-1">{comp?.name ?? "—"}</div>
+                              {comp?.start_date && <div className="text-xs text-ink-mute mt-0.5">{fmtDate(comp.start_date)}</div>}
                             </td>
-                            <td className="py-2.5 px-4">
-                              <div className="font-medium">{p.category}</div>
+                            <td className="py-3 px-4 min-w-[140px]">
+                              <div className="font-medium text-ink">{p.category}</div>
                               {p.age_group && <div className="text-xs text-ink-mute">{p.age_group}</div>}
                             </td>
-                            <td className="py-2.5 px-4 font-mono text-ocean-700 font-bold">
+                            <td className="py-3 px-4 font-mono text-ocean-700 font-bold whitespace-nowrap">
                               {p.time_formatted || (p.time_seconds ? `${p.time_seconds}s` : "—")}
                             </td>
-                            <td className="py-2.5 px-4 text-center font-bold">{p.rank ? `#${p.rank}` : "—"}</td>
-                            <td className="py-2.5 px-4 text-center">
-                              <span className={`px-2 py-0.5 rounded-full text-xs border ${awardInfo.style}`}>
+                            <td className="py-3 px-4 text-center font-bold whitespace-nowrap">{p.rank ? `#${p.rank}` : "—"}</td>
+                            <td className="py-3 px-4 text-center whitespace-nowrap">
+                              <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${awardInfo.style}`}>
                                 {awardInfo.icon} {p.award === "custom" && p.custom_award_label ? p.custom_award_label : awardInfo.label}
                               </span>
                             </td>
-                            <td className="py-2.5 px-4 text-right">
+                            <td className="py-3 px-4 text-right whitespace-nowrap">
                               <div className="flex items-center justify-end gap-1">
-                                <Btn variant="ghost" size="sm" icon="edit" onClick={() => openEditParticipant(p)} />
-                                <Btn variant="ghost" size="sm" icon="trash" onClick={() => handleRemoveParticipant(p)} />
+                                <button
+                                  type="button"
+                                  onClick={() => openEditParticipant(p)}
+                                  title="Edit"
+                                  className="w-7 h-7 rounded-lg hover:bg-paper-deep text-ink-mute hover:text-ocean-600 flex items-center justify-center transition-colors"
+                                >
+                                  <Icon name="edit" className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveParticipant(p)}
+                                  title="Hapus"
+                                  className="w-7 h-7 rounded-lg hover:bg-danger-50 text-ink-mute hover:text-danger-500 flex items-center justify-center transition-colors"
+                                >
+                                  <Icon name="trash" className="w-3.5 h-3.5" />
+                                </button>
                               </div>
                             </td>
                           </tr>
@@ -738,13 +871,17 @@ export default function AdminCompetition({ branchId }: { branchId: string }) {
       {/* ── Actions Header & Filter ── */}
       <Card className="p-5 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-3 flex-1 max-w-md">
-            <Input
-              placeholder="Cari perlombaan, penyelenggara, lokasi..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-            />
-            <Select value={levelFilter} onChange={e => setLevelFilter(e.target.value)} className="w-40">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 flex-1 max-w-xl">
+            <div className="relative flex-1 min-w-[220px]">
+              <Icon name="search" className="w-4 h-4 text-ink-mute absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <Input
+                placeholder="Cari perlombaan, penyelenggara, lokasi..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                className="pl-9 text-sm"
+              />
+            </div>
+            <Select value={levelFilter} onChange={e => setLevelFilter(e.target.value)} className="!w-44 shrink-0">
               <option value="all">Semua Level</option>
               <option value="internal">Internal</option>
               <option value="local">Lokal / Kota</option>
@@ -766,45 +903,58 @@ export default function AdminCompetition({ branchId }: { branchId: string }) {
             Belum ada perlombaan terdaftar. Klik <strong>Tambah Perlombaan</strong> untuk mencatat event baru.
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="overflow-x-auto border border-line rounded-2xl">
+            <table className="w-full text-sm min-w-[980px]">
               <thead>
-                <tr className="border-b border-line text-left text-[11px] font-bold uppercase tracking-wider text-ink-faint">
-                  <th className="py-3 px-3">Nama Perlombaan</th>
-                  <th className="py-3 px-3">Tanggal & Lokasi</th>
-                  <th className="py-3 px-3">Penyelenggara</th>
-                  <th className="py-3 px-3 text-center">Level</th>
-                  <th className="py-3 px-3 text-center">Peserta</th>
-                  <th className="py-3 px-3 text-center">Medali</th>
-                  <th className="py-3 px-3 text-right">Aksi</th>
+                <tr className="border-b border-line bg-paper-tint text-left text-[11px] font-bold uppercase tracking-wider text-ink-faint">
+                  <th className="py-3 px-4 min-w-[280px]">Nama Perlombaan</th>
+                  <th className="py-3 px-4 min-w-[190px] whitespace-nowrap">Tanggal & Lokasi</th>
+                  <th className="py-3 px-4 min-w-[200px]">Penyelenggara</th>
+                  <th className="py-3 px-4 text-center w-28 whitespace-nowrap">Level</th>
+                  <th className="py-3 px-4 text-center w-20 whitespace-nowrap">Peserta</th>
+                  <th className="py-3 px-4 text-center w-24 whitespace-nowrap">Medali</th>
+                  <th className="py-3 px-4 text-right w-44 whitespace-nowrap">Aksi</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-line">
+              <tbody className="divide-y divide-line bg-white">
                 {filteredComps.map(comp => (
-                  <tr key={comp.id} className="hover:bg-paper-tint transition-colors">
-                    <td className="py-3 px-3">
-                      <div className="font-bold text-ink-strong">{comp.name}</div>
-                      {comp.description && <div className="text-xs text-ink-mute truncate max-w-xs">{comp.description}</div>}
+                  <tr key={comp.id} className="hover:bg-paper-tint/60 transition-colors">
+                    <td className="py-3.5 px-4 min-w-[280px]">
+                      <div className="font-bold text-ink-strong leading-snug line-clamp-2">{comp.name}</div>
+                      {comp.description && <div className="text-xs text-ink-mute mt-0.5 line-clamp-1 max-w-md">{comp.description}</div>}
                     </td>
-                    <td className="py-3 px-3 text-ink-soft">
-                      <div>{fmtDate(comp.start_date)}</div>
-                      <div className="text-xs text-ink-mute">{comp.location || comp.city || "—"}</div>
+                    <td className="py-3.5 px-4 min-w-[190px]">
+                      <div className="font-semibold text-ink whitespace-nowrap flex items-center gap-1.5">
+                        <Icon name="calendar" className="w-3.5 h-3.5 text-ink-faint shrink-0" />
+                        <span>{fmtDate(comp.start_date)}</span>
+                        {comp.end_date && comp.end_date !== comp.start_date && (
+                          <span className="text-ink-mute font-normal"> – {fmtDate(comp.end_date)}</span>
+                        )}
+                      </div>
+                      {(comp.location || comp.city) && (
+                        <div className="text-xs text-ink-mute mt-0.5 flex items-center gap-1 line-clamp-1 max-w-[220px]">
+                          <Icon name="mapPin" className="w-3 h-3 text-ink-faint shrink-0" />
+                          <span className="truncate">{comp.location || comp.city}</span>
+                        </div>
+                      )}
                     </td>
-                    <td className="py-3 px-3 text-ink-soft">{comp.organizer || "—"}</td>
-                    <td className="py-3 px-3 text-center">
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-ocean-50 text-ocean-700 border border-ocean-200">
+                    <td className="py-3.5 px-4 min-w-[200px] text-ink-soft text-xs leading-relaxed">
+                      <span className="line-clamp-2">{comp.organizer || "—"}</span>
+                    </td>
+                    <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-ocean-50 text-ocean-700 border border-ocean-200/80">
                         {comp.level}
                       </span>
                     </td>
-                    <td className="py-3 px-3 text-center font-semibold text-ink-strong">
-                      {comp.participations_count}
+                    <td className="py-3.5 px-4 text-center font-bold text-ink-strong whitespace-nowrap font-mono">
+                      {comp.participations_count ?? 0}
                     </td>
-                    <td className="py-3 px-3 text-center">
-                      <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${comp.medals_count ? "bg-amber-100 text-amber-900 border border-amber-300" : "text-ink-mute"}`}>
-                        🏆 {comp.medals_count}
+                    <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                      <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold ${comp.medals_count ? "bg-amber-50 text-amber-900 border border-amber-300/80" : "text-ink-mute bg-paper-tint border border-line"}`}>
+                        🏆 {comp.medals_count ?? 0}
                       </span>
                     </td>
-                    <td className="py-3 px-3 text-right">
+                    <td className="py-3.5 px-4 text-right whitespace-nowrap">
                       <div className="flex items-center justify-end gap-1.5">
                         <Btn
                           variant="soft"
@@ -817,8 +967,22 @@ export default function AdminCompetition({ branchId }: { branchId: string }) {
                         >
                           Detail Peserta
                         </Btn>
-                        <Btn variant="ghost" size="sm" icon="edit" onClick={() => openEditComp(comp)} />
-                        <Btn variant="ghost" size="sm" icon="trash" onClick={() => handleDeleteComp(comp)} />
+                        <button
+                          type="button"
+                          onClick={() => openEditComp(comp)}
+                          title="Edit"
+                          className="w-7 h-7 rounded-lg hover:bg-paper-deep text-ink-mute hover:text-ocean-600 flex items-center justify-center transition-colors"
+                        >
+                          <Icon name="edit" className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteComp(comp)}
+                          title="Hapus"
+                          className="w-7 h-7 rounded-lg hover:bg-danger-50 text-ink-mute hover:text-danger-500 flex items-center justify-center transition-colors"
+                        >
+                          <Icon name="trash" className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -956,21 +1120,21 @@ export default function AdminCompetition({ branchId }: { branchId: string }) {
                   Belum ada peserta terdaftar dalam perlombaan ini. Klik tombol <strong>Tambah Hasil Member</strong> di atas.
                 </div>
               ) : (
-                <div className="overflow-x-auto border border-line rounded-xl">
-                  <table className="w-full text-sm">
+                <div className="overflow-x-auto border border-line rounded-2xl">
+                  <table className="w-full text-sm min-w-[900px]">
                     <thead>
                       <tr className="bg-paper-tint text-left text-[11px] font-bold uppercase tracking-wider text-ink-faint border-b border-line">
-                        <th className="py-2.5 px-3">Member & Cabang</th>
-                        <th className="py-2.5 px-3">Kategori & KU</th>
-                        <th className="py-2.5 px-3">Waktu Result</th>
-                        <th className="py-2.5 px-3 text-center">Peringkat</th>
-                        <th className="py-2.5 px-3 text-center">Hasil / Medali</th>
-                        <th className="py-2.5 px-3">Coach</th>
-                        <th className="py-2.5 px-3 text-center">Sertifikat</th>
-                        <th className="py-2.5 px-3 text-right">Aksi</th>
+                        <th className="py-3 px-4 min-w-[200px]">Member & Cabang</th>
+                        <th className="py-3 px-4 min-w-[160px]">Kategori & KU</th>
+                        <th className="py-3 px-4 w-32 whitespace-nowrap">Waktu Result</th>
+                        <th className="py-3 px-4 text-center w-24 whitespace-nowrap">Peringkat</th>
+                        <th className="py-3 px-4 text-center w-36 whitespace-nowrap">Hasil / Medali</th>
+                        <th className="py-3 px-4 min-w-[140px]">Coach</th>
+                        <th className="py-3 px-4 text-center w-28 whitespace-nowrap">Sertifikat</th>
+                        <th className="py-3 px-4 text-right w-24 whitespace-nowrap">Aksi</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-line">
+                    <tbody className="divide-y divide-line bg-white">
                       {participations.map(p => {
                         const awardInfo = AWARD_LABELS[p.award] || AWARD_LABELS.participant;
                         const memberName = (p.member?.profile as any)?.full_name ?? "Member";
@@ -978,34 +1142,34 @@ export default function AdminCompetition({ branchId }: { branchId: string }) {
 
                         return (
                           <tr key={p.id} className="hover:bg-paper-tint/60 transition-colors">
-                            <td className="py-2.5 px-3">
-                              <div className="flex items-center gap-2">
+                            <td className="py-3 px-4 min-w-[200px]">
+                              <div className="flex items-center gap-2.5">
                                 <Avatar src={avatarUrl ?? undefined} name={memberName} size={32} />
-                                <div>
-                                  <div className="font-bold text-ink-strong">{memberName}</div>
+                                <div className="min-w-0">
+                                  <div className="font-bold text-ink-strong truncate max-w-[180px]">{memberName}</div>
                                   <div className="text-xs text-ink-mute">{p.branch?.name || "Center"}</div>
                                 </div>
                               </div>
                             </td>
-                            <td className="py-2.5 px-3">
+                            <td className="py-3 px-4 min-w-[160px]">
                               <div className="font-medium text-ink-strong">{p.category}</div>
                               {p.age_group && <div className="text-xs text-ink-mute">{p.age_group}</div>}
                             </td>
-                            <td className="py-2.5 px-3 font-mono font-bold text-ocean-700">
+                            <td className="py-3 px-4 font-mono font-bold text-ocean-700 whitespace-nowrap">
                               {p.time_formatted || (p.time_seconds ? `${p.time_seconds}s` : "—")}
                             </td>
-                            <td className="py-2.5 px-3 text-center font-bold text-ink-strong">
+                            <td className="py-3 px-4 text-center font-bold text-ink-strong whitespace-nowrap">
                               {p.rank ? `#${p.rank}` : "—"}
                             </td>
-                            <td className="py-2.5 px-3 text-center">
-                              <span className={`px-2 py-0.5 rounded-full text-xs border ${awardInfo.style}`}>
+                            <td className="py-3 px-4 text-center whitespace-nowrap">
+                              <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${awardInfo.style}`}>
                                 {awardInfo.icon} {p.award === "custom" && p.custom_award_label ? p.custom_award_label : awardInfo.label}
                               </span>
                             </td>
-                            <td className="py-2.5 px-3 text-xs text-ink-soft">
+                            <td className="py-3 px-4 text-xs text-ink-soft min-w-[140px]">
                               {p.coach?.full_name || "—"}
                             </td>
-                            <td className="py-2.5 px-3 text-center">
+                            <td className="py-3 px-4 text-center whitespace-nowrap">
                               {p.certificate_url ? (
                                 <button
                                   type="button"
@@ -1018,10 +1182,24 @@ export default function AdminCompetition({ branchId }: { branchId: string }) {
                                 <span className="text-xs text-ink-faint">—</span>
                               )}
                             </td>
-                            <td className="py-2.5 px-3 text-right">
+                            <td className="py-3 px-4 text-right whitespace-nowrap">
                               <div className="flex items-center justify-end gap-1">
-                                <Btn variant="ghost" size="sm" icon="edit" onClick={() => openEditParticipant(p)} />
-                                <Btn variant="ghost" size="sm" icon="trash" onClick={() => handleRemoveParticipant(p)} />
+                                <button
+                                  type="button"
+                                  onClick={() => openEditParticipant(p)}
+                                  title="Edit"
+                                  className="w-7 h-7 rounded-lg hover:bg-paper-deep text-ink-mute hover:text-ocean-600 flex items-center justify-center transition-colors"
+                                >
+                                  <Icon name="edit" className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveParticipant(p)}
+                                  title="Hapus"
+                                  className="w-7 h-7 rounded-lg hover:bg-danger-50 text-ink-mute hover:text-danger-500 flex items-center justify-center transition-colors"
+                                >
+                                  <Icon name="trash" className="w-3.5 h-3.5" />
+                                </button>
                               </div>
                             </td>
                           </tr>
@@ -1106,6 +1284,24 @@ export default function AdminCompetition({ branchId }: { branchId: string }) {
                   value={partForm.age_group}
                   onChange={e => setPartForm(prev => ({ ...prev, age_group: e.target.value }))}
                   placeholder="KU-4 (U-12)"
+                />
+              </Field>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Field label="Gaya" hint="Misal: Gaya Bebas, Gaya Dada, Gaya Punggung, Kupu-kupu, Ganti">
+                <Input
+                  value={partForm.stroke}
+                  onChange={e => setPartForm(prev => ({ ...prev, stroke: e.target.value }))}
+                  placeholder="Gaya Bebas"
+                />
+              </Field>
+              <Field label="Jarak (meter)" hint="Misal: 25, 50, 100">
+                <Input
+                  type="number" min={0} inputMode="numeric"
+                  value={partForm.distance_meters}
+                  onChange={e => setPartForm(prev => ({ ...prev, distance_meters: e.target.value }))}
+                  placeholder="50"
                 />
               </Field>
             </div>

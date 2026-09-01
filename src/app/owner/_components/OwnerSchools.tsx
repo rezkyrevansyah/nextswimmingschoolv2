@@ -4,6 +4,7 @@ import Image from "next/image";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
+import { useLocale } from "@/components/providers/LocaleProvider";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import Btn from "@/components/ui/Btn";
 import Icon from "@/components/ui/Icon";
@@ -38,9 +39,10 @@ interface SchoolSignature {
   is_active: boolean;
 }
 
-export default function OwnerSchools({ branches }: { branches: Branch[] }) {
+export default function OwnerSchools({}: { branches: Branch[] }) {
   const toast = useToast();
   const confirm = useConfirm();
+  const { t } = useLocale();
   const supabase = createClient();
   const { upload, uploading } = useUpload();
   const logoInputRef = useRef<HTMLInputElement>(null);
@@ -110,14 +112,14 @@ export default function OwnerSchools({ branches }: { branches: Branch[] }) {
     try {
       const url = await upload.schoolLogo(file, school.id);
       if (url) {
-        toast.success("Logo berhasil diunggah");
+        toast.success(t("owner.schools.logoUpdated"));
         setSchools(prev => prev.map(s => s.id === school.id ? { ...s, logo_url: url } : s));
         if (selectedSchool?.id === school.id) {
           setSelectedSchool(prev => prev ? { ...prev, logo_url: url } : null);
         }
       }
     } catch (err) {
-      toast.error("Gagal mengunggah logo", err instanceof Error ? err.message : undefined);
+      toast.error(t("owner.schools.uploadLogoFailed"), err instanceof Error ? err.message : undefined);
     } finally {
       if (e.target) e.target.value = "";
     }
@@ -135,11 +137,11 @@ export default function OwnerSchools({ branches }: { branches: Branch[] }) {
         head_sig_title: configForm.head_sig_title || "HEAD OF NEXT SWIMMING",
       }).eq("id", selectedSchool.id);
       if (error) throw error;
-      toast.success("Pengaturan tanda tangan berhasil disimpan");
+      toast.success(t("owner.schools.configSaved"));
       setSchools(prev => prev.map(s => s.id === selectedSchool.id ? { ...s, ...configForm } : s));
       setSelectedSchool(prev => prev ? { ...prev, ...configForm } : null);
     } catch (err) {
-      toast.error("Gagal menyimpan pengaturan", err instanceof Error ? err.message : undefined);
+      toast.error(t("owner.schools.saveConfigFailed"), err instanceof Error ? err.message : undefined);
     } finally {
       setConfigSaving(false);
     }
@@ -147,8 +149,8 @@ export default function OwnerSchools({ branches }: { branches: Branch[] }) {
 
   const saveSignature = async () => {
     if (!selectedSchool) return;
-    if (!sigForm.name || !sigForm.title) return toast.error("Nama dan Jabatan wajib diisi");
-    if (!sigForm.id && !sigFile) return toast.error("File gambar tanda tangan wajib diunggah untuk tanda tangan baru");
+    if (!sigForm.name || !sigForm.title) return toast.error(t("owner.schools.nameTitleRequired"));
+    if (!sigForm.id && !sigFile) return toast.error(t("owner.schools.sigFileRequired"));
 
     setSigSaving(true);
     try {
@@ -162,7 +164,7 @@ export default function OwnerSchools({ branches }: { branches: Branch[] }) {
         if (sigFile) {
           await upload.schoolSignature(sigFile, selectedSchool.id, sigForm.id);
         }
-        toast.success("Tanda tangan berhasil diperbarui");
+        toast.success(t("owner.schools.sigSaved"));
       } else {
         // Insert new
         const { data: inserted, error } = await supabase.from("school_signatures")
@@ -178,12 +180,12 @@ export default function OwnerSchools({ branches }: { branches: Branch[] }) {
         if (sigFile) {
           await upload.schoolSignature(sigFile, selectedSchool.id, inserted.id);
         }
-        toast.success("Tanda tangan baru berhasil ditambahkan");
+        toast.success(t("owner.schools.sigSaved"));
       }
       setShowSigModal(false);
       loadSignatures(selectedSchool.id);
     } catch (err) {
-      toast.error("Gagal menyimpan tanda tangan", err instanceof Error ? err.message : undefined);
+      toast.error(t("owner.schools.saveSigFailed"), err instanceof Error ? err.message : undefined);
     } finally {
       setSigSaving(false);
     }
@@ -194,34 +196,34 @@ export default function OwnerSchools({ branches }: { branches: Branch[] }) {
     const { error } = await supabase.from("school_signatures")
       .update({ is_active: nextState })
       .eq("id", sig.id);
-    if (error) return toast.error("Gagal mengubah status", error.message);
+    if (error) return toast.error("Error", error.message);
     setSignatures(prev => prev.map(s => s.id === sig.id ? { ...s, is_active: nextState } : s));
   };
 
   const deleteSignature = async (sig: SchoolSignature) => {
-    const yes = await confirm({ title: `Hapus tanda tangan ${sig.name}?`, danger: true });
+    const yes = await confirm({ title: t("owner.schools.deleteSigConfirm", { name: sig.name }), danger: true });
     if (!yes) return;
     const { error } = await supabase.from("school_signatures").delete().eq("id", sig.id);
-    if (error) return toast.error("Gagal menghapus", error.message);
-    toast.success("Tanda tangan berhasil dihapus");
+    if (error) return toast.error(t("owner.schools.deleteSigFailed"), error.message);
+    toast.success(t("owner.schools.sigDeleted"));
     if (selectedSchool) loadSignatures(selectedSchool.id);
   };
 
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="font-display font-bold text-2xl">Schools & Rapor Assets</h2>
-        <p className="text-ink-mute text-sm mt-0.5">Kelola logo sekolah, layout tanda tangan rapor, dan tanda tangan digital kepala sekolah/pejabat.</p>
+        <h2 className="font-display font-bold text-2xl">{t("owner.schools.title")}</h2>
+        <p className="text-ink-mute text-sm mt-0.5">{t("owner.schools.sub")}</p>
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6">
         {/* Left Column: School List */}
         <Card className="space-y-4 lg:col-span-1">
-          <SectionTitle>Daftar Sekolah</SectionTitle>
+          <SectionTitle>{t("owner.schools.schoolsListTitle")}</SectionTitle>
           {loading ? (
-            <div className="text-center py-10 text-ink-mute text-sm">Memuat data sekolah...</div>
+            <div className="text-center py-10 text-ink-mute text-sm">{t("common.actions.saving")}</div>
           ) : schools.length === 0 ? (
-            <div className="text-center py-10 text-ink-mute text-sm">Belum ada sekolah yang terdaftar.</div>
+            <div className="text-center py-10 text-ink-mute text-sm">{t("owner.schools.noSchools")}</div>
           ) : (
             <div className="space-y-2.5">
               {schools.map(school => (
@@ -251,14 +253,14 @@ export default function OwnerSchools({ branches }: { branches: Branch[] }) {
           <div className="space-y-6 lg:col-span-2">
             {/* 1. School Logo */}
             <Card className="space-y-4">
-              <SectionTitle sub="Logo sekolah akan tampil di header rapor sebelah kanan mendampingi logo NEXT Swimming School">
-                Logo Sekolah: {selectedSchool.name}
+              <SectionTitle sub={t("owner.schools.sub")}>
+                {selectedSchool.name}
               </SectionTitle>
               <div className="flex flex-col sm:flex-row items-center gap-6 p-5 border border-line rounded-2xl bg-paper-tint">
                 <div 
                   className="w-24 h-24 rounded-2xl bg-white border border-line flex items-center justify-center overflow-hidden cursor-pointer hover:border-ocean-400 transition-all shadow-sm shrink-0"
                   onClick={() => logoInputRef.current?.click()}
-                  title="Klik untuk memilih logo baru"
+                  title={t("owner.schools.changeLogoBtn")}
                 >
                   {selectedSchool.logo_url ? (
                     <Image src={selectedSchool.logo_url} alt="Logo" width={96} height={96} className="w-full h-full object-contain p-2" />
@@ -277,7 +279,7 @@ export default function OwnerSchools({ branches }: { branches: Branch[] }) {
                     disabled={uploading} 
                     onClick={() => logoInputRef.current?.click()}
                   >
-                    {uploading ? "Mengunggah..." : "Upload Logo Sekolah"}
+                    {uploading ? t("common.actions.saving") : t("owner.schools.uploadLogoBtn")}
                   </Btn>
                   <input 
                     ref={logoInputRef}
@@ -294,11 +296,11 @@ export default function OwnerSchools({ branches }: { branches: Branch[] }) {
             {/* 2. Rapor Signature Display Settings */}
             <Card className="space-y-5">
               <div className="flex items-center justify-between">
-                <SectionTitle sub="Atur tanda tangan siapa saja yang wajib tampil di lembar rapor sekolah ini">
-                  Pengaturan Tanda Tangan Rapor
+                <SectionTitle sub={t("owner.schools.sigConfigSub")}>
+                  {t("owner.schools.sigConfigTitle")}
                 </SectionTitle>
                 <Btn variant="primary" size="sm" onClick={saveConfig} disabled={configSaving}>
-                  {configSaving ? "Menyimpan..." : "Simpan Pengaturan"}
+                  {configSaving ? t("owner.schools.savingConfigBtn") : t("owner.schools.saveConfigBtn")}
                 </Btn>
               </div>
 
@@ -308,7 +310,7 @@ export default function OwnerSchools({ branches }: { branches: Branch[] }) {
                   <div className="flex items-center gap-3">
                     <Switch checked={configForm.show_coach_sig} onChange={c => setConfigForm(f => ({ ...f, show_coach_sig: c }))} />
                     <div>
-                      <div className="font-semibold text-sm text-ink">Tampilkan Tanda Tangan Coach</div>
+                      <div className="font-semibold text-sm text-ink">{t("owner.schools.showCoachSig")}</div>
                       <div className="text-xs text-ink-mute">Tanda tangan coach pengajar kelas murid</div>
                     </div>
                   </div>
@@ -317,7 +319,7 @@ export default function OwnerSchools({ branches }: { branches: Branch[] }) {
                       <Input 
                         value={configForm.coach_sig_title} 
                         onChange={e => setConfigForm(f => ({ ...f, coach_sig_title: e.target.value }))}
-                        placeholder="Jabatan Coach (e.g. HEAD COACH)"
+                        placeholder={t("owner.schools.coachSigTitleField")}
                       />
                     </div>
                   )}
@@ -328,8 +330,8 @@ export default function OwnerSchools({ branches }: { branches: Branch[] }) {
                   <div className="flex items-center gap-3">
                     <Switch checked={configForm.show_head_sig} onChange={c => setConfigForm(f => ({ ...f, show_head_sig: c }))} />
                     <div>
-                      <div className="font-semibold text-sm text-ink">Tampilkan TTD Head of NEXT Swimming School</div>
-                      <div className="text-xs text-ink-mute">Tanda tangan resmi pimpinan NEXT Swimming (Syahril Sidik)</div>
+                      <div className="font-semibold text-sm text-ink">{t("owner.schools.showHeadSig")}</div>
+                      <div className="text-xs text-ink-mute">Tanda tangan resmi pimpinan NEXT Swimming</div>
                     </div>
                   </div>
                   {configForm.show_head_sig && (
@@ -337,7 +339,7 @@ export default function OwnerSchools({ branches }: { branches: Branch[] }) {
                       <Input 
                         value={configForm.head_sig_title} 
                         onChange={e => setConfigForm(f => ({ ...f, head_sig_title: e.target.value }))}
-                        placeholder="Jabatan Head (e.g. HEAD OF NEXT SWIMMING)"
+                        placeholder={t("owner.schools.headSigTitleField")}
                       />
                     </div>
                   )}
@@ -348,7 +350,7 @@ export default function OwnerSchools({ branches }: { branches: Branch[] }) {
                   <div className="flex items-center gap-3">
                     <Switch checked={configForm.show_school_sig} onChange={c => setConfigForm(f => ({ ...f, show_school_sig: c }))} />
                     <div>
-                      <div className="font-semibold text-sm text-ink">Tampilkan Tanda Tangan Sekolah (Kepala Sekolah / Pejabat)</div>
+                      <div className="font-semibold text-sm text-ink">{t("owner.schools.showSchoolSig")}</div>
                       <div className="text-xs text-ink-mute">Tanda tangan digital dari daftar di bawah yang berstatus Aktif</div>
                     </div>
                   </div>
@@ -359,21 +361,21 @@ export default function OwnerSchools({ branches }: { branches: Branch[] }) {
             {/* 3. School Digital Signatures (CRUD) */}
             <Card className="space-y-4">
               <div className="flex items-center justify-between">
-                <SectionTitle sub="Kelola master tanda tangan digital sekolah">
-                  Tanda Tangan Sekolah ({selectedSchool.name})
+                <SectionTitle sub={t("owner.schools.digitalSignaturesSub")}>
+                  {t("owner.schools.digitalSignaturesTitle")} ({selectedSchool.name})
                 </SectionTitle>
                 <Btn variant="outline" size="sm" icon="plus" onClick={() => {
                   setSigForm({ id: "", name: "", title: "Kepala Sekolah", is_active: true });
                   setSigFile(null);
                   setShowSigModal(true);
-                }}>Tambah TTD</Btn>
+                }}>{t("owner.schools.addSigBtn")}</Btn>
               </div>
               
               {sigLoading ? (
-                <div className="text-center py-6 text-ink-mute text-sm">Memuat data tanda tangan...</div>
+                <div className="text-center py-6 text-ink-mute text-sm">{t("common.actions.saving")}</div>
               ) : signatures.length === 0 ? (
                 <div className="text-center py-8 text-ink-mute text-sm border-2 border-dashed border-line rounded-xl">
-                  Belum ada tanda tangan yang diunggah untuk sekolah ini.
+                  {t("owner.schools.noSignaturesYet")}
                 </div>
               ) : (
                 <div className="grid sm:grid-cols-2 gap-3.5">
@@ -386,8 +388,8 @@ export default function OwnerSchools({ branches }: { branches: Branch[] }) {
                           ) : <span className="text-xs text-ink-mute">Pending</span>}
                         </div>
                         <div className="flex items-center gap-1">
-                          <button onClick={() => { setSigForm({ id: sig.id, name: sig.name, title: sig.title, is_active: sig.is_active }); setSigFile(null); setShowSigModal(true); }} className="text-ink-mute hover:text-ocean-600 p-1.5 rounded-lg hover:bg-white transition" title="Edit"><Icon name="edit" className="w-4 h-4" /></button>
-                          <button onClick={() => deleteSignature(sig)} className="text-ink-mute hover:text-danger-500 p-1.5 rounded-lg hover:bg-white transition" title="Hapus"><Icon name="trash" className="w-4 h-4" /></button>
+                          <button onClick={() => { setSigForm({ id: sig.id, name: sig.name, title: sig.title, is_active: sig.is_active }); setSigFile(null); setShowSigModal(true); }} className="text-ink-mute hover:text-ocean-600 p-1.5 rounded-lg hover:bg-white transition" title={t("common.actions.edit")}><Icon name="edit" className="w-4 h-4" /></button>
+                          <button onClick={() => deleteSignature(sig)} className="text-ink-mute hover:text-danger-500 p-1.5 rounded-lg hover:bg-white transition" title={t("common.actions.delete")}><Icon name="trash" className="w-4 h-4" /></button>
                         </div>
                       </div>
 
@@ -400,7 +402,7 @@ export default function OwnerSchools({ branches }: { branches: Branch[] }) {
                         <div className="flex items-center gap-2">
                           <Switch checked={sig.is_active} onChange={() => toggleSigActive(sig)} />
                           <span className={`text-xs font-bold ${sig.is_active ? "text-ok-700" : "text-ink-mute"}`}>
-                            {sig.is_active ? "Aktif di Rapor" : "Non-aktif"}
+                            {sig.is_active ? t("owner.schools.activeSigBadge") : t("owner.schools.inactiveSigBadge")}
                           </span>
                         </div>
                       </div>
@@ -413,36 +415,36 @@ export default function OwnerSchools({ branches }: { branches: Branch[] }) {
         ) : (
           <div className="lg:col-span-2 flex flex-col items-center justify-center text-ink-mute text-sm p-12 border-2 border-dashed border-line rounded-2xl min-h-[300px]">
             <Icon name="book" className="w-10 h-10 text-ink-faint mb-2" />
-            <span>Pilih salah satu sekolah di sebelah kiri untuk mengatur logo dan tanda tangan</span>
+            <span>{t("owner.schools.selectSchoolPrompt")}</span>
           </div>
         )}
       </div>
 
       {/* Modal Add / Edit Signature */}
-      <Modal open={showSigModal} onClose={() => setShowSigModal(false)} title={sigForm.id ? "Edit Tanda Tangan" : "Tambah Tanda Tangan Baru"} size="md"
+      <Modal open={showSigModal} onClose={() => setShowSigModal(false)} title={sigForm.id ? t("owner.schools.editSigModalTitle") : t("owner.schools.addSigModalTitle")} size="md"
         footer={
           <>
-            <Btn variant="ghost" onClick={() => setShowSigModal(false)}>Batal</Btn>
-            <Btn variant="primary" onClick={saveSignature} disabled={sigSaving}>{sigSaving ? "Menyimpan..." : "Simpan Tanda Tangan"}</Btn>
+            <Btn variant="ghost" onClick={() => setShowSigModal(false)}>{t("common.actions.cancel")}</Btn>
+            <Btn variant="primary" onClick={saveSignature} disabled={sigSaving}>{sigSaving ? t("common.actions.saving") : t("owner.schools.sigSaved")}</Btn>
           </>
         }
       >
         <div className="space-y-4">
-          <Field label="Nama Penandatangan" required>
+          <Field label={t("owner.schools.fieldSignerName")} required>
             <Input value={sigForm.name} onChange={e => setSigForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Dra. Hj. Siti Aminah, M.Pd" />
           </Field>
-          <Field label="Jabatan / Title (Bebas diisi sesuai sebutan sekolah)" required>
-            <Input value={sigForm.title} onChange={e => setSigForm(f => ({ ...f, title: e.target.value }))} placeholder="e.g. Kepala Sekolah SMAN 70 Jakarta / Principal / Koordinator" />
+          <Field label={t("owner.schools.fieldSignerTitle")} required>
+            <Input value={sigForm.title} onChange={e => setSigForm(f => ({ ...f, title: e.target.value }))} placeholder="e.g. Kepala Sekolah SMAN 70 Jakarta / Principal" />
           </Field>
-          <Field label="Status Aktif di Rapor">
+          <Field label={t("owner.schools.fieldSignerActive")}>
             <div className="flex items-center gap-3">
               <Switch checked={sigForm.is_active} onChange={checked => setSigForm(f => ({ ...f, is_active: checked }))} />
-              <span className="text-sm text-ink-mute">Gunakan tanda tangan ini di lembar rapor sekolah</span>
+              <span className="text-sm text-ink-mute">{t("owner.schools.activeSigBadge")}</span>
             </div>
           </Field>
-          <Field label="File Gambar Tanda Tangan" required={!sigForm.id}>
-            <input type="file" accept="image/*" onChange={e => setSigFile(e.target.files?.[0] ?? null)} className="w-full text-sm mt-1 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-ocean-50 file:text-ocean-700 hover:file:bg-ocean-100 cursor-pointer" />
-            <div className="text-xs text-ink-mute mt-1.5">Disarankan format PNG transparan dengan kontras tajam (garis tinta hitam/biru tua).</div>
+          <Field label={t("owner.schools.fieldSignerImage")} required={!sigForm.id}>
+            <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml,image/*" onChange={e => setSigFile(e.target.files?.[0] ?? null)} className="w-full text-sm mt-1 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-ocean-50 file:text-ocean-700 hover:file:bg-ocean-100 cursor-pointer" />
+            <div className="text-xs text-ink-mute mt-1.5">Disarankan format PNG transparan atau SVG dengan kontras tajam (garis tinta hitam/biru tua).</div>
           </Field>
         </div>
       </Modal>

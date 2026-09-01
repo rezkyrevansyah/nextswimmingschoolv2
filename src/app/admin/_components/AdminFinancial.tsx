@@ -68,13 +68,23 @@ export default function AdminFinancial({ branchId, userId, userName }: { branchI
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase
-      .from("bills")
-      .select("id, member_id, class_id, period_label, amount, discount, total, status, type, paid_at, paid_method, created_at, member:members(profile:profiles(full_name)), class:classes(name)")
-      .eq("branch_id", branchId)
-      .order("created_at", { ascending: false })
-      .limit(2000);
-    if (data) setBills(data as unknown as FinancialRow[]);
+    // Fetch ALL bills for this branch, paginated — a hard .limit() here would
+    // silently drop older rows once a branch accumulates more history than
+    // the cap, making the financial totals below quietly wrong.
+    const PAGE = 1000;
+    const all: FinancialRow[] = [];
+    for (let from = 0; ; from += PAGE) {
+      const { data } = await supabase
+        .from("bills")
+        .select("id, member_id, class_id, period_label, amount, discount, total, status, type, paid_at, paid_method, created_at, member:members(profile:profiles(full_name)), class:classes(name)")
+        .eq("branch_id", branchId)
+        .order("created_at", { ascending: false })
+        .range(from, from + PAGE - 1);
+      if (!data || data.length === 0) break;
+      all.push(...(data as unknown as FinancialRow[]));
+      if (data.length < PAGE) break;
+    }
+    setBills(all);
     setLoading(false);
   }, [branchId]); // eslint-disable-line react-hooks/exhaustive-deps
 

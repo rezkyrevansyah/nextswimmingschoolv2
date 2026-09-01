@@ -327,13 +327,15 @@ function AdminAbsensiCoach({ branchId }: { branchId: string }) {
       toast.success(t("admin.absensi.attendanceUpdatedToast"));
       logActivity(supabase, { userId: user?.id ?? "unknown", userRole: "admin", userName: user?.user_metadata?.full_name ?? "Admin", branchId, entityType: "coach_attendances", entityId: editTarget.id, action: "update", label: t("admin.absensi.activityManualUpdated", { date: form.session_date }), meta: { coach_id: form.coach_id, session_date: form.session_date, status: manualStatus } });
     } else {
-      const { error } = await supabase.from("coach_attendances").insert({
+      // Upsert (not insert) — guards against creating a second attendance
+      // row for the same coach/class/date, which would double-count honor.
+      const { error } = await supabase.from("coach_attendances").upsert({
         branch_id: branchId, coach_id: form.coach_id, class_id: form.class_id,
         session_date: form.session_date,
         clock_in_time: clockInTime,
         is_manual: true, manual_by: user?.id ?? null,
         manual_note: form.note || null, status: manualStatus,
-      });
+      }, { onConflict: "coach_id,class_id,session_date" });
       setSaving(false);
       if (error) return toast.error(t("admin.absensi.saveFailed"), error.message);
       toast.success(t("admin.absensi.attendanceSavedToast"));

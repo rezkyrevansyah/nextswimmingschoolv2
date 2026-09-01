@@ -4,40 +4,12 @@ import * as XLSX from "xlsx";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
+import { useLocale } from "@/components/providers/LocaleProvider";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import Btn from "@/components/ui/Btn";
 import { Field, Input, Select } from "@/components/ui/FormFields";
 import Icon from "@/components/ui/Icon";
 import { cn } from "@/lib/utils";
-
-const TABLE_LABELS: Record<string, string> = {
-  profiles: "Profil Pengguna",
-  branches: "Cabang",
-  classes: "Kelas",
-  members: "Member",
-  member_classes: "Member per Kelas",
-  member_attendances: "Absensi Member",
-  coach_attendances: "Absensi Coach",
-  staff_attendances: "Absensi Staff",
-  bills: "Tagihan",
-  coach_invoices: "Invoice Coach",
-  payslips: "Payslip",
-  coach_loans: "Pinjaman Coach",
-  rapor_entries: "Entry Rapor",
-  rapor_periods: "Periode Rapor",
-  announcements: "Pengumuman",
-  notifications: "Notifikasi",
-  activity_logs: "Log Aktivitas",
-  registrations: "Pendaftaran",
-  trial_bookings: "Booking Trial",
-  competitions: "Perlombaan",
-  competition_participations: "Peserta Perlombaan",
-  manual_transactions: "Transaksi Manual",
-  manual_transaction_categories: "Kategori Transaksi",
-  certifications: "Sertifikasi",
-  coach_leaves: "Izin Coach",
-  member_leaves: "Izin Member",
-};
 
 const SEARCH_COLS: Record<string, string> = {
   profiles: "full_name",
@@ -50,12 +22,40 @@ const SEARCH_COLS: Record<string, string> = {
   certifications: "title",
 };
 
-const ALLOWED_TABLES = Object.keys(TABLE_LABELS);
+const ALLOWED_TABLES = [
+  "profiles",
+  "branches",
+  "classes",
+  "members",
+  "member_classes",
+  "member_attendances",
+  "coach_attendances",
+  "staff_attendances",
+  "bills",
+  "coach_invoices",
+  "payslips",
+  "coach_loans",
+  "rapor_entries",
+  "rapor_periods",
+  "announcements",
+  "notifications",
+  "activity_logs",
+  "registrations",
+  "trial_bookings",
+  "competitions",
+  "competition_participations",
+  "manual_transactions",
+  "manual_transaction_categories",
+  "certifications",
+  "coach_leaves",
+  "member_leaves",
+];
 
 export default function OwnerDatabaseManager() {
   const supabase = createClient();
   const toast = useToast();
   const confirm = useConfirm();
+  const { t, locale } = useLocale();
 
   const [activeTab, setActiveTab] = useState<"browser" | "monitor">("browser");
   const [selectedTable, setSelectedTable] = useState("activity_logs");
@@ -108,13 +108,17 @@ export default function OwnerDatabaseManager() {
     return () => { void supabase.removeChannel(channel); };
   }, [activeTab, supabase]);
 
+  const getTableLabel = (tableName: string) => {
+    return t(`owner.databaseManager.tables.${tableName}`) || tableName;
+  };
+
   async function handleDelete() {
     if (selectedIds.length === 0) return;
-    const label = TABLE_LABELS[selectedTable] ?? selectedTable;
+    const label = getTableLabel(selectedTable);
     const ok = await confirm({
-      title: `Hapus ${selectedIds.length} baris?`,
-      body: `Menghapus ${selectedIds.length} baris dari tabel "${label}". Tindakan ini tidak dapat dibatalkan.`,
-      confirmLabel: "Hapus",
+      title: `${t("common.actions.delete")} ${selectedIds.length} ${locale === "id" ? "baris" : "rows"}?`,
+      body: `${t("common.actions.delete")} ${selectedIds.length} ${locale === "id" ? "baris dari tabel" : "rows from table"} "${label}".`,
+      confirmLabel: t("common.actions.delete"),
       danger: true,
     });
     if (!ok) return;
@@ -125,7 +129,7 @@ export default function OwnerDatabaseManager() {
     });
     const json = await res.json() as { deleted?: number; error?: string };
     if (json.error) { toast.error(json.error); return; }
-    toast.success(`${json.deleted} baris berhasil dihapus`);
+    toast.success(`${json.deleted} ${locale === "id" ? "baris berhasil dihapus" : "rows deleted successfully"}`);
     fetchRows();
   }
 
@@ -142,7 +146,7 @@ export default function OwnerDatabaseManager() {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, selectedTable.slice(0, 31));
     XLSX.writeFile(wb, `${selectedTable}_${new Date().toISOString().slice(0, 10)}.xlsx`);
-    toast.success("File Excel berhasil diunduh");
+    toast.success(locale === "id" ? "File Excel berhasil diunduh" : "Excel file downloaded successfully");
   }
 
   const columns = rows.length > 0 ? Object.keys(rows[0]).slice(0, 8) : [];
@@ -151,8 +155,8 @@ export default function OwnerDatabaseManager() {
 
   return (
     <div className="space-y-6">
-      <SectionTitle sub="Kelola, ekspor, dan monitor database secara realtime">
-        Database Manager
+      <SectionTitle sub={t("owner.databaseManager.sub")}>
+        {t("owner.databaseManager.title")}
       </SectionTitle>
 
       {/* Tab switcher */}
@@ -167,7 +171,7 @@ export default function OwnerDatabaseManager() {
               activeTab === tab ? "bg-white shadow-card text-ocean-700" : "text-ink-soft hover:text-ink"
             )}
           >
-            {tab === "browser" ? "Browser Data" : "Monitor Realtime"}
+            {tab === "browser" ? t("owner.databaseManager.tabBrowser") : t("owner.databaseManager.tabMonitor")}
           </button>
         ))}
       </div>
@@ -178,38 +182,38 @@ export default function OwnerDatabaseManager() {
           <div className="p-5 space-y-4">
             {/* Controls */}
             <div className="flex flex-wrap gap-3 items-end">
-              <Field label="Tabel" className="w-60">
+              <Field label={t("owner.databaseManager.selectTableLabel")} className="w-60">
                 <Select
                   value={selectedTable}
                   onChange={e => setSelectedTable(e.target.value)}
                 >
-                  {ALLOWED_TABLES.map(t => (
-                    <option key={t} value={t}>{TABLE_LABELS[t]}</option>
+                  {ALLOWED_TABLES.map(tabName => (
+                    <option key={tabName} value={tabName}>{getTableLabel(tabName)}</option>
                   ))}
                 </Select>
               </Field>
               {SEARCH_COLS[selectedTable] && (
-                <Field label="Cari" className="flex-1 min-w-[160px]">
+                <Field label={t("common.actions.search")} className="flex-1 min-w-[160px]">
                   <Input
                     value={search}
                     onChange={e => { setSearch(e.target.value); setPage(1); }}
-                    placeholder="Cari..."
+                    placeholder={t("owner.databaseManager.searchTablePlaceholder", { table: getTableLabel(selectedTable) })}
                     type="search"
                   />
                 </Field>
               )}
               <Btn variant="outline" size="sm" onClick={handleExport}>
-                <Icon name="download" className="w-4 h-4 mr-1" /> Export Excel
+                <Icon name="download" className="w-4 h-4 mr-1" /> {t("owner.databaseManager.exportExcelBtn")}
               </Btn>
               {selectedIds.length > 0 && (
                 <Btn variant="danger" size="sm" onClick={handleDelete}>
-                  <Icon name="trash" className="w-4 h-4 mr-1" /> Hapus ({selectedIds.length})
+                  <Icon name="trash" className="w-4 h-4 mr-1" /> {t("common.actions.delete")} ({selectedIds.length})
                 </Btn>
               )}
             </div>
 
             <div className="flex items-center justify-between text-xs text-ink-soft">
-              <span>Total <strong>{totalCount.toLocaleString("id-ID")}</strong> baris · halaman {page} dari {totalPages || 1}</span>
+              <span>{t("owner.databaseManager.totalRows", { count: totalCount })} · {locale === "id" ? `halaman ${page} dari ${totalPages || 1}` : `page ${page} of ${totalPages || 1}`}</span>
               {selectedIds.length > 0 && (
                 <span className="text-ocean-700 font-semibold">{selectedIds.length} dipilih</span>
               )}
@@ -218,9 +222,9 @@ export default function OwnerDatabaseManager() {
             {/* Table */}
             <div className="overflow-x-auto rounded-xl border border-line">
               {loading ? (
-                <div className="p-10 text-center text-sm text-ink-mute">Memuat data...</div>
+                <div className="p-10 text-center text-sm text-ink-mute">{t("owner.databaseManager.loadingTableData")}</div>
               ) : rows.length === 0 ? (
-                <div className="p-10 text-center text-sm text-ink-mute">Tidak ada data</div>
+                <div className="p-10 text-center text-sm text-ink-mute">{t("owner.databaseManager.noDataInTable", { table: getTableLabel(selectedTable) })}</div>
               ) : (
                 <table className="w-full text-xs">
                   <thead className="bg-paper-tint border-b border-line">
@@ -312,7 +316,7 @@ export default function OwnerDatabaseManager() {
             </div>
             {realtimeLogs.length === 0 ? (
               <div className="py-12 text-center text-sm text-ink-mute border border-dashed border-line rounded-xl">
-                Menunggu aktivitas baru... Coba lakukan aksi di panel lain (buat/ubah data).
+                Menunggu aktivitas baru...
               </div>
             ) : (
               <div className="max-h-[600px] overflow-y-auto space-y-0.5 font-mono text-xs">

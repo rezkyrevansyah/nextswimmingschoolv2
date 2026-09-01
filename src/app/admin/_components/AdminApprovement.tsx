@@ -14,7 +14,6 @@ import Status from "@/components/ui/Status";
 import Avatar from "@/components/ui/Avatar";
 import Modal from "@/components/ui/Modal";
 import DatePicker from "@/components/ui/DatePicker";
-import type { Database } from "@/types/database";
 import { calcAge, parseUserApiError } from "../_utils";
 import { logActivity } from "@/lib/activityLog";
 import { fmtDate, fmtDateLong, waLink } from "@/lib/utils";
@@ -219,18 +218,18 @@ export default function AdminApprovement({ branchId }: { branchId: string }) {
     const res = await fetch("/api/admin/users", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: memberEmail, password: tempPassword, full_name: r.full_name, role: "member", branch_id: branchId, phone: r.phone, birth_date: r.birth_date || null, gender: r.gender || null, address: r.address || null, health_notes: r.health_notes || null, member_type: "reguler", school_id: null, class_id: null, total_sessions: null, proof_url: proofUrl }),
+      body: JSON.stringify({ email: memberEmail, password: tempPassword, full_name: r.full_name, role: "member", branch_id: branchId, phone: r.phone, birth_date: r.birth_date || null, gender: r.gender || null, address: r.address || null, health_notes: r.health_notes || null, member_type: "reguler", school_id: null, class_id: null, total_sessions: null, proof_url: proofUrl, registration_id: r.id }),
     });
-    const json = await res.json() as { user_id?: string; member_id?: string; error?: string; code?: string };
+    const json = await res.json() as { user_id?: string; member_id?: string; error?: string; code?: string; class_assignment_error?: string };
     if (!res.ok) {
       const [errT, errS, errD] = parseUserApiError(json, t);
       toast.error(errT, errS, errD);
       setApprovingId(null);
       return;
     }
+    // Account creation + registration status update now happen together
+    // server-side (see /api/admin/users) so they can't drift out of sync.
     const user = (await supabase.auth.getUser()).data.user;
-    const upd: Database["public"]["Tables"]["registrations"]["Update"] = { status: "approved", reviewed_by: user?.id ?? null, reviewed_at: new Date().toISOString(), proof_url: proofUrl ?? undefined, member_id: json.member_id ?? undefined };
-    await supabase.from("registrations").update(upd).eq("id", r.id);
     toast.success(t("admin.approvement.registrationApprovedToast"), t("admin.approvement.memberInMenuHint"));
     logActivity(supabase, { userId: user?.id ?? "unknown", userRole: "admin", userName: user?.user_metadata?.full_name ?? "Admin", branchId, entityType: "registrations", entityId: r.id, entityLabel: r.full_name, action: "approve", label: t("admin.approvement.activityRegApproved", { name: r.full_name, email: r.email ?? "" }) });
     setApprovingId(null);

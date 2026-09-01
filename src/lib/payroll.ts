@@ -119,6 +119,33 @@ export interface GeneratePayslipParams {
   created_by: string;
 }
 
+// Deletes a payslip along with its dependent rows (payslip_deductions,
+// coach_loan_payments) first — neither FK has ON DELETE CASCADE, so deleting
+// the payslip row directly while children exist fails silently if the error
+// isn't checked, leaving an orphaned/undeletable draft behind.
+export async function deletePayslipCascade(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: SupabaseClient<any>,
+  payslipId: string
+): Promise<{ error: string } | null> {
+  const { error: loanPaymentsError } = await supabase
+    .from("coach_loan_payments")
+    .delete()
+    .eq("payslip_id", payslipId);
+  if (loanPaymentsError) return { error: loanPaymentsError.message };
+
+  const { error: deductionsError } = await supabase
+    .from("payslip_deductions")
+    .delete()
+    .eq("payslip_id", payslipId);
+  if (deductionsError) return { error: deductionsError.message };
+
+  const { error: payslipError } = await supabase.from("payslips").delete().eq("id", payslipId);
+  if (payslipError) return { error: payslipError.message };
+
+  return null;
+}
+
 export async function generatePayslip(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: SupabaseClient<any>,
@@ -183,7 +210,7 @@ export async function generatePayslip(
         .select("id")
         .single();
       if (paymentError) {
-        await supabase.from("payslips").delete().eq("id", payslip.id);
+        await deletePayslipCascade(supabase, payslip.id);
         return { error: paymentError.message };
       }
       loanPaymentId = paymentRow?.id ?? null;
@@ -199,7 +226,7 @@ export async function generatePayslip(
       meta: d.meta ?? null,
     });
     if (deductionError) {
-      await supabase.from("payslips").delete().eq("id", payslip.id);
+      await deletePayslipCascade(supabase, payslip.id);
       return { error: deductionError.message };
     }
   }

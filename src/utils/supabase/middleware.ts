@@ -53,24 +53,32 @@ export const updateSession = async (request: NextRequest) => {
 
   // Block suspended members — redirect to /login with ?suspended=1
   if (user && pathname.startsWith("/member")) {
-    const { data: member } = await supabase
+    const { data: memberRows, error: memberError } = await supabase
       .from("members")
       .select("status, suspend_until")
-      .eq("profile_id", user.id)
-      .single();
+      .eq("profile_id", user.id);
 
-    if (member) {
-      const isSuspended =
+    if (memberError) {
+      // Fail closed: don't silently let a suspended member through just
+      // because the status lookup errored (e.g. duplicate rows, DB hiccup).
+      const url = request.nextUrl.clone();
+      url.pathname = "/login";
+      url.searchParams.set("suspended", "1");
+      return NextResponse.redirect(url);
+    }
+
+    const isSuspended = (memberRows ?? []).some(
+      (member) =>
         member.status === "suspended" ||
         (member.suspend_until != null &&
-          new Date(member.suspend_until) >= new Date());
-      if (isSuspended) {
-        await supabase.auth.signOut();
-        const url = request.nextUrl.clone();
-        url.pathname = "/login";
-        url.searchParams.set("suspended", "1");
-        return NextResponse.redirect(url);
-      }
+          new Date(member.suspend_until) >= new Date())
+    );
+    if (isSuspended) {
+      await supabase.auth.signOut();
+      const url = request.nextUrl.clone();
+      url.pathname = "/login";
+      url.searchParams.set("suspended", "1");
+      return NextResponse.redirect(url);
     }
   }
 

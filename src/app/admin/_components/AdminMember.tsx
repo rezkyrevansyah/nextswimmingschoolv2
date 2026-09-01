@@ -181,7 +181,7 @@ export default function AdminMember({ branchId }: { branchId: string }) {
         total_sessions: form.type === "private" ? (Number(form.jumlah_sesi) || null) : null,
       }),
     });
-    const json = await res.json() as { user_id?: string; error?: string; code?: string };
+    const json = await res.json() as { user_id?: string; error?: string; code?: string; class_assignment_error?: string };
     if (!res.ok) { const [errT, errS, errD] = parseUserApiError(json, t); toast.error(errT, errS, errD); setSaving(false); return; }
 
     // Upload avatar if selected
@@ -194,7 +194,11 @@ export default function AdminMember({ branchId }: { branchId: string }) {
       } catch { /* non-fatal */ }
     }
 
-    toast.success(t("admin.members.memberCreatedToast"), t("admin.members.accountActiveImmediatelySub"));
+    if (json.class_assignment_error) {
+      toast.error(t("admin.members.memberCreatedToast"), json.class_assignment_error);
+    } else {
+      toast.success(t("admin.members.memberCreatedToast"), t("admin.members.accountActiveImmediatelySub"));
+    }
     setSaving(false);
     setOpenCreate(false);
     setCreateAvatarFile(null);
@@ -371,7 +375,7 @@ export default function AdminMember({ branchId }: { branchId: string }) {
   const [importPage, setImportPage] = useState(0);
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState<{ done: number; total: number } | null>(null);
-  const [importResult, setImportResult] = useState<{ success: number; failed: { row: number; email: string; error: string }[] } | null>(null);
+  const [importResult, setImportResult] = useState<{ success: number; failed: { row: number; email: string; error: string }[]; classWarnings: { row: number; email: string; warning: string }[] } | null>(null);
 
   // Bulk QR download state
   const [qrSelectMode, setQrSelectMode] = useState(false);
@@ -535,6 +539,7 @@ export default function AdminMember({ branchId }: { branchId: string }) {
 
     const CHUNK = 10;
     const allFailed: { row: number; email: string; error: string }[] = [];
+    const allClassWarnings: { row: number; email: string; warning: string }[] = [];
     let totalSuccess = 0;
 
     setImporting(true);
@@ -557,20 +562,21 @@ export default function AdminMember({ branchId }: { branchId: string }) {
             })),
           }),
         });
-        const json = await res.json() as { success: number; failed: { row: number; email: string; error: string }[] };
+        const json = await res.json() as { success: number; failed: { row: number; email: string; error: string }[]; classWarnings?: { row: number; email: string; warning: string }[] };
         if (!res.ok) {
           toast.error(t("admin.members.importStoppedTitle"), (json as { error?: string }).error ?? t("admin.members.genericErrorOccurred"));
           break;
         }
         totalSuccess += json.success;
         allFailed.push(...json.failed);
+        allClassWarnings.push(...(json.classWarnings ?? []));
         setImportProgress({ done: Math.min(i + CHUNK, toImport.length), total: toImport.length });
       }
     } catch {
       toast.error(t("admin.members.importFailedTitle"), t("admin.members.networkErrorOccurred"));
     }
 
-    setImportResult({ success: totalSuccess, failed: allFailed });
+    setImportResult({ success: totalSuccess, failed: allFailed, classWarnings: allClassWarnings });
     setImportStep("result");
     setImporting(false);
     setImportProgress(null);
@@ -1661,7 +1667,7 @@ export default function AdminMember({ branchId }: { branchId: string }) {
         open={openImport}
         onClose={() => setOpenImport(false)}
         title={importStep === "upload" ? t("admin.members.importModalTitleUpload") : importStep === "preview" ? t("admin.members.importModalTitlePreview", { count: importRows.length }) : t("admin.members.importModalTitleResult")}
-        size={importStep === "result" ? (importResult && importResult.failed.length > 0 ? "lg" : "sm") : "xl"}
+        size={importStep === "result" ? (importResult && (importResult.failed.length > 0 || importResult.classWarnings.length > 0) ? "lg" : "sm") : "xl"}
         footer={
           importStep === "upload" ? (
             <Btn variant="ghost" onClick={() => setOpenImport(false)}>{t("common.actions.close")}</Btn>
@@ -1813,7 +1819,7 @@ export default function AdminMember({ branchId }: { branchId: string }) {
         {/* Step: result */}
         {importStep === "result" && importResult && (
           <div className="space-y-5 py-2">
-            {importResult.failed.length === 0 ? (
+            {importResult.failed.length === 0 && importResult.classWarnings.length === 0 ? (
               <div className="flex flex-col items-center justify-center text-center p-6 bg-ok-50/70 border border-ok-200 rounded-2xl">
                 <div className="w-12 h-12 rounded-full bg-ok-100 text-ok-600 flex items-center justify-center mb-3">
                   <Icon name="check" className="w-6 h-6" strokeWidth={2.5} />
@@ -1834,26 +1840,54 @@ export default function AdminMember({ branchId }: { branchId: string }) {
                   </div>
                 </div>
 
-                <div className="overflow-x-auto rounded-xl border border-line max-h-60 overflow-y-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="bg-paper-tint border-b border-line text-left sticky top-0">
-                        <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs w-14">{t("admin.members.colRowImport")}</th>
-                        <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs">{t("admin.coaches.colEmail")}</th>
-                        <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs">{t("admin.members.colReasonImport")}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {importResult.failed.map(f => (
-                        <tr key={f.row} className="border-b border-line">
-                          <td className="px-3 py-2 text-xs text-ink-mute">{f.row}</td>
-                          <td className="px-3 py-2 text-ink-soft">{f.email}</td>
-                          <td className="px-3 py-2 text-xs text-danger-700">{f.error}</td>
+                {importResult.failed.length > 0 && (
+                  <div className="overflow-x-auto rounded-xl border border-line max-h-60 overflow-y-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-paper-tint border-b border-line text-left sticky top-0">
+                          <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs w-14">{t("admin.members.colRowImport")}</th>
+                          <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs">{t("admin.coaches.colEmail")}</th>
+                          <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs">{t("admin.members.colReasonImport")}</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody>
+                        {importResult.failed.map(f => (
+                          <tr key={f.row} className="border-b border-line">
+                            <td className="px-3 py-2 text-xs text-ink-mute">{f.row}</td>
+                            <td className="px-3 py-2 text-ink-soft">{f.email}</td>
+                            <td className="px-3 py-2 text-xs text-danger-700">{f.error}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {importResult.classWarnings.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="text-xs font-semibold text-warn-700">{t("admin.members.classFullWarningsTitle", { count: importResult.classWarnings.length })}</div>
+                    <div className="overflow-x-auto rounded-xl border border-line max-h-60 overflow-y-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="bg-paper-tint border-b border-line text-left sticky top-0">
+                            <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs w-14">{t("admin.members.colRowImport")}</th>
+                            <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs">{t("admin.coaches.colEmail")}</th>
+                            <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs">{t("admin.members.colReasonImport")}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {importResult.classWarnings.map(w => (
+                            <tr key={w.row} className="border-b border-line">
+                              <td className="px-3 py-2 text-xs text-ink-mute">{w.row}</td>
+                              <td className="px-3 py-2 text-ink-soft">{w.email}</td>
+                              <td className="px-3 py-2 text-xs text-warn-700">{w.warning}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </>
             )}
           </div>

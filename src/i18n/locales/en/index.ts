@@ -4,5 +4,7 @@ import { landing } from "./landing";
 import { owner } from "./owner";
 import { coach } from "./coach";
 import { admin } from "./admin";
+import { staff } from "./staff";
+import { school } from "./school";
 
-export const en = { common, member, landing, owner, coach, admin };
+export const en = { common, member, landing, owner, coach, admin, staff, school };

@@ -14,7 +14,7 @@ import Sidebar, { type NavItem } from "@/components/layout/Sidebar";
 import Topbar from "@/components/layout/Topbar";
 import Bell from "@/components/layout/Bell";
 import BetaFeedback, { BETA_FEEDBACK_ENABLED } from "@/components/layout/BetaFeedback";
-import { fmtIDR, clampPercent, fmtDate, fmtDateLong, waLink } from "@/lib/utils";
+import { fmtIDR, clampPercent, fmtDate, fmtDateLong, waLink, cn } from "@/lib/utils";
 import { logActivity } from "@/lib/activityLog";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
@@ -28,6 +28,7 @@ import PayslipGenerator from "./payroll/PayslipGenerator";
 import CoachLoans from "./payroll/CoachLoans";
 import AdminCompetition from "../admin/_components/AdminCompetition";
 import OwnerDatabaseManager from "./_components/OwnerDatabaseManager";
+import OwnerClassesMaster from "./_components/OwnerClassesMaster";
 
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -248,10 +249,7 @@ function Branches({ branches, onRefresh, userId, userName }: { branches: Branch[
   const router = useRouter();
   const supabase = createClient();
 
-  const openAdminPanel = (b: Branch) => {
-    sessionStorage.setItem("ownerPreviewBranch", JSON.stringify({ id: b.id, name: b.name }));
-    router.push("/admin");
-  };
+  const [filterTab, setFilterTab] = useState<"all" | "active" | "archived">("all");
   const [showAdd, setShowAdd] = useState(false);
   const [editItem, setEditItem] = useState<Branch | null>(null);
   const [name, setName] = useState("");
@@ -262,6 +260,11 @@ function Branches({ branches, onRefresh, userId, userName }: { branches: Branch[
   const [bankAccount, setBankAccount] = useState("");
   const [bankHolder, setBankHolder] = useState("");
   const [saving, setSaving] = useState(false);
+
+  const openAdminPanel = (b: Branch) => {
+    sessionStorage.setItem("ownerPreviewBranch", JSON.stringify({ id: b.id, name: b.name }));
+    router.push("/admin");
+  };
 
   const openAdd = () => { setName(""); setCity(""); setAddress(""); setWaPhone(""); setBankName(""); setBankAccount(""); setBankHolder(""); setEditItem(null); setShowAdd(true); };
   const openEdit = (b: Branch) => { setName(b.name); setCity(b.city); setAddress(b.address); setWaPhone(b.wa_numbers?.[0] ?? ""); setBankName(b.bank_name ?? ""); setBankAccount(b.bank_account ?? ""); setBankHolder(b.bank_holder ?? ""); setEditItem(b); setShowAdd(true); };
@@ -301,6 +304,20 @@ function Branches({ branches, onRefresh, userId, userName }: { branches: Branch[
     onRefresh();
   };
 
+  const unarchive = async (b: Branch) => {
+    const yes = await confirm({
+      title: t("owner.branches.unarchiveConfirmTitle", { name: b.name }),
+      body: t("owner.branches.unarchiveConfirmBody"),
+      confirmLabel: t("owner.branches.unarchiveBtn"),
+    });
+    if (!yes) return;
+    const { error } = await supabase.from("branches").update({ status: "active" }).eq("id", b.id);
+    if (error) return toast.error(t("owner.branches.unarchiveFailed"), error.message);
+    toast.success(t("owner.branches.unarchived"));
+    logActivity(supabase, { userId, userRole: "owner", userName, entityType: "branches", entityId: b.id, entityLabel: b.name, action: "restore", label: t("owner.branches.activityUnarchived", { name: b.name }) });
+    onRefresh();
+  };
+
   const deleteBranch = async (b: Branch) => {
     const yes = await confirm({
       title: t("owner.branches.deleteConfirmTitle", { name: b.name }),
@@ -317,6 +334,15 @@ function Branches({ branches, onRefresh, userId, userName }: { branches: Branch[
     onRefresh();
   };
 
+  const activeCount = branches.filter(b => b.status !== "archived").length;
+  const archivedCount = branches.filter(b => b.status === "archived").length;
+
+  const filteredBranches = useMemo(() => {
+    if (filterTab === "active") return branches.filter(b => b.status !== "archived");
+    if (filterTab === "archived") return branches.filter(b => b.status === "archived");
+    return branches;
+  }, [branches, filterTab]);
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -326,45 +352,105 @@ function Branches({ branches, onRefresh, userId, userName }: { branches: Branch[
         </div>
         <Btn variant="primary" icon="plus" onClick={openAdd}>{t("owner.branches.addBranch")}</Btn>
       </div>
+
+      {/* Filter Tabs */}
+      <div className="flex gap-1 p-1 bg-paper-tint rounded-xl w-fit border border-line">
+        <button
+          type="button"
+          onClick={() => setFilterTab("all")}
+          className={cn(
+            "px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all",
+            filterTab === "all" ? "bg-white shadow-card text-ocean-700 font-semibold" : "text-ink-mute hover:text-ink"
+          )}
+        >
+          {t("owner.branches.tabAll")} ({branches.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => setFilterTab("active")}
+          className={cn(
+            "px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all",
+            filterTab === "active" ? "bg-white shadow-card text-ocean-700 font-semibold" : "text-ink-mute hover:text-ink"
+          )}
+        >
+          {t("owner.branches.tabActive")} ({activeCount})
+        </button>
+        <button
+          type="button"
+          onClick={() => setFilterTab("archived")}
+          className={cn(
+            "px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all",
+            filterTab === "archived" ? "bg-white shadow-card text-amber-700 font-semibold" : "text-ink-mute hover:text-ink"
+          )}
+        >
+          {t("owner.branches.tabArchived")} ({archivedCount})
+        </button>
+      </div>
+
       <div className="grid lg:grid-cols-3 gap-5">
-        {branches.map((b) => (
-          <Card key={b.id} padded={false} className="overflow-hidden">
-            <div className="h-32 relative bg-gradient-to-br from-ocean-700 to-ocean-500">
-              <div className="caustics absolute inset-0" />
-              <div className="absolute inset-0 grid-faint opacity-15" />
-              <div className="relative p-5 h-full flex items-end text-white">
-                <div>
-                  <div className="text-[10px] uppercase tracking-widest font-bold opacity-80">{t("owner.branches.branchLabel")}</div>
-                  <div className="font-display font-bold text-xl">{b.name}</div>
+        {filteredBranches.map((b) => {
+          const isArchived = b.status === "archived";
+          return (
+            <Card key={b.id} padded={false} className={cn("overflow-hidden transition-all", isArchived && "border-amber-200 bg-paper-tint/30")}>
+              <div className={cn("h-32 relative", isArchived ? "bg-gradient-to-br from-slate-700 to-slate-800" : "bg-gradient-to-br from-ocean-700 to-ocean-500")}>
+                <div className="caustics absolute inset-0 opacity-20" />
+                <div className="absolute inset-0 grid-faint opacity-15" />
+                <div className="relative p-5 h-full flex items-end justify-between text-white">
+                  <div>
+                    <div className="text-[10px] uppercase tracking-widest font-bold opacity-80">{t("owner.branches.branchLabel")}</div>
+                    <div className="font-display font-bold text-xl">{b.name}</div>
+                  </div>
+                  <div>
+                    {isArchived ? (
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/25 text-amber-200 border border-amber-400/40 uppercase tracking-wider">
+                        {t("owner.branches.statusArchived")}
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-ok-500/25 text-ok-200 border border-ok-400/40 uppercase tracking-wider">
+                        {t("owner.branches.statusActive")}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-            <div className="p-5">
-              <div className="flex items-center gap-2 text-sm text-ink-mute">
-                <Icon name="pin" className="w-4 h-4 text-ocean-500" />{b.address || b.city}
-              </div>
-              {b.bank_name && (
-                <div className="mt-1.5 flex items-center gap-1.5 text-xs text-ink-mute">
-                  <Icon name="card" className="w-3.5 h-3.5 shrink-0" />
-                  <span className="font-mono">{b.bank_name} · {b.bank_account}</span>
+              <div className="p-5">
+                <div className="flex items-center gap-2 text-sm text-ink-mute">
+                  <Icon name="pin" className={cn("w-4 h-4", isArchived ? "text-slate-400" : "text-ocean-500")} />{b.address || b.city}
                 </div>
-              )}
-              <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-                <div className="p-2.5 rounded-xl bg-paper-tint"><div className="font-display font-bold text-lg text-ink">{b.member_count ?? 0}</div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("owner.branches.memberStat")}</div></div>
-                <div className="p-2.5 rounded-xl bg-paper-tint"><div className="font-display font-bold text-lg text-ink">{b.coach_count ?? 0}</div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("owner.branches.coachStat")}</div></div>
-                <div className="p-2.5 rounded-xl bg-paper-tint"><div className="font-display font-bold text-lg text-ink">{b.class_count ?? 0}</div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("owner.branches.classStat")}</div></div>
-              </div>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <Btn variant="primary" size="sm" icon="grid" onClick={() => openAdminPanel(b)}>{t("owner.branches.openAdminPanel")}</Btn>
-                <Btn variant="ghost" size="sm" icon="edit" onClick={() => openEdit(b)}>{t("common.actions.edit")}</Btn>
-                {b.status !== "archived" && (
-                  <Btn variant="ghost" size="sm" icon="archive" onClick={() => archive(b)}>{t("owner.branches.archiveBtn")}</Btn>
+                {b.bank_name && (
+                  <div className="mt-1.5 flex items-center gap-1.5 text-xs text-ink-mute">
+                    <Icon name="card" className="w-3.5 h-3.5 shrink-0" />
+                    <span className="font-mono">{b.bank_name} · {b.bank_account}</span>
+                  </div>
                 )}
-                <Btn variant="danger" size="sm" icon="trash" onClick={() => deleteBranch(b)}>{t("common.actions.delete")}</Btn>
+                <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+                  <div className="p-2.5 rounded-xl bg-paper-tint"><div className="font-display font-bold text-lg text-ink">{b.member_count ?? 0}</div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("owner.branches.memberStat")}</div></div>
+                  <div className="p-2.5 rounded-xl bg-paper-tint"><div className="font-display font-bold text-lg text-ink">{b.coach_count ?? 0}</div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("owner.branches.coachStat")}</div></div>
+                  <div className="p-2.5 rounded-xl bg-paper-tint"><div className="font-display font-bold text-lg text-ink">{b.class_count ?? 0}</div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("owner.branches.classStat")}</div></div>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <Btn variant="primary" size="sm" icon="grid" onClick={() => openAdminPanel(b)}>{t("owner.branches.openAdminPanel")}</Btn>
+                  <Btn variant="ghost" size="sm" icon="edit" onClick={() => openEdit(b)}>{t("common.actions.edit")}</Btn>
+                  {isArchived ? (
+                    <Btn variant="outline" size="sm" icon="refresh" className="text-ok-700 hover:bg-ok-50 border-ok-300 font-bold" onClick={() => unarchive(b)}>
+                      {t("owner.branches.unarchiveBtn")}
+                    </Btn>
+                  ) : (
+                    <Btn variant="ghost" size="sm" icon="archive" onClick={() => archive(b)}>
+                      {t("owner.branches.archiveBtn")}
+                    </Btn>
+                  )}
+                  <Btn variant="danger" size="sm" icon="trash" onClick={() => deleteBranch(b)}>{t("common.actions.delete")}</Btn>
+                </div>
               </div>
-            </div>
-          </Card>
-        ))}
+            </Card>
+          );
+        })}
+        {filteredBranches.length === 0 && (
+          <div className="lg:col-span-3 py-12 text-center text-ink-mute text-sm border-2 border-dashed border-line rounded-2xl">
+            {filterTab === "archived" ? "Tidak ada center yang diarsipkan." : "Belum ada center."}
+          </div>
+        )}
         <button onClick={openAdd} className="rounded-2xl border-2 border-dashed border-line hover:border-ocean-300 hover:bg-ocean-50/40 transition flex flex-col items-center justify-center min-h-[280px] text-ink-mute hover:text-ocean-600 group">
           <span className="w-14 h-14 rounded-2xl bg-paper-tint group-hover:bg-white flex items-center justify-center mb-3">
             <Icon name="plus" className="w-6 h-6" />
@@ -401,480 +487,10 @@ function Branches({ branches, onRefresh, userId, userName }: { branches: Branch[
   );
 }
 
-interface ClassCoachRow { id: string; full_name: string; phone: string | null; status: string; role: string; }
-interface ClassMemberRow { id: string; full_name: string; phone: string | null; status: string; }
-interface CoachAttRow { id: string; date: string; status: string; note: string | null; profile: { full_name: string } | null; }
-interface MemberAttRow { id: string; date: string; status: string; note: string | null; profile: { full_name: string } | null; }
-
 function Classes({ branches }: { branches: Branch[] }) {
-  const { t } = useLocale();
-  const supabase = createClient();
-  const toast = useToast();
-  const confirm = useConfirm();
-  const [classes, setClasses] = useState<ClassRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [editTarget, setEditTarget] = useState<ClassRow | null>(null);
-  const [editForm, setEditForm] = useState({ goals: "", description: "" });
-  const [saving, setSaving] = useState(false);
-
-  // Detail modal
-  const [detailClass, setDetailClass] = useState<ClassRow | null>(null);
-  const [detailTab, setDetailTab] = useState<"info" | "coach" | "member" | "att_coach" | "att_member">("info");
-  const [detailCoaches, setDetailCoaches] = useState<ClassCoachRow[]>([]);
-  const [detailMembers, setDetailMembers] = useState<ClassMemberRow[]>([]);
-  const [detailCoachAtt, setDetailCoachAtt] = useState<CoachAttRow[]>([]);
-  const [detailMemberAtt, setDetailMemberAtt] = useState<MemberAttRow[]>([]);
-  const [detailLoading, setDetailLoading] = useState(false);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    const { data } = await supabase
-      .from("classes")
-      .select("id, name, branch_id, status, capacity, enrolled, price_monthly, schedule_days, time_start, time_end, goals, description, spreadsheet_url, spreadsheet_filled, rapor_signer_coach_id, branch:branches(name), class_coaches(coach_id, role, profile:profiles(full_name)), coach_spreadsheets:class_coach_spreadsheets(coach_id, spreadsheet_url, updated_at, coach:profiles(full_name))")
-      .eq("status", "active")
-      .order("branch_id")
-      .order("name");
-    if (data) setClasses(data as unknown as ClassRow[]);
-    setLoading(false);
-  }, [supabase]);
-
-  /* eslint-disable react-hooks/set-state-in-effect -- async data loader */
-  useEffect(() => { load(); }, [load]);
-  /* eslint-enable react-hooks/set-state-in-effect */
-
-  const openEdit = (c: ClassRow) => {
-    setEditTarget(c);
-    setEditForm({ goals: c.goals ?? "", description: c.description ?? "" });
-  };
-
-  const saveEdit = async () => {
-    if (!editTarget) return;
-    setSaving(true);
-    const { error } = await supabase.from("classes")
-      .update({ goals: editForm.goals.trim() || null, description: editForm.description.trim() || null })
-      .eq("id", editTarget.id);
-    setSaving(false);
-    if (error) return toast.error(t("owner.classes.saveFailed"), error.message);
-    toast.success(t("owner.classes.updated"));
-    setEditTarget(null);
-    load();
-  };
-
-  const openDetail = async (c: ClassRow) => {
-    setDetailClass(c);
-    setDetailTab("info");
-    setDetailCoaches([]); setDetailMembers([]); setDetailCoachAtt([]); setDetailMemberAtt([]);
-  };
-
-  const loadDetailTab = useCallback(async (tab: typeof detailTab, classId: string) => {
-    setDetailLoading(true);
-    if (tab === "coach") {
-      const { data } = await supabase
-        .from("class_coaches")
-        .select("role, profile:profiles(id, full_name, phone, status)")
-        .eq("class_id", classId);
-      setDetailCoaches(
-        ((data ?? []) as unknown as { role: string; profile: { id: string; full_name: string; phone: string | null; status: string } | null }[])
-          .filter(r => !!r.profile)
-          .map(r => ({ ...r.profile!, role: r.role }))
-      );
-    } else if (tab === "member") {
-      const { data } = await supabase
-        .from("member_classes")
-        .select("member:members(id, profile:profiles(full_name, phone, status))")
-        .eq("class_id", classId);
-      setDetailMembers(
-        ((data ?? []) as unknown as { member: { id: string; profile: { full_name: string; phone: string | null; status: string } | null } | null }[])
-          .map(r => r.member)
-          .filter((m): m is { id: string; profile: { full_name: string; phone: string | null; status: string } | null } => !!m)
-          .map(m => ({ id: m.id, full_name: m.profile?.full_name ?? "—", phone: m.profile?.phone ?? null, status: m.profile?.status ?? "active" }))
-      );
-    } else if (tab === "att_coach") {
-      const { data } = await supabase
-        .from("coach_attendances")
-        .select("id, date, status, note, profile:profiles(full_name)")
-        .eq("class_id", classId)
-        .order("date", { ascending: false })
-        .limit(100);
-      setDetailCoachAtt((data ?? []) as unknown as CoachAttRow[]);
-    } else if (tab === "att_member") {
-      const { data } = await supabase
-        .from("member_attendances")
-        .select("id, date, status, note, profile:profiles(full_name)")
-        .eq("class_id", classId)
-        .order("date", { ascending: false })
-        .limit(100);
-      setDetailMemberAtt((data ?? []) as unknown as MemberAttRow[]);
-    }
-    setDetailLoading(false);
-  }, [supabase]);
-
-  const switchDetailTab = async (tab: typeof detailTab) => {
-    setDetailTab(tab);
-    if (!detailClass) return;
-    if (tab === "info") return;
-    loadDetailTab(tab, detailClass.id);
-  };
-
-  const [settingRole, setSettingRole] = useState<string | null>(null);
-  const setCoachRole = async (classId: string, coachId: string, role: "head" | "assistant") => {
-    setSettingRole(coachId);
-    if (role === "head") {
-      await supabase.from("class_coaches").update({ role: "assistant" }).eq("class_id", classId).eq("role", "head");
-    }
-    const { error } = await supabase.from("class_coaches").update({ role }).eq("class_id", classId).eq("coach_id", coachId);
-    setSettingRole(null);
-    if (error) return toast.error(t("owner.classes.roleChangeFailed"), error.message);
-    toast.success(role === "head" ? t("owner.classes.setAsHeadCoach") : t("owner.classes.setAsAssistantCoach"));
-    setDetailCoaches(prev => prev.map(c => c.id === coachId ? { ...c, role } : role === "head" ? { ...c, role: c.role === "head" ? "assistant" : c.role } : c));
-    setClasses(prev => prev.map(c => c.id !== classId ? c : {
-      ...c,
-      class_coaches: (c.class_coaches ?? []).map(cc => cc.coach_id === coachId ? { ...cc, role } : role === "head" ? { ...cc, role: cc.role === "head" ? "assistant" : cc.role } : cc),
-    }));
-  };
-
-  const [savingSigner, setSavingSigner] = useState(false);
-  const setRaporSigner = async (classId: string, coachId: string | null) => {
-    setSavingSigner(true);
-    const { error } = await supabase.from("classes").update({ rapor_signer_coach_id: coachId }).eq("id", classId);
-    setSavingSigner(false);
-    if (error) return toast.error(t("owner.classes.saveFailed"), error.message);
-    toast.success(t("owner.classes.signerSaved"));
-    setDetailClass(prev => prev && prev.id === classId ? { ...prev, rapor_signer_coach_id: coachId } : prev);
-    setClasses(prev => prev.map(c => c.id === classId ? { ...c, rapor_signer_coach_id: coachId } : c));
-  };
-
-  // Group by branch
-  const grouped = branches.map(b => ({
-    branch: b,
-    classes: classes.filter(c => c.branch_id === b.id),
-  })).filter(g => g.classes.length > 0);
-
-  return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="font-display font-bold text-2xl">{t("owner.classes.pageTitle")}</h2>
-        <p className="text-ink-mute text-sm mt-0.5">{t("owner.classes.pageSub")}</p>
-      </div>
-
-      {loading ? (
-        <Card><div className="py-10 text-center text-ink-mute text-sm">{t("owner.classes.loading")}</div></Card>
-      ) : grouped.length === 0 ? (
-        <Card><div className="py-10 text-center text-ink-mute text-sm">{t("owner.classes.empty")}</div></Card>
-      ) : (
-        grouped.map(({ branch, classes: bClasses }) => (
-          <div key={branch.id} className="space-y-3">
-            <div className="flex items-center gap-3">
-              <div className="font-display font-bold text-lg text-ink">{branch.name}</div>
-              <div className="text-xs text-ink-faint font-semibold">{t("owner.classes.classCount", { count: bClasses.length })}</div>
-            </div>
-            <div className="grid sm:grid-cols-2 gap-3">
-              {bClasses.map((c) => {
-                const coachList = c.class_coaches ?? [];
-                const headCoach = coachList.find(cc => cc.role === "head") ?? coachList[0];
-                const pct = c.enrolled / (c.capacity || 1);
-                return (
-                  <Card key={c.id} className="space-y-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1 min-w-0">
-                        <div className="font-display font-bold text-ink">{c.name}</div>
-                        <div className="text-xs text-ink-mute mt-0.5">
-                          {(c.schedule_days ?? []).join(", ")}
-                          {c.time_start && <span className="font-mono"> · {c.time_start.slice(0,5)}{c.time_end ? `–${c.time_end.slice(0,5)}` : ""}</span>}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Btn variant="ghost" size="sm" icon="eye" onClick={() => openDetail(c)}>{t("owner.classes.detailBtn")}</Btn>
-                        <Btn variant="ghost" size="sm" icon="edit" onClick={() => openEdit(c)}>{t("owner.classes.editBtn")}</Btn>
-                      </div>
-                    </div>
-
-                    {/* Goals & Description */}
-                    {(c.goals || c.description) ? (
-                      <div className="space-y-1.5">
-                        {c.goals && (
-                          <div>
-                            <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("owner.classes.goalsLabel")}</div>
-                            <p className="text-xs text-ink-soft mt-0.5">{c.goals}</p>
-                          </div>
-                        )}
-                        {c.description && (
-                          <div>
-                            <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("owner.classes.descriptionLabel")}</div>
-                            <p className="text-xs text-ink-soft mt-0.5">{c.description}</p>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <p className="text-xs text-ink-faint italic">{t("owner.classes.goalsDescriptionEmpty")}</p>
-                    )}
-
-                    <div className="border-t border-line pt-3 flex items-center justify-between gap-3 flex-wrap">
-                      <div className="flex items-center gap-2 text-xs text-ink-mute">
-                        {headCoach?.profile?.full_name
-                          ? <>
-                              <Avatar name={headCoach.profile.full_name} size={20} />
-                              <span>{headCoach.profile.full_name}</span>
-                              {headCoach.role === "head" && <span className="px-1.5 py-0.5 rounded-full bg-ocean-50 text-ocean-700 text-[10px] font-bold uppercase tracking-wide">Head</span>}
-                            </>
-                          : <span className="text-ink-faint">{t("owner.classes.noCoachYet")}</span>
-                        }
-                      </div>
-                      <div className="flex items-center gap-3 text-xs">
-                        <span className={`font-mono font-semibold ${pct >= 1 ? "text-danger-600" : pct > 0.7 ? "text-warn-600" : "text-ok-600"}`}>
-                          {c.enrolled}/{c.capacity}
-                        </span>
-                        {(c.coach_spreadsheets ?? []).length > 0
-                          ? <span className="inline-flex items-center gap-1 text-ok-600 font-semibold"><Icon name="link" className="w-3 h-3" />{t("owner.classes.spreadsheetCount", { count: c.coach_spreadsheets!.length })}</span>
-                          : <span className="text-warn-500 font-semibold">{t("owner.classes.noSpreadsheet")}</span>
-                        }
-                      </div>
-                    </div>
-                  </Card>
-                );
-              })}
-            </div>
-          </div>
-        ))
-      )}
-
-      {/* Detail modal — Info | Coach | Member | Absensi Coach | Absensi Member */}
-      <Modal open={!!detailClass} onClose={() => setDetailClass(null)}
-        title={t("owner.classes.detailModalTitle", { name: detailClass?.name ?? "" })} size="xl"
-        footer={<Btn variant="ghost" onClick={() => setDetailClass(null)}>{t("owner.classes.closeBtn")}</Btn>}>
-        {detailClass && (
-          <div className="space-y-4">
-            {/* Tab bar */}
-            <div className="flex gap-1 flex-wrap border-b border-line pb-2">
-              {(["info", "coach", "member", "att_coach", "att_member"] as const).map(tab => {
-                const labels: Record<string, string> = { info: t("owner.classes.tabInfo"), coach: t("owner.classes.tabCoach"), member: t("owner.classes.tabMember"), att_coach: t("owner.classes.tabAttCoach"), att_member: t("owner.classes.tabAttMember") };
-                return (
-                  <button key={tab} onClick={() => switchDetailTab(tab)}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${detailTab === tab ? "bg-ocean-600 text-white" : "text-ink-mute hover:bg-paper-tint"}`}>
-                    {labels[tab]}
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Tab: Info */}
-            {detailTab === "info" && (
-              <div className="space-y-4">
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("owner.classes.infoBranch")}</div>
-                    <div className="font-semibold text-ink">{(detailClass.branch as { name: string } | null | undefined)?.name ?? "—"}</div>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("owner.classes.infoStatus")}</div>
-                    <Status kind={detailClass.status === "active" ? "active" : "inactive"}>{detailClass.status === "active" ? t("common.status.active") : t("common.status.inactive")}</Status>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("owner.classes.infoSchedule")}</div>
-                    <div className="text-sm text-ink">{(detailClass.schedule_days ?? []).join(", ")} {detailClass.time_start && <span className="font-mono">{detailClass.time_start.slice(0,5)}{detailClass.time_end ? `–${detailClass.time_end.slice(0,5)}` : ""}</span>}</div>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("owner.classes.infoCapacity")}</div>
-                    <div className="text-sm font-mono text-ink">{detailClass.enrolled}/{detailClass.capacity} {t("owner.classes.infoCapacityParticipants")}</div>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("owner.classes.infoMonthlyPrice")}</div>
-                    <div className="text-sm font-mono text-ink">{detailClass.price_monthly != null ? `Rp ${Number(detailClass.price_monthly).toLocaleString("id-ID")}` : "—"}</div>
-                  </div>
-                  {(detailClass.coach_spreadsheets ?? []).length > 0 && (
-                    <div className="space-y-2 sm:col-span-2">
-                      <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("owner.classes.infoSpreadsheetProgram")}</div>
-                      <div className="space-y-1.5">
-                        {detailClass.coach_spreadsheets!.map(s => (
-                          <div key={s.coach_id} className="flex items-center gap-2.5 p-2.5 rounded-xl border border-line bg-paper-tint">
-                            <Avatar name={s.coach?.full_name ?? "?"} size={24} />
-                            <span className="flex-1 text-sm font-medium text-ink truncate">{s.coach?.full_name ?? "—"}</span>
-                            <a href={s.spreadsheet_url} target="_blank" rel="noreferrer"
-                              className="text-xs font-semibold text-ocean-600 hover:underline inline-flex items-center gap-1">
-                              <Icon name="link" className="w-3 h-3" />{t("owner.classes.infoOpenLink")}
-                            </a>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-                {detailClass.goals && (
-                  <div>
-                    <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-1">{t("owner.classes.goalsLabel")}</div>
-                    <p className="text-sm text-ink-soft">{detailClass.goals}</p>
-                  </div>
-                )}
-                {detailClass.description && (
-                  <div>
-                    <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-1">{t("owner.classes.descriptionLabel")}</div>
-                    <p className="text-sm text-ink-soft">{detailClass.description}</p>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Tab: Coach */}
-            {detailTab === "coach" && (
-              detailLoading ? <div className="text-center py-10 text-ink-mute text-sm">{t("owner.classes.coachLoading")}</div> : (
-                detailCoaches.length === 0
-                  ? <div className="text-center py-10 text-ink-mute text-sm">{t("owner.classes.coachEmpty")}</div>
-                  : <div className="space-y-4">
-                    <div className="divide-y divide-line">
-                      {detailCoaches.map(c => (
-                        <div key={c.id} className="flex items-center gap-3 py-3">
-                          <Avatar name={c.full_name} size={36} />
-                          <div className="flex-1 min-w-0">
-                            <div className="font-semibold text-ink text-sm">{c.full_name}</div>
-                            <div className="text-xs text-ink-mute">{c.phone ?? "—"}</div>
-                          </div>
-                          <Status kind={c.status === "active" ? "active" : "inactive"}>{c.status === "active" ? t("common.status.active") : t("common.status.inactive")}</Status>
-                          <div className="flex gap-1.5 shrink-0">
-                            <button onClick={() => detailClass && setCoachRole(detailClass.id, c.id, "head")} disabled={settingRole === c.id}
-                              className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-colors ${c.role === "head" ? "bg-ocean-700 text-white" : "bg-paper-tint text-ink-soft hover:bg-paper-deep"}`}>
-                              {t("owner.classes.headCoachBtn")}
-                            </button>
-                            <button onClick={() => detailClass && setCoachRole(detailClass.id, c.id, "assistant")} disabled={settingRole === c.id}
-                              className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-colors ${c.role === "assistant" ? "bg-ocean-700 text-white" : "bg-paper-tint text-ink-soft hover:bg-paper-deep"}`}>
-                              {t("owner.classes.assistantBtn")}
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="border-t border-line pt-4">
-                      <div className="text-xs font-bold uppercase tracking-widest text-ink-faint mb-1.5">{t("owner.classes.raporSignerTitle")}</div>
-                      <Select value={detailClass?.rapor_signer_coach_id ?? ""} disabled={savingSigner}
-                        onChange={e => detailClass && setRaporSigner(detailClass.id, e.target.value || null)}>
-                        <option value="">{t("owner.classes.raporSignerAuto")}</option>
-                        {detailCoaches.map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
-                      </Select>
-                      <p className="text-[11px] text-ink-faint mt-1.5">{t("owner.classes.raporSignerHint")}</p>
-                    </div>
-                  </div>
-              )
-            )}
-
-            {/* Tab: Member */}
-            {detailTab === "member" && (
-              detailLoading ? <div className="text-center py-10 text-ink-mute text-sm">{t("owner.classes.coachLoading")}</div> : (
-                detailMembers.length === 0
-                  ? <div className="text-center py-10 text-ink-mute text-sm">{t("owner.classes.memberEmpty")}</div>
-                  : <div className="divide-y divide-line">
-                    {detailMembers.map(m => (
-                      <div key={m.id} className="flex items-center gap-3 py-3">
-                        <Avatar name={m.full_name} size={36} />
-                        <div className="flex-1 min-w-0">
-                          <div className="font-semibold text-ink text-sm">{m.full_name}</div>
-                          <div className="text-xs text-ink-mute">{m.phone ?? "—"}</div>
-                        </div>
-                        <Status kind={m.status === "active" ? "active" : "suspend"}>{m.status === "active" ? t("common.status.active") : m.status}</Status>
-                      </div>
-                    ))}
-                  </div>
-              )
-            )}
-
-            {/* Tab: Absensi Coach */}
-            {detailTab === "att_coach" && (
-              detailLoading ? <div className="text-center py-10 text-ink-mute text-sm">{t("owner.classes.coachLoading")}</div> : (
-                detailCoachAtt.length === 0
-                  ? <div className="text-center py-10 text-ink-mute text-sm">{t("owner.classes.attCoachEmpty")}</div>
-                  : <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-line text-xs uppercase tracking-widest text-ink-faint">
-                          <th className="text-left py-2 pr-4 font-semibold">{t("owner.classes.colDate")}</th>
-                          <th className="text-left py-2 pr-4 font-semibold">{t("owner.classes.colCoach")}</th>
-                          <th className="text-left py-2 pr-4 font-semibold">{t("owner.classes.colStatus")}</th>
-                          <th className="text-left py-2 font-semibold">{t("owner.classes.colNote")}</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-line">
-                        {detailCoachAtt.map(a => (
-                          <tr key={a.id} className="hover:bg-paper-tint">
-                            <td className="py-2.5 pr-4 font-mono text-xs">{a.date}</td>
-                            <td className="py-2.5 pr-4">{a.profile?.full_name ?? "—"}</td>
-                            <td className="py-2.5 pr-4">
-                              <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                                a.status === "present" ? "bg-ok-50 text-ok-700" :
-                                a.status === "absent" ? "bg-danger-50 text-danger-700" :
-                                a.status === "leave" ? "bg-warn-50 text-warn-700" :
-                                "bg-paper-tint text-ink-mute"
-                              }`}>{t(`owner.classes.attStatus.${a.status}`)}</span>
-                            </td>
-                            <td className="py-2.5 text-ink-mute text-xs">{a.note ?? "—"}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-              )
-            )}
-
-            {/* Tab: Absensi Member */}
-            {detailTab === "att_member" && (
-              detailLoading ? <div className="text-center py-10 text-ink-mute text-sm">{t("owner.classes.coachLoading")}</div> : (
-                detailMemberAtt.length === 0
-                  ? <div className="text-center py-10 text-ink-mute text-sm">{t("owner.classes.attMemberEmpty")}</div>
-                  : <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-line text-xs uppercase tracking-widest text-ink-faint">
-                          <th className="text-left py-2 pr-4 font-semibold">{t("owner.classes.colDate")}</th>
-                          <th className="text-left py-2 pr-4 font-semibold">{t("owner.classes.colMember")}</th>
-                          <th className="text-left py-2 pr-4 font-semibold">{t("owner.classes.colStatus")}</th>
-                          <th className="text-left py-2 font-semibold">{t("owner.classes.colNote")}</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-line">
-                        {detailMemberAtt.map(a => (
-                          <tr key={a.id} className="hover:bg-paper-tint">
-                            <td className="py-2.5 pr-4 font-mono text-xs">{a.date}</td>
-                            <td className="py-2.5 pr-4">{a.profile?.full_name ?? "—"}</td>
-                            <td className="py-2.5 pr-4">
-                              <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                                a.status === "present" ? "bg-ok-50 text-ok-700" :
-                                a.status === "absent" ? "bg-danger-50 text-danger-700" :
-                                a.status === "leave" ? "bg-warn-50 text-warn-700" :
-                                "bg-paper-tint text-ink-mute"
-                              }`}>{t(`owner.classes.attStatus.${a.status}`)}</span>
-                            </td>
-                            <td className="py-2.5 text-ink-mute text-xs">{a.note ?? "—"}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-              )
-            )}
-          </div>
-        )}
-      </Modal>
-
-      {/* Edit modal — goals & description only */}
-      <Modal open={!!editTarget} onClose={() => setEditTarget(null)}
-        title={t("owner.classes.editModalTitle", { name: editTarget?.name ?? "" })} size="md"
-        footer={<><Btn variant="ghost" onClick={() => setEditTarget(null)}>{t("common.actions.cancel")}</Btn><Btn variant="primary" onClick={saveEdit} disabled={saving}>{saving ? t("common.actions.saving") : t("common.actions.save")}</Btn></>}>
-        <div className="space-y-4">
-          <div className="p-3 rounded-xl bg-ocean-50 border border-ocean-100 text-xs text-ocean-800">
-            {t("owner.classes.editHint")}
-          </div>
-          <Field label={t("owner.classes.fieldGoals")} hint={t("owner.classes.fieldGoalsHint")}>
-            <Textarea rows={2} value={editForm.goals}
-              onChange={e => setEditForm(f => ({ ...f, goals: e.target.value }))}
-              placeholder={t("owner.classes.fieldGoalsPlaceholder")} />
-          </Field>
-          <Field label={t("owner.classes.fieldDescription")} hint={t("owner.classes.fieldGoalsHint")}>
-            <Textarea rows={3} value={editForm.description}
-              onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))}
-              placeholder={t("owner.classes.fieldDescriptionPlaceholder")} />
-          </Field>
-        </div>
-      </Modal>
-    </div>
-  );
+  return <OwnerClassesMaster branches={branches} />;
 }
+
 
 interface TarifClassRow {
   id: string; name: string; branch_id: string;
@@ -3194,11 +2810,11 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
                 <Icon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-faint pointer-events-none" />
                 <input value={incomeSearch} onChange={e => setIncomeSearch(e.target.value)} placeholder={t("owner.financial.searchIncomePlaceholder")} className="w-full pl-9 pr-3 py-2 text-sm rounded-xl border border-line bg-paper-tint focus:outline-none focus:ring-1 focus:ring-ocean-400" />
               </div>
-              <select value={incomeBranch} onChange={e => setIncomeBranch(e.target.value)} className="text-sm rounded-xl border border-line bg-paper-tint px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
+              <select value={incomeBranch} onChange={e => setIncomeBranch(e.target.value)} className="text-sm rounded-xl border border-line bg-paper-tint pl-3.5 pr-8 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
                 <option value="all">{t("owner.financial.allBranches")}</option>
                 {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
-              <select value={incomeStatus} onChange={e => setIncomeStatus(e.target.value)} className="text-sm rounded-xl border border-line bg-paper-tint px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
+              <select value={incomeStatus} onChange={e => setIncomeStatus(e.target.value)} className="text-sm rounded-xl border border-line bg-paper-tint pl-3.5 pr-8 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
                 <option value="">{t("owner.financial.allStatus")}</option>
                 <option value="unpaid">{t("owner.financial.statusUnpaid")}</option>
                 <option value="paid">{t("owner.financial.statusPaid")}</option>
@@ -3206,13 +2822,13 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
                 <option value="school_covered">{t("owner.financial.statusSchoolCovered")}</option>
                 <option value="free">{t("owner.financial.statusFree")}</option>
               </select>
-              <select value={incomeType} onChange={e => setIncomeType(e.target.value)} className="text-sm rounded-xl border border-line bg-paper-tint px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
+              <select value={incomeType} onChange={e => setIncomeType(e.target.value)} className="text-sm rounded-xl border border-line bg-paper-tint pl-3.5 pr-8 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
                 <option value="">{t("owner.financial.allTypes")}</option>
                 <option value="monthly">{t("owner.financial.typeMonthly")}</option>
                 <option value="session_pack">{t("owner.financial.typeSessionPack")}</option>
                 <option value="custom">{t("owner.financial.typeCustom")}</option>
               </select>
-              <select value={incomeMethod} onChange={e => setIncomeMethod(e.target.value)} className="text-sm rounded-xl border border-line bg-paper-tint px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
+              <select value={incomeMethod} onChange={e => setIncomeMethod(e.target.value)} className="text-sm rounded-xl border border-line bg-paper-tint pl-3.5 pr-8 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
                 <option value="">{t("owner.financial.allMethods")}</option>
                 <option value="transfer">{t("owner.financial.methodTransfer")}</option>
                 <option value="cash">{t("owner.financial.methodCash")}</option>
@@ -3337,16 +2953,16 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
                 <Icon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-faint pointer-events-none" />
                 <input value={expenseSearch} onChange={e => setExpenseSearch(e.target.value)} placeholder={t("owner.financial.searchExpensePlaceholder")} className="w-full pl-9 pr-3 py-2 text-sm rounded-xl border border-line bg-paper-tint focus:outline-none focus:ring-1 focus:ring-ocean-400" />
               </div>
-              <select value={expenseBranch} onChange={e => setExpenseBranch(e.target.value)} className="text-sm rounded-xl border border-line bg-paper-tint px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
+              <select value={expenseBranch} onChange={e => setExpenseBranch(e.target.value)} className="text-sm rounded-xl border border-line bg-paper-tint pl-3.5 pr-8 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
                 <option value="all">{t("owner.financial.allBranches")}</option>
                 {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
-              <select value={expenseStatus} onChange={e => setExpenseStatus(e.target.value)} className="text-sm rounded-xl border border-line bg-paper-tint px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
+              <select value={expenseStatus} onChange={e => setExpenseStatus(e.target.value)} className="text-sm rounded-xl border border-line bg-paper-tint pl-3.5 pr-8 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
                 <option value="">{t("owner.financial.allStatus")}</option>
                 <option value="pending">{t("owner.financial.statusPending")}</option>
                 <option value="paid">{t("owner.financial.statusPaid")}</option>
               </select>
-              <select value={expenseReimburseFilter} onChange={e => setExpenseReimburseFilter(e.target.value)} className="text-sm rounded-xl border border-line bg-paper-tint px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
+              <select value={expenseReimburseFilter} onChange={e => setExpenseReimburseFilter(e.target.value)} className="text-sm rounded-xl border border-line bg-paper-tint pl-3.5 pr-8 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
                 <option value="all">{t("owner.financial.allReimburseTypes")}</option>
                 <option value="reimburse">{t("owner.financial.reimburseOnly")}</option>
                 <option value="non_reimburse">{t("owner.financial.nonReimburse")}</option>
@@ -4439,28 +4055,28 @@ function OwnerActivityLog({ branches }: { branches: Branch[] }) {
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-1 border-t border-line">
             <div>
               <label className="block text-xs font-semibold text-ink-faint mb-1">{t("owner.activityLog.filterBranch")}</label>
-              <select value={filterBranch} onChange={e => setFilterBranch(e.target.value)} className="w-full text-sm rounded-xl border border-line bg-paper-tint px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
+              <select value={filterBranch} onChange={e => setFilterBranch(e.target.value)} className="w-full text-sm rounded-xl border border-line bg-paper-tint pl-3.5 pr-8 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
                 <option value="all">{t("owner.activityLog.allBranches")}</option>
                 {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-xs font-semibold text-ink-faint mb-1">{t("owner.activityLog.filterEntity")}</label>
-              <select value={filterEntity} onChange={e => setFilterEntity(e.target.value)} className="w-full text-sm rounded-xl border border-line bg-paper-tint px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
+              <select value={filterEntity} onChange={e => setFilterEntity(e.target.value)} className="w-full text-sm rounded-xl border border-line bg-paper-tint pl-3.5 pr-8 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
                 <option value="all">{t("owner.activityLog.allEntities")}</option>
                 {Object.entries(entityLabel).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-xs font-semibold text-ink-faint mb-1">{t("owner.activityLog.filterAction")}</label>
-              <select value={filterAction} onChange={e => setFilterAction(e.target.value)} className="w-full text-sm rounded-xl border border-line bg-paper-tint px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
+              <select value={filterAction} onChange={e => setFilterAction(e.target.value)} className="w-full text-sm rounded-xl border border-line bg-paper-tint pl-3.5 pr-8 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
                 <option value="all">{t("owner.activityLog.allActions")}</option>
                 {Object.entries(actionLabel).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-xs font-semibold text-ink-faint mb-1">{t("owner.activityLog.filterRole")}</label>
-              <select value={filterRole} onChange={e => setFilterRole(e.target.value)} className="w-full text-sm rounded-xl border border-line bg-paper-tint px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
+              <select value={filterRole} onChange={e => setFilterRole(e.target.value)} className="w-full text-sm rounded-xl border border-line bg-paper-tint pl-3.5 pr-8 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
                 <option value="all">{t("owner.activityLog.allRoles")}</option>
                 <option value="owner">{t("owner.activityLog.roleOwner")}</option>
                 <option value="admin">{t("owner.activityLog.roleAdmin")}</option>

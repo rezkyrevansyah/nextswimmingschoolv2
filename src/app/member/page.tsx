@@ -14,7 +14,7 @@ import MobileNav from "@/components/layout/MobileNav";
 import type { NavItem as MobileNavItem } from "@/components/layout/Sidebar";
 import Bell from "@/components/layout/Bell";
 import BetaFeedback, { BETA_FEEDBACK_ENABLED } from "@/components/layout/BetaFeedback";
-import { fmtIDR, fmtDate, waLink } from "@/lib/utils";
+import { fmtIDR, fmtDate, waLink, toLocalDateStr } from "@/lib/utils";
 import { downloadRaporPdf, printSingleRaporPopup, type PrintCriterion, type PrintBestTime } from "@/lib/printRapor";
 import { resolveRaporSigner, buildSchoolRaporSignatures, type SchoolForSignerConfig } from "@/lib/rapor";
 import { createClient } from "@/utils/supabase/client";
@@ -456,7 +456,7 @@ function MemberSchedule({ memberId }: { memberId: string }) {
         // Fetch today's holidays for these classes
         const classIds = cls.map(c => c.id);
         if (classIds.length > 0) {
-          const today = new Date().toISOString().slice(0, 10);
+          const today = toLocalDateStr();
           const { data: hols } = await supabase.from("class_holidays").select("class_id").in("class_id", classIds).eq("holiday_date", today);
           if (hols) setHolidayClassIds(new Set(hols.map((h: { class_id: string }) => h.class_id)));
         }
@@ -974,6 +974,13 @@ function MemberLeave({ memberId }: { memberId: string }) {
 
   const submit = async () => {
     if (!form.start_date || !form.type) return;
+    if (form.class_ids.length === 0) {
+      return toast.error(t("member.leave.errorNoClassTitle"), t("member.leave.errorNoClassBody"));
+    }
+    const endDate = form.end_date || form.start_date;
+    if (endDate < form.start_date) {
+      return toast.error(t("member.leave.errorDateRangeTitle"), t("member.leave.errorDateRangeBody"));
+    }
     setSubmitting(true);
     const { data: newLeave, error } = await supabase.from("member_leaves").insert({
       member_id: memberId,
@@ -1484,6 +1491,7 @@ function MemberRapor({ memberId, memberName, branchId, avatarUrl, memberNo, birt
             {selectedEntry && (() => {
               const signatures = buildSchoolRaporSignatures(schoolInfo, selectedEntry.coach_name, selectedEntry.coach_signature_url, ownerSettings);
               const raporData = {
+                member_id: memberId, period_id: selectedEntry.period_id,
                 full_name: memberName,
                 member_no: memberNo ?? undefined,
                 birth_date: birthDate ?? undefined,

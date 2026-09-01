@@ -220,6 +220,7 @@ export default function OwnerAccountDetail({ account, branches, open, onClose, o
 
   const roleLabel = ROLE_LABELS[account.role] ?? account.role;
   const roleColor = ROLE_COLORS[account.role] ?? "bg-slate-100 text-slate-700 border-slate-200";
+  const displayName = account.full_name?.trim() || account.email?.split("@")[0] || roleLabel || "—";
 
   return (
     <Modal
@@ -364,10 +365,10 @@ export default function OwnerAccountDetail({ account, branches, open, onClose, o
             <div className="relative shrink-0">
               {account.avatar_url ? (
                 <div className="relative w-16 h-16 rounded-2xl overflow-hidden border border-line shadow-sm">
-                  <Image src={account.avatar_url} alt={account.full_name} fill className="object-cover" />
+                  <Image src={account.avatar_url} alt={displayName} fill className="object-cover" />
                 </div>
               ) : (
-                <Avatar name={account.full_name} size={64} className="rounded-2xl text-lg" />
+                <Avatar name={displayName} size={64} className="rounded-2xl text-lg" />
               )}
               {account.is_archived && (
                 <div
@@ -380,7 +381,7 @@ export default function OwnerAccountDetail({ account, branches, open, onClose, o
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="font-display font-bold text-xl text-ink">{account.full_name}</h3>
+                <h3 className="font-display font-bold text-xl text-ink">{displayName}</h3>
                 {account.is_archived ? (
                   <Status kind="archived">{t("owner.accountDetail.inactiveBadge")}</Status>
                 ) : (
@@ -390,7 +391,7 @@ export default function OwnerAccountDetail({ account, branches, open, onClose, o
               <div className="flex items-center gap-2 mt-1 flex-wrap">
                 <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border text-xs font-bold ${roleColor}`}>
                   {roleLabel}
-                  {account.custom_role_label && ` · ${account.custom_role_label}`}
+                  {account.custom_role_label && !account.custom_role_label.includes("@") && ` · ${account.custom_role_label}`}
                 </span>
                 {account.user_no && (
                   <span className="font-mono text-xs text-ink-mute bg-paper-deep px-2 py-0.5 rounded-lg border border-line">

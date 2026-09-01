@@ -255,7 +255,12 @@ export default function AdminIzin({ branchId }: { branchId: string }) {
           while (d <= to) {
             const dayName = dayNames[d.getDay()];
             if (cls.schedule_days.length === 0 || cls.schedule_days.includes(dayName)) {
-              rows.push({ branch_id: branchId, coach_id: subId, class_id: cls.id, session_date: d.toISOString().slice(0, 10), status: "present" as const, is_manual: true, manual_by: adminId });
+              const sessionDate = d.toISOString().slice(0, 10);
+              rows.push({ branch_id: branchId, coach_id: subId, class_id: cls.id, session_date: sessionDate, status: "present" as const, is_manual: true, manual_by: adminId });
+              // Mark the original coach absent for the same session so they
+              // aren't paid twice alongside the substitute (invoice generation
+              // only bills status "present"/"late").
+              rows.push({ branch_id: branchId, coach_id: createForm.target_id, class_id: cls.id, session_date: sessionDate, status: "absent" as const, is_manual: true, manual_by: adminId });
             }
             d.setDate(d.getDate() + 1);
           }
@@ -286,15 +291,17 @@ export default function AdminIzin({ branchId }: { branchId: string }) {
   };
 
   const confirmApprove = async () => {
-    if (!approveTarget) return;
+    if (!approveTarget || approving) return;
     setApproving(true);
 
     // Determine primary substitute (first class's substitute, backward compat)
     const primarySubId = Object.values(classSubstitutes).find(s => !!s) ?? null;
+    const adminId = (await supabase.auth.getUser()).data.user?.id ?? null;
 
     const upd: Database["public"]["Tables"]["coach_leaves"]["Update"] = {
       status: "approved" as Database["public"]["Enums"]["leave_status"],
       reviewed_at: new Date().toISOString(),
+      reviewed_by: adminId,
       substitute_id: primarySubId || null,
     };
     const { error } = await supabase.from("coach_leaves").update(upd).eq("id", approveTarget.id);
@@ -327,7 +334,6 @@ export default function AdminIzin({ branchId }: { branchId: string }) {
       const dayNames = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
       const from = new Date(detail.date_from);
       const to   = new Date(detail.date_to);
-      const adminId = (await supabase.auth.getUser()).data.user?.id ?? null;
       const rows: { branch_id: string; coach_id: string; class_id: string; session_date: string; status: "present" | "absent" | "late"; is_manual: boolean; manual_by: string | null }[] = [];
 
       for (const lc of detail.coach_leave_classes) {
@@ -338,7 +344,12 @@ export default function AdminIzin({ branchId }: { branchId: string }) {
         while (d <= to) {
           const dayName = dayNames[d.getDay()];
           if (scheduleDays.length === 0 || scheduleDays.includes(dayName)) {
-            rows.push({ branch_id: branchId, coach_id: subId, class_id: lc.class_id, session_date: d.toISOString().slice(0, 10), status: "present" as const, is_manual: true, manual_by: adminId });
+            const sessionDate = d.toISOString().slice(0, 10);
+            rows.push({ branch_id: branchId, coach_id: subId, class_id: lc.class_id, session_date: sessionDate, status: "present" as const, is_manual: true, manual_by: adminId });
+            // Mark the original coach absent for the same session so they
+            // aren't paid twice alongside the substitute (invoice generation
+            // only bills status "present"/"late").
+            rows.push({ branch_id: branchId, coach_id: detail.coach_id, class_id: lc.class_id, session_date: sessionDate, status: "absent" as const, is_manual: true, manual_by: adminId });
           }
           d.setDate(d.getDate() + 1);
         }

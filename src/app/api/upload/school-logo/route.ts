@@ -23,10 +23,10 @@ export async function POST(req: NextRequest) {
   const schoolId = form.get("schoolId") as string | null;
   if (!file || !schoolId) return NextResponse.json({ error: "Missing fields" }, { status: 400 });
 
-  const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+  const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif", "image/svg+xml"];
   const MAX_SIZE_MB = 5;
   if (!ALLOWED_TYPES.includes(file.type)) {
-    return NextResponse.json({ error: "Tipe file tidak diizinkan. Gunakan JPG, PNG, atau WebP." }, { status: 400 });
+    return NextResponse.json({ error: "Tipe file tidak diizinkan. Gunakan PNG, SVG, JPG, atau WebP." }, { status: 400 });
   }
   if (file.size / (1024 * 1024) > MAX_SIZE_MB) {
     return NextResponse.json({ error: `Ukuran file terlalu besar. Maksimum ${MAX_SIZE_MB}MB.` }, { status: 400 });

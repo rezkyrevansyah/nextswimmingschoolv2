@@ -30,6 +30,11 @@ export interface PrintSignatureItem {
 }
 
 export interface PrintStudent {
+  /** Member + period identifiers used by the server to re-derive and
+   * authorize the actual rapor data — every other field below is only a
+   * client-side preview and is IGNORED by /api/rapor/pdf. */
+  member_id?: string;
+  period_id?: string;
   full_name: string;
   member_no?: string | null;
   class_name: string;

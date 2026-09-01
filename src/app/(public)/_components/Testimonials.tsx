@@ -1,5 +1,6 @@
 "use client";
 
+import SmartImage from "@/components/ui/SmartImage";
 import StarDisplay from "@/components/ui/StarDisplay";
 import Btn from "@/components/ui/Btn";
 import { useLocale } from "@/components/providers/LocaleProvider";
@@ -37,9 +38,9 @@ export default function Testimonials({ testimonials }: { testimonials: Testimoni
               <StarDisplay stars={tst.rating} />
               <p className="mt-3 text-sm text-ink-soft flex-1">&ldquo;{tst.body_text}&rdquo;</p>
               <div className="mt-5 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-ocean-100 overflow-hidden shrink-0 flex items-center justify-center text-ocean-700 font-bold text-sm">
+                <div className="relative w-10 h-10 rounded-full bg-ocean-100 overflow-hidden shrink-0 flex items-center justify-center text-ocean-700 font-bold text-sm">
                   {tst.avatar_url ? (
-                    <img src={tst.avatar_url} alt={tst.name} className="w-full h-full object-cover" />
+                    <SmartImage src={tst.avatar_url} alt={tst.name} fill sizes="40px" className="object-cover" />
                   ) : (
                     tst.name.charAt(0).toUpperCase()
                   )}

@@ -40,6 +40,21 @@ export const mailtoLink = (subject: string, body = "", email?: string | null): s
   return `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 };
 
+/**
+ * Return a date as a YYYY-MM-DD string using the browser/server's LOCAL
+ * calendar date — unlike `date.toISOString().slice(0, 10)`, which reads the
+ * UTC date and is wrong for roughly 7 hours a day in WIB (UTC+7): a session
+ * happening "today" locally can land on UTC "yesterday" or "tomorrow"
+ * depending on the time of day, breaking session_date lookups (holidays,
+ * attendance, clock-in windows) right around local midnight.
+ */
+export const toLocalDateStr = (d: Date = new Date()): string => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
+
 /** Merge class names (minimal, no extra dep needed) */
 export const cn = (...classes: (string | undefined | false | null)[]): string =>
   classes.filter(Boolean).join(" ");

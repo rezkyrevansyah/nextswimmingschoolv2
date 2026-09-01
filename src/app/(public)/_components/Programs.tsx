@@ -1,5 +1,6 @@
 "use client";
 
+import SmartImage from "@/components/ui/SmartImage";
 import BorderGlowCard from "@/components/BorderGlowCard";
 import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
@@ -35,9 +36,15 @@ export default function Programs({ programs }: { programs: ProgramItem[] }) {
         <div className="mt-12 grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {programs.map((p) => (
             <BorderGlowCard key={p.id}>
-              <div className="aspect-[4/3] bg-ocean-50">
+              <div className="relative aspect-[4/3] bg-ocean-50">
                 {p.photo_url ? (
-                  <img src={p.photo_url} alt={p.name} className="w-full h-full object-cover" />
+                  <SmartImage
+                    src={p.photo_url}
+                    alt={p.name}
+                    fill
+                    sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
+                    className="object-cover"
+                  />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center">
                     <Icon name="swim" className="w-10 h-10 text-ocean-200" />

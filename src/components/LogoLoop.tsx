@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, memo, type CSSProperties, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { useInViewport } from "@/hooks/useInViewport";
 
 const ANIMATION_CONFIG = { SMOOTH_TAU: 0.25, MIN_COPIES: 2, COPY_HEADROOM: 2 };
 
@@ -66,6 +67,7 @@ function useAnimationLoop(
   isHovered: boolean,
   hoverSpeed: number | undefined,
   reducedMotion: boolean,
+  isVisible: boolean,
 ) {
   const rafRef = useRef<number | null>(null);
   const lastTimestampRef = useRef<number | null>(null);
@@ -80,6 +82,11 @@ function useAnimationLoop(
       track.style.transform = "translate3d(0, 0, 0)";
       return;
     }
+
+    // Off-screen: leave the track frozen at its current position instead of
+    // continuing to animate a marquee no one can see — resumes automatically
+    // once `isVisible` flips back to true (effect deps below).
+    if (!isVisible) return;
 
     if (seqWidth > 0) {
       offsetRef.current = ((offsetRef.current % seqWidth) + seqWidth) % seqWidth;
@@ -112,7 +119,7 @@ function useAnimationLoop(
       rafRef.current = null;
       lastTimestampRef.current = null;
     };
-  }, [targetVelocity, seqWidth, isHovered, hoverSpeed, reducedMotion, trackRef]);
+  }, [targetVelocity, seqWidth, isHovered, hoverSpeed, reducedMotion, trackRef, isVisible]);
 }
 
 const LogoLoop = memo(function LogoLoop({
@@ -169,6 +176,10 @@ const LogoLoop = memo(function LogoLoop({
 
   useResizeObserver(updateDimensions, [containerRef, seqRef], [logos, gap, logoHeight]);
 
+  // Pause the marquee while scrolled off-screen — `initial: true` avoids a
+  // stalled first frame before the observer's callback fires.
+  const isVisible = useInViewport(containerRef, "100px", true);
+
   useEffect(() => {
     const images = seqRef.current?.querySelectorAll("img") ?? [];
     if (images.length === 0) {
@@ -195,7 +206,7 @@ const LogoLoop = memo(function LogoLoop({
     };
   }, [logos, gap, logoHeight, updateDimensions]);
 
-  useAnimationLoop(trackRef, targetVelocity, seqWidth, isHovered, hoverSpeed, reducedMotion);
+  useAnimationLoop(trackRef, targetVelocity, seqWidth, isHovered, hoverSpeed, reducedMotion, isVisible);
 
   const handleMouseEnter = useCallback(() => setIsHovered(true), []);
   const handleMouseLeave = useCallback(() => setIsHovered(false), []);
