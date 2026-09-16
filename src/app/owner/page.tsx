@@ -27,6 +27,7 @@ import OwnerSchools from "./_components/OwnerSchools";
 import OwnerMasterData from "./_components/OwnerMasterData";
 import OwnerAccountsMaster from "./_components/OwnerAccountsMaster";
 import OwnerMemberPrivate from "./_components/OwnerMemberPrivate";
+import OwnerStaffPresensi from "./_components/OwnerStaffPresensi";
 import PayslipGenerator, { parsePeriodToMonth } from "./payroll/PayslipGenerator";
 import CoachLoans from "./payroll/CoachLoans";
 import AdminCompetition from "../admin/_components/AdminCompetition";
@@ -1951,6 +1952,20 @@ interface UnifiedExpenseItem {
 interface ManualTxnCategory { id: string; kind: "income" | "expense"; name: string; sort_order: number }
 
 type FinancialTab = "overview" | "income" | "expenses" | "payroll" | "moneyflow";
+type FinancialPreset = "this_month" | "last_month" | "custom" | "multi_month";
+
+function toISODate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function startOfMonthISO(d: Date): string {
+  return toISODate(new Date(d.getFullYear(), d.getMonth(), 1));
+}
+function endOfMonthISO(d: Date): string {
+  return toISODate(new Date(d.getFullYear(), d.getMonth() + 1, 0));
+}
+function monthISO(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
 
 function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; userId: string; userName: string }) {
   const { t, tNode } = useLocale();
@@ -1958,24 +1973,45 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
   const toast = useToast();
   const confirm = useConfirm();
   const [tab, setTab] = useState<FinancialTab>("overview");
+  const [exportingExcel, setExportingExcel] = useState(false);
 
   // ── Data ────────────────────────────────────────────────────────────────────
   const [bills, setBills] = useState<OwnerFinancialBill[]>([]);
   const [expenses, setExpenses] = useState<OwnerFinancialExpense[]>([]);
   const [manualTxns, setManualTxns] = useState<ManualTxnRow[]>([]);
-  const [paidStaffSalaries, setPaidStaffSalaries] = useState<{ id: string; total_salary: number; paid_at: string | null; created_at: string }[]>([]);
-  const [paidStaffReimbursements, setPaidStaffReimbursements] = useState<{ id: string; amount: number; paid_at: string | null; created_at: string }[]>([]);
   const [payslips, setPayslips] = useState<FinancialPayslipItem[]>([]);
   const [allStaffSalaries, setAllStaffSalaries] = useState<StaffSalaryRow[]>([]);
   const [loadingBills, setLoadingBills] = useState(true);
   const [loadingExpenses, setLoadingExpenses] = useState(true);
   const [selectedExpenseDetail, setSelectedExpenseDetail] = useState<UnifiedExpenseItem | null>(null);
 
+  // ── Unified date-range filter (applies uniformly across all 5 sub-tabs) ────
+  const [financialPreset, setFinancialPreset] = useState<FinancialPreset>("this_month");
+  const [financialFrom, setFinancialFrom] = useState(() => startOfMonthISO(new Date()));
+  const [financialTo, setFinancialTo] = useState(() => endOfMonthISO(new Date()));
+  // Months (YYYY-MM) intersecting [financialFrom, financialTo], inclusive.
+  const monthsInRange = useMemo(() => {
+    const months: string[] = [];
+    const from = new Date(financialFrom + "T00:00:00");
+    const to = new Date(financialTo + "T00:00:00");
+    const cursor = new Date(from.getFullYear(), from.getMonth(), 1);
+    const last = new Date(to.getFullYear(), to.getMonth(), 1);
+    while (cursor <= last) {
+      months.push(`${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}`);
+      cursor.setMonth(cursor.getMonth() + 1);
+    }
+    return months.length ? months : [monthISO(new Date())];
+  }, [financialFrom, financialTo]);
+  const inFinancialRange = useCallback((dateStr: string | null | undefined) => {
+    if (!dateStr) return false;
+    const d = dateStr.slice(0, 10);
+    return d >= financialFrom && d <= financialTo;
+  }, [financialFrom, financialTo]);
+
   // ── Unified Payroll (Coach & Staff) state ──────────────────────────────────
-  const [payrollMonth, setPayrollMonth] = useState(() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-  });
+  // "Which month a new/edited salary record targets" is now carried per-row by
+  // unifiedPayrollItems (one row per staff x month in monthsInRange), not a single
+  // page-level month — see editSalaryModal.month.
   const [payrollBranchFilter, setPayrollBranchFilter] = useState("all");
   const [payrollRecipientFilter, setPayrollRecipientFilter] = useState<"all" | "coach" | "staff">("all");
   const [payrollStatusFilter, setPayrollStatusFilter] = useState<"all" | "unpaid" | "paid">("all");
@@ -2024,9 +2060,8 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
 
   // ── Staff Payroll state ───────────────────────────────────────────────────
   const [staffList, setStaffList] = useState<{ id: string; full_name: string; email: string; phone: string | null; bank_name: string | null; bank_account: string | null; bank_holder: string | null; branch_id: string | null; branch?: { name: string } | null }[]>([]);
-  const [staffSalaries, setStaffSalaries] = useState<StaffSalaryRow[]>([]);
   const [loadingStaff, setLoadingStaff] = useState(false);
-  const [editSalaryModal, setEditSalaryModal] = useState<{ staff: any; salary: StaffSalaryRow | null } | null>(null);
+  const [editSalaryModal, setEditSalaryModal] = useState<{ staff: any; salary: StaffSalaryRow | null; month: string } | null>(null);
   const [salaryForm, setSalaryForm] = useState({ base_salary: "", allowances: "", reimburse: "", deductions: "", notes: "" });
   const [savingSalary, setSavingSalary] = useState(false);
   const [markingStaffSalaryId, setMarkingStaffSalaryId] = useState<string | null>(null);
@@ -2039,21 +2074,20 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
       .eq("role", "staff")
       .order("full_name");
     if (staffs) setStaffList(staffs as any);
-
-    const { data: sals } = await supabase
-      .from("staff_salaries")
-      .select("*")
-      .eq("period_month", payrollMonth);
-    if (sals) setStaffSalaries(sals as unknown as StaffSalaryRow[]);
-
     setLoadingStaff(false);
-  }, [supabase, payrollMonth]);
+  }, [supabase]);
+  // staff_salaries for the currently-filtered months come from allStaffSalaries
+  // (loaded unconditionally by loadAllStaffSalaries) — no separate per-month query needed.
+  const staffSalaries = useMemo(
+    () => allStaffSalaries.filter(s => monthsInRange.includes(s.period_month)),
+    [allStaffSalaries, monthsInRange]
+  );
 
   // ── Staff reimbursements (staff_reimbursements table) ────────────────────────
   const [staffReimbursements, setStaffReimbursements] = useState<{
     id: string; profile_id: string; branch_id: string; invoice_number: string;
     description: string; amount: number; proof_url: string | null; status: string;
-    submitted_at: string; rejection_reason: string | null;
+    submitted_at: string; paid_at: string | null; rejection_reason: string | null;
   }[]>([]);
   const [loadingReimbursements, setLoadingReimbursements] = useState(false);
   const [processingReimburseId, setProcessingReimburseId] = useState<string | null>(null);
@@ -2072,12 +2106,10 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
   useEffect(() => {
     loadPayslips();
     loadAllStaffSalaries();
-    if (tab === "payroll") {
-      loadDetailedInvoices();
-      loadStaffPayroll();
-      loadStaffReimbursements();
-    }
-  }, [tab, payrollMonth, loadPayslips, loadAllStaffSalaries, loadDetailedInvoices, loadStaffPayroll, loadStaffReimbursements]);
+    loadDetailedInvoices();
+    loadStaffPayroll();
+    loadStaffReimbursements();
+  }, [loadPayslips, loadAllStaffSalaries, loadDetailedInvoices, loadStaffPayroll, loadStaffReimbursements]);
 
   const copyToClipboard = (text: string, label: ReactNode) => {
     navigator.clipboard.writeText(text);
@@ -2115,7 +2147,7 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
     const payload = {
       staff_id: editSalaryModal.staff.id,
       branch_id: editSalaryModal.staff.branch_id,
-      period_month: payrollMonth,
+      period_month: editSalaryModal.month,
       base_salary: base,
       allowances: allowances,
       deductions: deductions,
@@ -2196,8 +2228,6 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
   const [incomeBranch, setIncomeBranch] = useState("all");
   const [incomeType, setIncomeType] = useState("");
   const [incomeMethod, setIncomeMethod] = useState("");
-  const [incomeDateFrom, setIncomeDateFrom] = useState("");
-  const [incomeDateTo, setIncomeDateTo] = useState("");
   const [incomePage, setIncomePage] = useState(0);
   const [incomeSortBy, setIncomeSortBy] = useState<"paid_at" | "total">("paid_at");
   const [incomeSortDir, setIncomeSortDir] = useState<"asc" | "desc">("desc");
@@ -2229,16 +2259,6 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
       .order("submitted_at", { ascending: false })
       .limit(2000)
       .then(({ data }) => { if (data) setExpenses(data as unknown as OwnerFinancialExpense[]); setLoadingExpenses(false); });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Staff payroll cost (salaries + reimbursements) — loaded unconditionally (not
-  // gated behind the staff_payroll sub-tab) because Overview/Expenses/Moneyflow
-  // need it across all periods for the headline totals to actually be accurate.
-  useEffect(() => {
-    supabase.from("staff_salaries").select("id, total_salary, paid_at, created_at").eq("status", "paid")
-      .then(({ data }) => { if (data) setPaidStaffSalaries(data); });
-    supabase.from("staff_reimbursements").select("id, amount, paid_at, created_at").eq("status", "paid")
-      .then(({ data }) => { if (data) setPaidStaffReimbursements(data); });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* eslint-enable react-hooks/set-state-in-effect */
@@ -2339,10 +2359,16 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
   };
 
   // ── Computed: income summary ────────────────────────────────────────────────
+  // "All-time" pools — kept unfiltered because the trend charts (barChartData,
+  // moneyFlowData) need history beyond the active filter range. The headline
+  // stat cards and list views use the "ranged" variants below instead.
   const manualIncome = useMemo(() => manualTxns.filter(t => t.kind === "income"), [manualTxns]);
   const manualExpense = useMemo(() => manualTxns.filter(t => t.kind === "expense"), [manualTxns]);
   const paidBills = useMemo(() => bills.filter(b => b.status === "paid"), [bills]);
-  const totalIncome = useMemo(() => paidBills.reduce((s, b) => s + b.total, 0) + manualIncome.reduce((s, t) => s + t.amount, 0), [paidBills, manualIncome]);
+
+  const rangedPaidBills = useMemo(() => paidBills.filter(b => inFinancialRange(b.paid_at ?? b.created_at)), [paidBills, inFinancialRange]);
+  const rangedManualIncome = useMemo(() => manualIncome.filter(t => inFinancialRange(t.occurred_at)), [manualIncome, inFinancialRange]);
+  const totalIncome = useMemo(() => rangedPaidBills.reduce((s, b) => s + b.total, 0) + rangedManualIncome.reduce((s, t) => s + t.amount, 0), [rangedPaidBills, rangedManualIncome]);
 
   // ── Unified Expenses (Payslips + Invoices + Salaries + Reimbursements + Manual)
   const unifiedExpenses = useMemo<UnifiedExpenseItem[]>(() => {
@@ -2480,8 +2506,13 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
       });
     });
 
-    // 4. Staff Reimbursements
+    // 4. Staff Reimbursements — skip ones already folded into a staff salary's
+    // reimburse_amount (see unifiedPayrollItems' identical guard) to avoid double-counting.
     staffReimbursements.forEach((r) => {
+      const rMonth = (r.paid_at ?? r.submitted_at).slice(0, 7);
+      const sal = allStaffSalaries.find(s => s.staff_id === r.profile_id && s.period_month === rMonth);
+      if (sal && sal.reimburse_amount >= r.amount && (r.status === "approved" || r.status === "paid")) return;
+
       list.push({
         id: r.id,
         sourceType: "staff_reimburse",
@@ -2501,7 +2532,7 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
         otherDeductions: 0,
         netTransferredAmount: r.amount,
         status: r.status as any,
-        date: r.submitted_at,
+        date: r.paid_at ?? r.submitted_at,
         proofUrl: r.proof_url,
       });
     });
@@ -2536,11 +2567,14 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
     return list.sort((a, b) => (a.date < b.date ? 1 : -1));
   }, [payslips, detailedInvoices, allStaffSalaries, staffReimbursements, manualExpense, t]);
 
+  // All-time paid expenses — feeds the trend charts below. Headline totals use
+  // rangedPaidExpenses instead.
   const paidExpensesList = useMemo(() => unifiedExpenses.filter((e) => e.status === "paid"), [unifiedExpenses]);
-  const totalGrossExpenses = useMemo(() => paidExpensesList.reduce((s, e) => s + e.grossAmount, 0), [paidExpensesList]);
-  const totalTaxWithheld = useMemo(() => paidExpensesList.reduce((s, e) => s + e.taxAmount, 0), [paidExpensesList]);
-  const totalOtherDeductions = useMemo(() => paidExpensesList.reduce((s, e) => s + e.otherDeductions, 0), [paidExpensesList]);
-  const totalRealCashOut = useMemo(() => paidExpensesList.reduce((s, e) => s + e.netTransferredAmount, 0), [paidExpensesList]);
+  const rangedPaidExpenses = useMemo(() => paidExpensesList.filter(e => inFinancialRange(e.date)), [paidExpensesList, inFinancialRange]);
+  const totalGrossExpenses = useMemo(() => rangedPaidExpenses.reduce((s, e) => s + e.grossAmount, 0), [rangedPaidExpenses]);
+  const totalTaxWithheld = useMemo(() => rangedPaidExpenses.reduce((s, e) => s + e.taxAmount, 0), [rangedPaidExpenses]);
+  const totalOtherDeductions = useMemo(() => rangedPaidExpenses.reduce((s, e) => s + e.otherDeductions, 0), [rangedPaidExpenses]);
+  const totalRealCashOut = useMemo(() => rangedPaidExpenses.reduce((s, e) => s + e.netTransferredAmount, 0), [rangedPaidExpenses]);
   const totalExpenses = totalRealCashOut;
   const netAmount = totalIncome - totalRealCashOut;
 
@@ -2568,10 +2602,10 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
   // ── Branch income breakdown ─────────────────────────────────────────────────
   const branchIncomeMap = useMemo(() => {
     const map: Record<string, number> = {};
-    paidBills.forEach(b => { map[b.branch_id] = (map[b.branch_id] ?? 0) + b.total; });
-    manualIncome.forEach(t => { map[t.branch_id] = (map[t.branch_id] ?? 0) + t.amount; });
+    rangedPaidBills.forEach(b => { map[b.branch_id] = (map[b.branch_id] ?? 0) + b.total; });
+    rangedManualIncome.forEach(t => { map[t.branch_id] = (map[t.branch_id] ?? 0) + t.amount; });
     return map;
-  }, [paidBills, manualIncome]);
+  }, [rangedPaidBills, rangedManualIncome]);
   const maxBranchIncome = useMemo(() => Math.max(1, ...Object.values(branchIncomeMap)), [branchIncomeMap]);
 
   // ── Income table filtered (merges bills + manual income) ───────────────────
@@ -2587,8 +2621,7 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
     if (incomeBranch !== "all") r = r.filter(row => row.branch_id === incomeBranch);
     if (incomeType) r = r.filter(row => row.source === "manual" || row.type === incomeType);
     if (incomeMethod) r = r.filter(row => row.source === "manual" || row.paid_method === incomeMethod);
-    if (incomeDateFrom) r = r.filter(row => incomeSortDate(row) >= incomeDateFrom);
-    if (incomeDateTo) r = r.filter(row => incomeSortDate(row) <= incomeDateTo + "T23:59:59");
+    r = r.filter(row => inFinancialRange(incomeSortDate(row)));
     if (incomeSearch) {
       const q = incomeSearch.toLowerCase();
       r = r.filter(row => row.source === "manual"
@@ -2602,9 +2635,9 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
       return incomeSortDir === "asc" ? (va > vb ? 1 : -1) : (va < vb ? 1 : -1);
     });
     return r;
-  }, [bills, manualIncome, incomeStatus, incomeBranch, incomeType, incomeMethod, incomeDateFrom, incomeDateTo, incomeSearch, incomeSortBy, incomeSortDir]);
+  }, [bills, manualIncome, incomeStatus, incomeBranch, incomeType, incomeMethod, inFinancialRange, incomeSearch, incomeSortBy, incomeSortDir]);
 
-  useEffect(() => { setIncomePage(0); }, [incomeStatus, incomeBranch, incomeType, incomeMethod, incomeDateFrom, incomeDateTo, incomeSearch]);
+  useEffect(() => { setIncomePage(0); }, [incomeStatus, incomeBranch, incomeType, incomeMethod, financialFrom, financialTo, incomeSearch]);
 
   const incomeTotalPages = Math.max(1, Math.ceil(filteredIncome.length / PAGE_SIZE));
   const incomeSafePage = Math.min(incomePage, Math.max(0, incomeTotalPages - 1));
@@ -2612,7 +2645,7 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
 
   // ── Expenses table filtered (Unified: Payslips + Invoices + Salaries + Reimburse + Manual)
   const filteredExpenses = useMemo(() => {
-    let r = unifiedExpenses;
+    let r = unifiedExpenses.filter(e => inFinancialRange(e.date));
     if (expenseStatus) r = r.filter(e => e.status === expenseStatus);
     if (expenseBranch !== "all") r = r.filter(e => e.branchId === expenseBranch);
     if (expenseCategoryFilter !== "all") r = r.filter(e => e.categoryKey === expenseCategoryFilter);
@@ -2627,9 +2660,9 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
       );
     }
     return r;
-  }, [unifiedExpenses, expenseStatus, expenseBranch, expenseCategoryFilter, expenseSearch]);
+  }, [unifiedExpenses, inFinancialRange, expenseStatus, expenseBranch, expenseCategoryFilter, expenseSearch]);
 
-  useEffect(() => { setExpensePage(0); }, [expenseStatus, expenseBranch, expenseCategoryFilter, expenseSearch]);
+  useEffect(() => { setExpensePage(0); }, [financialFrom, financialTo, expenseStatus, expenseBranch, expenseCategoryFilter, expenseSearch]);
 
   const expenseTotalPages = Math.max(1, Math.ceil(filteredExpenses.length / PAGE_SIZE));
   const expenseSafePage = Math.min(expensePage, Math.max(0, expenseTotalPages - 1));
@@ -2753,63 +2786,69 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
       });
     }
 
-    // 2. Staff Salaries
-    for (const st of staffList) {
-      const sal = staffSalaries.find(s => s.staff_id === st.id)
-        ?? allStaffSalaries.find(s => s.staff_id === st.id && s.period_month === payrollMonth);
-      const matchingSlip = payslips.find(p => p.coach_id === st.id && parsePeriodToMonth(p.period_label) === payrollMonth);
+    // 2. Staff Salaries — one row per staff x month in the selected range. For a
+    // wide multi-month range, only emit a row where there's actual data (a salary
+    // record or matching payslip) to avoid flooding the list with empty drafts;
+    // for the common single-month view, still show every staff (incl. no-salary-yet)
+    // so the owner can create one.
+    for (const month of monthsInRange) {
+      for (const st of staffList) {
+        const sal = staffSalaries.find(s => s.staff_id === st.id && s.period_month === month);
+        const matchingSlip = payslips.find(p => p.coach_id === st.id && parsePeriodToMonth(p.period_label) === month);
+        if (!sal && !matchingSlip && monthsInRange.length > 1) continue;
 
-      const base = matchingSlip ? (matchingSlip.gross_amount - (sal?.allowances ?? 0) - (sal?.reimburse_amount ?? 0)) : (sal?.base_salary ?? 0);
-      const allowances = sal?.allowances ?? 0;
-      const reimburse = sal?.reimburse_amount ?? 0;
-      const taxAmount = matchingSlip?.payslip_deductions?.filter(d => d.type === "tax").reduce((s, d) => s + d.amount, 0) ?? 0;
-      const loanDeduction = matchingSlip?.payslip_deductions?.filter(d => d.type === "loan").reduce((s, d) => s + d.amount, 0) ?? 0;
-      const otherDeds = matchingSlip?.payslip_deductions?.filter(d => d.type !== "tax" && d.type !== "loan").reduce((s, d) => s + d.amount, 0) ?? 0;
-      const otherDeductions = otherDeds > 0 ? otherDeds : (matchingSlip ? Math.max(0, matchingSlip.deductions - taxAmount - loanDeduction) : (sal?.deductions ?? 0));
-      const grossAmount = matchingSlip ? matchingSlip.gross_amount : (base + allowances + reimburse);
-      const netPayout = matchingSlip ? matchingSlip.net_amount : (sal?.total_salary ?? (base + allowances + reimburse - otherDeductions - taxAmount));
-      const isPaid = matchingSlip?.status === "published" || sal?.status === "paid";
-      const status: "draft" | "pending" | "approved" | "paid" = isPaid ? "paid" : (sal?.status === "approved" ? "approved" : (sal ? "pending" : "draft"));
+        const base = matchingSlip ? (matchingSlip.gross_amount - (sal?.allowances ?? 0) - (sal?.reimburse_amount ?? 0)) : (sal?.base_salary ?? 0);
+        const allowances = sal?.allowances ?? 0;
+        const reimburse = sal?.reimburse_amount ?? 0;
+        const taxAmount = matchingSlip?.payslip_deductions?.filter(d => d.type === "tax").reduce((s, d) => s + d.amount, 0) ?? 0;
+        const loanDeduction = matchingSlip?.payslip_deductions?.filter(d => d.type === "loan").reduce((s, d) => s + d.amount, 0) ?? 0;
+        const otherDeds = matchingSlip?.payslip_deductions?.filter(d => d.type !== "tax" && d.type !== "loan").reduce((s, d) => s + d.amount, 0) ?? 0;
+        const otherDeductions = otherDeds > 0 ? otherDeds : (matchingSlip ? Math.max(0, matchingSlip.deductions - taxAmount - loanDeduction) : (sal?.deductions ?? 0));
+        const grossAmount = matchingSlip ? matchingSlip.gross_amount : (base + allowances + reimburse);
+        const netPayout = matchingSlip ? matchingSlip.net_amount : (sal?.total_salary ?? (base + allowances + reimburse - otherDeductions - taxAmount));
+        const isPaid = matchingSlip?.status === "published" || sal?.status === "paid";
+        const status: "draft" | "pending" | "approved" | "paid" = isPaid ? "paid" : (sal?.status === "approved" ? "approved" : (sal ? "pending" : "draft"));
 
-      list.push({
-        id: `staff_${sal?.id ?? st.id}`,
-        itemType: "staff_salary",
-        recipientType: "staff",
-        recipientId: st.id,
-        recipientName: st.full_name,
-        recipientRole: "Staff",
-        branchId: st.branch_id,
-        branchName: st.branch?.name ?? "Center",
-        periodMonth: payrollMonth,
-        periodLabel: payrollMonth,
-        title: "Staff Salary & Allowances",
-        referenceNo: sal?.id ? `SAL-${sal.id.slice(0, 8)}` : undefined,
-        bankName: st.bank_name ?? null,
-        bankAccount: st.bank_account ?? null,
-        bankHolder: st.bank_holder ?? null,
-        baseAmount: base,
-        allowances: allowances,
-        reimburseAmount: reimburse,
-        taxAmount: taxAmount,
-        loanDeduction: loanDeduction,
-        otherDeductions: otherDeductions,
-        grossAmount: grossAmount,
-        netTransferredAmount: netPayout,
-        status: status,
-        isPaid: isPaid,
-        paidAt: sal?.paid_at ?? matchingSlip?.published_at ?? null,
-        rawSalary: sal ?? null,
-        rawPayslip: matchingSlip ?? null,
-        rawExpense: matchingSlip ? (unifiedExpenses.find(e => e.id === matchingSlip.id) ?? null) : null,
-      });
+        list.push({
+          id: `staff_${sal?.id ?? `${st.id}_${month}`}`,
+          itemType: "staff_salary",
+          recipientType: "staff",
+          recipientId: st.id,
+          recipientName: st.full_name,
+          recipientRole: "Staff",
+          branchId: st.branch_id,
+          branchName: st.branch?.name ?? "Center",
+          periodMonth: month,
+          periodLabel: month,
+          title: "Staff Salary & Allowances",
+          referenceNo: sal?.id ? `SAL-${sal.id.slice(0, 8)}` : undefined,
+          bankName: st.bank_name ?? null,
+          bankAccount: st.bank_account ?? null,
+          bankHolder: st.bank_holder ?? null,
+          baseAmount: base,
+          allowances: allowances,
+          reimburseAmount: reimburse,
+          taxAmount: taxAmount,
+          loanDeduction: loanDeduction,
+          otherDeductions: otherDeductions,
+          grossAmount: grossAmount,
+          netTransferredAmount: netPayout,
+          status: status,
+          isPaid: isPaid,
+          paidAt: sal?.paid_at ?? matchingSlip?.published_at ?? null,
+          rawSalary: sal ?? null,
+          rawPayslip: matchingSlip ?? null,
+          rawExpense: matchingSlip ? (unifiedExpenses.find(e => e.id === matchingSlip.id) ?? null) : null,
+        });
+      }
     }
 
     // 3. Standalone Staff Reimbursements
     for (const rb of staffReimbursements) {
-      const rbMonth = rb.submitted_at ? rb.submitted_at.slice(0, 7) : payrollMonth;
+      const rbMonth = (rb.paid_at ?? rb.submitted_at)?.slice(0, 7) || monthsInRange[0];
       const st = staffList.find(s => s.id === rb.profile_id);
-      const sal = staffSalaries.find(s => s.staff_id === rb.profile_id);
-      if (sal && sal.reimburse_amount >= rb.amount && rb.status === "approved") {
+      const sal = staffSalaries.find(s => s.staff_id === rb.profile_id && s.period_month === rbMonth);
+      if (sal && sal.reimburse_amount >= rb.amount && (rb.status === "approved" || rb.status === "paid")) {
         continue;
       }
       const isPaid = rb.status === "paid";
@@ -2845,11 +2884,13 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
     }
 
     return list;
-  }, [detailedInvoices, payslips, staffList, staffSalaries, allStaffSalaries, staffReimbursements, payrollMonth, branches, unifiedExpenses]);
+  }, [detailedInvoices, payslips, staffList, staffSalaries, staffReimbursements, monthsInRange, branches, unifiedExpenses]);
 
   const filteredPayrollItems = useMemo(() => {
+    const rangeStart = monthsInRange[0];
+    const rangeEnd = monthsInRange[monthsInRange.length - 1];
     return unifiedPayrollItems.filter(item => {
-      if (payrollMonth && payrollMonth !== "all" && item.periodMonth && item.periodMonth !== payrollMonth) {
+      if (item.periodMonth && (item.periodMonth < rangeStart || item.periodMonth > rangeEnd)) {
         return false;
       }
       if (payrollBranchFilter !== "all" && item.branchId !== payrollBranchFilter) {
@@ -2877,7 +2918,7 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
       }
       return true;
     });
-  }, [unifiedPayrollItems, payrollMonth, payrollBranchFilter, payrollRecipientFilter, payrollStatusFilter, payrollSearch]);
+  }, [unifiedPayrollItems, monthsInRange, payrollBranchFilter, payrollRecipientFilter, payrollStatusFilter, payrollSearch]);
 
   const payrollTotalHarusTransfer = filteredPayrollItems.filter(i => !i.isPaid).reduce((s, i) => s + i.netTransferredAmount, 0);
   const payrollUnpaidCount = filteredPayrollItems.filter(i => !i.isPaid).length;
@@ -2887,6 +2928,78 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
   const payrollTotalReimburse = filteredPayrollItems.reduce((s, i) => s + i.reimburseAmount, 0);
   const payrollTotalTax = filteredPayrollItems.reduce((s, i) => s + i.taxAmount, 0);
   const payrollTotalLoanDeduction = filteredPayrollItems.reduce((s, i) => s + i.loanDeduction, 0);
+
+  // ── Unified date-range filter: presets ──────────────────────────────────────
+  const applyFinancialPreset = (preset: FinancialPreset) => {
+    setFinancialPreset(preset);
+    const now = new Date();
+    if (preset === "this_month") {
+      setFinancialFrom(startOfMonthISO(now));
+      setFinancialTo(endOfMonthISO(now));
+    } else if (preset === "last_month") {
+      const lm = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      setFinancialFrom(startOfMonthISO(lm));
+      setFinancialTo(endOfMonthISO(lm));
+    }
+    // "custom" and "multi_month" just reveal their own pickers, keeping the current range.
+  };
+
+  // ── Excel export (Summary + Income + Expenses) — reads the same filtered/
+  // computed state the screen renders, so export can never drift from the UI.
+  const downloadFinancialExcel = async () => {
+    setExportingExcel(true);
+    try {
+      const XLSX = await import("xlsx");
+      const wb = XLSX.utils.book_new();
+
+      const summarySheet = XLSX.utils.aoa_to_sheet([
+        [t("owner.financial.exportPeriodLabel"), `${financialFrom} s/d ${financialTo}`],
+        [],
+        [t("owner.financial.statTotalIncome"), totalIncome],
+        [t("owner.financial.statNetCashOut"), totalRealCashOut],
+        [t("owner.financial.statNet"), netAmount],
+        [t("owner.financial.statTaxWithheld"), totalTaxWithheld],
+        [t("owner.financial.exportOtherDeductions"), totalOtherDeductions],
+        [t("owner.financial.exportGrossExpenses"), totalGrossExpenses],
+      ]);
+      summarySheet["!cols"] = [{ wch: 30 }, { wch: 20 }];
+      XLSX.utils.book_append_sheet(wb, summarySheet, "Summary");
+
+      const incomeRows = filteredIncome.map(row => ({
+        [t("owner.financial.exportColDate")]: (row.source === "manual" ? row.occurred_at : (row.paid_at ?? row.created_at))?.slice(0, 10) ?? "-",
+        [t("owner.financial.exportColSource")]: row.source === "manual" ? t("owner.financial.exportSourceManual") : t("owner.financial.exportSourceBill"),
+        [t("owner.financial.exportColBranch")]: row.branch?.name ?? "-",
+        [t("owner.financial.exportColDescription")]: row.source === "manual" ? row.description : (row.member?.profile?.full_name ?? row.period_label),
+        [t("owner.financial.exportColAmount")]: row.source === "manual" ? row.amount : row.total,
+        [t("owner.financial.exportColStatus")]: row.source === "manual" ? "-" : row.status,
+      }));
+      const incomeSheet = XLSX.utils.json_to_sheet(incomeRows);
+      incomeSheet["!cols"] = [{ wch: 12 }, { wch: 10 }, { wch: 20 }, { wch: 32 }, { wch: 16 }, { wch: 12 }];
+      XLSX.utils.book_append_sheet(wb, incomeSheet, "Income");
+
+      const expenseRows = filteredExpenses.map(e => ({
+        [t("owner.financial.exportColDate")]: e.date?.slice(0, 10) ?? "-",
+        [t("owner.financial.exportColCategory")]: e.categoryLabel,
+        [t("owner.financial.exportColBranch")]: e.branchName,
+        [t("owner.financial.exportColReceiver")]: e.receiverName,
+        [t("owner.financial.exportColGross")]: e.grossAmount,
+        [t("owner.financial.exportColTax")]: e.taxAmount,
+        [t("owner.financial.exportColDeductions")]: e.otherDeductions,
+        [t("owner.financial.exportColNet")]: e.netTransferredAmount,
+        [t("owner.financial.exportColStatus")]: e.status,
+      }));
+      const expenseSheet = XLSX.utils.json_to_sheet(expenseRows);
+      expenseSheet["!cols"] = [{ wch: 12 }, { wch: 18 }, { wch: 20 }, { wch: 24 }, { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 12 }];
+      XLSX.utils.book_append_sheet(wb, expenseSheet, "Expenses");
+
+      XLSX.writeFile(wb, `Financial-${financialFrom}-sd-${financialTo}.xlsx`);
+      toast.success(t("owner.financial.exportExcelSuccess"));
+    } catch (err) {
+      toast.error(t("owner.financial.exportExcelFailed"), err instanceof Error ? err.message : undefined);
+    } finally {
+      setExportingExcel(false);
+    }
+  };
 
   // ── Sub-tab nav ──────────────────────────────────────────────────────────────
   const FTABS: { id: FinancialTab; label: string; icon: string }[] = [
@@ -2915,6 +3028,64 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
         ))}
       </div>
 
+      {/* Unified date-range filter — applies to every sub-tab above */}
+      <div className="bg-white border border-line rounded-2xl p-3.5 shadow-xs space-y-2.5">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex gap-1.5 flex-wrap">
+            {([
+              { id: "this_month", label: t("owner.financial.presetThisMonth") },
+              { id: "last_month", label: t("owner.financial.presetLastMonth") },
+              { id: "custom", label: t("owner.financial.presetCustom") },
+              { id: "multi_month", label: t("owner.financial.presetMultiMonth") },
+            ] as { id: FinancialPreset; label: string }[]).map(p => (
+              <button key={p.id} onClick={() => applyFinancialPreset(p.id)}
+                className={`px-3 py-1.5 text-xs font-bold rounded-xl border transition-colors ${financialPreset === p.id ? "bg-ocean-600 text-white border-ocean-600" : "bg-paper-tint text-ink-soft border-line hover:text-ink"}`}>
+                {p.label}
+              </button>
+            ))}
+          </div>
+          <Btn variant="soft" size="sm" icon="download" onClick={downloadFinancialExcel} disabled={exportingExcel}>
+            {exportingExcel ? t("owner.financial.exportingExcel") : t("owner.financial.exportExcelBtn")}
+          </Btn>
+        </div>
+
+        {financialPreset === "custom" && (
+          <div className="flex items-center gap-2 flex-wrap">
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-faint mb-1">{t("owner.financial.filterFromLabel")}</label>
+              <input type="date" value={financialFrom} onChange={e => setFinancialFrom(e.target.value)}
+                className="text-xs rounded-xl border border-line bg-paper-tint px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-ocean-400" />
+            </div>
+            <span className="text-ink-faint text-sm mt-4">—</span>
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-faint mb-1">{t("owner.financial.filterToLabel")}</label>
+              <input type="date" value={financialTo} onChange={e => setFinancialTo(e.target.value)}
+                className="text-xs rounded-xl border border-line bg-paper-tint px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-ocean-400" />
+            </div>
+          </div>
+        )}
+        {financialPreset === "multi_month" && (
+          <div className="flex items-center gap-2 flex-wrap">
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-faint mb-1">{t("owner.financial.filterFromLabel")}</label>
+              <input type="month" value={financialFrom.slice(0, 7)}
+                onChange={e => setFinancialFrom(startOfMonthISO(new Date(e.target.value + "-01")))}
+                className="text-xs rounded-xl border border-line bg-paper-tint px-3 py-1.5 font-mono font-semibold focus:outline-none focus:ring-1 focus:ring-ocean-400" />
+            </div>
+            <span className="text-ink-faint text-sm mt-4">—</span>
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-faint mb-1">{t("owner.financial.filterToLabel")}</label>
+              <input type="month" value={financialTo.slice(0, 7)}
+                onChange={e => setFinancialTo(endOfMonthISO(new Date(e.target.value + "-01")))}
+                className="text-xs rounded-xl border border-line bg-paper-tint px-3 py-1.5 font-mono font-semibold focus:outline-none focus:ring-1 focus:ring-ocean-400" />
+            </div>
+          </div>
+        )}
+        {(financialPreset === "this_month" || financialPreset === "last_month") && (
+          <div className="text-xs text-ink-mute font-medium">{financialFrom} — {financialTo}</div>
+        )}
+      </div>
+
       {/* ── OVERVIEW ────────────────────────────────────────────────────────── */}
       {tab === "overview" && (
         <div className="space-y-5">
@@ -2941,7 +3112,7 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
                   </div>
                   <div className="text-xs text-ink-mute mt-1.5 flex items-center gap-1.5">
                     <span className="inline-block px-1.5 py-0.5 rounded bg-ok-50 text-ok-700 text-[11px] font-semibold">
-                      {paidBills.length} transaksi lunas
+                      {rangedPaidBills.length} transaksi lunas
                     </span>
                   </div>
                 </div>
@@ -3232,11 +3403,8 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
               </select>
             </div>
             <div className="flex gap-2 flex-wrap items-center">
-              <input type="date" value={incomeDateFrom} onChange={e => setIncomeDateFrom(e.target.value)} className="text-sm rounded-xl border border-line bg-paper-tint px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400" />
-              <span className="text-ink-faint text-sm">—</span>
-              <input type="date" value={incomeDateTo} onChange={e => setIncomeDateTo(e.target.value)} className="text-sm rounded-xl border border-line bg-paper-tint px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400" />
-              {(incomeSearch || incomeStatus || incomeBranch !== "all" || incomeType || incomeMethod || incomeDateFrom || incomeDateTo) && (
-                <button onClick={() => { setIncomeSearch(""); setIncomeStatus(""); setIncomeBranch("all"); setIncomeType(""); setIncomeMethod(""); setIncomeDateFrom(""); setIncomeDateTo(""); }} className="text-xs text-ocean-600 hover:underline">{t("owner.financial.resetFilter")}</button>
+              {(incomeSearch || incomeStatus || incomeBranch !== "all" || incomeType || incomeMethod) && (
+                <button onClick={() => { setIncomeSearch(""); setIncomeStatus(""); setIncomeBranch("all"); setIncomeType(""); setIncomeMethod(""); }} className="text-xs text-ocean-600 hover:underline">{t("owner.financial.resetFilter")}</button>
               )}
               <span className="text-xs text-ink-mute ml-auto">{t("owner.financial.rowCount", { count: filteredIncome.length })}</span>
             </div>
@@ -3640,34 +3808,7 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
               </div>
 
               {/* Filter Inputs Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
-                {/* Month Picker */}
-                <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-faint mb-1">
-                    {t("owner.financial.payrollFilterMonth")}
-                  </label>
-                  <div className="flex items-center gap-1.5">
-                    <input
-                      type="month"
-                      value={payrollMonth}
-                      onChange={e => setPayrollMonth(e.target.value)}
-                      className="w-full px-2.5 py-1.5 text-xs rounded-xl border border-line bg-white font-mono font-semibold text-ink focus:outline-none focus:ring-2 focus:ring-wave-400"
-                    />
-                    {payrollMonth && (
-                      <button
-                        onClick={() => {
-                          const now = new Date();
-                          setPayrollMonth(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`);
-                        }}
-                        title={t("owner.financial.payrollThisMonthBtn")}
-                        className="px-2 py-1.5 text-[11px] font-semibold text-ocean-700 hover:text-ocean-900 bg-ocean-50 border border-ocean-200 rounded-xl hover:bg-ocean-100 transition-colors whitespace-nowrap"
-                      >
-                        {t("owner.financial.payrollThisMonthBtn")}
-                      </button>
-                    )}
-                  </div>
-                </div>
-
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
                 {/* Branch Filter */}
                 <div>
                   <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-faint mb-1">
@@ -3884,7 +4025,7 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
                                       deductions: String(item.rawSalary.deductions || ""),
                                       notes: item.rawSalary.notes || "",
                                     });
-                                    setEditSalaryModal({ staff: st, salary: item.rawSalary });
+                                    setEditSalaryModal({ staff: st, salary: item.rawSalary, month: item.periodMonth });
                                   }
                                 }
                               }}
@@ -3903,7 +4044,7 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
                                   } else if (item.itemType === "staff_reimburse" && item.id.startsWith("reimburse_")) {
                                     const rId = item.id.replace("reimburse_", "");
                                     const { error } = await supabase
-                                      .from("coach_reimbursements")
+                                      .from("staff_reimbursements")
                                       .update({ status: "paid" })
                                       .eq("id", rId);
                                     if (!error) {
@@ -3920,7 +4061,7 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
                                         deductions: String(item.otherDeductions || ""),
                                         notes: "",
                                       });
-                                      setEditSalaryModal({ staff: st, salary: null });
+                                      setEditSalaryModal({ staff: st, salary: null, month: item.periodMonth });
                                     }
                                   }
                                 }}
@@ -4301,7 +4442,7 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
       <Modal
         open={!!editSalaryModal}
         onClose={() => setEditSalaryModal(null)}
-        title={tNode("owner.financial.staffSalaryModalTitle", { name: editSalaryModal?.staff?.full_name ?? "", period: payrollMonth })}
+        title={tNode("owner.financial.staffSalaryModalTitle", { name: editSalaryModal?.staff?.full_name ?? "", period: editSalaryModal?.month ?? "" })}
         size="sm"
         footer={
           <div className="flex gap-2 justify-end w-full">
@@ -5402,6 +5543,7 @@ function buildNavItems(t: (key: string) => string): NavItem[] {
     { id: "branches",  label: t("owner.nav.branches"),  icon: "pin"     },
     { id: "schools",   label: t("owner.nav.schools"),   icon: "book"    },
     { id: "accounts",  label: t("owner.nav.accounts"),  icon: "users"   },
+    { id: "staffPresensi", label: t("owner.nav.staffPresensi"), icon: "clipboard" },
     { id: "memberPrivate", label: t("owner.nav.memberPrivate"), icon: "target" },
     { id: "classes",   label: t("owner.nav.classes"),   icon: "swim"    },
     { id: "competitions", label: t("owner.nav.competitions"), icon: "flag" },
@@ -5426,6 +5568,7 @@ function buildTitles(t: (key: string) => string): Record<string, [string, string
     branches:  [t("owner.titles.branches.title"),  t("owner.titles.branches.sub")],
     schools:   [t("owner.titles.schools.title"),   t("owner.titles.schools.sub")],
     accounts:  [t("owner.titles.accounts.title"),  t("owner.titles.accounts.sub")],
+    staffPresensi: [t("owner.titles.staffPresensi.title"), t("owner.titles.staffPresensi.sub")],
     classes:   [t("owner.titles.classes.title"),   t("owner.titles.classes.sub")],
     competitions: [t("owner.titles.competitions.title"), t("owner.titles.competitions.sub")],
     levels:    [t("owner.titles.levels.title"),    t("owner.titles.levels.sub")],
@@ -5527,6 +5670,7 @@ export default function OwnerPage() {
     branches:  <Branches branches={branches} onRefresh={loadBranches} userId={userId} userName={ownerName} />,
     schools:   <OwnerSchools branches={branches} />,
     accounts:  <OwnerAccountsMaster branches={branches} />,
+    staffPresensi: <OwnerStaffPresensi branches={branches} />,
     memberPrivate: <OwnerMemberPrivate branches={branches} />,
     classes:   <Classes branches={branches} />,
     competitions: <AdminCompetition branchId="" />,

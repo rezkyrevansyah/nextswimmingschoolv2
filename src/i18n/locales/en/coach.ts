@@ -11,8 +11,10 @@ export const coach = {
   },
   clockIn: {
     selectClassFirst: "Select a class first",
+    selfieRequiredTitle: "Photo required",
+    selfieRequiredBody: "Take a selfie before submitting attendance",
     selfieUploadFailedTitle: "Selfie upload failed",
-    selfieUploadFailedBody: "Attendance saved anyway without a photo",
+    selfieUploadFailedBody: "Attendance was not saved — please try again",
     alreadyClockedInTitle: "Already clocked in for this session",
     alreadyClockedInBody: "You've already clocked in for this class today.",
     saveAttendanceFailedTitle: "Failed to save attendance",

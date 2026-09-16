@@ -13,7 +13,7 @@ import Modal from "@/components/ui/Modal";
 import type { CoachProfile, ClassRow } from "../_types";
 import type { Database } from "@/types/database";
 import { fmtDate } from "@/lib/utils";
-import { memberLeaveTypeToStatus, MEMBER_ATTENDANCE_CONFLICT, COACH_ATTENDANCE_CONFLICT } from "@/lib/attendance";
+import { memberLeaveTypeToStatus, uiToCoachDb, MEMBER_ATTENDANCE_CONFLICT, COACH_ATTENDANCE_CONFLICT } from "@/lib/attendance";
 
 interface LeaveRow {
   id: string; type: string; reason: string | null;
@@ -257,11 +257,11 @@ export default function AdminIzin({ branchId }: { branchId: string }) {
             const dayName = dayNames[d.getDay()];
             if (cls.schedule_days.length === 0 || cls.schedule_days.includes(dayName)) {
               const sessionDate = d.toISOString().slice(0, 10);
-              rows.push({ branch_id: branchId, coach_id: subId, class_id: cls.id, session_date: sessionDate, status: "present" as const, is_manual: true, manual_by: adminId });
+              rows.push({ branch_id: branchId, coach_id: subId, class_id: cls.id, session_date: sessionDate, status: uiToCoachDb("present")!, is_manual: true, manual_by: adminId });
               // Mark the original coach absent for the same session so they
               // aren't paid twice alongside the substitute (invoice generation
               // only bills status "present"/"late").
-              rows.push({ branch_id: branchId, coach_id: createForm.target_id, class_id: cls.id, session_date: sessionDate, status: "absent" as const, is_manual: true, manual_by: adminId });
+              rows.push({ branch_id: branchId, coach_id: createForm.target_id, class_id: cls.id, session_date: sessionDate, status: uiToCoachDb("absent")!, is_manual: true, manual_by: adminId });
             }
             d.setDate(d.getDate() + 1);
           }
@@ -346,11 +346,11 @@ export default function AdminIzin({ branchId }: { branchId: string }) {
           const dayName = dayNames[d.getDay()];
           if (scheduleDays.length === 0 || scheduleDays.includes(dayName)) {
             const sessionDate = d.toISOString().slice(0, 10);
-            rows.push({ branch_id: branchId, coach_id: subId, class_id: lc.class_id, session_date: sessionDate, status: "present" as const, is_manual: true, manual_by: adminId });
+            rows.push({ branch_id: branchId, coach_id: subId, class_id: lc.class_id, session_date: sessionDate, status: uiToCoachDb("present")!, is_manual: true, manual_by: adminId });
             // Mark the original coach absent for the same session so they
             // aren't paid twice alongside the substitute (invoice generation
             // only bills status "present"/"late").
-            rows.push({ branch_id: branchId, coach_id: detail.coach_id, class_id: lc.class_id, session_date: sessionDate, status: "absent" as const, is_manual: true, manual_by: adminId });
+            rows.push({ branch_id: branchId, coach_id: detail.coach_id, class_id: lc.class_id, session_date: sessionDate, status: uiToCoachDb("absent")!, is_manual: true, manual_by: adminId });
           }
           d.setDate(d.getDate() + 1);
         }

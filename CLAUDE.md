@@ -8,9 +8,13 @@ A Next.js (App Router) web app for **Next Swimming School** — a multi-branch s
 
 ## Key docs
 
+- [docs/README.md](docs/README.md) — **start here** (reading order, glossary)
+- [docs/01-prd.md](docs/01-prd.md) — product intent
+- [docs/02-umpan-balik.md](docs/02-umpan-balik.md) — mistakes that must not repeat
+- [docs/03-alur/](docs/03-alur/) — cross-role flows
+- [docs/04-panel/](docs/04-panel/) — per-role screens
+- [docs/05-desain/](docs/05-desain/) — visual tokens
 - [supabase/schema.sql](supabase/schema.sql) — current full SQL schema reference
-- [docs/feedback-priorities.md](docs/feedback-priorities.md) — prioritized feedback/backlog
-- [docs/test-scenarios.md](docs/test-scenarios.md) — test scenario notes
 - `supabase/*.sql` — standalone migration scripts, one per feature — **apply these yourself, don't hand them to the user to paste into the Supabase SQL Editor.** See "Applying database migrations" below.
 
 ## Tech stack

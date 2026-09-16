@@ -13,8 +13,10 @@ export const coach: typeof CoachEn = {
   },
   clockIn: {
     selectClassFirst: "Pilih kelas terlebih dahulu",
+    selfieRequiredTitle: "Foto wajib diambil",
+    selfieRequiredBody: "Ambil selfie dulu sebelum submit absensi",
     selfieUploadFailedTitle: "Upload selfie gagal",
-    selfieUploadFailedBody: "Absensi tetap tersimpan tanpa foto",
+    selfieUploadFailedBody: "Absensi tidak tersimpan — silakan coba lagi",
     alreadyClockedInTitle: "Sudah absen untuk sesi ini",
     alreadyClockedInBody: "Anda sudah absen untuk kelas ini hari ini.",
     saveAttendanceFailedTitle: "Gagal menyimpan absensi",

@@ -7,6 +7,9 @@ import {
   uiToCoachDb,
   uiToStaffDb,
   memberStatusKind,
+  coachStatusKind,
+  staffStatusKind,
+  memberStatusIcon,
   isMemberPresentLike,
   isCoachPresentLike,
   isStaffPresentLike,
@@ -14,6 +17,7 @@ import {
   classifyCoachClockIn,
   classifyMemberScan,
   memberLeaveTypeToStatus,
+  staffLeaveTypeToStatus,
   isUniqueViolation,
   COACH_LATE_THRESHOLD_MINUTES,
   MEMBER_QR_LATE_THRESHOLD_MINUTES,
@@ -131,5 +135,75 @@ describe("isUniqueViolation", () => {
     expect(isUniqueViolation("duplicate key value violates unique constraint")).toBe(true);
     expect(isUniqueViolation("UNIQUE constraint failed")).toBe(true);
     expect(isUniqueViolation("permission denied")).toBe(false);
+  });
+});
+
+describe("uiToStaffDb full round-trip", () => {
+  it("round-trips every UI status staff supports", () => {
+    for (const ui of ["present", "absent", "izin", "sick"] as const) {
+      expect(staffDbToUi(uiToStaffDb(ui)!)).toBe(ui);
+    }
+  });
+});
+
+describe("uiToMemberDb direct mapping", () => {
+  it("maps each UI status to its exact DB value", () => {
+    expect(uiToMemberDb("present")).toBe("hadir");
+    expect(uiToMemberDb("late")).toBe("telat");
+    expect(uiToMemberDb("absent")).toBe("tidak_hadir");
+    expect(uiToMemberDb("sick")).toBe("sakit");
+    expect(uiToMemberDb("izin")).toBe("izin");
+  });
+});
+
+describe("coachStatusKind / staffStatusKind", () => {
+  it("coach: present/late/absent map straight through, no excused", () => {
+    expect(coachStatusKind("present")).toBe("present");
+    expect(coachStatusKind("late")).toBe("late");
+    expect(coachStatusKind("absent")).toBe("absent");
+  });
+
+  it("staff: izin maps to excused, sakit to sick, no late", () => {
+    expect(staffStatusKind("izin")).toBe("excused");
+    expect(staffStatusKind("sakit")).toBe("sick");
+    expect(staffStatusKind("present")).toBe("present");
+    expect(staffStatusKind("absent")).toBe("absent");
+  });
+});
+
+describe("memberStatusIcon", () => {
+  it("maps each UI status to its icon", () => {
+    expect(memberStatusIcon("hadir")).toBe("check");
+    expect(memberStatusIcon("izin")).toBe("clipboard");
+    expect(memberStatusIcon("sakit")).toBe("warning");
+    expect(memberStatusIcon("tidak_hadir")).toBe("close");
+    expect(memberStatusIcon("telat")).toBe("info");
+  });
+});
+
+describe("legacy-alias branches", () => {
+  it("coachDbToUi accepts legacy hadir/telat aliases", () => {
+    expect(coachDbToUi("hadir")).toBe("present");
+    expect(coachDbToUi("telat")).toBe("late");
+  });
+
+  it("staffDbToUi accepts legacy late/hadir aliases (staff has no real Late)", () => {
+    expect(staffDbToUi("late")).toBe("present");
+    expect(staffDbToUi("hadir")).toBe("present");
+  });
+});
+
+describe("case sensitivity (characterization, not an endorsement)", () => {
+  it("uppercase/mixed-case input is not recognized and falls back to absent", () => {
+    expect(memberDbToUi("HADIR")).toBe("absent");
+    expect(coachDbToUi("Present")).toBe("absent");
+    expect(staffDbToUi("SAKIT")).toBe("absent");
+  });
+});
+
+describe("staffLeaveTypeToStatus", () => {
+  it("maps 1:1 onto staff_attendances' status values", () => {
+    expect(staffLeaveTypeToStatus("izin")).toBe("izin");
+    expect(staffLeaveTypeToStatus("sakit")).toBe("sakit");
   });
 });

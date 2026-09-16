@@ -752,6 +752,7 @@ export const admin = {
     colCoach: "Coach",
     colClockIn: "Clock-in",
     colDistance: "Distance",
+    colSelfie: "Selfie",
     methodSelfieGps: "Selfie + GPS",
     noAttendanceYet: "No attendance yet",
     coachDateRequired: "Coach, class, and date are required",

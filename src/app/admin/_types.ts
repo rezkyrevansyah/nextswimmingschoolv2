@@ -1,6 +1,8 @@
 // Shared types used by multiple admin panel components.
 // Types used only by a single component are defined in that component's file.
 
+import type { CoachDbStatus } from "@/lib/attendance";
+
 export interface Branch {
   id: string; name: string; city: string; address: string | null;
   lat: number | null; lng: number | null; wa_numbers: string[] | null;
@@ -60,8 +62,9 @@ export interface CoachProfile {
 
 export interface AttendanceRow {
   id: string; coach_id: string; class_id: string; session_date: string; clock_in_time: string | null;
-  status: string; distance_meters: number | null; is_manual: boolean;
+  status: CoachDbStatus; distance_meters: number | null; is_manual: boolean;
   manual_note: string | null;
+  selfie_url: string | null;
   profile?: { full_name: string } | null;
   class?: { name: string } | null;
 }

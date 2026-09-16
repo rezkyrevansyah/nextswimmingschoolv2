@@ -35,6 +35,8 @@ import {
   memberStatusKind,
   memberStatusIcon,
   isUniqueViolation,
+  uiToMemberDb,
+  MEMBER_DB_STATUSES,
   MEMBER_ATTENDANCE_CONFLICT,
   type MemberDbStatus,
 } from "@/lib/attendance";
@@ -440,6 +442,7 @@ function ClockInFlow({ back, coachId, branchId, classes, preselectedClassId, onS
 
   const submit = async () => {
     if (!classId) return toast.error(t("coach.clockIn.selectClassFirst"));
+    if (!photoFile) return toast.error(t("coach.clockIn.selfieRequiredTitle"), t("coach.clockIn.selfieRequiredBody"));
     setSubmitting(true);
     const today = toLocalDateStr();
     const nowTime = new Date().toTimeString().slice(0, 8);
@@ -449,13 +452,13 @@ function ClockInFlow({ back, coachId, branchId, classes, preselectedClassId, onS
     const lateMinutes = selectedClass?.time_start ? minutesAfterStart(nowTime, selectedClass.time_start) : 0;
     const coachStatus = classifyCoachClockIn(lateMinutes);
 
-    let selfieUrl: string | null = null;
-    if (photoFile) {
-      try {
-        selfieUrl = await upload.selfie(photoFile, classId, today);
-      } catch {
-        toast.error(t("coach.clockIn.selfieUploadFailedTitle"), t("coach.clockIn.selfieUploadFailedBody"));
-      }
+    let selfieUrl: string;
+    try {
+      selfieUrl = await upload.selfie(photoFile, classId, today);
+    } catch {
+      setSubmitting(false);
+      toast.error(t("coach.clockIn.selfieUploadFailedTitle"), t("coach.clockIn.selfieUploadFailedBody"));
+      return;
     }
 
     // Check for existing attendance on same class + date before inserting
@@ -1611,7 +1614,7 @@ function CoachAbsensi({ setOverlay, coachId, branchId, classes, holidayClassIds,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const rawProfile = Array.isArray((m as any).profile) ? (m as any).profile[0] : (m as any).profile;
         return {
-          id: "", member_id: (m as any).id as string, session_date: date, status: "hadir",
+          id: "", member_id: (m as any).id as string, session_date: date, status: uiToMemberDb("present"),
           type: m.type as string | undefined,
           school_grade: m.school_grade as string | null | undefined,
           member: rawProfile,
@@ -1619,7 +1622,7 @@ function CoachAbsensi({ setOverlay, coachId, branchId, classes, holidayClassIds,
       });
       setMemberAtt(rows as unknown as MemberAttRow[]);
       const init: Record<string, string> = {};
-      active.forEach(m => { init[m.id as string] = "hadir"; });
+      active.forEach(m => { init[m.id as string] = uiToMemberDb("present"); });
       setAttStatus(init);
     }
   }, [supabase]);
@@ -1634,7 +1637,7 @@ function CoachAbsensi({ setOverlay, coachId, branchId, classes, holidayClassIds,
     if (!manualClassId || !manualDate) return toast.error(t("coach.absen.classAndDateRequired"));
     if (memberAtt.length === 0) return toast.error(t("coach.absen.noMembersInClass"));
     setSaving(true);
-    const rows = memberAtt.map(m => ({ class_id: manualClassId, member_id: m.member_id, session_date: manualDate, status: (attStatus[m.member_id] ?? "hadir") as MemberDbStatus, method: "manual" as const }));
+    const rows = memberAtt.map(m => ({ class_id: manualClassId, member_id: m.member_id, session_date: manualDate, status: (attStatus[m.member_id] ?? uiToMemberDb("present")) as MemberDbStatus, method: "manual" as const }));
     const { error } = await supabase.from("member_attendances").upsert(rows, { onConflict: MEMBER_ATTENDANCE_CONFLICT });
     setSaving(false);
     if (error) return toast.error(t("coach.absen.saveFailed"), error.message);
@@ -1663,7 +1666,7 @@ function CoachAbsensi({ setOverlay, coachId, branchId, classes, holidayClassIds,
     const { data: result, error: recordErr } = await supabase
       .rpc("record_private_session_attendance", {
         p_member_id: memberId, p_class_id: privateClassId, p_session_date: privateDate,
-        p_status: "hadir", p_method: "manual", p_marked_by: null,
+        p_status: uiToMemberDb("present"), p_method: "manual", p_marked_by: null,
       })
       .single();
     if (recordErr) {
@@ -1902,12 +1905,13 @@ function CoachAbsensi({ setOverlay, coachId, branchId, classes, holidayClassIds,
                     )}
                   </div>
                   <div className="flex flex-wrap gap-1">
-                    {([["hadir", t("coach.absen.attStatusHadir")], ["telat", t("coach.absen.attStatusTelat")], ["izin", t("coach.absen.attStatusIzin")], ["sakit", t("coach.absen.attStatusSakit")], ["tidak_hadir", t("coach.absen.attStatusTidakHadirShort")]] as const).map(([id, l]) => {
-                      const active = (attStatus[m.member_id] ?? "hadir") === id;
+                    {MEMBER_DB_STATUSES.map(id => {
+                      const label = id === "hadir" ? t("coach.absen.attStatusHadir") : id === "telat" ? t("coach.absen.attStatusTelat") : id === "izin" ? t("coach.absen.attStatusIzin") : id === "sakit" ? t("coach.absen.attStatusSakit") : t("coach.absen.attStatusTidakHadirShort");
+                      const active = (attStatus[m.member_id] ?? uiToMemberDb("present")) === id;
                       const activeStyle = id === "hadir" ? "border-ok-500 bg-ok-50 text-ok-600" : id === "telat" ? "border-warn-500 bg-warn-50 text-warn-600" : id === "tidak_hadir" ? "border-danger-500 bg-danger-50 text-danger-600" : "border-warn-400 bg-warn-50 text-warn-500";
                       return (
                         <button key={id} onClick={() => setAttStatus(s => ({ ...s, [m.member_id]: id }))}
-                          className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border ${active ? activeStyle : "border-line text-ink-mute hover:bg-paper-tint"}`}>{l}</button>
+                          className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border ${active ? activeStyle : "border-line text-ink-mute hover:bg-paper-tint"}`}>{label}</button>
                       );
                     })}
                   </div>

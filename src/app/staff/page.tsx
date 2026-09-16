@@ -22,7 +22,7 @@ import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
 import { useLocale } from "@/components/providers/LocaleProvider";
 import { fmtIDR, fmtDate, fmtDateLong } from "@/lib/utils";
-import { isUniqueViolation } from "@/lib/attendance";
+import { isUniqueViolation, staffStatusKind, uiToStaffDb, isStaffPresentLike, type StaffDbStatus } from "@/lib/attendance";
 import { createClient } from "@/utils/supabase/client";
 import { useUpload } from "@/hooks/useUpload";
 import { printPayslip } from "@/lib/printPayslip";
@@ -58,9 +58,20 @@ interface StaffAttendance {
   attendance_date: string;
   clock_in_time: string | null;
   clock_out_time: string | null;
-  status: "present" | "absent" | "izin" | "sakit";
+  status: StaffDbStatus;
   note: string | null;
   selfie_url: string | null;
+  created_at: string;
+}
+
+interface StaffLeaveRequest {
+  id: string;
+  type: "izin" | "sakit";
+  date_from: string;
+  date_to: string;
+  reason: string | null;
+  status: "pending" | "approved" | "rejected";
+  reject_reason: string | null;
   created_at: string;
 }
 
@@ -533,6 +544,7 @@ export default function StaffPage() {
 
   // Data states
   const [todayAttendance, setTodayAttendance] = useState<StaffAttendance | null>(null);
+  const [leaveRequests, setLeaveRequests] = useState<StaffLeaveRequest[]>([]);
   const [attendances, setAttendances] = useState<StaffAttendance[]>([]);
   const [salaries, setSalaries] = useState<StaffSalary[]>([]);
   const [expenses, setExpenses] = useState<ExpenseRow[]>([]);
@@ -582,6 +594,15 @@ export default function StaffPage() {
         category: prev.category && names.includes(prev.category) ? prev.category : names[0],
       }));
     }
+  }, [supabase]);
+
+  const loadLeaveRequests = useCallback(async (userId: string) => {
+    const { data } = await supabase
+      .from("staff_leaves")
+      .select("id, type, date_from, date_to, reason, status, reject_reason, created_at")
+      .eq("staff_id", userId)
+      .order("created_at", { ascending: false });
+    setLeaveRequests((data as unknown as StaffLeaveRequest[]) ?? []);
   }, [supabase]);
 
   // Profile edit state
@@ -664,7 +685,10 @@ export default function StaffPage() {
 
     // 5. Expense categories created/managed by Owner in owner panel
     await loadExpenseCategories();
-  }, [supabase, loadExpenseCategories]);
+
+    // 6. This staff's own leave requests (pending/approved/rejected)
+    await loadLeaveRequests(userId);
+  }, [supabase, loadExpenseCategories, loadLeaveRequests]);
 
   useEffect(() => {
     if (showExpenseModal) {
@@ -740,11 +764,13 @@ export default function StaffPage() {
     const timeStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;
     const today = now.toISOString().slice(0, 10);
 
-    let selfieUrl: string | null = null;
+    let selfieUrl: string;
     try {
       selfieUrl = await upload.staffSelfie(photoFile, today);
     } catch {
+      setClockLoading(false);
       toast.error(t("staff.actions.selfieUploadFailedTitle"), t("staff.actions.selfieUploadFailedBody"));
+      return;
     }
 
     const { data, error } = await supabase
@@ -754,7 +780,7 @@ export default function StaffPage() {
         branch_id: profile.branch_id ?? "",
         attendance_date: today,
         clock_in_time: isoTimestamp,
-        status: "present",
+        status: uiToStaffDb("present"),
         note: clockNotes.trim() || null,
         selfie_url: selfieUrl,
       })
@@ -819,29 +845,25 @@ export default function StaffPage() {
 
     setClockLoading(true);
     const today = new Date().toISOString().slice(0, 10);
-    const { data, error } = await supabase
-      .from("staff_attendances")
+    const { error } = await supabase
+      .from("staff_leaves")
       .insert({
         staff_id: user.id,
-        branch_id: profile.branch_id ?? "",
-        attendance_date: today,
-        status: status,
-        note: clockNotes.trim() || `Pengajuan ${label}`,
-      })
-      .select("*")
-      .single();
+        branch_id: profile.branch_id ?? null,
+        type: status,
+        date_from: today,
+        date_to: today,
+        reason: clockNotes.trim() || null,
+        status: "pending",
+      });
 
     setClockLoading(false);
     if (error) {
-      if (isUniqueViolation(error.message)) {
-        return toast.error(t("staff.actions.alreadyClockedInTitle"), t("staff.actions.alreadyClockedInBody"));
-      }
       return toast.error(t("staff.actions.recordLeaveFailed", { type: label }), error.message);
     }
-    setTodayAttendance(data as unknown as StaffAttendance);
     setClockNotes("");
     toast.success(t("staff.actions.recordLeaveSuccess", { type: label }));
-    await loadData(user.id);
+    await loadLeaveRequests(user.id);
   };
 
   // Handle Save Expense Reimburse
@@ -992,8 +1014,15 @@ export default function StaffPage() {
   }, [attendances, selectedMonth]);
 
   const monthPresentCount = useMemo(() => {
-    return filteredAttendances.filter(a => a.status === "present").length;
+    return filteredAttendances.filter(a => isStaffPresentLike(a.status)).length;
   }, [filteredAttendances]);
+
+  const staffStatusBadge = (status: StaffDbStatus) => {
+    const kind = staffStatusKind(status);
+    const className = kind === "present" ? "bg-ok-50 text-ok-700" : kind === "sick" ? "bg-amber-50 text-amber-700" : kind === "excused" ? "bg-warn-50 text-warn-700" : "bg-danger-50 text-danger-700";
+    const label = kind === "present" ? t("staff.attendance.statusPresent") : kind === "sick" ? t("staff.attendance.statusSick") : kind === "excused" ? t("staff.attendance.statusLeave") : t("staff.attendance.statusAbsent");
+    return { className, label };
+  };
 
   const latestSalary = salaries[0] ?? null;
 
@@ -1192,6 +1221,34 @@ export default function StaffPage() {
                 )}
               </Card>
 
+              {leaveRequests.length > 0 && (
+                <Card padded={false}>
+                  <div className="px-5 pt-4 pb-2 font-display font-bold text-ink">{t("staff.leaveHistory.title")}</div>
+                  <div className="divide-y divide-line">
+                    {leaveRequests.map(l => {
+                      const typeLabel = l.type === "izin" ? t("staff.home.leaveBtn") : t("staff.home.sickBtn");
+                      const statusLabel = l.status === "approved" ? t("staff.leaveHistory.statusApproved") : l.status === "rejected" ? t("staff.leaveHistory.statusRejected") : t("staff.leaveHistory.statusPending");
+                      const dateRange = l.date_to !== l.date_from ? `${fmtDate(l.date_from)}–${fmtDate(l.date_to)}` : fmtDate(l.date_from);
+                      return (
+                        <div key={l.id} className="px-5 py-3.5">
+                          <div className="flex items-center gap-3">
+                            <span className={`w-10 h-10 rounded-xl flex items-center justify-center ${l.status === "approved" ? "bg-ok-50 text-ok-600" : l.status === "rejected" ? "bg-danger-50 text-danger-500" : "bg-warn-50 text-warn-600"}`}>
+                              <Icon name={l.status === "approved" ? "check" : l.status === "rejected" ? "x" : "info"} className="w-4 h-4" strokeWidth={2.5} />
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              <div className="font-semibold text-ink text-sm">{typeLabel} · {dateRange}</div>
+                              {l.reason && <div className="text-xs text-ink-mute">{l.reason}</div>}
+                            </div>
+                            <Status kind={l.status}>{statusLabel}</Status>
+                          </div>
+                          {l.reject_reason && <div className="mt-2 text-xs text-danger-600 bg-danger-50 rounded-lg p-2.5"><b>{t("staff.leaveHistory.rejectReasonLabel")}:</b> {l.reject_reason}</div>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </Card>
+              )}
+
               {/* Quick Summary Grid */}
               <div className="grid sm:grid-cols-3 gap-4">
                 <Card>
@@ -1267,14 +1324,8 @@ export default function StaffPage() {
                         <td className="py-3 px-4 font-mono text-ink-soft">{fmtClockTime(att.clock_in_time)}</td>
                         <td className="py-3 px-4 font-mono text-ink-soft">{fmtClockTime(att.clock_out_time)}</td>
                         <td className="py-3 px-4">
-                          <span className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase ${
-                            att.status === "present" ? "bg-ok-50 text-ok-700" :
-                            att.status === "sakit" ? "bg-amber-50 text-amber-700" :
-                            att.status === "izin" ? "bg-warn-50 text-warn-700" : "bg-danger-50 text-danger-700"
-                          }`}>
-                            {att.status === "present" ? t("staff.attendance.statusPresent") :
-                             att.status === "sakit" ? t("staff.attendance.statusSick") :
-                             att.status === "izin" ? t("staff.attendance.statusLeave") : t("staff.attendance.statusAbsent")}
+                          <span className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase ${staffStatusBadge(att.status).className}`}>
+                            {staffStatusBadge(att.status).label}
                           </span>
                         </td>
                         <td className="py-3 px-4 text-xs text-ink-mute">{att.note ?? "—"}</td>
@@ -1297,14 +1348,8 @@ export default function StaffPage() {
                   <div key={att.id} className="p-3.5 rounded-xl border border-line bg-white shadow-2xs space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="font-bold text-sm text-ink">{fmtDate(att.attendance_date)}</span>
-                      <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                        att.status === "present" ? "bg-ok-50 text-ok-700" :
-                        att.status === "sakit" ? "bg-amber-50 text-amber-700" :
-                        att.status === "izin" ? "bg-warn-50 text-warn-700" : "bg-danger-50 text-danger-700"
-                      }`}>
-                        {att.status === "present" ? t("staff.attendance.statusPresent") :
-                         att.status === "sakit" ? t("staff.attendance.statusSick") :
-                         att.status === "izin" ? t("staff.attendance.statusLeave") : t("staff.attendance.statusAbsent")}
+                      <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${staffStatusBadge(att.status).className}`}>
+                        {staffStatusBadge(att.status).label}
                       </span>
                     </div>
                     <div className="flex items-center justify-between text-xs text-ink-soft font-mono bg-paper-tint px-3 py-2 rounded-lg">

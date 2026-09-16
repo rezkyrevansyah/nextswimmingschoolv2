@@ -50,7 +50,7 @@ const ATT_PAGE_SIZE = 20;
 function SchoolAbsensi({ schoolId, schoolName, members }: {
   schoolId: string;
   schoolName: string;
-  members: { id: string; name: string; school_grade: string | null }[];
+  members: { id: string; name: string; school_grade: string | null; class_name: string }[];
 }) {
   const supabase = createClient();
   const { t } = useLocale();
@@ -70,16 +70,27 @@ function SchoolAbsensi({ schoolId, schoolName, members }: {
     if (members.length === 0) { setRows([]); return; }
     setLoading(true);
     const memberIds = members.map(m => m.id);
-    const q = supabase
-      .from("member_attendances")
-      .select("id, member_id, class_id, session_date, status, method, member:members(profile:profiles(full_name)), class:classes(name)")
-      .in("member_id", memberIds)
-      .gte("session_date", filterDateFrom)
-      .lte("session_date", filterDateTo)
-      .order("session_date", { ascending: false })
-      .order("created_at", { ascending: false })
-      .limit(2000);
-    const { data } = await q;
+    // Paginated fetch — no arbitrary row cap, so a wide date range × many
+    // students can't silently truncate the data this export is built from.
+    const BATCH = 1000;
+    let offset = 0;
+    const allData: unknown[] = [];
+    while (true) {
+      const { data: batch } = await supabase
+        .from("member_attendances")
+        .select("id, member_id, class_id, session_date, status, method, member:members(profile:profiles(full_name)), class:classes(name)")
+        .in("member_id", memberIds)
+        .gte("session_date", filterDateFrom)
+        .lte("session_date", filterDateTo)
+        .order("session_date", { ascending: false })
+        .order("created_at", { ascending: false })
+        .range(offset, offset + BATCH - 1);
+      if (!batch || batch.length === 0) break;
+      allData.push(...batch);
+      if (batch.length < BATCH) break;
+      offset += BATCH;
+    }
+    const data = allData;
     const mapped: SchoolAttRow[] = (data ?? []).map((r) => {
       const raw = r as unknown as {
         id: string; member_id: string; class_id: string; session_date: string;
@@ -169,20 +180,68 @@ function SchoolAbsensi({ schoolId, schoolName, members }: {
   };
 
   const downloadExcel = async () => {
-    if (filtered.length === 0) return;
+    const targetMembers = filterMember === "all" ? members : members.filter(m => m.id === filterMember);
+    if (targetMembers.length === 0) return;
     setDownloading(true);
     try {
       const XLSX = await import("xlsx");
-      const sheetRows = filtered.map(r => ({
-        [t("school.absensi.colDate")]: r.session_date,
-        [t("school.absensi.colStudent")]: r.member_name,
-        [t("school.absensi.colSchoolGrade")]: r.school_grade ?? "—",
-        [t("school.absensi.colClass")]: r.class_name,
-        [t("school.absensi.colStatus")]: getStatusLabel(r.status),
-        [t("school.absensi.colMethod")]: getMethodLabel(r.method),
-      }));
-      const ws = XLSX.utils.json_to_sheet(sheetRows);
-      ws["!cols"] = [{ wch: 14 }, { wch: 28 }, { wch: 18 }, { wch: 24 }, { wch: 14 }, { wch: 12 }];
+
+      // Per-member date → status lookup, built from every attendance row in
+      // the selected date range (independent of the per-record filterStatus
+      // dropdown, which doesn't map cleanly onto a per-student summary row).
+      const byMember = new Map<string, Map<string, SchoolAttRow["status"]>>();
+      for (const r of rows) {
+        if (!byMember.has(r.member_id)) byMember.set(r.member_id, new Map());
+        byMember.get(r.member_id)!.set(r.session_date, r.status);
+      }
+
+      // Every calendar date in the selected range, inclusive — same column
+      // set for every student, regardless of which days their class met.
+      const dates: string[] = [];
+      const cursor = new Date(filterDateFrom + "T00:00:00");
+      const end = new Date(filterDateTo + "T00:00:00");
+      while (cursor <= end) {
+        dates.push(cursor.toISOString().slice(0, 10));
+        cursor.setDate(cursor.getDate() + 1);
+      }
+
+      const header = [
+        t("school.absensi.colStudent"),
+        t("school.absensi.colSchoolGrade"),
+        t("school.absensi.colClass"),
+        ...dates,
+        t("school.absensi.statusHadir"),
+        t("school.absensi.statusTelat"),
+        t("school.absensi.statusTidakHadir"),
+        t("school.absensi.statusSakit"),
+        t("school.absensi.statusIzin"),
+      ];
+
+      const dataRows = targetMembers.map(m => {
+        const memberDates = byMember.get(m.id);
+        let present = 0, late = 0, absent = 0, sick = 0, izin = 0;
+        const dateCells = dates.map(date => {
+          const status = memberDates?.get(date);
+          if (!status) return "-";
+          switch (memberDbToUi(status)) {
+            case "present": present++; break;
+            case "late": late++; break;
+            case "absent": absent++; break;
+            case "sick": sick++; break;
+            case "izin": izin++; break;
+          }
+          return getStatusLabel(status);
+        });
+        return [m.name, m.school_grade ?? "-", m.class_name ?? "-", ...dateCells, present, late, absent, sick, izin];
+      });
+
+      const ws = XLSX.utils.aoa_to_sheet([header, ...dataRows]);
+      ws["!cols"] = [
+        { wch: 24 }, { wch: 14 }, { wch: 20 },
+        ...dates.map(() => ({ wch: 10 })),
+        { wch: 9 }, { wch: 9 }, { wch: 9 }, { wch: 9 }, { wch: 13 },
+      ];
+      ws["!freeze"] = { xSplit: 3, ySplit: 1 };
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Absensi Siswa");
       const safeName = schoolName.replace(/[^a-zA-Z0-9]/g, "-");
@@ -226,7 +285,7 @@ function SchoolAbsensi({ schoolId, schoolName, members }: {
               variant="outline"
               size="sm"
               icon="download"
-              disabled={filtered.length === 0 || downloading}
+              disabled={members.length === 0 || downloading}
               onClick={downloadExcel}
             >
               {downloading ? t("school.absensi.exportingExcel") : t("school.absensi.exportExcelBtn")}
@@ -306,6 +365,7 @@ function SchoolAbsensi({ schoolId, schoolName, members }: {
               <tr className="text-[11px] uppercase tracking-widest text-ink-faint font-bold border-b border-line">
                 <th className="text-left py-3 px-5 font-bold">{t("school.absensi.colDate")}</th>
                 <th className="text-left py-3 px-4 font-bold">{t("school.absensi.colStudent")}</th>
+                <th className="text-left py-3 px-4 font-bold">{t("school.absensi.colSchoolGrade")}</th>
                 <th className="text-left py-3 px-4 font-bold">{t("school.absensi.colClass")}</th>
                 <th className="text-left py-3 px-4 font-bold">{t("school.absensi.colStatus")}</th>
                 <th className="text-left py-3 px-5 font-bold">{t("school.absensi.colMethod")}</th>
@@ -316,6 +376,7 @@ function SchoolAbsensi({ schoolId, schoolName, members }: {
                 <tr key={r.id} className="hover:bg-paper-tint transition-colors">
                   <td className="py-3 px-5 font-mono text-xs text-ink-soft">{r.session_date}</td>
                   <td className="py-3 px-4 font-semibold text-ink">{r.member_name}</td>
+                  <td className="py-3 px-4 text-ink-soft text-xs">{r.school_grade ?? "—"}</td>
                   <td className="py-3 px-4 text-ink-soft text-xs">{r.class_name}</td>
                   <td className="py-3 px-4">
                     <Status kind={memberStatusKind(r.status)}>
@@ -327,7 +388,7 @@ function SchoolAbsensi({ schoolId, schoolName, members }: {
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="py-12 text-center text-ink-mute text-sm">
+                  <td colSpan={6} className="py-12 text-center text-ink-mute text-sm">
                     {t("school.absensi.empty")}
                   </td>
                 </tr>
@@ -347,6 +408,7 @@ function SchoolAbsensi({ schoolId, schoolName, members }: {
                 </Status>
               </div>
               <div className="font-semibold text-sm text-ink">{r.member_name}</div>
+              {r.school_grade && <div className="text-xs text-ink-mute">{r.school_grade}</div>}
               <div className="flex items-center justify-between text-xs text-ink-mute pt-1 border-t border-line/60">
                 <span>{r.class_name}</span>
                 <span className="font-mono text-[11px] bg-paper-tint px-2 py-0.5 rounded">{getMethodLabel(r.method)}</span>
@@ -458,6 +520,7 @@ export default function SchoolPage() {
   // Download loading states
   const [bulkDownloading, setBulkDownloading] = useState(false);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState<{ done: number; total: number } | null>(null);
 
   const logout = async () => {
     await supabase.auth.signOut();
@@ -771,16 +834,22 @@ export default function SchoolPage() {
   const downloadZipFor = async (targets: Student[]) => {
     if (targets.length === 0) return;
     setBulkDownloading(true);
+    setDownloadProgress({ done: 0, total: targets.length });
     try {
       const zipName = `rapor-${schoolName.replace(/[^a-zA-Z0-9]/g, "_")}-${new Date().toISOString().slice(0, 10)}`;
-      const { success, failed } = await downloadRaporZip(targets.map(toPrintStudent), zipName);
+      const { success, failed } = await downloadRaporZip(
+        targets.map(toPrintStudent),
+        zipName,
+        (done, total) => setDownloadProgress({ done, total })
+      );
       if (failed === 0) toast.success(t("school.rapor.zipSuccessToast"));
       else if (success === 0) toast.error(t("school.rapor.zipFailedToast"));
-      else toast.error(`${success} berhasil, ${failed} gagal`);
+      else toast.error(t("school.rapor.zipPartialToast", { success, failed }));
     } catch {
       toast.error(t("school.rapor.zipFailedToast"));
     } finally {
       setBulkDownloading(false);
+      setDownloadProgress(null);
     }
   };
 
@@ -798,6 +867,9 @@ export default function SchoolPage() {
   };
   const handlePrintSelected = () => void downloadZipFor(students.filter(s => selected.has(s.id) && s.is_filled));
   const handlePrintFiltered = () => void downloadZipFor(filteredSorted.filter(s => s.is_filled));
+  const bulkDownloadingLabel = downloadProgress
+    ? t("school.rapor.downloadingZipProgress", { done: downloadProgress.done, total: downloadProgress.total })
+    : t("school.rapor.downloadingZip");
 
   return (
     <div className="min-h-screen bg-paper-tint">
@@ -848,7 +920,7 @@ export default function SchoolPage() {
                     className="inline-flex items-center gap-2 bg-white/15 hover:bg-white/25 backdrop-blur border border-white/20 text-white text-sm font-semibold px-4 py-2 rounded-xl transition disabled:opacity-60"
                   >
                     <Icon name="download" className="w-4 h-4" />
-                    {bulkDownloading ? t("school.rapor.downloadingZip") : `${t("school.rapor.downloadAllZipBtn")} (${totalDone})`}
+                    {bulkDownloading ? bulkDownloadingLabel : `${t("school.rapor.downloadAllZipBtn")} (${totalDone})`}
                   </button>
                   {(search || activeFilterCount > 0) && filteredSorted.filter(s => s.is_filled).length > 0 && filteredSorted.length < students.length && (
                     <button
@@ -857,7 +929,7 @@ export default function SchoolPage() {
                       className="inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 backdrop-blur border border-white/15 text-white/90 text-sm font-semibold px-4 py-2 rounded-xl transition disabled:opacity-60"
                     >
                       <Icon name="download" className="w-4 h-4" />
-                      {bulkDownloading ? t("school.rapor.downloadingZip") : `${t("school.rapor.downloadPdfBtn")} (${filteredSorted.filter(s => s.is_filled).length})`}
+                      {bulkDownloading ? bulkDownloadingLabel : `${t("school.rapor.downloadPdfBtn")} (${filteredSorted.filter(s => s.is_filled).length})`}
                     </button>
                   )}
                 </div>
@@ -903,7 +975,7 @@ export default function SchoolPage() {
           <SchoolAbsensi
             schoolId={schoolId}
             schoolName={schoolName}
-            members={students.map(s => ({ id: s.id, name: s.full_name, school_grade: s.school_grade }))}
+            members={students.map(s => ({ id: s.id, name: s.full_name, school_grade: s.school_grade, class_name: s.class_name }))}
           />
         )}
 
@@ -935,7 +1007,7 @@ export default function SchoolPage() {
                   <button type="button" onClick={() => setSelected(new Set())}
                     className="text-xs font-semibold text-ink-mute hover:underline">{t("common.actions.cancel")}</button>
                   <Btn variant="primary" size="sm" icon="download" disabled={selected.size === 0 || bulkDownloading} onClick={handlePrintSelected}>
-                    {bulkDownloading ? t("school.rapor.downloadingZip") : `${t("school.rapor.downloadPdfBtn")} (${selected.size})`}
+                    {bulkDownloading ? bulkDownloadingLabel : `${t("school.rapor.downloadPdfBtn")} (${selected.size})`}
                   </Btn>
                   <Btn variant="ghost" size="sm" onClick={() => { setSelectMode(false); setSelected(new Set()); }}>{t("common.actions.close")}</Btn>
                 </div>

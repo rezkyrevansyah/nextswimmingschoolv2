@@ -159,7 +159,7 @@ Latar semua panel: `bg-paper-tint min-h-screen`.
 | Keluarga panel | Cangkang | Catatan |
 |---|---|---|
 | Owner, Admin | `Sidebar` + `Topbar` | Desktop dulu; laci di ponsel |
-| Coach, Member | `MobileNav` bawah + tajuk | Tab Invoice/Bills/Leave di lembar Menu |
+| Coach, Student | `MobileNav` bawah + tajuk | Tab Invoice/Bills/Leave di lembar Menu |
 | Staff | Sidebar + `MobileNav` | Payslip tidak di navigasi bawah |
 | School | Tajuk + tab | Lebar `max-w-6xl` |
 | Publik | Bagian penuh lebar | Boleh `water-bg`, galeri, `caustics` |
@@ -220,7 +220,7 @@ Pemilih tanggal/waktu: `DatePicker`, `MonthYearPicker`, `TimePicker` (sadar loka
 | `Avatar` | Inisial; palet tetap di komponen |
 | `Logo` | `next/image`; jangan `<img>` logo |
 | `Modal` | Dialog; `footer` untuk aksi |
-| `QRBox` | QR member/staf |
+| `QRBox` | QR siswa/staf |
 | `PhotoLightbox` | Foto penuh |
 | `ProofViewer` | Bukti bayar privat (URL bertanda tangan) |
 | `Placeholder` | Foto kelas kosong |

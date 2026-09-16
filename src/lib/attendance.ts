@@ -191,6 +191,11 @@ export function memberLeaveTypeToStatus(type: string | null | undefined): Member
   return type === "sakit" ? "sakit" : "izin";
 }
 
+/** Approved staff leave → attendance status. Staff leave types already match staff_attendances' status values 1:1. */
+export function staffLeaveTypeToStatus(type: "izin" | "sakit"): StaffDbStatus {
+  return type;
+}
+
 export function isUniqueViolation(message: string | null | undefined): boolean {
   if (!message) return false;
   const lower = message.toLowerCase();

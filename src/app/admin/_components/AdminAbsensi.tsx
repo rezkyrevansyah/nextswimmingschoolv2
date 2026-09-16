@@ -14,7 +14,24 @@ import TimePicker from "@/components/ui/TimePicker";
 import type { AttendanceRow, CoachProfile, ClassRow, MemberAttendanceRow } from "../_types";
 import { fmtDate } from "@/lib/utils";
 import { logActivity } from "@/lib/activityLog";
-import { memberStatusKind, memberDbToUi, COACH_ATTENDANCE_CONFLICT } from "@/lib/attendance";
+import { memberStatusKind, memberDbToUi, coachDbToUi, COACH_DB_STATUSES, COACH_ATTENDANCE_CONFLICT, type CoachDbStatus } from "@/lib/attendance";
+import { useSignedUrl } from "@/hooks/useSignedUrl";
+import PhotoLightbox from "@/components/ui/PhotoLightbox";
+
+function SelfieThumb({ selfieKey, onOpen }: { selfieKey: string | null; onOpen: () => void }) {
+  const url = useSignedUrl(selfieKey);
+  if (!selfieKey) return <span className="text-ink-faint text-xs">—</span>;
+  return (
+    <button type="button" onClick={onOpen} className="w-9 h-9 rounded-lg overflow-hidden border border-line shrink-0">
+      {url ? (
+        // eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL, not a static asset
+        <img src={url} alt="" className="w-full h-full object-cover" />
+      ) : (
+        <span className="skeleton w-full h-full block" />
+      )}
+    </button>
+  );
+}
 
 function AdminAbsensiMember({ branchId }: { branchId: string }) {
   const supabase = createClient();
@@ -100,6 +117,13 @@ function AdminAbsensiMember({ branchId }: { branchId: string }) {
   useEffect(() => {
     setPage(0);
     loadRecords(0, false);
+    // Realtime: any change to member attendance → refresh (mirrors AdminDashboard.tsx's
+    // live_att channel). Merged into this effect so the channel is torn down and
+    // recreated whenever loadRecords' own deps change, avoiding a stale closure.
+    const channel = supabase.channel(`live_member_att:${branchId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "member_attendances" }, () => loadRecords(0, false))
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
   }, [loadRecords]); // eslint-disable-line react-hooks/exhaustive-deps
   /* eslint-enable react-hooks/set-state-in-effect */
 
@@ -204,6 +228,8 @@ function AdminAbsensiCoach({ branchId }: { branchId: string }) {
   const [loading, setLoading] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [page, setPage] = useState(0);
+  const [lightboxKey, setLightboxKey] = useState<string | null>(null);
+  const lightboxUrl = useSignedUrl(lightboxKey);
   const PAGE_SIZE_COACH = 30;
 
   const [openManual, setOpenManual] = useState(false);
@@ -212,7 +238,7 @@ function AdminAbsensiCoach({ branchId }: { branchId: string }) {
   const [classes, setClasses] = useState<ClassRow[]>([]);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ coach_id: "", class_id: "", session_date: "", clock_in_time: "", note: "" });
-  const [manualStatus, setManualStatus] = useState<"present" | "late" | "absent">("present");
+  const [manualStatus, setManualStatus] = useState<CoachDbStatus>("present");
   const [coachClassIds, setCoachClassIds] = useState<Set<string>>(new Set());
   const [sessionDates, setSessionDates] = useState<{ value: string; label: string }[]>([]);
 
@@ -233,7 +259,7 @@ function AdminAbsensiCoach({ branchId }: { branchId: string }) {
   const loadRecords = useCallback(async (pg: number, append = false) => {
     setLoading(true);
     let q = supabase.from("coach_attendances")
-      .select("id, coach_id, class_id, session_date, clock_in_time, status, distance_meters, is_manual, manual_note, profile:profiles!coach_attendances_coach_id_fkey(full_name), class:classes(name)")
+      .select("id, coach_id, class_id, session_date, clock_in_time, status, selfie_url, distance_meters, is_manual, manual_note, profile:profiles!coach_attendances_coach_id_fkey(full_name), class:classes(name)")
       .eq("branch_id", branchId)
       .gte("session_date", filterDateFrom)
       .lte("session_date", filterDateTo)
@@ -264,6 +290,13 @@ function AdminAbsensiCoach({ branchId }: { branchId: string }) {
   useEffect(() => {
     setPage(0);
     loadRecords(0, false);
+    // Realtime: any change to this branch's coach attendance → refresh (mirrors
+    // AdminDashboard.tsx's live_att channel). Merged into this effect so the
+    // channel is torn down and recreated whenever loadRecords' own deps change.
+    const channel = supabase.channel(`live_coach_att:${branchId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "coach_attendances", filter: `branch_id=eq.${branchId}` }, () => loadRecords(0, false))
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
   }, [loadRecords]); // eslint-disable-line react-hooks/exhaustive-deps
   /* eslint-enable react-hooks/set-state-in-effect */
 
@@ -376,7 +409,7 @@ function AdminAbsensiCoach({ branchId }: { branchId: string }) {
     }
     setSessionDates(dates);
     setForm({ coach_id: r.coach_id, class_id: r.class_id, session_date: r.session_date, clock_in_time: r.clock_in_time?.slice(0, 5) ?? "", note: r.manual_note ?? "" });
-    setManualStatus((r.status as "present" | "late" | "absent") ?? "present");
+    setManualStatus((r.status as CoachDbStatus) ?? "present");
     setOpenManual(true);
   };
 
@@ -435,6 +468,7 @@ function AdminAbsensiCoach({ branchId }: { branchId: string }) {
                   <th className="text-left py-3 px-5 font-bold">{t("admin.absensi.colDate")}</th><th className="text-left py-3 font-bold">{t("admin.absensi.colCoach")}</th>
                   <th className="text-left py-3 font-bold">{t("admin.absensi.colClass")}</th><th className="text-left py-3 font-bold">{t("admin.absensi.colClockIn")}</th>
                   <th className="text-left py-3 font-bold hidden sm:table-cell">{t("admin.absensi.colDistance")}</th><th className="text-left py-3 font-bold hidden sm:table-cell">{t("admin.absensi.colMethod")}</th>
+                  <th className="text-left py-3 font-bold">{t("admin.absensi.colSelfie")}</th>
                   <th className="text-left py-3 pr-5 font-bold"></th>
                 </tr></thead>
                 <tbody className="divide-y divide-line">
@@ -448,8 +482,11 @@ function AdminAbsensiCoach({ branchId }: { branchId: string }) {
                       <td className="hidden sm:table-cell">
                         <div className="flex flex-col gap-1">
                           {r.is_manual ? <Status kind="manual">{t("admin.absensi.methodManual")}</Status> : <Status kind="active">{t("admin.absensi.methodSelfieGps")}</Status>}
-                          {r.status === "late" && <Status kind="late">{t("admin.absensi.statusLate")}</Status>}
+                          {coachDbToUi(r.status) === "late" && <Status kind="late">{t("admin.absensi.statusLate")}</Status>}
                         </div>
+                      </td>
+                      <td>
+                        <SelfieThumb selfieKey={r.selfie_url} onOpen={() => setLightboxKey(r.selfie_url)} />
                       </td>
                       <td className="pr-5">
                         <div className="flex items-center gap-1">
@@ -459,7 +496,7 @@ function AdminAbsensiCoach({ branchId }: { branchId: string }) {
                       </td>
                     </tr>
                   ))}
-                  {records.length === 0 && !loading && <tr><td colSpan={7} className="py-10 text-center text-ink-mute">{t("admin.absensi.noAttendanceYet")}</td></tr>}
+                  {records.length === 0 && !loading && <tr><td colSpan={8} className="py-10 text-center text-ink-mute">{t("admin.absensi.noAttendanceYet")}</td></tr>}
                 </tbody>
               </table>
             </div>
@@ -499,15 +536,18 @@ function AdminAbsensiCoach({ branchId }: { branchId: string }) {
             <Field label={t("admin.absensi.fieldClockInTime")}><TimePicker value={form.clock_in_time} onChange={v => setForm(f => ({ ...f, clock_in_time: v }))} /></Field>
           </div>
           <Field label={t("admin.absensi.fieldAttendanceStatus")}>
-            <Select value={manualStatus} onChange={e => setManualStatus(e.target.value as "present" | "late" | "absent")}>
-              <option value="present">{t("admin.absensi.statusPresentOnTime")}</option>
-              <option value="late">{t("admin.absensi.statusLate")}</option>
-              <option value="absent">{t("admin.absensi.statusAbsent")}</option>
+            <Select value={manualStatus} onChange={e => setManualStatus(e.target.value as CoachDbStatus)}>
+              {COACH_DB_STATUSES.map(s => (
+                <option key={s} value={s}>{s === "present" ? t("admin.absensi.statusPresentOnTime") : s === "late" ? t("admin.absensi.statusLate") : t("admin.absensi.statusAbsent")}</option>
+              ))}
             </Select>
           </Field>
           <Field label={t("admin.absensi.fieldNoteReason")}><Textarea rows={3} value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} placeholder={t("admin.absensi.notePlaceholder")} /></Field>
         </div>
       </Modal>
+      {lightboxKey && (
+        <PhotoLightbox src={lightboxUrl} name={t("admin.absensi.colSelfie")} onClose={() => setLightboxKey(null)} />
+      )}
     </div>
   );
 }

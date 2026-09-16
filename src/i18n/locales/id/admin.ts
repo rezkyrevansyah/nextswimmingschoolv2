@@ -754,6 +754,7 @@ export const admin: typeof AdminEn = {
     colCoach: "Coach",
     colClockIn: "Clock-in",
     colDistance: "Jarak",
+    colSelfie: "Selfie",
     methodSelfieGps: "Selfie + GPS",
     noAttendanceYet: "Belum ada absensi",
     coachDateRequired: "Coach, kelas, dan tanggal wajib diisi",

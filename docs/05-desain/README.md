@@ -10,7 +10,7 @@ Sumber kode:
 
 Isi lengkap: [DESIGN.md](./DESIGN.md).
 
-Fitur per peran (bukan visual): [../features/README.md](../features/README.md).
+Mulai baca: [../README.md](../README.md). Panel: [../04-panel/README.md](../04-panel/README.md).
 
 ---
 
