@@ -13,7 +13,6 @@ import Modal from "@/components/ui/Modal";
 import MobileNav from "@/components/layout/MobileNav";
 import type { NavItem as MobileNavItem } from "@/components/layout/Sidebar";
 import Bell from "@/components/layout/Bell";
-import BetaFeedback, { BETA_FEEDBACK_ENABLED } from "@/components/layout/BetaFeedback";
 import { fmtIDR, fmtDate, waLink, toLocalDateStr } from "@/lib/utils";
 import { isMemberPresentLike, memberDbToUi, memberStatusKind, memberStatusIcon } from "@/lib/attendance";
 import { downloadRaporPdf, printSingleRaporPopup, type PrintCriterion, type PrintBestTime } from "@/lib/printRapor";
@@ -2144,11 +2143,8 @@ export default function MemberPage() {
   );
 
   return (
-    <>
-      <Shell active={active} setActive={setActive} name={memberName} branchName={branchName} userId={userId} avatarUrl={memberAvatarUrl} isSchoolAffiliate={memberType === "school_affiliate"}>
-        {lockChecked ? pages[active] : <div className="p-10 text-center text-ink-mute">{t("member.shell.loading")}</div>}
-      </Shell>
-      {BETA_FEEDBACK_ENABLED && <BetaFeedback role="member" />}
-    </>
+    <Shell active={active} setActive={setActive} name={memberName} branchName={branchName} userId={userId} avatarUrl={memberAvatarUrl} isSchoolAffiliate={memberType === "school_affiliate"}>
+      {lockChecked ? pages[active] : <div className="p-10 text-center text-ink-mute">{t("member.shell.loading")}</div>}
+    </Shell>
   );
 }
