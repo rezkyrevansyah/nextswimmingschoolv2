@@ -13,6 +13,7 @@ import AdminSettings from "./_components/AdminSettings";
 import AdminDashboard from "./_components/AdminDashboard";
 import AdminClass from "./_components/AdminClass";
 import AdminMember from "./_components/AdminMember";
+import AdminMemberPrivate from "./_components/AdminMemberPrivate";
 import AdminCoach from "./_components/AdminCoach";
 import AdminClassActivity from "./_components/AdminClassActivity";
 import AdminAbsensi from "./_components/AdminAbsensi";
@@ -30,11 +31,15 @@ import Topbar from "@/components/layout/Topbar";
 import Bell from "@/components/layout/Bell";
 import BetaFeedback, { BETA_FEEDBACK_ENABLED } from "@/components/layout/BetaFeedback";
 import { createClient } from "@/utils/supabase/client";
+import { roleHomePath } from "@/lib/utils";
 import type { User } from "@supabase/supabase-js";
 
 // ── Nav ────────────────────────────────────────────────────────────────────────
 
-function buildNavItems(t: (key: string) => string): NavItem[] {
+function buildNavItems(t: (key: string) => string, role: string, showPayments: boolean): NavItem[] {
+  const isManagerCenter = role === "manager_center";
+  const canSeeFinancial = isManagerCenter || role !== "admin";
+  const canSeePay = isManagerCenter || showPayments;
   return [
     { section: t("admin.nav.sectionOperasional") },
     { id: "dashboard",  label: t("admin.nav.dashboard"), icon: "grid"      },
@@ -42,6 +47,7 @@ function buildNavItems(t: (key: string) => string): NavItem[] {
     { section: t("admin.nav.sectionManajemen") },
     { id: "classes",    label: t("admin.nav.classes"),   icon: "swim"      },
     { id: "members",    label: t("admin.nav.members"),   icon: "users"     },
+    { id: "memberPrivate", label: t("admin.memberPrivate.pageTitle"), icon: "star" },
     { id: "coaches",    label: t("admin.nav.coaches"),   icon: "shield"    },
     { id: "competitions", label: t("admin.nav.competitions"), icon: "flag" },
     { id: "absensi",    label: t("admin.nav.absensi"),   icon: "check"     },
@@ -50,8 +56,8 @@ function buildNavItems(t: (key: string) => string): NavItem[] {
     { id: "izin",       label: t("admin.nav.izin"),      icon: "clipboard" },
     { id: "approve",    label: t("admin.nav.approve"),   icon: "check"     },
     { section: t("admin.nav.sectionKeuanganRapor") },
-    { id: "pay",        label: t("admin.nav.pay"),       icon: "wallet"    },
-    { id: "financial",  label: t("admin.nav.financial"), icon: "invoice"   },
+    ...(canSeePay ? [{ id: "pay", label: t("admin.nav.pay"), icon: "wallet" }] : []),
+    ...(canSeeFinancial ? [{ id: "financial", label: t("admin.nav.financial"), icon: "invoice" }] : []),
     { id: "rapor",      label: t("admin.nav.rapor"),     icon: "book"      },
     { id: "school",     label: t("admin.nav.school"),    icon: "school"    },
     { section: t("admin.nav.sectionSystem") },
@@ -65,6 +71,7 @@ function buildTitles(t: (key: string) => string): Record<string, [string, string
     activity:  [t("admin.titles.activity.title"),  t("admin.titles.activity.sub")],
     classes:   [t("admin.titles.classes.title"),   t("admin.titles.classes.sub")],
     members:   [t("admin.titles.members.title"),   t("admin.titles.members.sub")],
+    memberPrivate: [t("admin.memberPrivate.pageTitle"), t("admin.memberPrivate.pageSub")],
     coaches:   [t("admin.titles.coaches.title"),   t("admin.titles.coaches.sub")],
     competitions: [t("admin.titles.competitions.title"), t("admin.titles.competitions.sub")],
     absensi:   [t("admin.titles.absensi.title"),   t("admin.titles.absensi.sub")],
@@ -92,10 +99,11 @@ export default function AdminPage() {
   const [ownerPreview, setOwnerPreview] = useState<{ id: string; name: string } | null>(null);
   const [initError, setInitError] = useState<string | null>(null);
   const [approveBadge, setApproveBadge] = useState(0);
+  const [role, setRole] = useState("admin");
   const { t } = useLocale();
 
   const loadBranch = useCallback(async (branchId: string) => {
-    const { data } = await supabase.from("branches").select("id, name, city, address, lat, lng, wa_numbers, logo_url").eq("id", branchId).single();
+    const { data } = await supabase.from("branches").select("id, name, city, address, lat, lng, wa_numbers, logo_url, show_payments_to_admin").eq("id", branchId).single();
     if (data) setBranch(data as Branch);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -148,6 +156,13 @@ export default function AdminPage() {
         return;
       }
 
+      const resolvedRole = (profile.role ?? user.user_metadata?.role) as string | undefined;
+      if (resolvedRole && resolvedRole !== "admin" && resolvedRole !== "manager_center") {
+        router.push(roleHomePath(resolvedRole));
+        return;
+      }
+      if (resolvedRole) setRole(resolvedRole);
+
       const branchId = (profile.branch_id ?? user.user_metadata?.branch_id) as string | undefined;
       if (branchId) {
         setResolvedBranchId(branchId);
@@ -183,12 +198,12 @@ export default function AdminPage() {
   const branchId = resolvedBranchId || (currentUser?.user_metadata?.branch_id as string ?? "");
 
   const navItems = useMemo(() =>
-    buildNavItems(t).map(it =>
+    buildNavItems(t, role, branch?.show_payments_to_admin ?? true).map(it =>
       it.id === "approve" && approveBadge > 0
         ? { ...it, badge: approveBadge }
         : it
     ),
-  [approveBadge, t]);
+  [approveBadge, t, role, branch?.show_payments_to_admin]);
 
   function renderPage() {
     if (!resolvedBranchId && active !== "settings") return (
@@ -199,6 +214,7 @@ export default function AdminPage() {
       case "activity":  return <AdminClassActivity branchId={branchId} />;
       case "classes":   return <AdminClass branchId={branchId} />;
       case "members":   return <AdminMember branchId={branchId} />;
+      case "memberPrivate": return <AdminMemberPrivate branchId={branchId} />;
       case "coaches":   return <AdminCoach branchId={branchId} />;
       case "competitions": return <AdminCompetition branchId={branchId} />;
       case "absensi":   return <AdminAbsensi branchId={branchId} />;

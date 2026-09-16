@@ -11,6 +11,7 @@ import { Field, Input, Select, Textarea } from "@/components/ui/FormFields";
 import StarDisplay from "@/components/ui/StarDisplay";
 import { useUpload } from "@/hooks/useUpload";
 import { useLocale } from "@/components/providers/LocaleProvider";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -265,8 +266,8 @@ function PartnersTab() {
             </div>
             <div className="p-3 flex items-start gap-2">
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-bold text-ink truncate">{p.name || t("owner.landingCms.noName")}</div>
-                {p.website_url && <div className="text-xs text-ocean-600 truncate">{p.website_url}</div>}
+                <div className="text-sm font-bold text-ink truncate">{p.name ? <NoTranslate>{p.name}</NoTranslate> : t("owner.landingCms.noName")}</div>
+                {p.website_url && <div className="text-xs text-ocean-600 truncate"><NoTranslate>{p.website_url}</NoTranslate></div>}
               </div>
               <button onClick={() => openEdit(p)} className="w-7 h-7 rounded-lg border border-line bg-white flex items-center justify-center hover:bg-paper-deep"><Icon name="edit" className="w-3.5 h-3.5 text-ink-mute" /></button>
               <button onClick={() => del(p)} className="w-7 h-7 rounded-lg border border-danger-200 bg-danger-50 flex items-center justify-center hover:bg-danger-100"><Icon name="trash" className="w-3.5 h-3.5 text-danger-500" /></button>
@@ -375,8 +376,8 @@ function ProgramsTab() {
                     {p.class_type === "private" ? t("owner.landingCms.programs.typePrivate") : t("owner.landingCms.programs.typeRegular")}
                   </span>
                 </div>
-                <div className="text-sm font-bold text-ink truncate mt-1">{p.name || t("owner.landingCms.noName")}</div>
-                {p.description && <div className="text-xs text-ink-mute line-clamp-2">{p.description}</div>}
+                <div className="text-sm font-bold text-ink truncate mt-1">{p.name ? <NoTranslate>{p.name}</NoTranslate> : t("owner.landingCms.noName")}</div>
+                {p.description && <div className="text-xs text-ink-mute line-clamp-2"><NoTranslate>{p.description}</NoTranslate></div>}
               </div>
               <button onClick={() => openEdit(p)} className="w-7 h-7 rounded-lg border border-line bg-white flex items-center justify-center hover:bg-paper-deep shrink-0"><Icon name="edit" className="w-3.5 h-3.5 text-ink-mute" /></button>
               <button onClick={() => del(p)} className="w-7 h-7 rounded-lg border border-danger-200 bg-danger-50 flex items-center justify-center hover:bg-danger-100 shrink-0"><Icon name="trash" className="w-3.5 h-3.5 text-danger-500" /></button>
@@ -485,7 +486,7 @@ function CoachesTab() {
             </div>
             <div className="p-3 flex items-start gap-2">
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-bold text-ink truncate">{c.name || t("owner.landingCms.noName")}</div>
+                <div className="text-sm font-bold text-ink truncate">{c.name ? <NoTranslate>{c.name}</NoTranslate> : t("owner.landingCms.noName")}</div>
               </div>
               <button onClick={() => openEdit(c)} className="w-7 h-7 rounded-lg border border-line bg-white flex items-center justify-center hover:bg-paper-deep shrink-0"><Icon name="edit" className="w-3.5 h-3.5 text-ink-mute" /></button>
               <button onClick={() => del(c)} className="w-7 h-7 rounded-lg border border-danger-200 bg-danger-50 flex items-center justify-center hover:bg-danger-100 shrink-0"><Icon name="trash" className="w-3.5 h-3.5 text-danger-500" /></button>
@@ -579,8 +580,8 @@ function WhyNextTab() {
                 <Icon name={w.icon} className="w-4.5 h-4.5 text-ocean-600" />
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-bold text-ink truncate">{w.title || t("owner.landingCms.whyNext.noTitle")}</div>
-                {w.description && <div className="text-xs text-ink-mute line-clamp-2 mt-0.5">{w.description}</div>}
+                <div className="text-sm font-bold text-ink truncate">{w.title ? <NoTranslate>{w.title}</NoTranslate> : t("owner.landingCms.whyNext.noTitle")}</div>
+                {w.description && <div className="text-xs text-ink-mute line-clamp-2 mt-0.5"><NoTranslate>{w.description}</NoTranslate></div>}
               </div>
               <button onClick={() => openEdit(w)} className="w-7 h-7 rounded-lg border border-line bg-white flex items-center justify-center hover:bg-paper-deep shrink-0"><Icon name="edit" className="w-3.5 h-3.5 text-ink-mute" /></button>
               <button onClick={() => del(w)} className="w-7 h-7 rounded-lg border border-danger-200 bg-danger-50 flex items-center justify-center hover:bg-danger-100 shrink-0"><Icon name="trash" className="w-3.5 h-3.5 text-danger-500" /></button>
@@ -685,17 +686,17 @@ function TestimonialsTab() {
           <div key={item.id} className="rounded-xl bg-paper-tint overflow-hidden border border-line p-3">
             <div className="flex items-start gap-2">
               <div className="w-10 h-10 rounded-full bg-ocean-100 overflow-hidden shrink-0 flex items-center justify-center text-ocean-700 font-bold text-sm">
-                {item.avatar_url ? <img src={item.avatar_url} alt={item.name} className="w-full h-full object-cover" /> : item.name.charAt(0).toUpperCase() || "?"}
+                {item.avatar_url ? <img src={item.avatar_url} alt={item.name} className="w-full h-full object-cover" /> : <NoTranslate>{item.name.charAt(0).toUpperCase() || "?"}</NoTranslate>}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-bold text-ink truncate">{item.name || t("owner.landingCms.noName")}</div>
-                {item.role && <div className="text-xs text-ink-mute truncate">{item.role}</div>}
+                <div className="text-sm font-bold text-ink truncate">{item.name ? <NoTranslate>{item.name}</NoTranslate> : t("owner.landingCms.noName")}</div>
+                {item.role && <div className="text-xs text-ink-mute truncate"><NoTranslate>{item.role}</NoTranslate></div>}
                 <StarDisplay stars={item.rating} size="sm" />
               </div>
               <button onClick={() => openEdit(item)} className="w-7 h-7 rounded-lg border border-line bg-white flex items-center justify-center hover:bg-paper-deep shrink-0"><Icon name="edit" className="w-3.5 h-3.5 text-ink-mute" /></button>
               <button onClick={() => del(item)} className="w-7 h-7 rounded-lg border border-danger-200 bg-danger-50 flex items-center justify-center hover:bg-danger-100 shrink-0"><Icon name="trash" className="w-3.5 h-3.5 text-danger-500" /></button>
             </div>
-            <div className="text-xs text-ink-mute line-clamp-2 mt-2">{item.body_text}</div>
+            <div className="text-xs text-ink-mute line-clamp-2 mt-2"><NoTranslate>{item.body_text}</NoTranslate></div>
           </div>
         ))}
         {items.length === 0 && <div className="py-8 text-center text-ink-mute text-sm sm:col-span-2 lg:col-span-3">{t("owner.landingCms.testimonials.empty")}</div>}
@@ -785,8 +786,8 @@ function FaqTab() {
         {items.map((item) => (
           <div key={item.id} className="rounded-xl bg-paper-tint border border-line p-3 flex items-start gap-2">
             <div className="flex-1 min-w-0">
-              <div className="text-sm font-bold text-ink">{item.question || t("owner.landingCms.noName")}</div>
-              <div className="text-xs text-ink-mute line-clamp-2 mt-0.5">{item.answer}</div>
+              <div className="text-sm font-bold text-ink">{item.question ? <NoTranslate>{item.question}</NoTranslate> : t("owner.landingCms.noName")}</div>
+              <div className="text-xs text-ink-mute line-clamp-2 mt-0.5"><NoTranslate>{item.answer}</NoTranslate></div>
             </div>
             <button onClick={() => openEdit(item)} className="w-7 h-7 rounded-lg border border-line bg-white flex items-center justify-center hover:bg-paper-deep shrink-0"><Icon name="edit" className="w-3.5 h-3.5 text-ink-mute" /></button>
             <button onClick={() => del(item)} className="w-7 h-7 rounded-lg border border-danger-200 bg-danger-50 flex items-center justify-center hover:bg-danger-100 shrink-0"><Icon name="trash" className="w-3.5 h-3.5 text-danger-500" /></button>
@@ -967,9 +968,9 @@ function VideoTab() {
       })
       .eq("id", 1);
     setSaving(false);
-    if (error) return toast.error("Gagal menyimpan video YouTube", error.message);
+    if (error) return toast.error(t("owner.landingCms.video.saveFailed"), error.message);
     await revalidate();
-    toast.success("Pengaturan video YouTube berhasil disimpan");
+    toast.success(t("owner.landingCms.video.saved"));
   };
 
   const embedPreviewUrl = getYouTubeEmbedUrl(form.youtube_video_url);
@@ -977,8 +978,8 @@ function VideoTab() {
   return (
     <Card>
       <div className="flex items-center justify-between">
-        <SectionTitle sub="Atur tautan video YouTube profil atau kegiatan yang akan ditampilkan pada section khusus di landing page.">
-          Video YouTube / Profil
+        <SectionTitle sub={t("owner.landingCms.video.sectionSub")}>
+          {t("owner.landingCms.video.sectionTitle")}
         </SectionTitle>
         <Btn variant="primary" size="sm" onClick={save} disabled={loading || saving}>
           {saving ? t("common.actions.saving") : t("common.actions.save")}
@@ -990,55 +991,55 @@ function VideoTab() {
       ) : (
         <div className="mt-4 space-y-5">
           <Field
-            label="Tautan Video YouTube"
-            hint="Mendukung URL youtube biasa (https://www.youtube.com/watch?v=...), tautan pendek (https://youtu.be/...), maupun Shorts."
+            label={t("owner.landingCms.video.fieldVideoUrl1")}
+            hint={t("owner.landingCms.video.fieldVideoUrl1Hint")}
           >
             <Input
               type="url"
               value={form.youtube_video_url}
               onChange={(e) => setForm({ ...form, youtube_video_url: e.target.value })}
-              placeholder="Contoh: https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+              placeholder="E.g. https://www.youtube.com/watch?v=dQw4w9WgXcQ"
             />
           </Field>
 
-          <Field label="YouTube Video URL 2 (Opsional)" hint="Video kedua — ditampilkan di sisi kanan carousel">
+          <Field label={t("owner.landingCms.video.fieldVideoUrl2")} hint={t("owner.landingCms.video.fieldVideoUrl2Hint")}>
             <Input
               type="url"
               value={form.youtube_video_url_2}
               onChange={(e) => setForm({ ...form, youtube_video_url_2: e.target.value })}
-              placeholder="Contoh: https://www.youtube.com/watch?v=..."
+              placeholder="E.g. https://www.youtube.com/watch?v=..."
             />
           </Field>
 
-          <Field label="YouTube Video URL 3 (Opsional)" hint="Video ketiga — carousel otomatis aktif jika 3 video diisi">
+          <Field label={t("owner.landingCms.video.fieldVideoUrl3")} hint={t("owner.landingCms.video.fieldVideoUrl3Hint")}>
             <Input
               type="url"
               value={form.youtube_video_url_3}
               onChange={(e) => setForm({ ...form, youtube_video_url_3: e.target.value })}
-              placeholder="Contoh: https://www.youtube.com/watch?v=..."
+              placeholder="E.g. https://www.youtube.com/watch?v=..."
             />
           </Field>
 
-          <Field label="Judul Section Video (Opsional)" hint="Default: 'Lihat Aktivitas & Suasana Belajar Kami'">
+          <Field label={t("owner.landingCms.video.fieldSectionTitle")} hint={t("owner.landingCms.video.fieldSectionTitleHint")}>
             <Input
               value={form.youtube_section_title}
               onChange={(e) => setForm({ ...form, youtube_section_title: e.target.value })}
-              placeholder="Lihat Aktivitas & Suasana Belajar Kami"
+              placeholder={t("owner.landingCms.video.sectionTitlePlaceholder")}
             />
           </Field>
 
-          <Field label="Deskripsi / Subtitle Section (Opsional)">
+          <Field label={t("owner.landingCms.video.fieldSectionSubtitle")}>
             <Textarea
               rows={2}
               value={form.youtube_section_subtitle}
               onChange={(e) => setForm({ ...form, youtube_section_subtitle: e.target.value })}
-              placeholder="Kenali lebih dekat metode pengajaran, fasilitas, dan keseruan belajar renang bersama pelatih profesional di Next Swimming School."
+              placeholder={t("owner.landingCms.video.sectionSubtitlePlaceholder")}
             />
           </Field>
 
           {/* Live Preview */}
           <div className="border-t border-line pt-4 space-y-2">
-            <div className="text-xs font-bold uppercase tracking-widest text-ink-faint">Pratinjau Video (Live Preview)</div>
+            <div className="text-xs font-bold uppercase tracking-widest text-ink-faint">Live Video Preview</div>
             {embedPreviewUrl ? (
               <div className="rounded-2xl overflow-hidden shadow-card border border-line bg-black aspect-video max-w-2xl">
                 <iframe
@@ -1191,8 +1192,8 @@ function BranchesTab() {
                       {item.branch_id ? t("owner.landingCms.branches.modeLinked") : t("owner.landingCms.branches.modeStandalone")}
                     </span>
                   </div>
-                  <div className="text-sm font-bold text-ink truncate mt-1">{display.name || t("owner.landingCms.noName")}</div>
-                  {display.city && <div className="text-xs text-ink-mute">{display.city}</div>}
+                  <div className="text-sm font-bold text-ink truncate mt-1">{display.name ? <NoTranslate>{display.name}</NoTranslate> : t("owner.landingCms.noName")}</div>
+                  {display.city && <div className="text-xs text-ink-mute"><NoTranslate>{display.city}</NoTranslate></div>}
                 </div>
                 <button onClick={() => openEdit(item)} className="w-7 h-7 rounded-lg border border-line bg-white flex items-center justify-center hover:bg-paper-deep shrink-0"><Icon name="edit" className="w-3.5 h-3.5 text-ink-mute" /></button>
                 <button onClick={() => del(item)} className="w-7 h-7 rounded-lg border border-danger-200 bg-danger-50 flex items-center justify-center hover:bg-danger-100 shrink-0"><Icon name="trash" className="w-3.5 h-3.5 text-danger-500" /></button>
@@ -1222,11 +1223,11 @@ function BranchesTab() {
               <Field label={t("owner.landingCms.branches.fieldLinkedBranch")}>
                 <Select value={form.branch_id} onChange={(e) => setForm({ ...form, branch_id: e.target.value })}>
                   <option value="" disabled>{t("owner.landingCms.branches.fieldLinkedBranchPlaceholder")}</option>
-                  {coreBranches.map((b) => <option key={b.id} value={b.id}>{b.name}{b.city ? ` — ${b.city}` : ""}</option>)}
+                  {coreBranches.map((b) => <option key={b.id} value={b.id} translate="no" className="notranslate">{b.name}{b.city ? ` — ${b.city}` : ""}</option>)}
                 </Select>
               </Field>
               <div className="rounded-xl bg-paper-tint border border-line p-3 text-sm text-ink-mute">
-                {selectedCoreBranch ? `${selectedCoreBranch.name}${selectedCoreBranch.city ? ` — ${selectedCoreBranch.city}` : ""}` : t("owner.landingCms.branches.linkedPreviewEmpty")}
+                {selectedCoreBranch ? <NoTranslate>{selectedCoreBranch.name}{selectedCoreBranch.city ? ` — ${selectedCoreBranch.city}` : ""}</NoTranslate> : t("owner.landingCms.branches.linkedPreviewEmpty")}
               </div>
               <ImageField label={t("owner.landingCms.branches.fieldPhotoOverride")} url={form.photo_url} onUrlChange={(url) => setForm({ ...form, photo_url: url })} onFileChange={setPhotoFile} />
             </>

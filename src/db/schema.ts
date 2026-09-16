@@ -101,12 +101,23 @@ export const competitionParticipations = pgTable('competition_participations', {
   resultStatus: text('result_status').default('finished'),
   award: text('award').default('participant'),
   customAwardLabel: text('custom_award_label'),
-  certificateUrl: text('certificate_url'),
-  photoUrl: text('photo_url'),
   notes: text('notes'),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
 });
 
+// Competition Documents table — one certificate/photo per (member, competition), covering
+// every category that member won at that event. Replaces the old per-participation
+// certificateUrl/photoUrl fields above.
+export const competitionDocuments = pgTable('competition_documents', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  competitionId: uuid('competition_id').notNull(),
+  memberId: uuid('member_id').notNull(),
+  documentUrl: text('document_url').notNull(),
+  uploadedBy: uuid('uploaded_by'),
+  contentType: text('content_type'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
 
 

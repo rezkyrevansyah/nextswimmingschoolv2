@@ -18,6 +18,7 @@ import type { ScheduleSlot, ClassRow, CoachProfile, ClassPackage, MemberAttendan
 import { getSlotTime } from "../_utils";
 import type { Database, Json } from "@/types/database";
 import { fmtIDR, fmtDate } from "@/lib/utils";
+import { isMemberPresentLike, memberDbToUi, memberStatusKind } from "@/lib/attendance";
 
 const EMPTY_CLASS_FORM = { name: "", class_type: "reguler", location_type: "branch", external_location_name: "", external_location_address: "", google_maps_url: "", schedule_days: [] as string[], schedule_times: [] as ScheduleSlot[], same_time_all: true, time_start: "", time_end: "", capacity: "", price_monthly: "", price_per_session: "", goals: "", description: "", photo_url: "" };
 const DAY_OPTS = ["Senin","Selasa","Rabu","Kamis","Jumat","Sabtu","Minggu"];
@@ -59,9 +60,12 @@ export default function AdminClass({ branchId }: { branchId: string }) {
   const [savingPkg, setSavingPkg] = useState(false);
 
   const load = useCallback(async () => {
+    // Private classes are excluded — they're managed exclusively via the
+    // dedicated "Member Private" menu now (AdminMemberPrivate.tsx), which
+    // keeps the 1:1 class-to-student relationship intact.
     const { data } = await supabase.from("classes")
       .select("id, name, branch_id, status, capacity, enrolled, price_monthly, price_per_session, class_type, location_type, external_location_name, external_location_address, google_maps_url, schedule_days, time_start, time_end, schedule_times, goals, description, photo_url, spreadsheet_url, spreadsheet_filled, class_coaches(coach_id, role, profile:profiles(full_name, id)), coach_spreadsheets:class_coach_spreadsheets(coach_id, spreadsheet_url, updated_at, coach:profiles(full_name)), packages:class_packages(id, name, sessions, price, sort_order, active)")
-      .eq("branch_id", branchId).order("name");
+      .eq("branch_id", branchId).neq("class_type", "private").order("name");
     if (data) setClasses(data as unknown as ClassRow[]);
   }, [branchId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -545,20 +549,10 @@ export default function AdminClass({ branchId }: { branchId: string }) {
             )}
           </Field>
 
-          {/* Tipe kelas toggle — hanya saat create */}
-          {!editTarget && (
-            <Field label={t("admin.classes.fieldClassType")} required>
-              <div className="flex gap-2">
-                {[["reguler", t("admin.classes.typeRegularLabel"), t("admin.classes.typeRegularDesc")], ["private", t("admin.classes.typePrivateLabel"), t("admin.classes.typePrivateDesc")]].map(([val, label, desc]) => (
-                  <button key={val} type="button" onClick={() => setForm(f => ({ ...f, class_type: val, capacity: val === "private" ? "1" : f.capacity }))}
-                    className={`flex-1 p-3 rounded-xl border-2 text-left transition-colors ${form.class_type === val ? "border-ocean-500 bg-ocean-50" : "border-line hover:bg-paper-tint"}`}>
-                    <div className={`font-bold text-sm ${form.class_type === val ? "text-ocean-700" : "text-ink"}`}>{label}</div>
-                    <div className="text-xs text-ink-mute mt-0.5">{desc}</div>
-                  </button>
-                ))}
-              </div>
-            </Field>
-          )}
+          {/* Private classes are no longer created here — see the dedicated
+              "Member Private" menu, which creates the member and its class
+              slot together and keeps the 1:1 relationship intact. This
+              screen now only ever creates regular (shared) classes. */}
           {isPrivate && (
             <div className="bg-wave-50 border border-wave-100 rounded-xl p-3 text-sm text-wave-800 flex gap-2">
               <Icon name="info" className="w-4 h-4 mt-0.5 shrink-0 text-wave-500" />
@@ -854,7 +848,7 @@ export default function AdminClass({ branchId }: { branchId: string }) {
         ) : (
           <div className="space-y-2 max-h-[60vh] overflow-y-auto">
             {attSessions.map(s => {
-              const hadirCount = s.rows.filter(r => r.status === "hadir").length;
+              const hadirCount = s.rows.filter(r => isMemberPresentLike(r.status)).length;
               const isOpen = attExpanded.has(s.date);
               return (
                 <div key={s.date} className="border border-line rounded-xl overflow-hidden">
@@ -876,13 +870,15 @@ export default function AdminClass({ branchId }: { branchId: string }) {
                         <div key={r.id} className="flex items-center gap-3 px-4 py-2.5">
                           <span className="flex-1 text-sm text-ink">{r.member?.profile?.full_name ?? "—"}</span>
                           <span className="text-xs text-ink-mute capitalize">{r.method === "manual" ? t("admin.classes.methodManual2") : r.method === "qr" ? t("admin.classes.methodQr2") : r.method ?? "—"}</span>
-                          {r.status === "hadir"
-                            ? <Status kind="approved" dot={false}>{t("admin.absensi.statusPresent")}</Status>
-                            : r.status === "izin"
-                            ? <Status kind="excused" dot={false}>{t("admin.absensi.statusExcused")}</Status>
-                            : r.status === "sakit"
-                            ? <Status kind="sick" dot={false}>{t("admin.absensi.statusSick")}</Status>
-                            : <Status kind="rejected" dot={false}>{t("admin.absensi.statusAbsent")}</Status>}
+                          {(() => {
+                            const ui = memberDbToUi(r.status);
+                            const label = ui === "present" ? t("admin.absensi.statusPresent")
+                              : ui === "late" ? t("admin.absensi.statusLate")
+                              : ui === "izin" ? t("admin.absensi.statusExcused")
+                              : ui === "sick" ? t("admin.absensi.statusSick")
+                              : t("admin.absensi.statusAbsent");
+                            return <Status kind={memberStatusKind(r.status)} dot={false}>{label}</Status>;
+                          })()}
                         </div>
                       ))}
                     </div>

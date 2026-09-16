@@ -1,9 +1,11 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Image from "next/image";
 import dynamic from "next/dynamic";
 import Logo from "@/components/ui/Logo";
 import Btn from "@/components/ui/Btn";
+import Icon from "@/components/ui/Icon";
+import Avatar from "@/components/ui/Avatar";
 import { Field, Input } from "@/components/ui/FormFields";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import { createClient } from "@/utils/supabase/client";
@@ -18,7 +20,22 @@ function MapLoading() {
 }
 const MapPicker = dynamic(() => import("@/components/ui/MapPicker"), { ssr: false, loading: MapLoading });
 
-export default function AdminSettings({ branch, onRefresh, userId }: { branch: Branch | null; onRefresh: () => void; userId: string }) {
+const CENTER_STAFF_TEAM_ROLES = ["staff", "manager_center"];
+
+interface StaffProfile {
+  id: string;
+  full_name: string;
+  email: string | null;
+  phone: string | null;
+  role: string;
+  custom_role_label: string | null;
+  avatar_url: string | null;
+  bank_name: string | null;
+  bank_account: string | null;
+  bank_holder: string | null;
+}
+
+export default function AdminSettings({ branch, onRefresh }: { branch: Branch | null; onRefresh: () => void; userId: string }) {
   const toast = useToast();
   const { t } = useLocale();
   const supabase = createClient();
@@ -30,49 +47,27 @@ export default function AdminSettings({ branch, onRefresh, userId }: { branch: B
   const [waPhone, setWaPhone] = useState(branch?.wa_numbers?.[0] ?? "");
   const [saving, setSaving] = useState(false);
 
-  // Admin profile state
-  const [myPhone, setMyPhone] = useState("");
-  const [myName, setMyName] = useState("");
-  const [bankName, setBankName] = useState("");
-  const [bankAccount, setBankAccount] = useState("");
-  const [bankHolder, setBankHolder] = useState("");
-  const [savingProfile, setSavingProfile] = useState(false);
+  // Branch staff team state
+  const [staffList, setStaffList] = useState<StaffProfile[]>([]);
+  const [loadingStaff, setLoadingStaff] = useState(false);
+
+  const loadBranchStaff = useCallback(async () => {
+    if (!branch?.id) return;
+    setLoadingStaff(true);
+    const { data } = await supabase
+      .from("profiles")
+      .select("id, full_name, email, phone, role, custom_role_label, avatar_url, bank_name, bank_account, bank_holder")
+      .eq("branch_id", branch?.id)
+      .in("role", CENTER_STAFF_TEAM_ROLES)
+      .order("full_name");
+    setStaffList((data as StaffProfile[]) ?? []);
+    setLoadingStaff(false);
+  }, [branch?.id, supabase]);
 
   useEffect(() => {
-    if (!userId) return;
-    supabase.from("profiles").select("full_name, phone, bank_name, bank_account, bank_holder").eq("id", userId).single()
-      .then(({ data }) => {
-        if (data) {
-          setMyName(data.full_name ?? "");
-          setMyPhone(data.phone ?? "");
-          setBankName(data.bank_name ?? "");
-          setBankAccount(data.bank_account ?? "");
-          setBankHolder(data.bank_holder ?? "");
-        }
-      });
-  }, [userId]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const saveProfile = async () => {
-    if (!userId) return;
-    setSavingProfile(true);
-    const res = await fetch(`/api/admin/users/${userId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        profile: {
-          full_name: myName,
-          phone: myPhone || null,
-          bank_name: bankName.trim() || null,
-          bank_account: bankAccount.trim() || null,
-          bank_holder: bankHolder.trim() || null,
-        }
-      }),
-    });
-    setSavingProfile(false);
-    const json = await res.json() as { error?: string };
-    if (!res.ok) return toast.error(t("admin.settings.toastSaveProfileFailed"), json.error);
-    toast.success(t("admin.settings.toastProfileUpdated"));
-  };
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- load staff team list on mount / branch change
+    loadBranchStaff();
+  }, [loadBranchStaff]);
 
   // Sync state when branch prop changes
   /* eslint-disable react-hooks/set-state-in-effect -- sync form state from prop */
@@ -111,7 +106,7 @@ export default function AdminSettings({ branch, onRefresh, userId }: { branch: B
 
   return (
     <div className="space-y-5">
-      {/* Row 1: Identitas + Profil Saya */}
+      {/* Row 1: Identitas Center + Daftar Staff Cabang */}
       <div className="grid lg:grid-cols-2 gap-5">
         {/* Identitas Cabang */}
         <Card className="space-y-5">
@@ -140,43 +135,96 @@ export default function AdminSettings({ branch, onRefresh, userId }: { branch: B
           </div>
         </Card>
 
-        {/* Profil Saya & Rekening Bank */}
-        <Card className="space-y-4">
-          <SectionTitle sub={t("admin.settings.myProfileSub")}>{t("admin.settings.myProfileTitle")}</SectionTitle>
-          <Field label={t("admin.settings.fieldFullName")}><Input value={myName} onChange={e => setMyName(e.target.value)} /></Field>
-          <Field label={t("admin.settings.fieldPersonalPhone")} hint={t("admin.settings.fieldPersonalPhoneHint")}>
-            <Input type="tel" value={myPhone} onChange={e => setMyPhone(e.target.value)} placeholder={t("admin.settings.phonePlaceholder")} className="font-mono" />
-          </Field>
-
-          {/* Rekening Bank Admin untuk Transfer Owner */}
-          <div className="pt-3 border-t border-line space-y-3">
-            <div className="text-xs font-bold uppercase tracking-widest text-ink-faint">
-              Rekening Bank Admin (Untuk Transfer Owner)
+        {/* Daftar Staff & Admin Cabang */}
+        <Card className="space-y-4 flex flex-col justify-between">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between gap-2">
+              <SectionTitle sub={t("admin.settings.staffListSub")}>
+                {t("admin.settings.staffListTitle")}
+              </SectionTitle>
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-ocean-50 text-ocean-700 border border-ocean-200">
+                {t("admin.settings.activeStaffBadge", { count: staffList.length })}
+              </span>
             </div>
-            <div className="grid sm:grid-cols-3 gap-3">
-              <Field label="Nama Bank">
-                <Input value={bankName} onChange={e => setBankName(e.target.value)} placeholder="BCA / Mandiri / BSI" />
-              </Field>
-              <Field label="Nomor Rekening">
-                <Input value={bankAccount} onChange={e => setBankAccount(e.target.value)} placeholder="1234567890" className="font-mono" />
-              </Field>
-              <Field label="Atas Nama (Pemilik)">
-                <Input value={bankHolder} onChange={e => setBankHolder(e.target.value)} placeholder="Nama Sesuai Rekening" />
-              </Field>
-            </div>
-          </div>
 
-          <div className="pt-2">
-            <Btn variant="primary" onClick={saveProfile} disabled={savingProfile}>{savingProfile ? t("common.actions.saving") : t("admin.settings.saveProfileBtn")}</Btn>
+            {loadingStaff ? (
+              <div className="py-8 text-center text-ink-mute text-xs">Memuat daftar staf...</div>
+            ) : staffList.length === 0 ? (
+              <div className="p-6 rounded-2xl border-2 border-dashed border-line text-center space-y-1.5 bg-paper-tint/50">
+                <Icon name="users" className="w-8 h-8 text-ink-mute mx-auto stroke-1" />
+                <div className="font-semibold text-xs text-ink">{t("admin.settings.noStaffTitle")}</div>
+                <div className="text-[11px] text-ink-mute max-w-xs mx-auto">
+                  {t("admin.settings.noStaffSub")}
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2.5 max-h-[320px] overflow-y-auto pr-1 divide-y divide-line">
+                {staffList.map((st) => (
+                  <div key={st.id} className="pt-2.5 first:pt-0 flex items-start gap-3">
+                    <Avatar name={st.full_name} size={40} className="shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0 space-y-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-semibold text-xs text-ink truncate">{st.full_name}</span>
+                        <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-paper-deep text-ink-soft">
+                          {st.custom_role_label || (st.role === "manager_center" ? "Manager Cabang" : "Staff Cabang")}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-ink-mute flex items-center gap-2 flex-wrap">
+                        {st.phone && (
+                          <a
+                            href={`https://wa.me/${st.phone.replace(/[^0-9]/g, "")}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-ok-700 hover:underline flex items-center gap-1"
+                          >
+                            <Icon name="whatsapp" className="w-3 h-3 text-ok-600" />
+                            {st.phone}
+                          </a>
+                        )}
+                        {st.email && <span>{st.email}</span>}
+                      </div>
+                      {st.bank_account ? (
+                        <div className="flex items-center gap-1.5 text-[11px] bg-paper-tint px-2 py-1 rounded-lg border border-line/60">
+                          <Icon name="card" className="w-3 h-3 text-ocean-600 shrink-0" />
+                          <span className="font-medium text-ink">{st.bank_name}</span>
+                          <span className="font-mono text-ocean-800 font-semibold">{st.bank_account}</span>
+                          {st.bank_holder && <span className="text-ink-mute">({st.bank_holder})</span>}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(st.bank_account!);
+                              toast.success("Nomor rekening disalin");
+                            }}
+                            className="text-ink-mute hover:text-ocean-700 ml-auto"
+                            title="Salin No. Rekening"
+                          >
+                            <Icon name="copy" className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="text-[10px] text-ink-faint italic">Rekening bank belum diatur</div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </Card>
       </div>
 
-      {/* Row 2: Koordinat Lokasi — full width karena peta butuh ruang */}
+      {/* Row 2: Koordinat Lokasi — full width dengan Interactive Google Maps Picker */}
       <Card>
         <SectionTitle sub={t("admin.settings.locationCoordSub")}>{t("admin.settings.locationCoordTitle")}</SectionTitle>
         <div className="mt-4">
-          <MapPicker lat={lat} lng={lng} onChange={(newLat, newLng) => { setLat(newLat); setLng(newLng); }} />
+          <MapPicker
+            lat={lat}
+            lng={lng}
+            onChange={(newLat, newLng) => { setLat(newLat); setLng(newLng); }}
+            onSelectAddress={(newAddress) => {
+              if (!address) setAddress(newAddress);
+            }}
+          />
           <div className="mt-3 grid sm:grid-cols-2 gap-3 max-w-sm">
             <Field label={t("admin.settings.fieldLatitude")}><Input value={lat} onChange={e => setLat(e.target.value)} className="font-mono" placeholder="-6.2615" /></Field>
             <Field label={t("admin.settings.fieldLongitude")}><Input value={lng} onChange={e => setLng(e.target.value)} className="font-mono" placeholder="106.8106" /></Field>

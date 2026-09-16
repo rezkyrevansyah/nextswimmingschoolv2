@@ -3,9 +3,9 @@ import React, { createContext, useCallback, useContext, useState } from "react";
 import Modal from "@/components/ui/Modal";
 
 interface ConfirmOptions {
-  title?: string;
-  body?: string;
-  confirmLabel?: string;
+  title?: React.ReactNode;
+  body?: React.ReactNode;
+  confirmLabel?: React.ReactNode;
   danger?: boolean;
 }
 

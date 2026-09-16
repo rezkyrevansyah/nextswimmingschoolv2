@@ -52,7 +52,9 @@ export default function Avatar({ name = "?", src, size = 36, ring = false, class
           onError={() => setErrorSrc(src)}
         />
       ) : (
-        initials
+        <span translate="no" className="notranslate">
+          {initials}
+        </span>
       )}
     </span>
   );

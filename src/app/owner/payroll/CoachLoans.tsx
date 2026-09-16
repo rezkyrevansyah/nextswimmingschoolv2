@@ -14,6 +14,7 @@ import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
 import { useLocale } from "@/components/providers/LocaleProvider";
 import { computeInstallmentAmount } from "@/lib/payroll";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 
 interface Branch {
   id: string;
@@ -32,8 +33,9 @@ interface LoanRow {
   notes: string | null;
   created_at: string;
   closed_at: string | null;
-  coach?: { full_name: string } | null;
+  coach?: { full_name: string; role?: string } | null;
   branch?: { name: string } | null;
+  coach_loan_payments?: { amount: number; kind: string }[];
 }
 
 interface PaymentRow {
@@ -46,9 +48,10 @@ interface PaymentRow {
   payslip_id: string | null;
 }
 
-interface CoachOption {
+interface BorrowerOption {
   id: string;
   full_name: string;
+  role: "coach" | "staff";
   branch_id: string | null;
 }
 
@@ -60,7 +63,7 @@ const STATUS_KIND: Record<string, string> = {
 };
 
 export default function CoachLoans({ branches, userId, userName }: { branches: Branch[]; userId: string; userName: string }) {
-  const { t } = useLocale();
+  const { t, tNode } = useLocale();
   const supabase = createClient();
   const toast = useToast();
   const confirm = useConfirm();
@@ -69,8 +72,9 @@ export default function CoachLoans({ branches, userId, userName }: { branches: B
 
   const [loans, setLoans] = useState<LoanRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [coaches, setCoaches] = useState<CoachOption[]>([]);
+  const [borrowers, setBorrowers] = useState<BorrowerOption[]>([]);
   const [branchFilter, setBranchFilter] = useState("all");
+  const [roleFilter, setRoleFilter] = useState<"all" | "coach" | "staff">("all");
   const [statusFilter, setStatusFilter] = useState("active");
 
   const [showCreate, setShowCreate] = useState(false);
@@ -86,7 +90,7 @@ export default function CoachLoans({ branches, userId, userName }: { branches: B
     setLoading(true);
     const { data } = await supabase
       .from("coach_loans")
-      .select("id, coach_id, branch_id, principal_amount, tenor_months, installment_amount, reason, status, notes, created_at, closed_at, coach:profiles!coach_loans_coach_id_fkey(full_name), branch:branches(name)")
+      .select("id, coach_id, branch_id, principal_amount, tenor_months, installment_amount, reason, status, notes, created_at, closed_at, coach:profiles!coach_loans_coach_id_fkey(full_name, role), branch:branches(name), coach_loan_payments(amount, kind)")
       .order("created_at", { ascending: false });
     if (data) setLoans(data as unknown as LoanRow[]);
     setLoading(false);
@@ -96,29 +100,33 @@ export default function CoachLoans({ branches, userId, userName }: { branches: B
   useEffect(() => { loadLoans(); }, [loadLoans]);
 
   useEffect(() => {
-    supabase.from("profiles").select("id, full_name, branch_id").eq("role", "coach").order("full_name").then(({ data }) => {
-      if (data) setCoaches(data as CoachOption[]);
-    });
+    supabase
+      .from("profiles")
+      .select("id, full_name, role, branch_id")
+      .in("role", ["coach", "staff"])
+      .order("full_name")
+      .then(({ data }) => {
+        if (data) setBorrowers(data as BorrowerOption[]);
+      });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const loanPaymentSums = useMemo(() => {
-    // paid amount per loan is fetched lazily on detail open; list view estimate uses this map once populated
-    return new Map<string, number>();
-  }, []);
 
   const filtered = useMemo(() => {
     let r = loans;
     if (branchFilter !== "all") r = r.filter(l => l.branch_id === branchFilter);
     if (statusFilter !== "all") r = r.filter(l => l.status === statusFilter);
+    if (roleFilter !== "all") r = r.filter(l => (l.coach?.role ?? "coach") === roleFilter);
     return r;
-  }, [loans, branchFilter, statusFilter]);
+  }, [loans, branchFilter, statusFilter, roleFilter]);
 
   const activeLoans = loans.filter(l => l.status === "active");
-  const totalOutstanding = activeLoans.reduce((sum, l) => sum + l.principal_amount, 0);
+  const totalOutstanding = activeLoans.reduce((sum, l) => {
+    const paid = (l.coach_loan_payments ?? []).reduce((s, p) => s + p.amount, 0);
+    return sum + Math.max(0, l.principal_amount - paid);
+  }, 0);
 
-  const handleCoachChange = (coachId: string) => {
-    const c = coaches.find(x => x.id === coachId);
-    setForm(f => ({ ...f, coach_id: coachId, branch_id: c?.branch_id ?? f.branch_id }));
+  const handleBorrowerChange = (borrowerId: string) => {
+    const b = borrowers.find(x => x.id === borrowerId);
+    setForm(f => ({ ...f, coach_id: borrowerId, branch_id: b?.branch_id ?? f.branch_id }));
   };
 
   const previewInstallment = useMemo(() => {
@@ -129,7 +137,7 @@ export default function CoachLoans({ branches, userId, userName }: { branches: B
   }, [form.principal_amount, form.tenor_months]);
 
   const saveLoan = async () => {
-    if (!form.coach_id) return toast.error(t("owner.coachLoans.selectCoachRequired"));
+    if (!form.coach_id) return toast.error(t("owner.coachLoans.selectBorrowerRequired"));
     if (!form.branch_id) return toast.error(t("owner.coachLoans.selectBranchRequired"));
     const principal = Number(form.principal_amount || 0);
     const tenor = Number(form.tenor_months || 0);
@@ -137,7 +145,7 @@ export default function CoachLoans({ branches, userId, userName }: { branches: B
     if (!tenor || tenor <= 0) return toast.error(t("owner.coachLoans.invalidTenor"));
 
     setSaving(true);
-    const coach = coaches.find(c => c.id === form.coach_id);
+    const borrower = borrowers.find(c => c.id === form.coach_id);
     const { data: newLoan, error } = await supabase.from("coach_loans").insert({
       coach_id: form.coach_id,
       branch_id: form.branch_id,
@@ -151,25 +159,24 @@ export default function CoachLoans({ branches, userId, userName }: { branches: B
     }).select("id").single();
     setSaving(false);
     if (error) return toast.error(t("owner.coachLoans.saveFailed"), error.message);
-    // Record the disbursement as a cash outflow — loans are otherwise invisible to
-    // the Financial tab's expense totals (they only ever showed up, partially, once
-    // repaid via a payslip deduction, which itself wasn't counted either).
+    // Record the disbursement as a cash outflow
+    const rolePrefix = borrower?.role === "staff" ? "Staff" : "Coach";
     await supabase.from("manual_transactions").insert({
       branch_id: form.branch_id,
       kind: "expense",
-      category: "Coach Loan",
-      description: t("owner.coachLoans.disbursementTxnDescription", { coach: coach?.full_name ?? "coach" }),
+      category: t("owner.coachLoans.loanTxnCategory"),
+      description: t("owner.coachLoans.disbursementTxnDesc", { role: rolePrefix, name: borrower?.full_name ?? "" }),
       amount: principal,
       occurred_at: new Date().toISOString().split("T")[0],
       notes: newLoan ? `coach_loan:${newLoan.id}` : null,
       created_by: userId,
       created_by_role: "owner",
     });
-    toast.success(t("owner.coachLoans.created"));
+    toast.success(t("owner.coachLoans.loanCreated"));
     logActivity(supabase, {
       userId, userRole: "owner", userName, entityType: "coach_loans", entityId: form.coach_id,
-      entityLabel: coach?.full_name, action: "create",
-      label: t("owner.coachLoans.activityCreated", { coach: coach?.full_name ?? "coach", amount: fmtIDR(principal), tenor }),
+      entityLabel: borrower?.full_name, action: "create",
+      label: `New loan for ${rolePrefix} ${borrower?.full_name ?? ""} of ${fmtIDR(principal)} (${tenor} months)`,
       meta: { principal_amount: principal, tenor_months: tenor },
     });
     setShowCreate(false);
@@ -195,7 +202,7 @@ export default function CoachLoans({ branches, userId, userName }: { branches: B
 
   const writeOffLoan = async () => {
     if (!detail) return;
-    const ok = await confirm({ title: t("owner.coachLoans.writeOffConfirmTitle"), body: t("owner.coachLoans.writeOffConfirmBody", { amount: fmtIDR(remaining), coach: detail.coach?.full_name ?? "coach" }), confirmLabel: t("owner.coachLoans.writeOffConfirmLabel"), danger: true });
+    const ok = await confirm({ title: t("owner.coachLoans.writeOffConfirmTitle"), body: tNode("owner.coachLoans.writeOffConfirmBody", { amount: fmtIDR(remaining), coach: detail.coach?.full_name ?? "coach" }), confirmLabel: t("owner.coachLoans.writeOffConfirmLabel"), danger: true });
     if (!ok) return;
     setActioning(true);
     if (remaining > 0) {
@@ -235,8 +242,6 @@ export default function CoachLoans({ branches, userId, userName }: { branches: B
     loadLoans();
   };
 
-  void loanPaymentSums;
-
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -262,6 +267,11 @@ export default function CoachLoans({ branches, userId, userName }: { branches: B
             {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
         )}
+        <select value={roleFilter} onChange={e => setRoleFilter(e.target.value as any)} className="text-sm rounded-xl border border-line bg-white pl-3.5 pr-8 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
+          <option value="all">{t("owner.coachLoans.allBorrowerCategories")}</option>
+          <option value="coach">{t("owner.coachLoans.filterCoachOnly")}</option>
+          <option value="staff">{t("owner.coachLoans.filterStaffOnly")}</option>
+        </select>
         <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="text-sm rounded-xl border border-line bg-white pl-3.5 pr-8 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
           <option value="all">{t("owner.coachLoans.filterAllStatus")}</option>
           <option value="active">{statusLabel("active")}</option>
@@ -279,24 +289,55 @@ export default function CoachLoans({ branches, userId, userName }: { branches: B
           <div className="p-10 text-center text-ink-mute">{t("owner.coachLoans.empty")}</div>
         ) : (
           <div className="divide-y divide-line">
-            {filtered.map(loan => (
-              <div key={loan.id} className="flex items-center gap-3 px-5 py-3.5 hover:bg-paper-tint cursor-pointer" onClick={() => openDetail(loan)}>
-                <Avatar name={loan.coach?.full_name ?? "?"} size={36} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-semibold text-sm">{loan.coach?.full_name ?? "—"}</span>
-                    <Status kind={STATUS_KIND[loan.status]}>{statusLabel(loan.status)}</Status>
+            {filtered.map(loan => {
+              const isStaff = loan.coach?.role === "staff";
+              const paidTotal = (loan.coach_loan_payments ?? []).reduce((s, p) => s + p.amount, 0);
+              const remainingBalance = Math.max(0, loan.principal_amount - paidTotal);
+              const paidCount = (loan.coach_loan_payments ?? []).filter(p => p.kind === "installment").length;
+
+              return (
+                <div key={loan.id} className="flex items-center gap-3 px-5 py-3.5 hover:bg-paper-tint cursor-pointer" onClick={() => openDetail(loan)}>
+                  <Avatar name={loan.coach?.full_name ?? "?"} size={36} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-sm text-ink"><NoTranslate>{loan.coach?.full_name ?? "—"}</NoTranslate></span>
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-extrabold uppercase ${
+                        isStaff
+                          ? "bg-purple-50 text-purple-700 border border-purple-200"
+                          : "bg-ocean-50 text-ocean-700 border border-ocean-200"
+                      }`}>
+                        {isStaff ? t("owner.coachLoans.roleBadgeStaff") : t("owner.coachLoans.roleBadgeCoach")}
+                      </span>
+                      <Status kind={STATUS_KIND[loan.status]}>{statusLabel(loan.status)}</Status>
+                    </div>
+                    <div className="text-xs text-ink-mute mt-0.5">
+                      <NoTranslate>{loan.branch?.name ?? "—"}</NoTranslate> · {t("owner.coachLoans.perMonth", { tenor: loan.tenor_months, amount: fmtIDR(loan.installment_amount) })}
+                    </div>
+                    {/* Progress bar */}
+                    <div className="flex items-center gap-2 mt-1.5 max-w-sm">
+                      <div className="flex-1 h-1.5 rounded-full bg-paper-deep overflow-hidden">
+                        <div
+                          className="h-full bg-ok-500 rounded-full"
+                          style={{ width: `${clampPercent(paidCount, loan.tenor_months)}%` }}
+                        />
+                      </div>
+                      <span className="text-[11px] font-mono text-ink-mute shrink-0">
+                        {t("owner.coachLoans.monthsRemainingInline", { paid: paidCount, total: loan.tenor_months, amount: fmtIDR(remainingBalance) })}
+                      </span>
+                    </div>
+                    {loan.reason && <div className="text-xs text-ink-faint mt-1 truncate"><NoTranslate>{loan.reason}</NoTranslate></div>}
                   </div>
-                  <div className="text-xs text-ink-mute mt-0.5">{loan.branch?.name ?? "—"} · {t("owner.coachLoans.perMonth", { tenor: loan.tenor_months, amount: fmtIDR(loan.installment_amount) })}</div>
-                  {loan.reason && <div className="text-xs text-ink-faint mt-0.5 truncate">{loan.reason}</div>}
+                  <div className="text-right shrink-0">
+                    <div className="font-mono font-bold text-sm text-ink">{fmtIDR(loan.principal_amount)}</div>
+                    <div className="text-[11px] text-ink-mute">{t("owner.coachLoans.principalAmount")}</div>
+                    <div className="text-xs font-mono font-semibold text-danger-600 mt-0.5">
+                      {t("owner.coachLoans.remainingInlineLabel", { amount: fmtIDR(remainingBalance) })}
+                    </div>
+                  </div>
+                  <Icon name="chevron" className="w-4 h-4 text-ink-faint shrink-0" />
                 </div>
-                <div className="text-right shrink-0">
-                  <div className="font-mono font-bold text-sm">{fmtIDR(loan.principal_amount)}</div>
-                  <div className="text-xs text-ink-mute">{t("owner.coachLoans.principalLabel")}</div>
-                </div>
-                <Icon name="chevron" className="w-4 h-4 text-ink-faint shrink-0" />
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </Card>
@@ -310,10 +351,14 @@ export default function CoachLoans({ branches, userId, userName }: { branches: B
           </div>
         }>
         <div className="space-y-4">
-          <Field label={t("owner.coachLoans.fieldCoach")}>
-            <Select value={form.coach_id} onChange={e => handleCoachChange(e.target.value)}>
-              <option value="">{t("owner.coachLoans.selectCoachPlaceholder")}</option>
-              {coaches.map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
+          <Field label={t("owner.coachLoans.fieldLoanRecipient")}>
+            <Select value={form.coach_id} onChange={e => handleBorrowerChange(e.target.value)}>
+              <option value="">{t("owner.coachLoans.selectCoachOrStaffPlaceholder")}</option>
+              {borrowers.map(c => (
+                <option key={c.id} value={c.id}>
+                  [{c.role === "staff" ? t("owner.coachLoans.roleBadgeStaff") : t("owner.coachLoans.roleBadgeCoach")}] {c.full_name}
+                </option>
+              ))}
             </Select>
           </Field>
           <Field label={t("owner.coachLoans.fieldBranch")}>
@@ -361,11 +406,11 @@ export default function CoachLoans({ branches, userId, userName }: { branches: B
         {detail && (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3 text-sm">
-              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">{t("owner.coachLoans.detailCoach")}</div><div className="font-semibold">{detail.coach?.full_name ?? "—"}</div></div>
-              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">{t("owner.coachLoans.detailBranch")}</div><div className="font-semibold">{detail.branch?.name ?? "—"}</div></div>
+              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">{t("owner.coachLoans.detailRecipient")}</div><div className="font-semibold"><NoTranslate>{detail.coach?.full_name ?? "—"}</NoTranslate> <span className="text-xs font-normal text-ink-mute">({detail.coach?.role === "staff" ? t("owner.coachLoans.roleBadgeStaff") : t("owner.coachLoans.roleBadgeCoach")})</span></div></div>
+              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">{t("owner.coachLoans.detailBranch")}</div><div className="font-semibold"><NoTranslate>{detail.branch?.name ?? "—"}</NoTranslate></div></div>
               <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">{t("owner.coachLoans.detailStatus")}</div><Status kind={STATUS_KIND[detail.status]}>{statusLabel(detail.status)}</Status></div>
               <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">{t("owner.coachLoans.detailTenor")}</div><div>{t("owner.coachLoans.detailTenorMonths", { tenor: detail.tenor_months })}</div></div>
-              {detail.reason && <div className="col-span-2"><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">{t("owner.coachLoans.detailReason")}</div><div>{detail.reason}</div></div>}
+              {detail.reason && <div className="col-span-2"><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">{t("owner.coachLoans.detailReason")}</div><div><NoTranslate>{detail.reason}</NoTranslate></div></div>}
             </div>
 
             <div className="border-t border-line pt-4 space-y-2">
@@ -392,7 +437,7 @@ export default function CoachLoans({ branches, userId, userName }: { branches: B
                     <div key={p.id} className="flex items-center justify-between py-2 border-b border-line text-sm">
                       <div>
                         <div className="font-semibold text-ink">{p.kind === "installment" ? t("owner.coachLoans.installmentNumber", { number: p.installment_number }) : p.kind === "write_off" ? t("owner.coachLoans.writeOffKind") : t("owner.coachLoans.adjustmentKind")}</div>
-                        <div className="text-xs text-ink-mute">{p.period_label}</div>
+                        <div className="text-xs text-ink-mute"><NoTranslate>{p.period_label}</NoTranslate></div>
                       </div>
                       <div className="font-mono font-bold">{fmtIDR(p.amount)}</div>
                     </div>

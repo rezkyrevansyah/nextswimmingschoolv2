@@ -191,6 +191,7 @@ CREATE TABLE public.coach_attendances (
   manual_note text,
   invoice_id uuid,
   CONSTRAINT coach_attendances_pkey PRIMARY KEY (id),
+  CONSTRAINT coach_attendances_coach_class_date_key UNIQUE (coach_id, class_id, session_date),
   CONSTRAINT coach_attendances_coach_id_fkey FOREIGN KEY (coach_id) REFERENCES public.profiles(id),
   CONSTRAINT coach_attendances_manual_by_fkey FOREIGN KEY (manual_by) REFERENCES public.profiles(id),
   CONSTRAINT coach_attendances_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branches(id),
@@ -207,6 +208,7 @@ CREATE TABLE public.member_attendances (
   marked_by uuid,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT member_attendances_pkey PRIMARY KEY (id),
+  CONSTRAINT member_attendances_class_member_date_key UNIQUE (class_id, member_id, session_date),
   CONSTRAINT member_attendances_marked_by_fkey FOREIGN KEY (marked_by) REFERENCES public.profiles(id),
   CONSTRAINT member_attendances_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.classes(id),
   CONSTRAINT member_attendances_member_id_fkey FOREIGN KEY (member_id) REFERENCES public.members(id)
@@ -1010,9 +1012,13 @@ CREATE TABLE public.staff_attendances (
   status text NOT NULL DEFAULT 'present'::text CHECK (status = ANY (ARRAY['present'::text, 'absent'::text, 'izin'::text, 'sakit'::text])),
   note text,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
+  selfie_url text,
+  invoice_id uuid,
   CONSTRAINT staff_attendances_pkey PRIMARY KEY (id),
+  CONSTRAINT staff_attendances_staff_date_key UNIQUE (staff_id, attendance_date),
   CONSTRAINT staff_attendances_staff_id_fkey FOREIGN KEY (staff_id) REFERENCES public.profiles(id),
-  CONSTRAINT staff_attendances_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branches(id)
+  CONSTRAINT staff_attendances_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branches(id),
+  CONSTRAINT staff_attendances_invoice_id_fkey FOREIGN KEY (invoice_id) REFERENCES public.coach_invoices(id)
 );
 CREATE TABLE public.landing_videos (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),

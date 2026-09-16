@@ -14,6 +14,7 @@ import TimePicker from "@/components/ui/TimePicker";
 import type { AttendanceRow, CoachProfile, ClassRow, MemberAttendanceRow } from "../_types";
 import { fmtDate } from "@/lib/utils";
 import { logActivity } from "@/lib/activityLog";
+import { memberStatusKind, memberDbToUi, COACH_ATTENDANCE_CONFLICT } from "@/lib/attendance";
 
 function AdminAbsensiMember({ branchId }: { branchId: string }) {
   const supabase = createClient();
@@ -153,15 +154,16 @@ function AdminAbsensiMember({ branchId }: { branchId: string }) {
                       <td className="py-3 font-semibold text-ink">{r.member?.profile?.full_name ?? "—"}</td>
                       <td className="py-3 text-ink-soft">{r.class?.name ?? "—"}</td>
                       <td className="py-3">
-                        {r.status === "hadir"
-                          ? <Status kind="approved" dot={false}>{t("admin.absensi.statusPresent")}</Status>
-                          : r.status === "telat"
-                          ? <Status kind="telat" dot={false}>{t("admin.absensi.statusLate")}</Status>
-                          : r.status === "izin"
-                          ? <Status kind="excused" dot={false}>{t("admin.absensi.statusExcused")}</Status>
-                          : r.status === "sakit"
-                          ? <Status kind="sick" dot={false}>{t("admin.absensi.statusSick")}</Status>
-                          : <Status kind="rejected" dot={false}>{t("admin.absensi.statusAbsent")}</Status>}
+                        {(() => {
+                          const ui = memberDbToUi(r.status);
+                          const kind = memberStatusKind(r.status);
+                          const label = ui === "present" ? t("admin.absensi.statusPresent")
+                            : ui === "late" ? t("admin.absensi.statusLate")
+                            : ui === "izin" ? t("admin.absensi.statusExcused")
+                            : ui === "sick" ? t("admin.absensi.statusSick")
+                            : t("admin.absensi.statusAbsent");
+                          return <Status kind={kind} dot={false}>{label}</Status>;
+                        })()}
                       </td>
                       <td className="py-3 pr-5 hidden sm:table-cell text-ink-mute capitalize">
                         {r.method === "manual" ? t("admin.absensi.methodManual") : r.method === "qr" ? t("admin.absensi.methodQr") : r.method ?? "—"}
@@ -335,7 +337,7 @@ function AdminAbsensiCoach({ branchId }: { branchId: string }) {
         clock_in_time: clockInTime,
         is_manual: true, manual_by: user?.id ?? null,
         manual_note: form.note || null, status: manualStatus,
-      }, { onConflict: "coach_id,class_id,session_date" });
+      }, { onConflict: COACH_ATTENDANCE_CONFLICT });
       setSaving(false);
       if (error) return toast.error(t("admin.absensi.saveFailed"), error.message);
       toast.success(t("admin.absensi.attendanceSavedToast"));

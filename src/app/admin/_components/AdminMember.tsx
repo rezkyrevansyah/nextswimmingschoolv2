@@ -15,6 +15,7 @@ import QRBox from "@/components/ui/QRBox";
 import DatePicker from "@/components/ui/DatePicker";
 import PhotoLightbox from "@/components/ui/PhotoLightbox";
 import { fmtIDR, fmtDate } from "@/lib/utils";
+import { memberDbToUi, memberStatusKind } from "@/lib/attendance";
 import { logActivity } from "@/lib/activityLog";
 import { calcAge, parseUserApiError } from "../_utils";
 import type { ClassRow, ClassPackage, School } from "../_types";
@@ -24,6 +25,7 @@ import type { ClassRow, ClassPackage, School } from "../_types";
 interface MemberRow {
   id: string; profile_id: string; type: string; status: string;
   date_start: string; qr_code: string | null; school_id: string | null;
+  school_grade: string | null;
   member_no: string | null;
   remaining_sessions: number | null; total_sessions: number | null;
   suspend_until?: string | null; suspend_reason?: string | null;
@@ -46,8 +48,15 @@ interface ImportRow {
   alamat?: unknown;
   catatan_kesehatan?: unknown;
   jumlah_sesi?: unknown;
+  harga_paket?: unknown;
+  jadwal_hari?: unknown;
+  jam_mulai?: unknown;
+  jam_selesai?: unknown;
+  coach_utama_hp?: unknown;
+  coach_asisten_hp?: unknown;
   nama_kelas?: unknown;
   nama_sekolah?: unknown;
+  kelas_sekolah?: unknown;
 }
 
 type ImportRowStatus = "ok" | "warn" | "error";
@@ -70,6 +79,14 @@ interface ValidatedRow {
   total_sessions?: number | null;
   class_id?: string | null;
   school_id?: string | null;
+  school_grade?: string | null;
+  // Private-only
+  package_price?: number | null;
+  schedule_days?: string[];
+  time_start?: string;
+  time_end?: string;
+  head_coach_id?: string | null;
+  assistant_coach_ids?: string[];
   // Display only
   nama_kelas_raw?: string;
   nama_sekolah_raw?: string;
@@ -107,6 +124,23 @@ function normalizeMemberType(raw: unknown): "reguler" | "private" | "school_affi
   return undefined;
 }
 
+const IMPORT_DAY_OPTS = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"];
+
+function normalizeDayName(raw: string): string | undefined {
+  const s = raw.trim().toLowerCase();
+  return IMPORT_DAY_OPTS.find(d => d.toLowerCase() === s);
+}
+
+function normalizeImportTime(raw: unknown): string | undefined {
+  if (!raw) return undefined;
+  const s = String(raw).trim();
+  const m = /^(\d{1,2}):(\d{2})$/.exec(s);
+  if (!m) return undefined;
+  const hh = Number(m[1]), mm = Number(m[2]);
+  if (hh > 23 || mm > 59) return undefined;
+  return `${String(hh).padStart(2, "0")}:${m[2]}`;
+}
+
 export default function AdminMember({ branchId }: { branchId: string }) {
   const supabase = createClient();
   const toast = useToast();
@@ -120,7 +154,7 @@ export default function AdminMember({ branchId }: { branchId: string }) {
   const [detail, setDetail] = useState<MemberRow | null>(null);
   const [saving, setSaving] = useState(false);
   const [classes, setClasses] = useState<ClassRow[]>([]);
-  const [form, setForm] = useState({ full_name: "", birth_date: "", gender: "", type: "reguler", phone: "", phone_owner: "self", parent_name: "", parent_phone: "", address: "", health_notes: "", class_id: "", school_id: "", email: "", password: "", jumlah_sesi: "" });
+  const [form, setForm] = useState({ full_name: "", birth_date: "", gender: "", type: "reguler", phone: "", phone_owner: "self", parent_name: "", parent_phone: "", address: "", health_notes: "", class_id: "", school_id: "", school_grade: "", email: "", password: "", jumlah_sesi: "" });
   const [createAvatarFile, setCreateAvatarFile] = useState<File | null>(null);
   const [createAvatarPreview, setCreateAvatarPreview] = useState<string | null>(null);
   const [editAvatarFile, setEditAvatarFile] = useState<File | null>(null);
@@ -130,12 +164,13 @@ export default function AdminMember({ branchId }: { branchId: string }) {
   const [savingAddSesi, setSavingAddSesi] = useState(false);
   const [privateClassPackages, setPrivateClassPackages] = useState<ClassPackage[]>([]);
   const [schoolsList, setSchoolsList] = useState<School[]>([]);
+  const [coachesForImport, setCoachesForImport] = useState<{ id: string; phone: string | null }[]>([]);
 
   const load = useCallback(async () => {
     if (!branchId) return;
     setLoading(true);
     const db = createClient();
-    const sel = "id, profile_id, type, status, date_start, qr_code, school_id, member_no, remaining_sessions, total_sessions, suspend_until, suspend_reason, profile:profiles(full_name, birth_date, phone, gender, address, health_notes, email, avatar_url), member_classes(class:classes(id, name))";
+    const sel = "id, profile_id, type, status, date_start, qr_code, school_id, school_grade, member_no, remaining_sessions, total_sessions, suspend_until, suspend_reason, profile:profiles(full_name, birth_date, phone, gender, address, health_notes, email, avatar_url), member_classes(class:classes(id, name))";
     let q = db.from("members").select(sel).eq("branch_id", branchId).order("created_at", { ascending: false });
     if (tab === "suspended") q = db.from("members").select(sel).eq("branch_id", branchId).eq("status", "suspended") as typeof q;
     else if (tab !== "all") q = q.eq("type", tab as "reguler" | "private" | "school_affiliate");
@@ -153,7 +188,11 @@ export default function AdminMember({ branchId }: { branchId: string }) {
       .then(({ data }) => { if (data) setClasses(data as unknown as ClassRow[]); });
     supabase.from("schools").select("id, name").eq("branch_id", branchId).order("name")
       .then(({ data }) => { if (data) setSchoolsList(data as School[]); });
+    supabase.from("profiles").select("id, phone").eq("role", "coach").eq("branch_id", branchId)
+      .then(({ data }) => { if (data) setCoachesForImport(data as { id: string; phone: string | null }[]); });
   }, [branchId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const findCoachByPhone = (phone: string) => coachesForImport.find(c => (c.phone ?? "").replace(/\D/g, "") === phone.replace(/\D/g, "") && phone.trim() !== "");
 
   const createMember = async () => {
     if (!form.full_name || !form.email || !form.password) return toast.error(t("admin.coaches.nameEmailPasswordRequired"));
@@ -177,6 +216,7 @@ export default function AdminMember({ branchId }: { branchId: string }) {
         address: form.address || null, health_notes: form.health_notes || null,
         member_type: form.type,
         school_id: form.type === "school_affiliate" ? form.school_id : null,
+        school_grade: form.type === "school_affiliate" ? form.school_grade.trim() || null : null,
         class_id: form.class_id || null,
         total_sessions: form.type === "private" ? (Number(form.jumlah_sesi) || null) : null,
       }),
@@ -203,7 +243,7 @@ export default function AdminMember({ branchId }: { branchId: string }) {
     setOpenCreate(false);
     setCreateAvatarFile(null);
     setCreateAvatarPreview(null);
-    setForm({ full_name: "", birth_date: "", gender: "", type: "reguler", phone: "", phone_owner: "self", parent_name: "", parent_phone: "", address: "", health_notes: "", class_id: "", school_id: "", email: "", password: "", jumlah_sesi: "" });
+    setForm({ full_name: "", birth_date: "", gender: "", type: "reguler", phone: "", phone_owner: "self", parent_name: "", parent_phone: "", address: "", health_notes: "", class_id: "", school_id: "", school_grade: "", email: "", password: "", jumlah_sesi: "" });
     setSearch("");
     load();
   };
@@ -222,6 +262,7 @@ export default function AdminMember({ branchId }: { branchId: string }) {
       health_notes: m.profile?.health_notes ?? "",
       type: m.type ?? "reguler",
       school_id: m.school_id ?? "",
+      school_grade: m.school_grade ?? "",
       class_ids: m.member_classes?.map(mc => mc.class?.id).filter(Boolean) as string[] ?? [],
       member_no: m.member_no ?? "",
     });
@@ -266,6 +307,7 @@ export default function AdminMember({ branchId }: { branchId: string }) {
     await createClient().from("members").update({
       type: editMemberForm.type as "reguler" | "private" | "school_affiliate",
       school_id: editMemberForm.type === "school_affiliate" ? (editMemberForm.school_id || null) : null,
+      school_grade: editMemberForm.type === "school_affiliate" ? (editMemberForm.school_grade.trim() || null) : null,
     }).eq("id", detail.id);
 
     // Sync kelas — add new, remove removed
@@ -312,6 +354,7 @@ export default function AdminMember({ branchId }: { branchId: string }) {
     setDetail(prev => prev ? {
       ...prev,
       type: editMemberForm.type as MemberRow["type"],
+      school_grade: editMemberForm.type === "school_affiliate" ? (editMemberForm.school_grade.trim() || null) : null,
       member_no: editMemberForm.member_no || null,
       profile: prev.profile ? {
         ...prev.profile,
@@ -346,7 +389,7 @@ export default function AdminMember({ branchId }: { branchId: string }) {
   const [editMemberForm, setEditMemberForm] = useState({
     full_name: "", email: "", birth_date: "", gender: "", phone: "", phone_owner: "self",
     parent_name: "", parent_phone: "", address: "", health_notes: "",
-    type: "reguler", school_id: "", class_ids: [] as string[], member_no: "",
+    type: "reguler", school_id: "", school_grade: "", class_ids: [] as string[], member_no: "",
   });
   const [savingEdit, setSavingEdit] = useState(false);
   const [openResetPwd, setOpenResetPwd] = useState(false);
@@ -444,10 +487,9 @@ export default function AdminMember({ branchId }: { branchId: string }) {
       const phone = r.no_hp ? String(r.no_hp).trim() : undefined;
       const address = r.alamat ? String(r.alamat).trim() : undefined;
       const health_notes = r.catatan_kesehatan ? String(r.catatan_kesehatan).trim() : undefined;
-      const jumlahSesiRaw = r.jumlah_sesi;
-      const total_sessions = jumlahSesiRaw != null && String(jumlahSesiRaw).trim() !== "" ? Math.round(Number(jumlahSesiRaw)) : null;
       const nama_kelas_raw = r.nama_kelas ? String(r.nama_kelas).trim() : "";
       const nama_sekolah_raw = r.nama_sekolah ? String(r.nama_sekolah).trim() : "";
+      const kelas_sekolah_raw = r.kelas_sekolah ? String(r.kelas_sekolah).trim() : "";
 
       if (!full_name) errors.push(t("admin.members.fullNameRequired2"));
       if (!email) errors.push(t("admin.members.emailRequiredImport"));
@@ -457,10 +499,9 @@ export default function AdminMember({ branchId }: { branchId: string }) {
       if (memberTypeRaw && !normalizeMemberType(memberTypeRaw)) errors.push(t("admin.members.invalidMemberType", { value: String(memberTypeRaw) }));
       if (r.tanggal_lahir && !birth_date) errors.push(t("admin.members.invalidBirthDateFormat", { value: String(r.tanggal_lahir) }));
       if (r.jenis_kelamin && !gender) errors.push(t("admin.members.invalidGenderFormat", { value: String(r.jenis_kelamin) }));
-      if (member_type === "private" && (total_sessions === null || isNaN(total_sessions))) errors.push(t("admin.members.sessionCountRequiredForPrivate"));
 
       let class_id: string | null | undefined = undefined;
-      if (nama_kelas_raw) {
+      if (member_type !== "private" && nama_kelas_raw) {
         const found = classList.find(c => c.name.trim().toLowerCase() === nama_kelas_raw.toLowerCase());
         if (found) {
           class_id = found.id;
@@ -485,12 +526,61 @@ export default function AdminMember({ branchId }: { branchId: string }) {
         }
       }
 
+      let total_sessions: number | null = null;
+      let package_price: number | null = null;
+      let schedule_days: string[] | undefined = undefined;
+      let time_start: string | undefined = undefined;
+      let time_end: string | undefined = undefined;
+      let head_coach_id: string | null | undefined = undefined;
+      let assistant_coach_ids: string[] | undefined = undefined;
+
+      if (member_type === "private") {
+        const sesiRaw = r.jumlah_sesi;
+        total_sessions = sesiRaw != null && String(sesiRaw).trim() !== "" ? Math.round(Number(sesiRaw)) : null;
+        if (total_sessions === null || isNaN(total_sessions)) errors.push(t("admin.members.sessionCountRequiredForPrivate"));
+
+        const hargaRaw = r.harga_paket;
+        package_price = hargaRaw != null && String(hargaRaw).trim() !== "" ? Math.round(Number(hargaRaw)) : null;
+
+        const jadwalRaw = String(r.jadwal_hari ?? "").trim();
+        if (!jadwalRaw) {
+          errors.push(t("admin.members.scheduleDaysRequiredForPrivate"));
+        } else {
+          const tokens = jadwalRaw.split(",").map(d => d.trim()).filter(Boolean);
+          const normalized = tokens.map(normalizeDayName);
+          const invalidToken = tokens.find((_, idx) => !normalized[idx]);
+          if (invalidToken) errors.push(t("admin.members.invalidScheduleDay", { value: invalidToken }));
+          else schedule_days = normalized as string[];
+        }
+
+        time_start = normalizeImportTime(r.jam_mulai);
+        if (!time_start) errors.push(t("admin.members.invalidStartTimeForPrivate", { value: String(r.jam_mulai ?? "") }));
+        time_end = normalizeImportTime(r.jam_selesai);
+        if (!time_end) errors.push(t("admin.members.invalidEndTimeForPrivate", { value: String(r.jam_selesai ?? "") }));
+
+        const headPhone = r.coach_utama_hp ? String(r.coach_utama_hp).trim() : "";
+        if (headPhone) {
+          const found = findCoachByPhone(headPhone);
+          if (found) head_coach_id = found.id;
+          else { warnings.push(t("admin.members.coachNotFoundWarning", { value: headPhone })); head_coach_id = null; }
+        }
+        const assistantPhones = String(r.coach_asisten_hp ?? "").split(",").map(p => p.trim()).filter(Boolean);
+        assistant_coach_ids = [];
+        for (const p of assistantPhones) {
+          const found = findCoachByPhone(p);
+          if (found) assistant_coach_ids.push(found.id);
+          else warnings.push(t("admin.members.coachNotFoundWarning", { value: p }));
+        }
+      }
+
       const status: ImportRowStatus = errors.length > 0 ? "error" : warnings.length > 0 ? "warn" : "ok";
       return {
         _rowNum: i + 2, _status: status, _errors: errors, _warnings: warnings,
         full_name, email, password, member_type, birth_date, gender, phone, address, health_notes,
-        total_sessions: member_type === "private" ? total_sessions : null,
-        class_id, school_id, nama_kelas_raw, nama_sekolah_raw,
+        total_sessions, package_price, schedule_days, time_start, time_end, head_coach_id, assistant_coach_ids,
+        class_id, school_id,
+        school_grade: member_type === "school_affiliate" ? (kelas_sekolah_raw || null) : null,
+        nama_kelas_raw, nama_sekolah_raw,
       };
     });
   };
@@ -515,16 +605,21 @@ export default function AdminMember({ branchId }: { branchId: string }) {
 
   const downloadTemplate = async () => {
     const XLSX = await import("xlsx");
-    const headers = ["nama_lengkap", "email", "password", "tipe_member", "tanggal_lahir", "jenis_kelamin", "no_hp", "alamat", "catatan_kesehatan", "jumlah_sesi", "nama_kelas", "nama_sekolah"];
-    const example = ["Budi Santoso", "budi@gmail.com", "aqua2024", "reguler", "15/06/2010", "L", "08123456789", "Jl. Merdeka No. 1", "", "", "Kelas A Pagi", ""];
+    const headers = ["nama_lengkap", "email", "password", "tipe_member", "tanggal_lahir", "jenis_kelamin", "no_hp", "alamat", "catatan_kesehatan", "jumlah_sesi", "harga_paket", "jadwal_hari", "jam_mulai", "jam_selesai", "coach_utama_hp", "coach_asisten_hp", "nama_kelas", "nama_sekolah", "kelas_sekolah"];
+    const exampleRegular = ["Budi Santoso", "budi@gmail.com", "aqua2024", "reguler", "15/06/2010", "L", "08123456789", "Jl. Merdeka No. 1", "", "", "", "", "", "", "", "", "Kelas A Pagi", "", ""];
+    const examplePrivate = ["Siti Aminah", "siti@gmail.com", "aqua2024", "private", "10/03/2015", "P", "08129876543", "Jl. Melati No. 5", "", "8", "1500000", "Senin,Rabu", "07:00", "08:00", "08111222333", "", "", "", ""];
     const notes = [
       t("admin.coaches.fieldFullName2"), t("admin.members.emailUniqueNote"), t("admin.members.min6CharsNote"),
       "reguler / private / afiliasi_sekolah", t("admin.members.dateFormatsNote"), t("admin.members.lOrPNote"),
       t("admin.izin.optionalHint2"), t("admin.izin.optionalHint2"), t("admin.izin.optionalHint2"),
-      t("admin.members.requiredIfPrivateNote"), t("admin.members.mustMatchClassNameExactly"), t("admin.members.mandatoryIfSchoolAffiliateNote"),
+      t("admin.members.requiredIfPrivateNote"), t("admin.members.optionalPrivateBillNote"),
+      t("admin.members.scheduleDaysNote"), t("admin.members.startTimeNote"), t("admin.members.endTimeNote"),
+      t("admin.members.headCoachPhoneNote"), t("admin.members.assistantCoachPhoneNote"),
+      t("admin.members.mustMatchClassNameExactly"), t("admin.members.mandatoryIfSchoolAffiliateNote"),
+      t("admin.members.schoolGradeOptionalNote"),
     ];
-    const ws = XLSX.utils.aoa_to_sheet([headers, example, notes]);
-    ws["!cols"] = headers.map((_, i) => ({ wch: [20, 28, 14, 20, 16, 14, 16, 28, 24, 14, 20, 24][i] }));
+    const ws = XLSX.utils.aoa_to_sheet([headers, exampleRegular, examplePrivate, notes]);
+    ws["!cols"] = headers.map((_, i) => ({ wch: [20, 28, 14, 20, 16, 14, 16, 28, 24, 12, 12, 18, 12, 12, 16, 18, 20, 24, 18][i] }));
     ws["!freeze"] = { xSplit: 0, ySplit: 1 };
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Member Import");
@@ -559,6 +654,13 @@ export default function AdminMember({ branchId }: { branchId: string }) {
               phone: r.phone, address: r.address, health_notes: r.health_notes,
               total_sessions: r.total_sessions, class_id: r.class_id,
               school_id: r.school_id ?? null,
+              school_grade: r.school_grade ?? null,
+              package_price: r.package_price ?? null,
+              schedule_days: r.schedule_days ?? null,
+              time_start: r.time_start ?? null,
+              time_end: r.time_end ?? null,
+              head_coach_id: r.head_coach_id ?? null,
+              assistant_coach_ids: r.assistant_coach_ids ?? null,
             })),
           }),
         });
@@ -717,7 +819,7 @@ export default function AdminMember({ branchId }: { branchId: string }) {
     setAddSesiForm({ jumlah: "", generate_bill: false, selectedPackageId: "" });
     // Refresh detail
     const { data } = await db.from("members")
-      .select("id, profile_id, type, status, date_start, qr_code, school_id, remaining_sessions, total_sessions, suspend_until, suspend_reason, profile:profiles(full_name, birth_date, phone, gender, address, health_notes, email, avatar_url), member_classes(class:classes(id, name))")
+      .select("id, profile_id, type, status, date_start, qr_code, school_id, school_grade, remaining_sessions, total_sessions, suspend_until, suspend_reason, profile:profiles(full_name, birth_date, phone, gender, address, health_notes, email, avatar_url), member_classes(class:classes(id, name))")
       .eq("id", detail.id).single();
     if (data) setDetail(data as unknown as MemberRow);
     load();
@@ -829,7 +931,7 @@ export default function AdminMember({ branchId }: { branchId: string }) {
               <Btn variant="outline" icon="download" size="sm" onClick={downloadTemplate}>{t("admin.members.downloadTemplateBtn")}</Btn>
               <Btn variant="soft" icon="upload" onClick={() => { setImportStep("upload"); setImportRows([]); setImportResult(null); setOpenImport(true); }}>{t("admin.members.importExcelBtn")}</Btn>
               <Btn variant="outline" icon="qr" size="sm" onClick={() => { setQrSelectMode(true); setSelectedQR(new Set()); }}>{t("admin.members.downloadQrBtn")}</Btn>
-              <Btn variant="primary" icon="plus" onClick={() => { setForm({ full_name: "", birth_date: "", gender: "", type: "reguler", phone: "", phone_owner: "self", parent_name: "", parent_phone: "", address: "", health_notes: "", class_id: "", school_id: "", email: "", password: "", jumlah_sesi: "" }); setOpenCreate(true); }}>{t("admin.members.addMemberBtn")}</Btn>
+              <Btn variant="primary" icon="plus" onClick={() => { setForm({ full_name: "", birth_date: "", gender: "", type: "reguler", phone: "", phone_owner: "self", parent_name: "", parent_phone: "", address: "", health_notes: "", class_id: "", school_id: "", school_grade: "", email: "", password: "", jumlah_sesi: "" }); setOpenCreate(true); }}>{t("admin.members.addMemberBtn")}</Btn>
             </>
           )}
         </div>
@@ -1249,14 +1351,15 @@ export default function AdminMember({ branchId }: { branchId: string }) {
                                 <td className="py-2 px-3 font-mono whitespace-nowrap">{fmtDate(a.session_date)}</td>
                                 <td className="py-2 text-ink-soft">{a.class?.name ?? "—"}</td>
                                 <td className="py-2">
-                                  {a.status === "hadir"
-                                    ? <Status kind="approved" dot={false}>{t("admin.absensi.statusPresent")}</Status>
-                                    : a.status === "izin"
-                                    ? <Status kind="excused" dot={false}>{t("admin.absensi.statusExcused")}</Status>
-                                    : a.status === "sakit"
-                                    ? <Status kind="sick" dot={false}>{t("admin.absensi.statusSick")}</Status>
-                                    : <Status kind="rejected" dot={false}>{t("admin.absensi.statusAbsent")}</Status>
-                                  }
+                                  {(() => {
+                                    const ui = memberDbToUi(a.status);
+                                    const label = ui === "present" ? t("admin.absensi.statusPresent")
+                                      : ui === "late" ? t("admin.absensi.statusLate")
+                                      : ui === "izin" ? t("admin.absensi.statusExcused")
+                                      : ui === "sick" ? t("admin.absensi.statusSick")
+                                      : t("admin.absensi.statusAbsent");
+                                    return <Status kind={memberStatusKind(a.status)} dot={false}>{label}</Status>;
+                                  })()}
                                 </td>
                                 <td className="py-2 px-3 text-ink-mute capitalize">{a.method === "manual" ? t("admin.absensi.methodManual") : a.method === "qr" ? t("admin.absensi.methodQr") : a.method ?? "—"}</td>
                               </tr>
@@ -1428,20 +1531,32 @@ export default function AdminMember({ branchId }: { branchId: string }) {
               <option value="female">{t("admin.approvement.genderFemale")}</option>
             </Select>
           </Field>
-          <Field label={t("admin.members.fieldMemberType")} required>
-            <Select value={editMemberForm.type} onChange={e => setEditMemberForm(f => ({ ...f, type: e.target.value }))}>
-              <option value="reguler">{t("admin.members.typeRegularFull")}</option>
-              <option value="private">{t("admin.members.typePrivateFull")}</option>
-              <option value="school_affiliate">{t("admin.members.typeAffiliateFull")}</option>
-            </Select>
+          <Field label={t("admin.members.fieldMemberType")} required hint={detail?.type === "private" ? t("admin.members.privateManagedElsewhereHint") : t("admin.members.addPrivateElsewhereHint")}>
+            {detail?.type === "private" ? (
+              <Select value="private" disabled><option value="private">{t("admin.members.typePrivateFull")}</option></Select>
+            ) : (
+              <Select value={editMemberForm.type} onChange={e => setEditMemberForm(f => ({ ...f, type: e.target.value }))}>
+                <option value="reguler">{t("admin.members.typeRegularFull")}</option>
+                <option value="school_affiliate">{t("admin.members.typeAffiliateFull")}</option>
+              </Select>
+            )}
           </Field>
           {editMemberForm.type === "school_affiliate" && (
-            <Field label={t("admin.members.fieldSchoolAffiliate")}>
-              <Select value={editMemberForm.school_id} onChange={e => setEditMemberForm(f => ({ ...f, school_id: e.target.value }))}>
-                <option value="">{t("admin.members.selectSchoolPlaceholder")}</option>
-                {schoolsList.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </Select>
-            </Field>
+            <>
+              <Field label={t("admin.members.fieldSchoolAffiliate")}>
+                <Select value={editMemberForm.school_id} onChange={e => setEditMemberForm(f => ({ ...f, school_id: e.target.value }))}>
+                  <option value="">{t("admin.members.selectSchoolPlaceholder")}</option>
+                  {schoolsList.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </Select>
+              </Field>
+              <Field label={t("admin.members.fieldSchoolGrade")} hint={t("admin.members.fieldSchoolGradeHint")}>
+                <Input
+                  value={editMemberForm.school_grade}
+                  onChange={e => setEditMemberForm(f => ({ ...f, school_grade: e.target.value }))}
+                  placeholder={t("admin.members.fieldSchoolGradePlaceholder")}
+                />
+              </Field>
+            </>
           )}
           {/* Kontak */}
           <Field label={t("admin.members.fieldMemberPhone")}><Input type="tel" value={editMemberForm.phone} onChange={e => setEditMemberForm(f => ({ ...f, phone: e.target.value }))} /></Field>
@@ -1462,7 +1577,18 @@ export default function AdminMember({ branchId }: { branchId: string }) {
           {/* Kelas — multi-select checkboxes */}
           <div className="sm:col-span-2">
             <div className="text-sm font-semibold text-ink mb-2">{t("admin.members.classesJoinedFieldLabel")}</div>
-            {classes.length === 0 ? (
+            {detail?.type === "private" ? (
+              <div className="space-y-1.5">
+                {(detail.member_classes ?? []).length === 0 ? (
+                  <div className="text-sm text-ink-mute">{t("admin.coaches.noActiveClassesInBranch")}</div>
+                ) : (
+                  detail.member_classes!.map(mc => mc.class && (
+                    <div key={mc.class.id} className="px-3 py-2.5 rounded-xl border border-line bg-paper-tint text-sm font-semibold text-ink">{mc.class.name}</div>
+                  ))
+                )}
+                <p className="text-xs text-ink-mute">{t("admin.members.privateManagedElsewhereHint")}</p>
+              </div>
+            ) : classes.length === 0 ? (
               <div className="text-sm text-ink-mute">{t("admin.coaches.noActiveClassesInBranch")}</div>
             ) : (
               <div className="grid sm:grid-cols-2 gap-2">
@@ -1534,18 +1660,27 @@ export default function AdminMember({ branchId }: { branchId: string }) {
               <option value="female">{t("admin.approvement.genderFemale")}</option>
             </Select>
           </Field>
-          <Field label={t("admin.members.fieldMemberType")} required>
+          <Field label={t("admin.members.fieldMemberType")} required hint={t("admin.members.addPrivateElsewhereHint")}>
             <Select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}>
-              <option value="reguler">{t("admin.members.typeRegularFull")}</option><option value="private">{t("admin.members.typePrivateFull")}</option><option value="school_affiliate">{t("admin.members.typeAffiliateFull")}</option>
+              <option value="reguler">{t("admin.members.typeRegularFull")}</option><option value="school_affiliate">{t("admin.members.typeAffiliateFull")}</option>
             </Select>
           </Field>
           {form.type === "school_affiliate" && (
-            <Field label={t("admin.members.fieldSchoolAffiliate")}>
-              <Select value={form.school_id} onChange={e => setForm(f => ({ ...f, school_id: e.target.value }))}>
-                <option value="">{t("admin.members.selectSchoolPlaceholder")}</option>
-                {schoolsList.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </Select>
-            </Field>
+            <>
+              <Field label={t("admin.members.fieldSchoolAffiliate")}>
+                <Select value={form.school_id} onChange={e => setForm(f => ({ ...f, school_id: e.target.value }))}>
+                  <option value="">{t("admin.members.selectSchoolPlaceholder")}</option>
+                  {schoolsList.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </Select>
+              </Field>
+              <Field label={t("admin.members.fieldSchoolGrade")} hint={t("admin.members.fieldSchoolGradeHint")}>
+                <Input
+                  value={form.school_grade}
+                  onChange={e => setForm(f => ({ ...f, school_grade: e.target.value }))}
+                  placeholder={t("admin.members.fieldSchoolGradePlaceholder")}
+                />
+              </Field>
+            </>
           )}
           <Field label={t("admin.members.fieldAssignClass")} hint={form.type === "private" ? t("admin.members.privateClassesOnlyHint") : t("admin.members.regularClassesOnlyHint")}>
             <Select value={form.class_id} onChange={e => setForm(f => ({ ...f, class_id: e.target.value }))}>
@@ -1729,6 +1864,7 @@ export default function AdminMember({ branchId }: { branchId: string }) {
                 <div><span className="font-mono font-bold">nama_kelas</span> <span className="text-ink-mute">{t("admin.members.classNameColHint")}</span></div>
                 <div><span className="font-mono font-bold">nama_sekolah</span> <span className="text-ocean-600">{t("admin.members.schoolNameColHint")}</span></div>
               </div>
+              <div className="text-xs text-ocean-700 pt-1 border-t border-ocean-100">{t("admin.members.privateImportColumnsNote")}</div>
             </div>
             <label className="flex flex-col items-center justify-center gap-3 border-2 border-dashed border-line rounded-2xl p-10 cursor-pointer hover:border-ocean-400 hover:bg-ocean-50/30 transition-colors">
               <Icon name="upload" className="w-10 h-10 text-ink-faint" />
@@ -1790,7 +1926,7 @@ export default function AdminMember({ branchId }: { branchId: string }) {
                         <td className="px-3 py-2 font-medium text-ink truncate max-w-[140px]">{r.full_name || <span className="text-ink-faint italic">—</span>}</td>
                         <td className="px-3 py-2 text-ink-soft truncate max-w-[160px]">{r.email || <span className="text-ink-faint italic">—</span>}</td>
                         <td className="px-3 py-2 text-xs capitalize">{r.member_type}</td>
-                        <td className="px-3 py-2 text-xs text-ink-soft">{r.nama_kelas_raw || "—"}</td>
+                        <td className="px-3 py-2 text-xs text-ink-soft">{r.member_type === "private" ? (r.schedule_days?.length ? `${r.schedule_days.join(",")} ${r.time_start ?? ""}-${r.time_end ?? ""}` : "—") : (r.nama_kelas_raw || "—")}</td>
                         <td className="px-3 py-2 text-xs text-ink-soft">{r.nama_sekolah_raw || "—"}</td>
                         <td className="px-3 py-2">
                           {r._status === "ok" && <span className="text-xs font-bold text-ok-600">OK</span>}

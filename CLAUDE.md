@@ -11,7 +11,7 @@ A Next.js (App Router) web app for **Next Swimming School** — a multi-branch s
 - [supabase/schema.sql](supabase/schema.sql) — current full SQL schema reference
 - [docs/feedback-priorities.md](docs/feedback-priorities.md) — prioritized feedback/backlog
 - [docs/test-scenarios.md](docs/test-scenarios.md) — test scenario notes
-- `supabase/*.sql` — standalone migration scripts, one per feature, run manually in the Supabase SQL Editor
+- `supabase/*.sql` — standalone migration scripts, one per feature — **apply these yourself, don't hand them to the user to paste into the Supabase SQL Editor.** See "Applying database migrations" below.
 
 ## Tech stack
 
@@ -66,8 +66,31 @@ File storage was migrated off Cloudflare R2 onto native Supabase Storage. Two bu
 - Client files: `src/utils/supabase/client.ts`, `server.ts`, `middleware.ts`
 - Auth middleware: `src/proxy.ts` (Next's renamed `middleware.ts` entry point) delegates to `src/utils/supabase/middleware.ts::updateSession()` — handles role-based redirects automatically
 - DB types: `src/types/database.ts` — stub; regenerate with `npx supabase gen types typescript --project-id <id> > src/types/database.ts`
-- Env: `.env.local` → `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+- Env: `.env.local` → `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` + `DATABASE_URL` (direct Postgres connection, used for migrations — see below)
 - `supabase.auth.admin.*` calls must go through Route Handlers (`src/app/api/`) — never expose service key to client
+
+## Applying database migrations
+
+**Whenever a task needs a database change — a new/altered/dropped column, enum value, table, index, etc. — apply it yourself immediately. Do not ask the user to paste SQL into the Supabase SQL Editor.** They've explicitly asked not to be looped in for this; just run it.
+
+How to actually apply it:
+1. Still write the change as a standalone file under `supabase/*.sql` (one file per feature) — this stays the durable record/reference of what changed, same as existing files there.
+2. Execute it against the live database directly from the terminal, using the already-installed `postgres` (postgres-js) and `dotenv` packages — **not** `psql` (not installed in this environment) and **not** `drizzle-kit push`.
+3. Do this by writing a short-lived `.mjs` script **inside the project root** (needed so bare imports resolve via this project's `node_modules` — a script under a temp/scratch dir outside the repo won't find them), e.g.:
+   ```js
+   import * as dotenv from "dotenv";
+   import postgres from "postgres";
+   dotenv.config({ path: ".env.local" });
+   const sql = postgres(process.env.DATABASE_URL, { max: 1 });
+   await sql.unsafe(`ALTER TABLE ... `);
+   // then re-query information_schema / pg_enum to confirm the change actually landed
+   await sql.end();
+   ```
+   Run it with `node <script>.mjs`, then delete the script — it's scaffolding, not something to commit.
+4. If adding an enum value (`ALTER TYPE ... ADD VALUE`), keep it as its own statement/query call, and don't reference the new value in another statement in the same script — Postgres can't use a freshly added enum value until that statement's transaction commits.
+5. Verify after applying: query back what you just changed (e.g. `SELECT enumlabel FROM pg_enum WHERE enumtypid = 'user_role'::regtype`, or `information_schema.columns`) and show the result, don't just assume the `ALTER` succeeded.
+
+**Never run `drizzle-kit push`.** `src/db/schema.ts` / `drizzle.config.ts` are wired to the same live `DATABASE_URL`, but `schema.ts` is only a partial, out-of-sync model of the real database (it still has placeholder tables like `users` and `drizzleTestNotes`, models `profiles.role` as plain `text` instead of the real `user_role` enum, and is missing most real columns on tables like `branches`). `drizzle-kit push` diffs this file against the live DB and alters the DB to match it — given how incomplete the file is, that would drop/alter real production columns unrelated to whatever you're working on. Don't use it until `schema.ts` is a verified full mirror of `schema.sql`.
 
 ## File structure
 

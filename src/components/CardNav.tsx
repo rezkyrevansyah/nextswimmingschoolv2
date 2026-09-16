@@ -29,6 +29,7 @@ export interface CardNavProps {
   menuColor?: string;
   ctaText?: string;
   ctaHref?: string;
+  rightElement?: React.ReactNode;
 }
 
 const CardNav: React.FC<CardNavProps> = ({
@@ -40,7 +41,8 @@ const CardNav: React.FC<CardNavProps> = ({
   baseColor = '#fff',
   menuColor,
   ctaText = 'Get Started',
-  ctaHref = '#'
+  ctaHref = '#',
+  rightElement
 }) => {
   const [isHamburgerOpen, setIsHamburgerOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -217,12 +219,15 @@ const CardNav: React.FC<CardNavProps> = ({
             <img src={logo} alt={logoAlt} className="logo h-[28px]" />
           </div>
 
-          <Link
-            href={ctaHref}
-            className="card-nav-cta-button inline-flex border-0 rounded-[calc(0.75rem-0.2rem)] px-3 md:px-4 items-center h-full font-semibold text-sm cursor-pointer transition-colors duration-300 bg-ocean-600 text-white hover:bg-ocean-700 order-3 md:order-none"
-          >
-            {ctaText}
-          </Link>
+          <div className="flex items-center gap-2 order-3 md:order-none h-full">
+            {rightElement}
+            <Link
+              href={ctaHref}
+              className="card-nav-cta-button inline-flex border-0 rounded-[calc(0.75rem-0.2rem)] px-3 md:px-4 items-center h-full font-semibold text-sm cursor-pointer transition-colors duration-300 bg-ocean-600 text-white hover:bg-ocean-700"
+            >
+              {ctaText}
+            </Link>
+          </div>
         </div>
 
         <div

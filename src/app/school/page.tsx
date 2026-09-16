@@ -22,6 +22,7 @@ import Bell from "@/components/layout/Bell";
 import { resolveRaporSigner, buildSchoolRaporSignatures, type SchoolForSignerConfig } from "@/lib/rapor";
 import BetaFeedback, { BETA_FEEDBACK_ENABLED } from "@/components/layout/BetaFeedback";
 import { waLink } from "@/lib/utils";
+import { isMemberPresentLike, memberDbToUi, memberStatusKind } from "@/lib/attendance";
 import { downloadRaporPdf, printSingleRaporPopup, type PrintCriterion, type PrintBestTime, type PrintSignatureItem } from "@/lib/printRapor";
 import { downloadRaporZip } from "@/lib/downloadRaporZip";
 import { useToast } from "@/components/providers/ToastProvider";
@@ -36,6 +37,7 @@ interface SchoolAttRow {
   id: string;
   member_id: string;
   member_name: string;
+  school_grade: string | null;
   class_id: string;
   class_name: string;
   session_date: string;
@@ -48,7 +50,7 @@ const ATT_PAGE_SIZE = 20;
 function SchoolAbsensi({ schoolId, schoolName, members }: {
   schoolId: string;
   schoolName: string;
-  members: { id: string; name: string }[];
+  members: { id: string; name: string; school_grade: string | null }[];
 }) {
   const supabase = createClient();
   const { t } = useLocale();
@@ -89,6 +91,7 @@ function SchoolAbsensi({ schoolId, schoolName, members }: {
         id: raw.id,
         member_id: raw.member_id,
         member_name: raw.member?.profile?.full_name ?? members.find(m => m.id === raw.member_id)?.name ?? "—",
+        school_grade: members.find(m => m.id === raw.member_id)?.school_grade ?? null,
         class_id: raw.class_id,
         class_name: raw.class?.name ?? "—",
         session_date: raw.session_date,
@@ -131,9 +134,12 @@ function SchoolAbsensi({ schoolId, schoolName, members }: {
   }, [rows, filterMember, filterStatus]);
 
   // Stats — computed from date-filtered rows (before member/status filter)
-  const statsHadir     = rows.filter(r => r.status === "hadir").length;
-  const statsTidakHadir = rows.filter(r => r.status === "tidak_hadir").length;
-  const statsIzinSakit  = rows.filter(r => r.status === "izin" || r.status === "sakit").length;
+  const statsHadir     = rows.filter(r => isMemberPresentLike(r.status)).length;
+  const statsTidakHadir = rows.filter(r => memberDbToUi(r.status) === "absent").length;
+  const statsIzinSakit  = rows.filter(r => {
+    const ui = memberDbToUi(r.status);
+    return ui === "izin" || ui === "sick";
+  }).length;
   const statsDates      = new Set(rows.map(r => r.session_date)).size;
 
   // Pagination
@@ -142,12 +148,12 @@ function SchoolAbsensi({ schoolId, schoolName, members }: {
   const paginated  = filtered.slice(safePage * ATT_PAGE_SIZE, (safePage + 1) * ATT_PAGE_SIZE);
 
   const getStatusLabel = (status: string) => {
-    switch (status) {
-      case "hadir": return t("school.absensi.statusHadir");
+    switch (memberDbToUi(status)) {
+      case "present": return t("school.absensi.statusHadir");
       case "izin": return t("school.absensi.statusIzin");
-      case "sakit": return t("school.absensi.statusSakit");
-      case "tidak_hadir": return t("school.absensi.statusTidakHadir");
-      case "telat": return t("school.absensi.statusTelat");
+      case "sick": return t("school.absensi.statusSakit");
+      case "absent": return t("school.absensi.statusTidakHadir");
+      case "late": return t("school.absensi.statusTelat");
       default: return status;
     }
   };
@@ -170,12 +176,13 @@ function SchoolAbsensi({ schoolId, schoolName, members }: {
       const sheetRows = filtered.map(r => ({
         [t("school.absensi.colDate")]: r.session_date,
         [t("school.absensi.colStudent")]: r.member_name,
+        [t("school.absensi.colSchoolGrade")]: r.school_grade ?? "—",
         [t("school.absensi.colClass")]: r.class_name,
         [t("school.absensi.colStatus")]: getStatusLabel(r.status),
         [t("school.absensi.colMethod")]: getMethodLabel(r.method),
       }));
       const ws = XLSX.utils.json_to_sheet(sheetRows);
-      ws["!cols"] = [{ wch: 14 }, { wch: 28 }, { wch: 24 }, { wch: 14 }, { wch: 12 }];
+      ws["!cols"] = [{ wch: 14 }, { wch: 28 }, { wch: 18 }, { wch: 24 }, { wch: 14 }, { wch: 12 }];
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Absensi Siswa");
       const safeName = schoolName.replace(/[^a-zA-Z0-9]/g, "-");
@@ -292,8 +299,8 @@ function SchoolAbsensi({ schoolId, schoolName, members }: {
           </div>
         </div>
 
-        {/* Table */}
-        <div className="overflow-x-auto">
+        {/* Desktop Table */}
+        <div className="hidden sm:block overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-[11px] uppercase tracking-widest text-ink-faint font-bold border-b border-line">
@@ -311,7 +318,7 @@ function SchoolAbsensi({ schoolId, schoolName, members }: {
                   <td className="py-3 px-4 font-semibold text-ink">{r.member_name}</td>
                   <td className="py-3 px-4 text-ink-soft text-xs">{r.class_name}</td>
                   <td className="py-3 px-4">
-                    <Status kind={r.status === "hadir" ? "present" : r.status === "izin" ? "excused" : r.status === "sakit" ? "sick" : r.status === "telat" ? "late" : "absent"}>
+                    <Status kind={memberStatusKind(r.status)}>
                       {getStatusLabel(r.status)}
                     </Status>
                   </td>
@@ -327,6 +334,30 @@ function SchoolAbsensi({ schoolId, schoolName, members }: {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile Card List */}
+        <div className="sm:hidden divide-y divide-line">
+          {paginated.map(r => (
+            <div key={r.id} className="p-4 space-y-2 bg-white">
+              <div className="flex items-center justify-between">
+                <span className="font-mono text-xs text-ink-mute">{r.session_date}</span>
+                <Status kind={memberStatusKind(r.status)}>
+                  {getStatusLabel(r.status)}
+                </Status>
+              </div>
+              <div className="font-semibold text-sm text-ink">{r.member_name}</div>
+              <div className="flex items-center justify-between text-xs text-ink-mute pt-1 border-t border-line/60">
+                <span>{r.class_name}</span>
+                <span className="font-mono text-[11px] bg-paper-tint px-2 py-0.5 rounded">{getMethodLabel(r.method)}</span>
+              </div>
+            </div>
+          ))}
+          {filtered.length === 0 && (
+            <div className="py-12 text-center text-ink-mute text-sm">
+              {t("school.absensi.empty")}
+            </div>
+          )}
         </div>
 
         {/* Pagination */}
@@ -368,6 +399,7 @@ interface Student {
   member_no: string | null;
   birth_date: string | null;
   avatar_url: string | null;
+  school_grade: string | null;
   class_name: string;
   coach_name: string;
   coach_signature_url: string | null;
@@ -437,7 +469,7 @@ export default function SchoolPage() {
 
     const { data: memberRows } = await supabase
       .from("members")
-      .select("id, profile_id, member_no, profile:profiles(full_name, birth_date, avatar_url)")
+      .select("id, profile_id, member_no, school_grade, profile:profiles(full_name, birth_date, avatar_url)")
       .eq("school_id", sid);
 
     if (!memberRows || memberRows.length === 0) {
@@ -564,6 +596,7 @@ export default function SchoolPage() {
     type MemberProfile = {
       id: string;
       member_no?: string | null;
+      school_grade?: string | null;
       profile: {
         full_name: string;
         birth_date?: string | null;
@@ -595,6 +628,7 @@ export default function SchoolPage() {
         member_no: m.member_no ?? null,
         birth_date: profile?.birth_date ?? null,
         avatar_url: profile?.avatar_url ?? null,
+        school_grade: m.school_grade ?? null,
         class_name: cls?.name ?? "—",
         coach_name: signer?.full_name ?? "—",
         coach_signature_url: coachSig,
@@ -847,18 +881,18 @@ export default function SchoolPage() {
         </div>
 
         {/* Tab switcher */}
-        <div className="flex gap-1 p-1 bg-paper-tint rounded-xl border border-line w-fit">
+        <div className="flex gap-1 p-1 bg-white/95 backdrop-blur-md rounded-xl border border-line w-full sm:w-fit shadow-xs sticky top-16 z-20">
           <button
             type="button"
             onClick={() => setTab("rapor")}
-            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${tab === "rapor" ? "bg-white shadow-card text-ocean-700 font-semibold" : "text-ink-mute hover:text-ink"}`}
+            className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm font-semibold transition-all ${tab === "rapor" ? "bg-ocean-50 shadow-xs text-ocean-700 font-bold" : "text-ink-mute hover:text-ink"}`}
           >
             {t("school.tabs.rapor")}
           </button>
           <button
             type="button"
             onClick={() => setTab("absensi")}
-            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${tab === "absensi" ? "bg-white shadow-card text-ocean-700 font-semibold" : "text-ink-mute hover:text-ink"}`}
+            className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm font-semibold transition-all ${tab === "absensi" ? "bg-ocean-50 shadow-xs text-ocean-700 font-bold" : "text-ink-mute hover:text-ink"}`}
           >
             {t("school.tabs.absensi")}
           </button>
@@ -869,7 +903,7 @@ export default function SchoolPage() {
           <SchoolAbsensi
             schoolId={schoolId}
             schoolName={schoolName}
-            members={students.map(s => ({ id: s.id, name: s.full_name }))}
+            members={students.map(s => ({ id: s.id, name: s.full_name, school_grade: s.school_grade }))}
           />
         )}
 
@@ -1033,6 +1067,9 @@ export default function SchoolPage() {
                       <th className="text-left py-3 px-5 font-bold cursor-pointer select-none group" onClick={() => toggleSort("name")}>
                         {t("school.absensi.colStudent")} <SortIcon col="name" sortBy={sortBy} sortDir={sortDir} />
                       </th>
+                      <th className="text-left py-3 font-bold">
+                        {t("school.rapor.colSchoolGrade")}
+                      </th>
                       <th className="text-left py-3 font-bold cursor-pointer select-none group" onClick={() => toggleSort("class")}>
                         {t("school.absensi.colClass")} <SortIcon col="class" sortBy={sortBy} sortDir={sortDir} />
                       </th>
@@ -1074,6 +1111,7 @@ export default function SchoolPage() {
                               <div className="font-semibold text-ink">{s.full_name}</div>
                             </div>
                           </td>
+                          <td className="text-ink-soft text-sm">{s.school_grade ?? "—"}</td>
                           <td className="text-ink-soft text-sm">{s.class_name}</td>
                           <td className="text-ink-soft text-sm">{s.coach_name}</td>
                           <td>{s.is_filled ? <Status kind="approved">{t("school.rapor.statusComplete")}</Status> : <Status kind="pending">{t("school.rapor.statusIncomplete")}</Status>}</td>
@@ -1090,7 +1128,7 @@ export default function SchoolPage() {
                     })}
                     {filteredSorted.length === 0 && (
                       <tr>
-                        <td colSpan={selectMode ? 6 : 5} className="py-14 text-center">
+                        <td colSpan={selectMode ? 7 : 6} className="py-14 text-center">
                           <Icon name="search" className="w-8 h-8 text-ink-faint mx-auto mb-3" />
                           <div className="text-sm font-semibold text-ink-mute">{t("school.rapor.empty")}</div>
                           {(search || activeFilterCount > 0) && (
@@ -1129,27 +1167,32 @@ export default function SchoolPage() {
                       <Avatar name={s.full_name} size={40} />
                       <div className="flex-1 min-w-0">
                         <div className="font-semibold text-ink truncate">{s.full_name}</div>
-                        <div className="text-xs text-ink-mute truncate">{s.class_name} · {s.coach_name}</div>
+                        <div className="text-xs text-ink-mute truncate">
+                          {s.school_grade && <>{s.school_grade} · </>}
+                          {s.class_name} · {s.coach_name}
+                        </div>
                       </div>
-                      <div className="flex flex-col items-end gap-1.5 shrink-0">
+                      <div className="flex flex-col items-end gap-2 shrink-0">
                         {s.is_filled ? <Status kind="approved">{t("school.rapor.statusComplete")}</Status> : <Status kind="pending">{t("school.rapor.statusIncomplete")}</Status>}
                         {s.is_filled && !selectMode && (
-                          <div className="flex gap-1">
+                          <div className="flex items-center gap-1.5">
                             <button
                               type="button"
                               onClick={() => setOpen(s)}
-                              className="p-1.5 rounded-lg bg-ocean-50 text-ocean-600 hover:bg-ocean-100 transition"
+                              className="h-8 px-2.5 rounded-lg bg-ocean-50 text-ocean-700 hover:bg-ocean-100 text-xs font-semibold flex items-center gap-1 transition active:scale-95"
                             >
                               <Icon name="eye" className="w-3.5 h-3.5" />
+                              <span>Detail</span>
                             </button>
                             <button
                               type="button"
                               onClick={() => void handlePrintOne(s)}
                               disabled={downloadingId === s.id}
-                              className="p-1.5 rounded-lg bg-paper-tint text-ink-mute hover:bg-paper-deep transition disabled:opacity-60"
+                              className="h-8 px-2.5 rounded-lg bg-paper-tint text-ink-soft hover:bg-paper-deep text-xs font-semibold flex items-center gap-1 transition active:scale-95 disabled:opacity-60"
                               title={t("school.rapor.downloadPdfBtn")}
                             >
                               <Icon name="download" className="w-3.5 h-3.5" />
+                              <span>{downloadingId === s.id ? "…" : "PDF"}</span>
                             </button>
                           </div>
                         )}

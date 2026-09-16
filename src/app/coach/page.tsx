@@ -25,6 +25,19 @@ import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
 import { useLocale } from "@/components/providers/LocaleProvider";
 import { fmtIDR, fmtDate, fmtDateLong, waLink, mailtoLink, countTextStats, toLocalDateStr } from "@/lib/utils";
+import {
+  minutesAfterStart,
+  classifyCoachClockIn,
+  classifyMemberScan,
+  isMemberPresentLike,
+  isCoachPresentLike,
+  memberDbToUi,
+  memberStatusKind,
+  memberStatusIcon,
+  isUniqueViolation,
+  MEMBER_ATTENDANCE_CONFLICT,
+  type MemberDbStatus,
+} from "@/lib/attendance";
 import { downloadRaporPdf, printSingleRaporPopup, fmtSwimTime, type PrintCriterion, type PrintBestTime } from "@/lib/printRapor";
 import { buildBestTimeMatrix, findUnmatchedRecordedTimes, parseSwimTimeInput, type LevelDistance, type LevelStroke, type MatrixCell, type RecordedBestTime } from "@/lib/raporLevels";
 import { resolveRaporSigner, buildSchoolRaporSignatures } from "@/lib/rapor";
@@ -68,6 +81,8 @@ interface ClassRow {
   external_location_name?: string | null;
   external_location_address?: string | null;
   google_maps_url?: string | null;
+  custom_location_lat?: number | null;
+  custom_location_lng?: number | null;
   spreadsheet_filled?: boolean;
   spreadsheet_url?: string | null;
   branch_id?: string;
@@ -85,6 +100,7 @@ interface AttendanceRow {
 
 interface MemberAttRow {
   id: string; member_id: string; session_date: string; status: string;
+  type?: string; school_grade?: string | null;
   member?: { full_name: string; avatar_url?: string | null; birth_date?: string | null } | null;
 }
 
@@ -183,7 +199,27 @@ function Shell({ children, active, onNav, title, sub, user, avatarUrl, branches,
   onBranchChange?: (branchId: string) => void;
 }) {
   const { t } = useLocale();
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
   const navItems = useMemo(() => buildNavItems(t), [t]);
+
+  const isMoreActive = ["invoice", "payslip", "profile"].includes(active);
+  const mobileNavItems: MobileNavItem[] = useMemo(() => [
+    { id: "home", label: t("coach.tabs.homeLabel"), short: t("coach.tabs.homeShort") || "Home", icon: "home" },
+    { id: "absen", label: t("coach.tabs.absenLabel"), short: t("coach.tabs.absenShort") || "Absen", icon: "check" },
+    { id: "kelas", label: t("coach.tabs.kelasLabel"), short: t("coach.tabs.kelasShort") || "Kelas", icon: "swim" },
+    { id: "rapor", label: t("coach.tabs.raporLabel"), short: t("coach.tabs.raporShort") || "Rapor", icon: "book" },
+    { id: "more", label: "Menu", short: "Menu", icon: "menu" },
+  ], [t]);
+
+  const handleMobileNavSelect = (id: string) => {
+    if (id === "more") {
+      setShowMoreMenu(true);
+    } else {
+      setShowMoreMenu(false);
+      onNav(id as TabId);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-paper-tint pb-24 lg:pb-0">
       <header className="sticky top-0 z-30 bg-white/85 backdrop-blur border-b border-line">
@@ -220,8 +256,96 @@ function Shell({ children, active, onNav, title, sub, user, avatarUrl, branches,
           </button>
         </div>
       </header>
+
       <main className="max-w-3xl mx-auto p-4 lg:p-7">{children}</main>
-      <MobileNav items={navItems} active={active} onSelect={(id) => onNav(id as TabId)} />
+
+      {/* Mobile More Menu Sheet */}
+      {showMoreMenu && (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          <div className="fixed inset-0 bg-ink/40 backdrop-blur-xs transition-opacity" onClick={() => setShowMoreMenu(false)} />
+          <div className="fixed inset-x-0 bottom-0 bg-white rounded-t-3xl shadow-2xl p-5 pb-[max(env(safe-area-inset-bottom,0px),20px)] space-y-4 z-10 anim-in">
+            <div className="flex items-center justify-between border-b border-line pb-3">
+              <div className="flex items-center gap-3">
+                <Avatar name={user?.user_metadata?.full_name ?? "Coach"} src={avatarUrl ?? undefined} size={40} />
+                <div>
+                  <div className="font-display font-bold text-sm text-ink">{user?.user_metadata?.full_name ?? "Coach"}</div>
+                  <div className="text-xs text-ink-mute">{user?.email}</div>
+                </div>
+              </div>
+              <button onClick={() => setShowMoreMenu(false)} className="w-8 h-8 rounded-full flex items-center justify-center text-ink-mute hover:bg-paper-tint">
+                <Icon name="close" className="w-4 h-4" />
+              </button>
+            </div>
+
+            {branches && branches.length > 1 && onBranchChange && (
+              <div className="bg-ocean-50 p-3 rounded-xl border border-ocean-200">
+                <label className="text-[11px] font-bold text-ocean-800 uppercase tracking-wide block mb-1.5">Pilih Cabang</label>
+                <select
+                  value={activeBranchId}
+                  onChange={e => { onBranchChange(e.target.value); }}
+                  className="w-full text-xs font-semibold text-ocean-800 bg-white border border-ocean-300 rounded-lg px-2.5 py-2 cursor-pointer focus:outline-none focus:ring-2 focus:ring-ocean-500"
+                >
+                  {branches.map(b => (
+                    <option key={b.branch_id} value={b.branch_id}>{b.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 gap-2">
+              <button
+                onClick={() => { onNav("invoice"); setShowMoreMenu(false); }}
+                className={`flex items-center gap-3 p-3 rounded-xl border text-left transition ${
+                  active === "invoice" ? "bg-ocean-50 border-ocean-300 text-ocean-800 font-bold" : "border-line hover:bg-paper-tint text-ink"
+                }`}
+              >
+                <div className="w-10 h-10 rounded-lg bg-ocean-100/60 flex items-center justify-center text-ocean-700">
+                  <Icon name="invoice" className="w-5 h-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-bold text-sm">{t("coach.tabs.invoiceLabel")}</div>
+                  <div className="text-xs text-ink-mute">Klaim honor sesi & reimbursement</div>
+                </div>
+                <Icon name="arrowRight" className="w-4 h-4 text-ink-faint" />
+              </button>
+
+              <button
+                onClick={() => { onNav("payslip"); setShowMoreMenu(false); }}
+                className={`flex items-center gap-3 p-3 rounded-xl border text-left transition ${
+                  active === "payslip" ? "bg-ocean-50 border-ocean-300 text-ocean-800 font-bold" : "border-line hover:bg-paper-tint text-ink"
+                }`}
+              >
+                <div className="w-10 h-10 rounded-lg bg-ok-50 flex items-center justify-center text-ok-700">
+                  <Icon name="wallet" className="w-5 h-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-bold text-sm">{t("coach.tabs.payslipLabel")}</div>
+                  <div className="text-xs text-ink-mute">Riwayat & slip gaji bulanan</div>
+                </div>
+                <Icon name="arrowRight" className="w-4 h-4 text-ink-faint" />
+              </button>
+
+              <button
+                onClick={() => { onNav("profile"); setShowMoreMenu(false); }}
+                className={`flex items-center gap-3 p-3 rounded-xl border text-left transition ${
+                  active === "profile" ? "bg-ocean-50 border-ocean-300 text-ocean-800 font-bold" : "border-line hover:bg-paper-tint text-ink"
+                }`}
+              >
+                <div className="w-10 h-10 rounded-lg bg-paper-tint flex items-center justify-center text-ink-soft">
+                  <Icon name="user" className="w-5 h-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-bold text-sm">{t("coach.tabs.profileLabel")}</div>
+                  <div className="text-xs text-ink-mute">Data pelatih, bio & rekening bank</div>
+                </div>
+                <Icon name="arrowRight" className="w-4 h-4 text-ink-faint" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <MobileNav items={mobileNavItems} active={isMoreActive ? "more" : active} onSelect={handleMobileNavSelect} />
     </div>
   );
 }
@@ -270,13 +394,26 @@ function ClockInFlow({ back, coachId, branchId, classes, preselectedClassId, onS
   const selectedClass = classes.find(c => c.id === classId) ?? null;
   const isExternalLocation = selectedClass?.location_type === "external";
 
-  // Load branch coordinates — skipped for external-location classes, since the
-  // session doesn't happen at the branch and there's no coordinate to compare against.
+  // Load the coordinates to compare GPS against. For a branch-tied class this
+  // is that class's own assigned branch (not necessarily the coach's currently
+  // active branch tab, if they cover more than one branch). For an external
+  // location it's the pinned lat/lng captured on that class, so a change of
+  // lesson location always takes effect on the very next clock-in.
+  const classBranchId = selectedClass?.branch_id;
+  const customLat = selectedClass?.custom_location_lat;
+  const customLng = selectedClass?.custom_location_lng;
+  /* eslint-disable react-hooks/set-state-in-effect -- derived state from selected class's own location fields */
   useEffect(() => {
-    if (isExternalLocation) return;
-    supabase.from("branches").select("lat, lng").eq("id", branchId).single()
+    if (isExternalLocation) {
+      setBranchCoords(customLat != null && customLng != null ? { lat: customLat, lng: customLng } : null);
+      return;
+    }
+    const targetBranchId = classBranchId || branchId;
+    if (!targetBranchId) { setBranchCoords(null); return; }
+    supabase.from("branches").select("lat, lng").eq("id", targetBranchId).single()
       .then(({ data }) => { if (data?.lat && data?.lng) setBranchCoords({ lat: data.lat, lng: data.lng }); });
-  }, [branchId, supabase, isExternalLocation]);
+  }, [branchId, classBranchId, customLat, customLng, supabase, isExternalLocation]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Get GPS
   useEffect(() => {
@@ -309,8 +446,8 @@ function ClockInFlow({ back, coachId, branchId, classes, preselectedClassId, onS
 
     // Determine late status: coach late if > 15 minutes after class start
     const selectedClass = classes.find(c => c.id === classId);
-    const lateMinutes = selectedClass?.time_start ? minutesLate(nowTime, selectedClass.time_start) : 0;
-    const coachStatus: "present" | "late" = lateMinutes > 15 ? "late" : "present";
+    const lateMinutes = selectedClass?.time_start ? minutesAfterStart(nowTime, selectedClass.time_start) : 0;
+    const coachStatus = classifyCoachClockIn(lateMinutes);
 
     let selfieUrl: string | null = null;
     if (photoFile) {
@@ -340,7 +477,7 @@ function ClockInFlow({ back, coachId, branchId, classes, preselectedClassId, onS
 
     setSubmitting(false);
     if (error) {
-      const isDuplicate = error.message.includes("duplicate key") || error.message.includes("unique constraint");
+      const isDuplicate = isUniqueViolation(error.message);
       if (isDuplicate) { toast.error(t("coach.clockIn.alreadyClockedInTitle"), t("coach.clockIn.alreadyClockedInBody")); return; }
       toast.error(t("coach.clockIn.saveAttendanceFailedTitle"), error.message);
       return;
@@ -354,18 +491,15 @@ function ClockInFlow({ back, coachId, branchId, classes, preselectedClassId, onS
     setStep(3);
   };
 
-  const distLabel = isExternalLocation
-    ? t("coach.clockIn.externalLocationNote")
-    : distanceMeters != null
+  const distLabel = distanceMeters != null
     ? distanceMeters < 1000
       ? t("coach.clockIn.distFromBranchMeters", { m: distanceMeters })
       : t("coach.clockIn.distFromBranchKm", { km: (distanceMeters / 1000).toFixed(1) })
     : branchCoords == null
-      ? t("coach.clockIn.branchCoordsNotSet")
+      ? (isExternalLocation ? t("coach.clockIn.externalLocationNote") : t("coach.clockIn.branchCoordsNotSet"))
       : t("coach.clockIn.calculatingDistance");
 
-  const distColor = isExternalLocation ? "text-ink-mute"
-    : distanceMeters == null ? "text-ink-mute"
+  const distColor = distanceMeters == null ? "text-ink-mute"
     : distanceMeters <= 500 ? "text-ok-600"
     : distanceMeters <= 2000 ? "text-warn-600"
     : "text-danger-600";
@@ -409,7 +543,7 @@ function ClockInFlow({ back, coachId, branchId, classes, preselectedClassId, onS
                 </div>
               </div>
               <div>
-                <div className="text-ink-faint font-bold uppercase tracking-widest mb-0.5">{isExternalLocation ? t("coach.clockIn.sessionLocationLabel") : t("coach.clockIn.distToBranchLabel")}</div>
+                <div className="text-ink-faint font-bold uppercase tracking-widest mb-0.5">{isExternalLocation ? (branchCoords == null ? t("coach.clockIn.sessionLocationLabel") : t("coach.clockIn.distToLocationLabel")) : t("coach.clockIn.distToBranchLabel")}</div>
                 <div className={`font-semibold ${distColor}`}>{distLabel}</div>
               </div>
             </div>
@@ -729,10 +863,7 @@ function QRScanner({ coachId, classes, onClose }: {
   const [scanning, setScanning] = useState(false);
   const scannerRef = useRef<import("html5-qrcode").Html5Qrcode | null>(null);
 
-  // Find the class that's active right now (schedule_days includes today)
   const todayName = new Date().toLocaleDateString("id-ID", { weekday: "long" });
-  const activeClassId = classes.find(c => (c.schedule_days ?? []).includes(todayName))?.id ?? classes[0]?.id ?? "";
-  const activeClass = classes.find(c => c.id === activeClassId);
 
   const markAttendance = async (qrCode: string) => {
     // Lookup member by qr_code, join profile for suspend check
@@ -766,19 +897,78 @@ function QRScanner({ coachId, classes, onClose }: {
       return;
     }
 
+    // Which of THIS coach's classes the scanned member actually belongs to —
+    // not a single coach-wide "active class" guess (the old behavior), which
+    // silently misattributed attendance whenever a coach has more than one
+    // class the same day, and never worked for private students since it
+    // never knew which class_id to consume a session against.
+    const { data: mcRows } = await supabase
+      .from("member_classes")
+      .select("class_id")
+      .eq("member_id", typedMember.id)
+      .in("class_id", classes.map(c => c.id));
+    const memberClassIds = new Set((mcRows ?? []).map(r => r.class_id));
+    const candidates = classes.filter(c => memberClassIds.has(c.id));
+    const matchedClass = candidates.find(c => (c.schedule_days ?? []).includes(todayName)) ?? candidates[0];
+
+    if (!matchedClass) {
+      toast.error(t("coach.qrScanner.memberNotInClassTitle", { name }), t("coach.qrScanner.memberNotInClassBody"));
+      setTimeout(() => setLastScanned(null), 2500);
+      return;
+    }
+
     // Determine late status: member late if > 1 minute after class start
     const scanTime = new Date().toTimeString().slice(0, 8);
-    const memberLateMin = activeClass?.time_start ? minutesLate(scanTime, activeClass.time_start) : -999;
-    const memberStatus: "hadir" | "telat" = memberLateMin > 1 ? "telat" : "hadir";
+    const memberLateMin = matchedClass.time_start ? minutesAfterStart(scanTime, matchedClass.time_start) : -999;
+    const memberStatus = classifyMemberScan(memberLateMin);
+
+    if (matchedClass.class_type === "private") {
+      // Attendance insert + remaining_sessions decrement + bill sync all
+      // happen in one atomic DB transaction (record_private_session_attendance)
+      // — if any part fails, nothing is committed, so a retry is always safe
+      // and remaining_sessions can never silently drift from attendance.
+      const { data: result, error: recordErr } = await supabase
+        .rpc("record_private_session_attendance", {
+          p_member_id: typedMember.id, p_class_id: matchedClass.id, p_session_date: today,
+          p_status: memberStatus, p_method: "qr", p_marked_by: coachId,
+        })
+        .single();
+      if (recordErr) {
+        toast.error(t("coach.qrScanner.attendanceFailedTitle", { name }), t("coach.absen.recordAttendanceFailedRetry"));
+        setTimeout(() => setLastScanned(null), 2500);
+        return;
+      }
+      const { out_remaining_sessions, out_bill_id, out_bill_sessions_used, out_bill_sessions_total, out_already_recorded } = result as {
+        out_remaining_sessions: number | null; out_bill_id: string | null;
+        out_bill_sessions_used: number | null; out_bill_sessions_total: number | null; out_already_recorded: boolean;
+      };
+      if (out_already_recorded) {
+        toast.error(t("coach.absen.sessionAlreadyRecorded"));
+        setTimeout(() => setLastScanned(null), 2500);
+        return;
+      }
+      if (out_bill_id && out_bill_sessions_total != null && out_bill_sessions_used != null && (out_bill_sessions_total - out_bill_sessions_used) <= 1) {
+        await supabase.from("notifications").insert({
+          user_id: typedMember.id,
+          title: t("coach.absen.sessionsAlmostUpTitle"),
+          body: t("coach.absen.sessionsAlmostUpBody", { remaining: out_bill_sessions_total - out_bill_sessions_used }),
+          icon: "warning",
+          kind: "warn",
+        });
+      }
+      toast.success(t("coach.qrScanner.memberPresentTitle", { name }), t("coach.absen.remainingSessions", { count: out_remaining_sessions ?? 0 }));
+      setTimeout(() => setLastScanned(null), 2500);
+      return;
+    }
 
     const { error } = await supabase.from("member_attendances").upsert({
       member_id: typedMember.id,
-      class_id: activeClassId,
+      class_id: matchedClass.id,
       session_date: today,
       status: memberStatus,
       method: "qr",
       marked_by: coachId,
-    }, { onConflict: "class_id,member_id,session_date" });
+    }, { onConflict: MEMBER_ATTENDANCE_CONFLICT });
 
     if (error) {
       toast.error(t("coach.qrScanner.attendanceFailedTitle", { name }), error.message);
@@ -856,11 +1046,7 @@ function isInClockInWindow(timeStart: string, timeEnd: string): boolean {
   return nowMin >= startMin - 180 && nowMin <= endMin;
 }
 
-/** Returns minutes since class start (HH:MM:SS or HH:MM). Negative = early. */
-function minutesLate(clockInTime: string, classTimeStart: string): number {
-  const toMin = (t: string) => { const [h, m] = t.split(":").map(Number); return h * 60 + m; };
-  return toMin(clockInTime) - toMin(classTimeStart);
-}
+
 
 function CoachHome({ setOverlay, setActive, coachId, branchId, profile, classes, holidayClassIds, clockedInIds, setClockedInIds, ownSpreadsheets }: {
   setOverlay: (v: string) => void;
@@ -915,11 +1101,11 @@ function CoachHome({ setOverlay, setActive, coachId, branchId, profile, classes,
     supabase.from("coach_attendances").select("id, status, class_id, session_date").eq("coach_id", coachId).gte("session_date", monthStart).lte("session_date", monthEnd)
       .then(({ data }) => {
         if (data) {
-          setMonthStats({ present: data.filter(a => a.status === "present" || a.status === "late").length, leave: data.filter(a => a.status === "absent").length, sub: 0 });
+          setMonthStats({ present: data.filter(a => isCoachPresentLike(a.status)).length, leave: data.filter(a => a.status === "absent").length, sub: 0 });
           // Track which classes coach already clocked-in today
           const todayClockedIn = new Set<string>(
             (data as { id: string; status: string; class_id: string; session_date: string }[])
-              .filter(a => a.session_date === today && (a.status === "present" || a.status === "late") && a.class_id)
+              .filter(a => a.session_date === today && isCoachPresentLike(a.status) && a.class_id)
               .map(a => a.class_id)
           );
           setClockedInIds(todayClockedIn);
@@ -1318,7 +1504,7 @@ function CoachAbsensi({ setOverlay, coachId, branchId, classes, holidayClassIds,
       if (!grouped.has(key)) grouped.set(key, { id: key, class_id: row.class_id, session_date: row.session_date, class_name: cls?.name ?? "—", total: 0, hadir: 0 });
       const g = grouped.get(key)!;
       g.total++;
-      if (row.status === "hadir") g.hadir++;
+      if (isMemberPresentLike(row.status)) g.hadir++;
     }
     setMemberAttHistory([...grouped.values()].sort((a, b) => b.session_date.localeCompare(a.session_date)).slice(0, 15));
   }, [coachId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1408,7 +1594,7 @@ function CoachAbsensi({ setOverlay, coachId, branchId, classes, holidayClassIds,
     if (memberIds.length === 0) { setMemberAtt([]); setAttStatus({}); return; }
 
     const { data } = await supabase.from("members")
-      .select("id, status, suspend_until, profile:profiles(full_name, avatar_url, birth_date)")
+      .select("id, status, suspend_until, type, school_grade, profile:profiles(full_name, avatar_url, birth_date)")
       .in("id", memberIds);
 
     if (data) {
@@ -1424,7 +1610,12 @@ function CoachAbsensi({ setOverlay, coachId, branchId, classes, holidayClassIds,
       const rows = active.map(m => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const rawProfile = Array.isArray((m as any).profile) ? (m as any).profile[0] : (m as any).profile;
-        return { id: "", member_id: (m as any).id as string, session_date: date, status: "hadir", member: rawProfile };
+        return {
+          id: "", member_id: (m as any).id as string, session_date: date, status: "hadir",
+          type: m.type as string | undefined,
+          school_grade: m.school_grade as string | null | undefined,
+          member: rawProfile,
+        };
       });
       setMemberAtt(rows as unknown as MemberAttRow[]);
       const init: Record<string, string> = {};
@@ -1443,11 +1634,11 @@ function CoachAbsensi({ setOverlay, coachId, branchId, classes, holidayClassIds,
     if (!manualClassId || !manualDate) return toast.error(t("coach.absen.classAndDateRequired"));
     if (memberAtt.length === 0) return toast.error(t("coach.absen.noMembersInClass"));
     setSaving(true);
-    const rows = memberAtt.map(m => ({ class_id: manualClassId, member_id: m.member_id, session_date: manualDate, status: (attStatus[m.member_id] ?? "hadir") as "hadir" | "telat" | "izin" | "sakit" | "tidak_hadir", method: "manual" as const }));
-    const { error } = await supabase.from("member_attendances").upsert(rows, { onConflict: "class_id,member_id,session_date" });
+    const rows = memberAtt.map(m => ({ class_id: manualClassId, member_id: m.member_id, session_date: manualDate, status: (attStatus[m.member_id] ?? "hadir") as MemberDbStatus, method: "manual" as const }));
+    const { error } = await supabase.from("member_attendances").upsert(rows, { onConflict: MEMBER_ATTENDANCE_CONFLICT });
     setSaving(false);
     if (error) return toast.error(t("coach.absen.saveFailed"), error.message);
-    const hadirCount = rows.filter(r => r.status === "hadir").length;
+    const hadirCount = rows.filter(r => isMemberPresentLike(r.status)).length;
     toast.success(t("coach.absen.memberAttendanceSaved"), t("coach.absen.presentCountOfTotal", { present: hadirCount, total: rows.length }));
     const savedClassId = manualClassId;
     const savedDate = manualDate;
@@ -1465,38 +1656,40 @@ function CoachAbsensi({ setOverlay, coachId, branchId, classes, holidayClassIds,
     const { data: mcData } = await supabase.from("member_classes").select("member_id").eq("class_id", privateClassId).limit(1);
     const memberId = mcData?.[0]?.member_id;
     if (!memberId) { setSavingPrivate(false); return toast.error(t("coach.absen.noMembersInClass")); }
-    // Check for duplicate (same class + date)
-    const { data: dupCheck } = await supabase.from("member_attendances").select("id").eq("class_id", privateClassId).eq("member_id", memberId).eq("session_date", privateDate).limit(1);
-    if (dupCheck && dupCheck.length > 0) { setSavingPrivate(false); return toast.error(t("coach.absen.sessionAlreadyRecorded")); }
-    // Insert attendance
-    const { error: attErr } = await supabase.from("member_attendances").insert({ class_id: privateClassId, member_id: memberId, session_date: privateDate, status: "hadir", method: "manual" });
-    if (attErr) { setSavingPrivate(false); return toast.error(t("coach.absen.recordSessionFailed"), attErr.message); }
-    // Decrement remaining_sessions on members table
-    const { data: memberRow } = await supabase.from("members").select("remaining_sessions").eq("id", memberId).single();
-    const remaining = memberRow?.remaining_sessions ?? 0;
-    const newRemaining = Math.max(0, remaining - 1);
-    await supabase.from("members").update({ remaining_sessions: newRemaining }).eq("id", memberId);
-    // Increment sessions_used on the active session_pack bill for this member+class
-    const { data: activeBill } = await supabase.from("bills")
-      .select("id, sessions_total, sessions_used")
-      .eq("member_id", memberId).eq("class_id", privateClassId).eq("type", "session_pack").eq("status", "paid")
-      .order("created_at", { ascending: false }).limit(1).maybeSingle();
-    if (activeBill) {
-      const newUsed = (activeBill.sessions_used ?? 0) + 1;
-      await supabase.from("bills").update({ sessions_used: newUsed }).eq("id", activeBill.id);
-      // Send reminder when only 1 session left
-      if (activeBill.sessions_total != null && (activeBill.sessions_total - newUsed) <= 1) {
-        await supabase.from("notifications").insert({
-          user_id: memberId,
-          title: t("coach.absen.sessionsAlmostUpTitle"),
-          body: t("coach.absen.sessionsAlmostUpBody", { remaining: activeBill.sessions_total - newUsed }),
-          icon: "warning",
-          kind: "warn",
-        });
-      }
+    // Attendance insert + remaining_sessions decrement + bill sync all happen
+    // in one atomic DB transaction (record_private_session_attendance) — if
+    // any part fails, nothing is committed, so a retry is always safe and
+    // remaining_sessions can never silently drift from attendance.
+    const { data: result, error: recordErr } = await supabase
+      .rpc("record_private_session_attendance", {
+        p_member_id: memberId, p_class_id: privateClassId, p_session_date: privateDate,
+        p_status: "hadir", p_method: "manual", p_marked_by: null,
+      })
+      .single();
+    if (recordErr) {
+      setSavingPrivate(false);
+      return toast.error(t("coach.absen.recordSessionFailed"), t("coach.absen.recordAttendanceFailedRetry"));
+    }
+    const { out_remaining_sessions, out_bill_id, out_bill_sessions_used, out_bill_sessions_total, out_already_recorded } = result as {
+      out_remaining_sessions: number | null; out_bill_id: string | null;
+      out_bill_sessions_used: number | null; out_bill_sessions_total: number | null; out_already_recorded: boolean;
+    };
+    if (out_already_recorded) {
+      setSavingPrivate(false);
+      return toast.error(t("coach.absen.sessionAlreadyRecorded"));
+    }
+    // Send reminder when only 1 session left on the active package bill
+    if (out_bill_id && out_bill_sessions_total != null && out_bill_sessions_used != null && (out_bill_sessions_total - out_bill_sessions_used) <= 1) {
+      await supabase.from("notifications").insert({
+        user_id: memberId,
+        title: t("coach.absen.sessionsAlmostUpTitle"),
+        body: t("coach.absen.sessionsAlmostUpBody", { remaining: out_bill_sessions_total - out_bill_sessions_used }),
+        icon: "warning",
+        kind: "warn",
+      });
     }
     setSavingPrivate(false);
-    toast.success(t("coach.absen.privateSessionRecorded"), t("coach.absen.remainingSessions", { count: newRemaining }));
+    toast.success(t("coach.absen.privateSessionRecorded"), t("coach.absen.remainingSessions", { count: out_remaining_sessions ?? 0 }));
     setOpenPrivate(false);
     setPrivateClassId(""); setPrivateDate(new Date().toISOString().split("T")[0]); setPrivateNote("");
   };
@@ -1702,7 +1895,12 @@ function CoachAbsensi({ setOverlay, coachId, branchId, classes, holidayClassIds,
               {memberAtt.map((m) => (
                 <div key={m.member_id} className="flex items-center gap-3 p-3 rounded-xl border border-line">
                   <Avatar name={m.member?.full_name ?? "?"} src={m.member?.avatar_url ?? undefined} size={36} />
-                  <div className="flex-1 min-w-0"><div className="font-semibold text-ink text-sm truncate">{m.member?.full_name}</div></div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-ink text-sm truncate">{m.member?.full_name}</div>
+                    {m.type === "school_affiliate" && m.school_grade && (
+                      <div className="text-[11px] text-ink-mute truncate">{t("coach.absen.schoolGradeLabel")}: {m.school_grade}</div>
+                    )}
+                  </div>
                   <div className="flex flex-wrap gap-1">
                     {([["hadir", t("coach.absen.attStatusHadir")], ["telat", t("coach.absen.attStatusTelat")], ["izin", t("coach.absen.attStatusIzin")], ["sakit", t("coach.absen.attStatusSakit")], ["tidak_hadir", t("coach.absen.attStatusTidakHadirShort")]] as const).map(([id, l]) => {
                       const active = (attStatus[m.member_id] ?? "hadir") === id;
@@ -1755,43 +1953,56 @@ function CoachAbsensi({ setOverlay, coachId, branchId, classes, holidayClassIds,
         ) : (
           <div>
             {/* Summary bar */}
-            <div className="flex gap-4 text-xs font-bold mb-4 pb-3 border-b border-line">
+            <div className="flex gap-4 text-xs font-bold mb-4 pb-3 border-b border-line flex-wrap">
               <span className="flex items-center gap-1 text-ok-600">
                 <span className="w-4 h-4 rounded-full bg-ok-100 flex items-center justify-center"><Icon name="check" className="w-2.5 h-2.5" strokeWidth={3} /></span>
-                {detailRows.filter(r => r.status === "hadir").length} {t("coach.absen.attStatusHadir")}
+                {detailRows.filter(r => memberDbToUi(r.status) === "present").length} {t("coach.absen.attStatusHadir")}
+              </span>
+              <span className="flex items-center gap-1 text-warn-600">
+                <span className="w-4 h-4 rounded-full bg-warn-100 flex items-center justify-center"><Icon name="info" className="w-2.5 h-2.5" /></span>
+                {detailRows.filter(r => memberDbToUi(r.status) === "late").length} {t("coach.absen.attStatusTelat")}
               </span>
               <span className="flex items-center gap-1 text-warn-600">
                 <span className="w-4 h-4 rounded-full bg-warn-100 flex items-center justify-center"><Icon name="clipboard" className="w-2.5 h-2.5" /></span>
-                {detailRows.filter(r => r.status === "izin").length} {t("coach.absen.attStatusIzin")}
+                {detailRows.filter(r => memberDbToUi(r.status) === "izin").length} {t("coach.absen.attStatusIzin")}
               </span>
               <span className="flex items-center gap-1 text-orange-500">
-                <span className="w-4 h-4 rounded-full bg-orange-100 flex items-center justify-center"><Icon name="alert" className="w-2.5 h-2.5" /></span>
-                {detailRows.filter(r => r.status === "sakit").length} {t("coach.absen.attStatusSakit")}
+                <span className="w-4 h-4 rounded-full bg-orange-100 flex items-center justify-center"><Icon name="warning" className="w-2.5 h-2.5" /></span>
+                {detailRows.filter(r => memberDbToUi(r.status) === "sick").length} {t("coach.absen.attStatusSakit")}
               </span>
               <span className="flex items-center gap-1 text-danger-500">
                 <span className="w-4 h-4 rounded-full bg-danger-100 flex items-center justify-center"><Icon name="close" className="w-2.5 h-2.5" /></span>
-                {detailRows.filter(r => r.status === "tidak_hadir").length} {t("coach.absen.attStatusTidakHadirShort")}
+                {detailRows.filter(r => memberDbToUi(r.status) === "absent").length} {t("coach.absen.attStatusTidakHadirShort")}
               </span>
             </div>
             <div className="space-y-0.5">
-              {detailRows.map(r => (
+              {detailRows.map(r => {
+                const ui = memberDbToUi(r.status);
+                const kind = memberStatusKind(r.status);
+                const icon = memberStatusIcon(r.status);
+                const label = ui === "present" ? t("coach.absen.attStatusHadir")
+                  : ui === "late" ? t("coach.absen.attStatusTelat")
+                  : ui === "izin" ? t("coach.absen.attStatusIzin")
+                  : ui === "sick" ? t("coach.absen.attStatusSakit")
+                  : t("coach.absen.attStatusTidakHadirFull");
+                return (
                 <div key={r.member_id} className="flex items-center gap-3 py-2.5 border-b border-line last:border-0">
                   <span className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
-                    r.status === "hadir" ? "bg-ok-50 text-ok-600" :
-                    r.status === "izin" ? "bg-warn-50 text-warn-600" :
-                    r.status === "sakit" ? "bg-orange-50 text-orange-500" :
-                    "bg-danger-50 text-danger-500"
+                    ui === "present" ? "bg-ok-50 text-ok-600" :
+                    ui === "absent" ? "bg-danger-50 text-danger-500" :
+                    "bg-warn-50 text-warn-600"
                   }`}>
-                    <Icon name={r.status === "hadir" ? "check" : r.status === "izin" ? "clipboard" : r.status === "sakit" ? "alert" : "close"} className="w-4 h-4" strokeWidth={r.status === "hadir" ? 2.5 : 2} />
+                    <Icon name={icon} className="w-4 h-4" strokeWidth={ui === "present" ? 2.5 : 2} />
                   </span>
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-semibold text-ink truncate">{r.full_name}</div>
                   </div>
-                  <Status kind={r.status === "hadir" ? "approved" : r.status === "izin" ? "excused" : r.status === "sakit" ? "sick" : "inactive"}>
-                    {r.status === "hadir" ? t("coach.absen.attStatusHadir") : r.status === "izin" ? t("coach.absen.attStatusIzin") : r.status === "sakit" ? t("coach.absen.attStatusSakit") : t("coach.absen.attStatusTidakHadirFull")}
+                  <Status kind={kind}>
+                    {label}
                   </Status>
                 </div>
-              ))}
+                );
+              })}
               {detailRows.length === 0 && (
                 <div className="py-4 text-center text-ink-mute text-sm">{t("coach.absen.noAttendanceDataForSession")}</div>
               )}
@@ -2130,15 +2341,21 @@ function CoachKelas({ classes, coachId, classSpreadsheets, ownSpreadsheets, onRe
               {memberAttHistory.rows.map((r) => {
                 const d = new Date(r.session_date + "T00:00:00");
                 const dateStr = `${d.getDate()} ${monthsShort[d.getMonth()]} ${d.getFullYear()}`;
-                const statusLabel = r.status === "hadir" ? t("coach.absen.attStatusHadir") : r.status === "izin" ? t("coach.absen.attStatusIzin") : r.status === "sakit" ? t("coach.absen.attStatusSakit") : t("coach.absen.attStatusTidakHadirShort");
-                const statusKind = r.status === "hadir" ? "present" : r.status === "izin" ? "excused" : r.status === "sakit" ? "sick" : "absent";
+                const ui = memberDbToUi(r.status);
+                const statusLabel = ui === "present" ? t("coach.absen.attStatusHadir")
+                  : ui === "late" ? t("coach.absen.attStatusTelat")
+                  : ui === "izin" ? t("coach.absen.attStatusIzin")
+                  : ui === "sick" ? t("coach.absen.attStatusSakit")
+                  : t("coach.absen.attStatusTidakHadirShort");
+                const statusKind = memberStatusKind(r.status);
+                const icon = memberStatusIcon(r.status);
                 return (
                   <div key={r.id} className="px-5 py-3 flex items-center gap-3">
-                    <span className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${r.status === "hadir" ? "bg-ok-50 text-ok-600" : r.status === "tidak_hadir" || r.status === "absent" ? "bg-danger-50 text-danger-500" : "bg-warn-50 text-warn-600"}`}>
-                      <Icon name={r.status === "hadir" ? "check" : r.status === "tidak_hadir" || r.status === "absent" ? "x" : "info"} className="w-3.5 h-3.5" strokeWidth={2.5} />
+                    <span className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${ui === "present" ? "bg-ok-50 text-ok-600" : ui === "absent" ? "bg-danger-50 text-danger-500" : "bg-warn-50 text-warn-600"}`}>
+                      <Icon name={icon} className="w-3.5 h-3.5" strokeWidth={2.5} />
                     </span>
                     <div className="flex-1 text-sm font-mono text-ink-soft">{dateStr}</div>
-                    <Status kind={statusKind as "present" | "absent" | "excused" | "sick"}>{statusLabel}</Status>
+                    <Status kind={statusKind}>{statusLabel}</Status>
                   </div>
                 );
               })}
@@ -2603,7 +2820,7 @@ function CoachInvoice({ coachId, branchId, profile }: { coachId: string; branchI
                 }} className="w-8 h-8 rounded-lg border border-line hover:bg-paper-tint flex items-center justify-center text-ink-mute hover:text-ocean-600">
                   <Icon name="print" className="w-4 h-4" />
                 </button>
-                {iv.status === "pending" && (
+                {(iv.status === "pending" || iv.status === "rejected") && (
                   <button
                     title={t("coach.invoice.cancelTitleAttr")}
                     onClick={() => cancelInvoice(iv.id)}
@@ -4168,7 +4385,7 @@ export default function CoachPage() {
   }, [supabase]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadClasses = useCallback(async (profileId: string) => {
-    const { data, error } = await supabase.from("class_coaches").select("class:classes(id, name, branch_id, schedule_days, time_start, time_end, capacity, enrolled, goals, description, class_type, location_type, external_location_name, external_location_address, google_maps_url, spreadsheet_filled, spreadsheet_url, branch:branches(name, city, address))").eq("coach_id", profileId);
+    const { data, error } = await supabase.from("class_coaches").select("class:classes(id, name, branch_id, schedule_days, time_start, time_end, capacity, enrolled, goals, description, class_type, location_type, external_location_name, external_location_address, google_maps_url, custom_location_lat, custom_location_lng, spreadsheet_filled, spreadsheet_url, branch:branches(name, city, address))").eq("coach_id", profileId);
     if (error || !data) return;
     const rows = data.map((d: Record<string, unknown>) => d.class as ClassRow).filter(Boolean);
     const classIds = rows.map((c) => c.id);

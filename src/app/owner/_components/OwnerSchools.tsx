@@ -11,6 +11,7 @@ import Icon from "@/components/ui/Icon";
 import { Field, Input, Switch } from "@/components/ui/FormFields";
 import Modal from "@/components/ui/Modal";
 import { useUpload } from "@/hooks/useUpload";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 
 interface Branch {
   id: string;
@@ -42,7 +43,7 @@ interface SchoolSignature {
 export default function OwnerSchools({}: { branches: Branch[] }) {
   const toast = useToast();
   const confirm = useConfirm();
-  const { t } = useLocale();
+  const { t, tNode } = useLocale();
   const supabase = createClient();
   const { upload, uploading } = useUpload();
   const logoInputRef = useRef<HTMLInputElement>(null);
@@ -196,12 +197,12 @@ export default function OwnerSchools({}: { branches: Branch[] }) {
     const { error } = await supabase.from("school_signatures")
       .update({ is_active: nextState })
       .eq("id", sig.id);
-    if (error) return toast.error("Error", error.message);
+    if (error) return toast.error(t("owner.schools.saveSigFailed"), error.message);
     setSignatures(prev => prev.map(s => s.id === sig.id ? { ...s, is_active: nextState } : s));
   };
 
   const deleteSignature = async (sig: SchoolSignature) => {
-    const yes = await confirm({ title: t("owner.schools.deleteSigConfirm", { name: sig.name }), danger: true });
+    const yes = await confirm({ title: tNode("owner.schools.deleteSigConfirm", { name: sig.name }), danger: true });
     if (!yes) return;
     const { error } = await supabase.from("school_signatures").delete().eq("id", sig.id);
     if (error) return toast.error(t("owner.schools.deleteSigFailed"), error.message);
@@ -239,8 +240,8 @@ export default function OwnerSchools({}: { branches: Branch[] }) {
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-sm text-ink truncate">{school.name}</div>
-                    <div className="text-xs text-ink-mute truncate">{school.branch?.name}</div>
+                    <div className="font-semibold text-sm text-ink truncate"><NoTranslate>{school.name}</NoTranslate></div>
+                    <div className="text-xs text-ink-mute truncate"><NoTranslate>{school.branch?.name}</NoTranslate></div>
                   </div>
                 </div>
               ))}
@@ -254,7 +255,7 @@ export default function OwnerSchools({}: { branches: Branch[] }) {
             {/* 1. School Logo */}
             <Card className="space-y-4">
               <SectionTitle sub={t("owner.schools.sub")}>
-                {selectedSchool.name}
+                <NoTranslate>{selectedSchool.name}</NoTranslate>
               </SectionTitle>
               <div className="flex flex-col sm:flex-row items-center gap-6 p-5 border border-line rounded-2xl bg-paper-tint">
                 <div 
@@ -311,7 +312,7 @@ export default function OwnerSchools({}: { branches: Branch[] }) {
                     <Switch checked={configForm.show_coach_sig} onChange={c => setConfigForm(f => ({ ...f, show_coach_sig: c }))} />
                     <div>
                       <div className="font-semibold text-sm text-ink">{t("owner.schools.showCoachSig")}</div>
-                      <div className="text-xs text-ink-mute">Tanda tangan coach pengajar kelas murid</div>
+                      <div className="text-xs text-ink-mute">{t("owner.schools.coachSigSub")}</div>
                     </div>
                   </div>
                   {configForm.show_coach_sig && (
@@ -331,7 +332,7 @@ export default function OwnerSchools({}: { branches: Branch[] }) {
                     <Switch checked={configForm.show_head_sig} onChange={c => setConfigForm(f => ({ ...f, show_head_sig: c }))} />
                     <div>
                       <div className="font-semibold text-sm text-ink">{t("owner.schools.showHeadSig")}</div>
-                      <div className="text-xs text-ink-mute">Tanda tangan resmi pimpinan NEXT Swimming</div>
+                      <div className="text-xs text-ink-mute">{t("owner.schools.headSigSub")}</div>
                     </div>
                   </div>
                   {configForm.show_head_sig && (
@@ -351,7 +352,7 @@ export default function OwnerSchools({}: { branches: Branch[] }) {
                     <Switch checked={configForm.show_school_sig} onChange={c => setConfigForm(f => ({ ...f, show_school_sig: c }))} />
                     <div>
                       <div className="font-semibold text-sm text-ink">{t("owner.schools.showSchoolSig")}</div>
-                      <div className="text-xs text-ink-mute">Tanda tangan digital dari daftar di bawah yang berstatus Aktif</div>
+                      <div className="text-xs text-ink-mute">{t("owner.schools.schoolSigSub")}</div>
                     </div>
                   </div>
                 </div>
@@ -362,10 +363,10 @@ export default function OwnerSchools({}: { branches: Branch[] }) {
             <Card className="space-y-4">
               <div className="flex items-center justify-between">
                 <SectionTitle sub={t("owner.schools.digitalSignaturesSub")}>
-                  {t("owner.schools.digitalSignaturesTitle")} ({selectedSchool.name})
+                  {t("owner.schools.digitalSignaturesTitle")} (<NoTranslate>{selectedSchool.name}</NoTranslate>)
                 </SectionTitle>
                 <Btn variant="outline" size="sm" icon="plus" onClick={() => {
-                  setSigForm({ id: "", name: "", title: "Kepala Sekolah", is_active: true });
+                  setSigForm({ id: "", name: "", title: "Principal", is_active: true });
                   setSigFile(null);
                   setShowSigModal(true);
                 }}>{t("owner.schools.addSigBtn")}</Btn>
@@ -394,8 +395,8 @@ export default function OwnerSchools({}: { branches: Branch[] }) {
                       </div>
 
                       <div>
-                        <div className="font-bold text-sm text-ink">{sig.name}</div>
-                        <div className="text-xs text-ink-mute font-medium">{sig.title}</div>
+                        <div className="font-bold text-sm text-ink"><NoTranslate>{sig.name}</NoTranslate></div>
+                        <div className="text-xs text-ink-mute font-medium"><NoTranslate>{sig.title}</NoTranslate></div>
                       </div>
 
                       <div className="pt-2 border-t border-line/60 flex items-center justify-between">

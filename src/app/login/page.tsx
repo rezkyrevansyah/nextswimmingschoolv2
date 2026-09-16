@@ -8,7 +8,7 @@ import Btn from "@/components/ui/Btn";
 import { Field, Input } from "@/components/ui/FormFields";
 import Modal from "@/components/ui/Modal";
 import { useToast } from "@/components/providers/ToastProvider";
-import { waLink } from "@/lib/utils";
+import { waLink, roleHomePath } from "@/lib/utils";
 import { createClient } from "@/utils/supabase/client";
 
 function LoginForm() {
@@ -48,7 +48,7 @@ function LoginForm() {
     }
 
     const role = data.user?.user_metadata?.role as string | undefined;
-    const destination = role ? `/${role}` : "/member";
+    const destination = roleHomePath(role);
     toast.success("Login berhasil", `Mengarahkan ke halaman ${role ?? "member"}…`);
     router.push(destination);
   };

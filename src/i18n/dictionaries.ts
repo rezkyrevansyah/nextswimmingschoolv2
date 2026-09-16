@@ -22,16 +22,24 @@ function interpolate(text: string, vars?: Record<string, string | number>): stri
   return text.replace(/\{(\w+)\}/g, (match, key) => (key in vars ? String(vars[key]) : match));
 }
 
+/** Resolve a dot-path translation key to its raw (un-interpolated) template string for
+ * the given locale, falling back to `en`, then to the raw key itself. Shared by
+ * `translate()` and `translateNode()` (src/i18n/translateNode.tsx) so both agree on
+ * which template a key resolves to. */
+export function getTemplate(locale: Locale, key: string): string {
+  const fromLocale = getPath(dictionaries[locale], key);
+  if (typeof fromLocale === "string") return fromLocale;
+
+  const fromEnglish = getPath(dictionaries.en, key);
+  if (typeof fromEnglish === "string") return fromEnglish;
+
+  return key;
+}
+
 /** Resolve a dot-path translation key for the given locale, falling back to `en`,
  * then to the raw key itself — never throws, never renders blank. */
 export function translate(locale: Locale, key: string, vars?: Record<string, string | number>): string {
-  const fromLocale = getPath(dictionaries[locale], key);
-  if (typeof fromLocale === "string") return interpolate(fromLocale, vars);
-
-  const fromEnglish = getPath(dictionaries.en, key);
-  if (typeof fromEnglish === "string") return interpolate(fromEnglish, vars);
-
-  return key;
+  return interpolate(getTemplate(locale, key), vars);
 }
 
 /** Same resolution order as `translate`, for dictionary entries that are string arrays

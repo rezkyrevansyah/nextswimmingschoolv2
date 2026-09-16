@@ -5,15 +5,15 @@ import Icon from "@/components/ui/Icon";
 interface ToastItem {
   id: string;
   kind: "ok" | "err" | "info";
-  msg: string;
-  sub?: string;
+  msg: React.ReactNode;
+  sub?: React.ReactNode;
   duration?: number;
 }
 
 interface ToastApi {
-  success: (msg: string, sub?: string) => void;
-  info:    (msg: string, sub?: string) => void;
-  error:   (msg: string, sub?: string, duration?: number) => void;
+  success: (msg: React.ReactNode, sub?: React.ReactNode) => void;
+  info:    (msg: React.ReactNode, sub?: React.ReactNode) => void;
+  error:   (msg: React.ReactNode, sub?: React.ReactNode, duration?: number) => void;
 }
 
 const ToastCtx = createContext<ToastApi | null>(null);

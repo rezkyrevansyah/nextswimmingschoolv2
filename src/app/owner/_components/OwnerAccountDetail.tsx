@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import Image from "next/image";
 import Modal from "@/components/ui/Modal";
 import Btn from "@/components/ui/Btn";
@@ -7,7 +7,8 @@ import Icon from "@/components/ui/Icon";
 import Avatar from "@/components/ui/Avatar";
 import Status from "@/components/ui/Status";
 import QRBox from "@/components/ui/QRBox";
-import { Field, Input, Select, Textarea } from "@/components/ui/FormFields";
+import { Field, Input, Select, Textarea, SectionLabel } from "@/components/ui/FormFields";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
 import { useLocale } from "@/components/providers/LocaleProvider";
@@ -26,6 +27,7 @@ export interface AccountMemberData {
   remaining_sessions: number | null;
   total_sessions: number | null;
   school_id: string | null;
+  school_grade: string | null;
   date_start: string | null;
   school?: { id: string; name: string } | null;
   member_classes?: { class: { id: string; name: string; time_start?: string; time_end?: string } }[];
@@ -66,9 +68,14 @@ interface Props {
   onRefresh: () => void;
 }
 
+// Only roles actually paid through this system carry a bank account —
+// members/schools pay the school, they don't receive payouts from it.
+const BANK_ACCOUNT_ROLES = ["staff", "admin", "coach", "manager_center"];
+
 const ROLE_COLORS: Record<string, string> = {
   owner: "bg-purple-100 text-purple-700 border-purple-200",
   admin: "bg-ocean-100 text-ocean-700 border-ocean-200",
+  manager_center: "bg-indigo-100 text-indigo-700 border-indigo-200",
   coach: "bg-wave-100 text-wave-700 border-wave-200",
   member: "bg-green-100 text-green-700 border-green-200",
   school: "bg-amber-100 text-amber-700 border-amber-200",
@@ -78,12 +85,13 @@ const ROLE_COLORS: Record<string, string> = {
 export default function OwnerAccountDetail({ account, branches, open, onClose, onRefresh }: Props) {
   const toast = useToast();
   const confirm = useConfirm();
-  const { t } = useLocale();
+  const { t, tNode } = useLocale();
   const supabase = createClient();
 
   const ROLE_LABELS: Record<string, string> = {
     owner: t("owner.accounts.roleOwner"),
     admin: t("owner.accounts.roleAdmin"),
+    manager_center: t("owner.accounts.roleManagerCenter"),
     coach: t("owner.accounts.roleCoach"),
     member: t("owner.accounts.roleMember"),
     school: t("owner.accounts.roleSchool"),
@@ -105,6 +113,21 @@ export default function OwnerAccountDetail({ account, branches, open, onClose, o
   const [schools, setSchools] = useState<{ id: string; name: string }[]>([]);
   const [downloadingQr, setDownloadingQr] = useState(false);
 
+  // For admin/manager_center accounts with an auto-created linked Staff account:
+  // personal + bank fields live on the Staff profile (the only place they're ever
+  // entered — via the Staff panel's profile gate), not on this primary row, which
+  // stays permanently null for those columns. Look it up so we display/edit the
+  // real data instead of an empty primary row.
+  const [linkedStaff, setLinkedStaff] = useState<{
+    id: string;
+    gender: string | null;
+    birth_date: string | null;
+    address: string | null;
+    bank_name: string | null;
+    bank_account: string | null;
+    bank_holder: string | null;
+  } | null>(null);
+
   const [form, setForm] = useState({
     full_name: "",
     email: "",
@@ -125,11 +148,22 @@ export default function OwnerAccountDetail({ account, branches, open, onClose, o
     total_sessions: "",
     remaining_sessions: "",
     school_id: "",
+    school_grade: "",
   });
 
   // Load contextual relations for the account
   useEffect(() => {
     if (!account || !open) return;
+
+    const linkedStaffQuery =
+      account.role === "admin" || account.role === "manager_center"
+        ? supabase
+            .from("profiles")
+            .select("id, gender, birth_date, address, bank_name, bank_account, bank_holder")
+            .eq("linked_admin_id", account.id)
+            .maybeSingle()
+        : Promise.resolve({ data: null });
+    linkedStaffQuery.then(({ data }) => setLinkedStaff(data ?? null));
 
     if (account.role === "coach") {
       supabase
@@ -152,7 +186,7 @@ export default function OwnerAccountDetail({ account, branches, open, onClose, o
     if (account.role === "member") {
       supabase
         .from("members")
-        .select("id, member_no, qr_code, type, status, remaining_sessions, total_sessions, school_id, date_start, school:schools(id, name), member_classes(class:classes(id, name, time_start, time_end))")
+        .select("id, member_no, qr_code, type, status, remaining_sessions, total_sessions, school_id, school_grade, date_start, school:schools(id, name), member_classes(class:classes(id, name, time_start, time_end))")
         .eq("profile_id", account.id)
         .maybeSingle()
         .then(({ data }) => {
@@ -173,18 +207,19 @@ export default function OwnerAccountDetail({ account, branches, open, onClose, o
   const openEdit = () => {
     if (!account) return;
     const m = memberData || (account.members && account.members[0]) || account.member;
+    const personal = linkedStaff ?? account;
     setForm({
       full_name: account.full_name ?? "",
       email: account.email ?? "",
       phone: account.phone ?? "",
       role: account.role ?? "staff",
       branch_id: account.branch_id ?? "",
-      gender: account.gender ?? "",
-      birth_date: account.birth_date ?? "",
-      address: account.address ?? "",
-      bank_name: account.bank_name ?? "",
-      bank_account: account.bank_account ?? "",
-      bank_holder: account.bank_holder ?? "",
+      gender: personal.gender ?? "",
+      birth_date: personal.birth_date ?? "",
+      address: personal.address ?? "",
+      bank_name: personal.bank_name ?? "",
+      bank_account: personal.bank_account ?? "",
+      bank_holder: personal.bank_holder ?? "",
       custom_role_label: account.custom_role_label ?? "",
       bio: account.bio ?? "",
       specialization: account.specialization ?? "",
@@ -192,6 +227,7 @@ export default function OwnerAccountDetail({ account, branches, open, onClose, o
       total_sessions: m?.total_sessions != null ? String(m.total_sessions) : "",
       remaining_sessions: m?.remaining_sessions != null ? String(m.remaining_sessions) : "",
       school_id: m?.school_id || "",
+      school_grade: m?.school_grade || "",
     });
     setEditing(true);
   };
@@ -201,6 +237,16 @@ export default function OwnerAccountDetail({ account, branches, open, onClose, o
     if (!form.full_name.trim()) return toast.error(t("owner.accountDetail.fullNameRequired"));
 
     setSaving(true);
+
+    const personalFields = {
+      gender: form.gender || null,
+      birth_date: form.birth_date || null,
+      address: form.address.trim() || null,
+      bank_name: form.bank_name.trim() || null,
+      bank_account: form.bank_account.trim() || null,
+      bank_holder: form.bank_holder.trim() || null,
+    };
+
     const res = await fetch(`/api/admin/users/${account.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -211,15 +257,12 @@ export default function OwnerAccountDetail({ account, branches, open, onClose, o
           role: form.role,
           phone: form.phone.trim() || null,
           branch_id: form.branch_id || null,
-          gender: form.gender || null,
-          birth_date: form.birth_date || null,
-          address: form.address.trim() || null,
-          bank_name: form.bank_name.trim() || null,
-          bank_account: form.bank_account.trim() || null,
-          bank_holder: form.bank_holder.trim() || null,
           custom_role_label: form.custom_role_label.trim() || null,
           bio: form.bio.trim() || null,
           specialization: form.specialization.trim() || null,
+          // Personal/bank fields live on the linked Staff account instead, when
+          // one exists — see the second PATCH below.
+          ...(linkedStaff ? {} : personalFields),
         },
         user_metadata: {
           full_name: form.full_name.trim(),
@@ -228,6 +271,17 @@ export default function OwnerAccountDetail({ account, branches, open, onClose, o
         },
       }),
     });
+
+    // Personal/bank data belongs to the linked Staff account (the one place it's
+    // actually entered, via the Staff panel) — write there instead of this
+    // primary row, so both views always agree with a single source of truth.
+    if (linkedStaff) {
+      await fetch(`/api/admin/users/${linkedStaff.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profile: personalFields }),
+      });
+    }
 
     // If member, update members table too
     if (account.role === "member" && memberData) {
@@ -238,6 +292,7 @@ export default function OwnerAccountDetail({ account, branches, open, onClose, o
           total_sessions: form.total_sessions ? Number(form.total_sessions) : null,
           remaining_sessions: form.remaining_sessions ? Number(form.remaining_sessions) : null,
           school_id: form.member_type === "school_affiliate" ? form.school_id || null : null,
+          school_grade: form.member_type === "school_affiliate" ? form.school_grade.trim() || null : null,
           branch_id: form.branch_id || null,
         })
         .eq("id", memberData.id);
@@ -258,8 +313,8 @@ export default function OwnerAccountDetail({ account, branches, open, onClose, o
     const action = isCurrentlyBanned ? "unban" : "ban";
     const confirmed = await confirm({
       title: isCurrentlyBanned
-        ? t("owner.accountDetail.reactivateConfirmTitle", { name: account.full_name })
-        : t("owner.accountDetail.deactivateConfirmTitle", { name: account.full_name }),
+        ? tNode("owner.accountDetail.reactivateConfirmTitle", { name: account.full_name })
+        : tNode("owner.accountDetail.deactivateConfirmTitle", { name: account.full_name }),
       body: isCurrentlyBanned
         ? t("owner.accountDetail.reactivateConfirmBody")
         : t("owner.accountDetail.deactivateConfirmBody"),
@@ -296,7 +351,7 @@ export default function OwnerAccountDetail({ account, branches, open, onClose, o
     if (!res.ok) return toast.error(t("owner.accountDetail.resetPasswordFailed"), json.error);
     toast.success(
       t("owner.accountDetail.passwordResetToast"),
-      t("owner.accountDetail.passwordResetSub", { name: account.full_name })
+      tNode("owner.accountDetail.passwordResetSub", { name: account.full_name })
     );
     setNewPassword("");
     setShowPwdReset(false);
@@ -305,7 +360,7 @@ export default function OwnerAccountDetail({ account, branches, open, onClose, o
   const handleDelete = async () => {
     if (!account) return;
     const confirmed = await confirm({
-      title: t("owner.accountDetail.deleteConfirmTitle", { name: account.full_name }),
+      title: tNode("owner.accountDetail.deleteConfirmTitle", { name: account.full_name }),
       body: t("owner.accountDetail.deleteConfirmBody"),
       danger: true,
     });
@@ -338,10 +393,10 @@ export default function OwnerAccountDetail({ account, branches, open, onClose, o
         },
         qrValue
       );
-      toast.success("Kartu QR berhasil diunduh!");
+      toast.success(t("owner.accountDetail.qrCardDownloaded"));
     } catch (err) {
       console.error(err);
-      toast.error("Gagal mengunduh kartu QR");
+      toast.error(t("owner.accountDetail.qrCardDownloadFailed"));
     }
     setDownloadingQr(false);
   };
@@ -349,9 +404,14 @@ export default function OwnerAccountDetail({ account, branches, open, onClose, o
   if (!account) return null;
 
   const roleLabel = ROLE_LABELS[account.role] ?? account.role;
+  const isKnownRole = account.role in ROLE_LABELS;
   const roleColor = ROLE_COLORS[account.role] ?? "bg-slate-100 text-slate-700 border-slate-200";
   const displayName = account.full_name?.trim() || account.email?.split("@")[0] || roleLabel || "—";
   const activeQR = memberData?.qr_code || memberData?.member_no || account.qr_code || account.user_no || account.id;
+
+  // Personal + bank data source: the linked Staff account when one exists
+  // (see linkedStaff state above), otherwise this account's own row.
+  const personalSource = linkedStaff ?? account;
 
   // Calculate age if birth_date exists
   const calcAge = (birthDateStr: string | null) => {
@@ -361,7 +421,7 @@ export default function OwnerAccountDetail({ account, branches, open, onClose, o
     const ageDt = new Date(diffMs);
     return Math.abs(ageDt.getUTCFullYear() - 1970);
   };
-  const age = calcAge(account.birth_date);
+  const age = calcAge(personalSource.birth_date);
 
   return (
     <Modal
@@ -428,6 +488,7 @@ export default function OwnerAccountDetail({ account, branches, open, onClose, o
               <Select value={form.role} onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}>
                 <option value="owner">{t("owner.accounts.roleOwner")}</option>
                 <option value="admin">{t("owner.accounts.roleAdmin")}</option>
+                <option value="manager_center">{t("owner.accounts.roleManagerCenter")}</option>
                 <option value="coach">{t("owner.accounts.roleCoach")}</option>
                 <option value="member">{t("owner.accounts.roleMember")}</option>
                 <option value="staff">{t("owner.accounts.roleStaff")}</option>
@@ -437,7 +498,7 @@ export default function OwnerAccountDetail({ account, branches, open, onClose, o
           </div>
 
           <div className="grid sm:grid-cols-2 gap-3">
-            <Field label="Email">
+            <Field label={t("owner.accountDetail.fieldEmail")}>
               <Input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} />
             </Field>
             <Field label={t("owner.accountDetail.fieldPhone")}>
@@ -462,7 +523,7 @@ export default function OwnerAccountDetail({ account, branches, open, onClose, o
             <Select value={form.branch_id} onChange={(e) => setForm((f) => ({ ...f, branch_id: e.target.value }))}>
               <option value="">{t("owner.accountDetail.branchNone")}</option>
               {branches.map((b) => (
-                <option key={b.id} value={b.id}>
+                <option key={b.id} value={b.id} translate="no" className="notranslate">
                   {b.name}
                 </option>
               ))}
@@ -472,33 +533,52 @@ export default function OwnerAccountDetail({ account, branches, open, onClose, o
           {/* Member Specific Form Inputs */}
           {form.role === "member" && (
             <div className="border border-green-200 bg-green-50/40 rounded-xl p-3.5 space-y-3">
-              <div className="text-xs font-bold text-green-900 uppercase tracking-wider">Pengaturan Member</div>
+              <div className="text-xs font-bold text-green-900 uppercase tracking-wider">{t("owner.accountDetail.memberSettingsTitle")}</div>
               <div className="grid sm:grid-cols-3 gap-3">
-                <Field label="Tipe Member">
-                  <Select value={form.member_type} onChange={(e) => setForm((f) => ({ ...f, member_type: e.target.value }))}>
-                    <option value="reguler">Reguler</option>
-                    <option value="private">Private</option>
-                    <option value="school_affiliate">Afiliasi Sekolah</option>
+                <Field label={t("owner.accounts.fieldMemberType")}>
+                  <Select value={form.member_type} onChange={(e) => setForm((f) => ({ ...f, member_type: e.target.value }))} disabled={form.member_type === "private"}>
+                    <option value="reguler">{t("owner.accounts.memberTypeRegular")}</option>
+                    <option value="school_affiliate">{t("owner.accounts.memberTypeSchoolAffiliate")}</option>
+                    {form.member_type === "private" && <option value="private">{t("owner.accounts.memberTypePrivate")}</option>}
                   </Select>
                 </Field>
-                <Field label="Total Sesi">
-                  <Input type="number" min={0} value={form.total_sessions} onChange={(e) => setForm((f) => ({ ...f, total_sessions: e.target.value }))} />
-                </Field>
-                <Field label="Sisa Sesi">
-                  <Input type="number" min={0} value={form.remaining_sessions} onChange={(e) => setForm((f) => ({ ...f, remaining_sessions: e.target.value }))} />
-                </Field>
+                {form.member_type !== "private" && (
+                  <>
+                    <Field label={t("owner.accountDetail.fieldTotalSessions")}>
+                      <Input type="number" min={0} value={form.total_sessions} onChange={(e) => setForm((f) => ({ ...f, total_sessions: e.target.value }))} />
+                    </Field>
+                    <Field label={t("owner.accountDetail.fieldRemainingSessions")}>
+                      <Input type="number" min={0} value={form.remaining_sessions} onChange={(e) => setForm((f) => ({ ...f, remaining_sessions: e.target.value }))} />
+                    </Field>
+                  </>
+                )}
               </div>
+              {form.member_type === "private" && (
+                <div className="flex items-center gap-2 p-3 rounded-xl bg-ocean-50 border border-ocean-100 text-sm text-ocean-800">
+                  <Icon name="info" className="w-4 h-4 shrink-0 text-ocean-500" />
+                  <span>{t("owner.accountDetail.privateManagedElsewhereNotice")}</span>
+                </div>
+              )}
               {form.member_type === "school_affiliate" && (
-                <Field label="Pilih Sekolah">
-                  <Select value={form.school_id} onChange={(e) => setForm((f) => ({ ...f, school_id: e.target.value }))}>
-                    <option value="">— Pilih Sekolah —</option>
-                    {schools.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
+                <div className="grid sm:grid-cols-2 gap-3">
+                  <Field label={t("owner.accountDetail.fieldSelectSchool")}>
+                    <Select value={form.school_id} onChange={(e) => setForm((f) => ({ ...f, school_id: e.target.value }))}>
+                      <option value="">{t("owner.accountDetail.selectSchoolPlaceholder")}</option>
+                      {schools.map((s) => (
+                        <option key={s.id} value={s.id} translate="no" className="notranslate">
+                          {s.name}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                  <Field label={t("owner.accounts.fieldSchoolGrade")} hint={t("owner.accounts.fieldSchoolGradeHint")}>
+                    <Input
+                      value={form.school_grade}
+                      onChange={(e) => setForm((f) => ({ ...f, school_grade: e.target.value }))}
+                      placeholder={t("owner.accounts.fieldSchoolGradePlaceholder")}
+                    />
+                  </Field>
+                </div>
               )}
             </div>
           )}
@@ -512,7 +592,7 @@ export default function OwnerAccountDetail({ account, branches, open, onClose, o
             />
           </Field>
 
-          {(form.role === "staff" || form.role === "admin") && (
+          {(form.role === "staff" || form.role === "admin" || form.role === "manager_center") && (
             <Field
               label={t("owner.accountDetail.fieldCustomRoleLabel")}
               hint={t("owner.accountDetail.customRoleLabelHint")}
@@ -544,34 +624,36 @@ export default function OwnerAccountDetail({ account, branches, open, onClose, o
             </>
           )}
 
-          <div className="border-t border-line pt-4">
-            <p className="text-xs font-bold text-ink-mute uppercase tracking-widest mb-3">
-              {t("owner.accountDetail.bankAccountTitle")}
-            </p>
-            <div className="grid grid-cols-3 gap-3">
-              <Field label={t("owner.accountDetail.fieldBankName")}>
-                <Input
-                  value={form.bank_name}
-                  onChange={(e) => setForm((f) => ({ ...f, bank_name: e.target.value }))}
-                  placeholder={t("owner.accountDetail.bankNamePlaceholder")}
-                />
-              </Field>
-              <Field label={t("owner.accountDetail.fieldBankAccount")}>
-                <Input
-                  value={form.bank_account}
-                  onChange={(e) => setForm((f) => ({ ...f, bank_account: e.target.value }))}
-                  placeholder={t("owner.accountDetail.bankAccountPlaceholder")}
-                />
-              </Field>
-              <Field label={t("owner.accountDetail.fieldBankHolder")}>
-                <Input
-                  value={form.bank_holder}
-                  onChange={(e) => setForm((f) => ({ ...f, bank_holder: e.target.value }))}
-                  placeholder={t("owner.accountDetail.bankHolderPlaceholder")}
-                />
-              </Field>
+          {BANK_ACCOUNT_ROLES.includes(form.role) && (
+            <div className="border-t border-line pt-4">
+              <p className="text-xs font-bold text-ink-mute uppercase tracking-widest mb-3">
+                {t("owner.accountDetail.bankAccountTitle")}
+              </p>
+              <div className="grid grid-cols-3 gap-3">
+                <Field label={t("owner.accountDetail.fieldBankName")}>
+                  <Input
+                    value={form.bank_name}
+                    onChange={(e) => setForm((f) => ({ ...f, bank_name: e.target.value }))}
+                    placeholder={t("owner.accountDetail.bankNamePlaceholder")}
+                  />
+                </Field>
+                <Field label={t("owner.accountDetail.fieldBankAccount")}>
+                  <Input
+                    value={form.bank_account}
+                    onChange={(e) => setForm((f) => ({ ...f, bank_account: e.target.value }))}
+                    placeholder={t("owner.accountDetail.bankAccountPlaceholder")}
+                  />
+                </Field>
+                <Field label={t("owner.accountDetail.fieldBankHolder")}>
+                  <Input
+                    value={form.bank_holder}
+                    onChange={(e) => setForm((f) => ({ ...f, bank_holder: e.target.value }))}
+                    placeholder={t("owner.accountDetail.bankHolderPlaceholder")}
+                  />
+                </Field>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       ) : (
         <div className="space-y-5">
@@ -596,7 +678,9 @@ export default function OwnerAccountDetail({ account, branches, open, onClose, o
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="font-display font-bold text-xl text-ink">{displayName}</h3>
+                <h3 className="font-display font-bold text-xl text-ink">
+                  <NoTranslate>{displayName}</NoTranslate>
+                </h3>
                 {account.is_archived ? (
                   <Status kind="archived">{t("owner.accountDetail.inactiveBadge")}</Status>
                 ) : (
@@ -607,14 +691,17 @@ export default function OwnerAccountDetail({ account, branches, open, onClose, o
                 <span
                   className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg border text-xs font-bold ${roleColor}`}
                 >
-                  {roleLabel}
-                  {account.custom_role_label &&
-                    !account.custom_role_label.includes("@") &&
-                    ` · ${account.custom_role_label}`}
+                  {isKnownRole ? roleLabel : <NoTranslate>{roleLabel}</NoTranslate>}
+                  {account.custom_role_label && !account.custom_role_label.includes("@") && (
+                    <>
+                      {" · "}
+                      <NoTranslate>{account.custom_role_label}</NoTranslate>
+                    </>
+                  )}
                 </span>
                 {(memberData?.member_no || account.user_no) && (
                   <span className="font-mono text-xs font-bold text-ocean-700 bg-ocean-50 px-2.5 py-0.5 rounded-lg border border-ocean-200">
-                    {memberData?.member_no || account.user_no}
+                    <NoTranslate>{memberData?.member_no || account.user_no}</NoTranslate>
                   </span>
                 )}
               </div>
@@ -623,98 +710,102 @@ export default function OwnerAccountDetail({ account, branches, open, onClose, o
                 {account.branch?.name && (
                   <>
                     <span>·</span>
-                    <span className="font-medium text-ink-soft">{account.branch.name}</span>
+                    <span className="font-medium text-ink-soft">
+                      <NoTranslate>{account.branch.name}</NoTranslate>
+                    </span>
                   </>
                 )}
               </div>
             </div>
           </div>
 
-          {/* ── Visual QR Code & Barcode Card ── */}
-          <div className="bg-gradient-to-br from-paper-tint to-ocean-50/40 border border-ocean-200/70 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xs">
-            <div className="flex items-center gap-4">
-              <div className="p-2 bg-white rounded-xl border border-line shadow-xs shrink-0">
-                <QRBox value={activeQR} size={110} />
+          {/* ── Compact identity strip (QR + ID) ── */}
+          <div className="flex items-center gap-3">
+            <div
+              className="shrink-0"
+              title={t("owner.accountDetail.qrUsageHint")}
+            >
+              <QRBox value={activeQR} size={56} hideCaption />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[10px] font-bold uppercase tracking-widest text-ink-faint">
+                {t("owner.accountDetail.idLabel")}
               </div>
-              <div className="space-y-1 text-left min-w-0">
-                <div className="text-[11px] font-bold uppercase tracking-wider text-ocean-800 flex items-center gap-1">
-                  <Icon name="qr" className="w-3.5 h-3.5" />
-                  QR Code &amp; Identitas Akun
-                </div>
-                <div className="font-mono text-sm font-bold text-ink-strong break-all">
-                  {activeQR}
-                </div>
-                <p className="text-xs text-ink-mute">
-                  Gunakan kode ini untuk scan presensi, absensi kelas, dan verifikasi profil resmi.
-                </p>
+              <div
+                className="font-mono text-sm font-semibold text-ink truncate"
+                title={activeQR}
+              >
+                <NoTranslate>{activeQR}</NoTranslate>
               </div>
             </div>
-            <div className="flex sm:flex-col items-center gap-2 shrink-0 w-full sm:w-auto">
+            <div className="flex items-center gap-1.5 shrink-0">
               <Btn
-                variant="outline"
+                variant="ghost"
                 size="sm"
                 icon="copy"
-                onClick={() => copyToClipboard(activeQR, "Kode QR")}
-                className="flex-1 sm:flex-none justify-center text-xs"
-              >
-                Salin Kode
-              </Btn>
+                onClick={() => copyToClipboard(activeQR, t("owner.accountDetail.qrCodeCopyLabel"))}
+                title={t("owner.accountDetail.copyCodeBtn")}
+              />
               <Btn
-                variant="primary"
+                variant="ghost"
                 size="sm"
                 icon="download"
                 onClick={handleDownloadSingleQR}
                 disabled={downloadingQr}
-                className="flex-1 sm:flex-none justify-center text-xs"
-              >
-                {downloadingQr ? "Memproses…" : "Unduh ID Card (PNG)"}
-              </Btn>
+                title={t("owner.accountDetail.downloadIdCardTitleAttr")}
+              />
             </div>
           </div>
 
           {/* Member Specific Stats & Classes */}
           {account.role === "member" && memberData && (
-            <div className="border border-green-200 bg-green-50/30 rounded-2xl p-4 space-y-3">
-              <div className="text-xs font-bold text-green-900 uppercase tracking-wider flex items-center justify-between">
-                <span>Detail Keanggotaan Member</span>
-                <span className="capitalize font-semibold text-green-700 bg-white px-2 py-0.5 rounded-md border border-green-200">
-                  Tipe: {memberData.type}
-                </span>
-              </div>
+            <div>
+              <SectionLabel sub={t("owner.accountDetail.membershipTypeLabel", { type: memberData.type })}>
+                {t("owner.accountDetail.membershipDetailsTitle")}
+              </SectionLabel>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                <div className="bg-white rounded-xl p-2.5 border border-green-100 text-center">
-                  <div className="text-[10px] text-ink-faint uppercase font-bold">Sisa Sesi</div>
-                  <div className="text-xl font-bold font-mono text-green-700">
+                <div className="bg-paper-tint rounded-xl p-2.5 border border-line/60 text-center">
+                  <div className="text-[10px] text-ink-faint uppercase font-bold">{t("owner.accountDetail.fieldRemainingSessions")}</div>
+                  <div className="text-xl font-bold font-mono text-ocean-700">
                     {memberData.remaining_sessions ?? "—"}
                   </div>
                 </div>
-                <div className="bg-white rounded-xl p-2.5 border border-green-100 text-center">
-                  <div className="text-[10px] text-ink-faint uppercase font-bold">Total Sesi</div>
+                <div className="bg-paper-tint rounded-xl p-2.5 border border-line/60 text-center">
+                  <div className="text-[10px] text-ink-faint uppercase font-bold">{t("owner.accountDetail.fieldTotalSessions")}</div>
                   <div className="text-xl font-bold font-mono text-ink">
                     {memberData.total_sessions ?? "—"}
                   </div>
                 </div>
-                <div className="bg-white rounded-xl p-2.5 border border-green-100 text-center col-span-2 sm:col-span-2">
-                  <div className="text-[10px] text-ink-faint uppercase font-bold">Afiliasi Sekolah</div>
+                <div className="bg-paper-tint rounded-xl p-2.5 border border-line/60 text-center col-span-2 sm:col-span-2">
+                  <div className="text-[10px] text-ink-faint uppercase font-bold">{t("owner.accountDetail.schoolAffiliateLabel")}</div>
                   <div className="text-sm font-semibold text-ink truncate mt-0.5">
-                    {memberData.school?.name ?? "Non-Afiliasi"}
+                    {memberData.school?.name ? (
+                      <NoTranslate>{memberData.school.name}</NoTranslate>
+                    ) : (
+                      t("owner.accountDetail.nonAffiliatedFallback")
+                    )}
                   </div>
+                  {memberData.school_grade && (
+                    <div className="text-xs text-ink-mute mt-0.5">
+                      {t("owner.accounts.fieldSchoolGrade")}: <NoTranslate>{memberData.school_grade}</NoTranslate>
+                    </div>
+                  )}
                 </div>
               </div>
 
               {/* Enrolled classes */}
               {memberData.member_classes && memberData.member_classes.length > 0 && (
-                <div className="pt-2 border-t border-green-200/60">
-                  <div className="text-[11px] font-bold text-green-900 mb-1.5">Kelas yang Diikuti:</div>
+                <div className="pt-2 mt-2.5 border-t border-line/60">
+                  <div className="text-[11px] font-bold text-ink-mute mb-1.5">{t("owner.accountDetail.enrolledClasses")}</div>
                   <div className="flex flex-wrap gap-1.5">
                     {memberData.member_classes.map((mc, idx) => (
                       <span
                         key={mc.class?.id || idx}
-                        className="bg-white px-2.5 py-1 rounded-lg border border-green-200 text-xs font-semibold text-green-800"
+                        className="bg-paper-tint px-2.5 py-1 rounded-lg border border-line/60 text-xs font-semibold text-ink-soft"
                       >
-                        🏊 {mc.class?.name}{" "}
+                        🏊 <NoTranslate>{mc.class?.name}</NoTranslate>{" "}
                         {mc.class?.time_start && (
-                          <span className="font-normal text-green-600 text-[11px]">
+                          <span className="font-normal text-ink-mute text-[11px]">
                             ({mc.class.time_start} - {mc.class.time_end})
                           </span>
                         )}
@@ -728,41 +819,41 @@ export default function OwnerAccountDetail({ account, branches, open, onClose, o
 
           {/* Coach Specific Classes & Certifications */}
           {account.role === "coach" && (
-            <div className="border border-wave-200 bg-wave-50/30 rounded-2xl p-4 space-y-3">
-              <div className="text-xs font-bold text-wave-900 uppercase tracking-wider">
-                Kelas &amp; Sertifikasi Pelatih
-              </div>
+            <div>
+              <SectionLabel>{t("owner.accountDetail.coachClassesAndCerts")}</SectionLabel>
               {coachClasses.length > 0 ? (
                 <div>
-                  <div className="text-[11px] font-bold text-wave-900 mb-1.5">Kelas yang Dilatih:</div>
+                  <div className="text-[11px] font-bold text-ink-mute mb-1.5">{t("owner.accountDetail.classesTaught")}</div>
                   <div className="flex flex-wrap gap-1.5">
                     {coachClasses.map((c) => (
                       <span
                         key={c.id}
-                        className="bg-white px-2.5 py-1 rounded-lg border border-wave-200 text-xs font-semibold text-wave-900"
+                        className="bg-paper-tint px-2.5 py-1 rounded-lg border border-line/60 text-xs font-semibold text-ink-soft"
                       >
-                        ⏱️ {c.name}{" "}
+                        ⏱️ <NoTranslate>{c.name}</NoTranslate>{" "}
                         {c.branch?.name && (
-                          <span className="font-normal text-ink-mute text-[11px]">· {c.branch.name}</span>
+                          <span className="font-normal text-ink-mute text-[11px]">
+                            · <NoTranslate>{c.branch.name}</NoTranslate>
+                          </span>
                         )}
                       </span>
                     ))}
                   </div>
                 </div>
               ) : (
-                <p className="text-xs text-ink-mute italic">Belum ada kelas renang yang ditugaskan.</p>
+                <p className="text-xs text-ink-mute italic">No swimming classes assigned yet.</p>
               )}
 
               {certifications.length > 0 && (
-                <div className="pt-2 border-t border-wave-200/60">
-                  <div className="text-[11px] font-bold text-wave-900 mb-1.5">Sertifikasi Resmi:</div>
+                <div className="pt-2 mt-2.5 border-t border-line/60">
+                  <div className="text-[11px] font-bold text-ink-mute mb-1.5">Official Certifications:</div>
                   <div className="flex flex-wrap gap-1.5">
                     {certifications.map((cert) => (
                       <span
                         key={cert.id}
-                        className="bg-white px-2.5 py-1 rounded-lg border border-wave-200 text-xs font-semibold text-wave-800"
+                        className="bg-paper-tint px-2.5 py-1 rounded-lg border border-line/60 text-xs font-semibold text-ink-soft"
                       >
-                        📜 {cert.title || cert.name}
+                        📜 <NoTranslate>{cert.title || cert.name}</NoTranslate>
                       </span>
                     ))}
                   </div>
@@ -771,12 +862,15 @@ export default function OwnerAccountDetail({ account, branches, open, onClose, o
             </div>
           )}
 
-          {/* Info grid */}
+          {/* Contact & personal info */}
+          <div>
+          <SectionLabel>{t("owner.accountDetail.contactPersonalSection")}</SectionLabel>
           <div className="grid sm:grid-cols-2 gap-3">
             <InfoRow
               icon="mail"
               label={t("owner.accountDetail.emailLabel")}
-              value={account.email ?? "—"}
+              value={<NoTranslate>{account.email ?? "—"}</NoTranslate>}
+              title={account.email ?? undefined}
               onCopy={
                 account.email
                   ? () => copyToClipboard(account.email!, t("owner.accountDetail.emailLabel"))
@@ -786,7 +880,8 @@ export default function OwnerAccountDetail({ account, branches, open, onClose, o
             <InfoRow
               icon="phone"
               label={t("owner.accountDetail.phoneLabel")}
-              value={account.phone ?? "—"}
+              value={<NoTranslate>{account.phone ?? "—"}</NoTranslate>}
+              title={account.phone ?? undefined}
               onCopy={
                 account.phone
                   ? () => copyToClipboard(account.phone!, t("owner.accountDetail.phoneLabel"))
@@ -797,9 +892,9 @@ export default function OwnerAccountDetail({ account, branches, open, onClose, o
               icon="user"
               label={t("owner.accountDetail.genderLabel")}
               value={
-                account.gender === "male"
+                personalSource.gender === "male"
                   ? t("owner.accountDetail.genderMale")
-                  : account.gender === "female"
+                  : personalSource.gender === "female"
                   ? t("owner.accountDetail.genderFemale")
                   : "—"
               }
@@ -808,31 +903,40 @@ export default function OwnerAccountDetail({ account, branches, open, onClose, o
               icon="calendar"
               label={t("owner.accountDetail.birthDateLabel")}
               value={
-                account.birth_date
-                  ? `${fmtDate(account.birth_date)}${age !== null ? ` (${age} thn)` : ""}`
+                personalSource.birth_date
+                  ? `${fmtDate(personalSource.birth_date)}${age !== null ? ` (${age} yrs)` : ""}`
                   : "—"
               }
             />
             <InfoRow
               icon="pin"
               label={t("owner.accountDetail.branchLabel")}
-              value={account.branch?.name ?? "—"}
+              value={<NoTranslate>{account.branch?.name ?? "—"}</NoTranslate>}
+              title={account.branch?.name ?? undefined}
             />
             <InfoRow
               icon="home"
               label={t("owner.accountDetail.addressLabel")}
-              value={account.address ?? "—"}
+              value={<NoTranslate>{personalSource.address ?? "—"}</NoTranslate>}
+              title={personalSource.address ?? undefined}
             />
             {account.specialization && (
               <InfoRow
                 icon="star"
                 label={t("owner.accountDetail.specializationLabel")}
-                value={account.specialization}
+                value={<NoTranslate>{account.specialization}</NoTranslate>}
+                title={account.specialization}
               />
             )}
             {account.bio && (
-              <InfoRow icon="clipboard" label={t("owner.accountDetail.bioLabel")} value={account.bio} />
+              <InfoRow
+                icon="clipboard"
+                label={t("owner.accountDetail.bioLabel")}
+                value={<NoTranslate>{account.bio}</NoTranslate>}
+                title={account.bio}
+              />
             )}
+          </div>
           </div>
 
           {account.role === "school" && (
@@ -842,41 +946,51 @@ export default function OwnerAccountDetail({ account, branches, open, onClose, o
             </div>
           )}
 
-          {/* Bank Account */}
-          <div className="rounded-xl border border-line bg-paper-tint p-4">
-            <p className="text-xs font-bold text-ink-mute uppercase tracking-widest mb-3">
-              {t("owner.accountDetail.bankAccountTitle")}
-            </p>
-            {account.bank_account ? (
-              <div className="flex items-center gap-3">
-                <div className="flex-1">
-                  <div className="font-bold text-ink">{account.bank_name ?? "—"}</div>
-                  <div className="font-mono text-ocean-700 text-lg font-bold mt-0.5">
-                    {account.bank_account}
-                  </div>
-                  <div className="text-sm text-ink-mute">
-                    {t("owner.accountDetail.accountHolderPrefix")} {account.bank_holder ?? "—"}
-                  </div>
-                </div>
-                <button
-                  onClick={() =>
-                    copyToClipboard(account.bank_account!, t("owner.accountDetail.fieldBankAccount"))
-                  }
-                  className="w-10 h-10 rounded-xl border border-ocean-200 bg-ocean-50 text-ocean-700 hover:bg-ocean-100 flex items-center justify-center transition-colors"
-                  title={t("owner.accountDetail.copyBankAccountTitleAttr")}
-                >
-                  <Icon name="copy" className="w-4 h-4" />
-                </button>
+          {/* Bank Account — only roles that get paid through this system */}
+          {BANK_ACCOUNT_ROLES.includes(account.role) && (
+            <div>
+              <div className="flex items-center justify-between gap-2">
+                <SectionLabel className="flex-1">{t("owner.accountDetail.bankAccountTitle")}</SectionLabel>
+                {linkedStaff && (
+                  <span className="text-[10px] font-bold uppercase tracking-wide text-ocean-700 bg-ocean-50 border border-ocean-200 rounded-full px-2 py-0.5 shrink-0">
+                    {t("owner.accountDetail.viaLinkedStaffBadge")}
+                  </span>
+                )}
               </div>
-            ) : (
-              <p className="text-sm text-ink-mute italic">
-                {t("owner.accountDetail.bankAccountEmpty")}{" "}
-                <button onClick={openEdit} className="text-ocean-600 underline">
-                  {t("owner.accountDetail.addBankAccountLink")}
-                </button>
-              </p>
-            )}
-          </div>
+              {personalSource.bank_account ? (
+                <div className="flex items-center gap-3">
+                  <div className="flex-1">
+                    <div className="font-bold text-ink">
+                      <NoTranslate>{personalSource.bank_name ?? "—"}</NoTranslate>
+                    </div>
+                    <div className="font-mono text-ocean-700 text-lg font-bold mt-0.5">
+                      <NoTranslate>{personalSource.bank_account}</NoTranslate>
+                    </div>
+                    <div className="text-sm text-ink-mute">
+                      {t("owner.accountDetail.accountHolderPrefix")}{" "}
+                      <NoTranslate>{personalSource.bank_holder ?? "—"}</NoTranslate>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() =>
+                      copyToClipboard(personalSource.bank_account!, t("owner.accountDetail.fieldBankAccount"))
+                    }
+                    className="w-10 h-10 rounded-xl border border-ocean-200 bg-ocean-50 text-ocean-700 hover:bg-ocean-100 flex items-center justify-center transition-colors"
+                    title={t("owner.accountDetail.copyBankAccountTitleAttr")}
+                  >
+                    <Icon name="copy" className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                <p className="text-sm text-ink-mute italic">
+                  {t("owner.accountDetail.bankAccountEmpty")}{" "}
+                  <button onClick={openEdit} className="text-ocean-600 underline">
+                    {t("owner.accountDetail.addBankAccountLink")}
+                  </button>
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Reset Password */}
           {showPwdReset && (
@@ -928,11 +1042,14 @@ function InfoRow({
   icon,
   label,
   value,
+  title,
   onCopy,
 }: {
   icon: string;
   label: string;
-  value: string;
+  value: ReactNode;
+  /** Full-text value shown on hover — set this whenever `value` can overflow (addresses, notes, etc.), since `value` itself may be wrapped JSX rather than a plain string. */
+  title?: string;
   onCopy?: () => void;
 }) {
   const { t } = useLocale();
@@ -943,7 +1060,9 @@ function InfoRow({
       </span>
       <div className="flex-1 min-w-0">
         <div className="text-[10px] font-bold uppercase tracking-widest text-ink-faint">{label}</div>
-        <div className="text-sm text-ink font-medium truncate">{value}</div>
+        <div className="text-sm text-ink font-medium truncate" title={title}>
+          {value}
+        </div>
       </div>
       {onCopy && (
         <button

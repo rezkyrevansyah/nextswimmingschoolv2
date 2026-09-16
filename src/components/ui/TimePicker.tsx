@@ -1,17 +1,7 @@
 "use client";
-import React, { useState, useRef, useEffect, useCallback } from "react";
-import { createPortal } from "react-dom";
+import React, { useState, useRef, useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { useLocale } from "@/components/providers/LocaleProvider";
-
-// Generate time options: 04:00 – 22:45, step 15 min
-const TIME_OPTIONS: string[] = [];
-for (let h = 4; h <= 22; h++) {
-  for (const m of [0, 15, 30, 45]) {
-    if (h === 22 && m > 0) break;
-    TIME_OPTIONS.push(`${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`);
-  }
-}
 
 interface TimePickerProps {
   value: string;
@@ -21,126 +11,114 @@ interface TimePickerProps {
   disabled?: boolean;
 }
 
+function parseHHmm(value: string): { hh: string; mm: string } | null {
+  const m = /^(\d{2}):(\d{2})/.exec(value);
+  if (!m) return null;
+  return { hh: m[1], mm: m[2] };
+}
+
+function digitsToDisplay(digits: string): string {
+  if (digits.length <= 2) return digits;
+  return `${digits.slice(0, 2)}:${digits.slice(2)}`;
+}
+
+function clampDigits(digits: string): { hh: string; mm: string } {
+  let hh = digits.slice(0, 2);
+  let mm = digits.slice(2, 4);
+  if (hh.length === 1) hh = hh.padStart(2, "0");
+  if (mm.length === 1) mm = mm.padEnd(2, "0");
+  const hhNum = Math.min(parseInt(hh || "0", 10), 23);
+  const mmNum = Math.min(parseInt(mm || "0", 10), 59);
+  return { hh: String(hhNum).padStart(2, "0"), mm: String(mmNum).padStart(2, "0") };
+}
+
 export default function TimePicker({ value, onChange, placeholder, className, disabled }: TimePickerProps) {
   const { t } = useLocale();
-  const [open, setOpen] = useState(false);
-  const [dropStyle, setDropStyle] = useState<React.CSSProperties>({});
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const listRef = useRef<HTMLUListElement>(null);
+  const [digits, setDigits] = useState("");
+  const [editing, setEditing] = useState(false);
+  const [touched, setTouched] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  const updatePosition = useCallback(() => {
-    if (!triggerRef.current) return;
-    const rect = triggerRef.current.getBoundingClientRect();
-    const spaceBelow = window.innerHeight - rect.bottom;
-    const dropHeight = 208;
+  const parsedProp = useMemo(() => parseHHmm(value), [value]);
 
-    if (spaceBelow < dropHeight + 8) {
-      setDropStyle({
-        position: "fixed",
-        left: rect.left,
-        width: rect.width,
-        bottom: window.innerHeight - rect.top + 4,
-        zIndex: 9999,
-      });
-    } else {
-      setDropStyle({
-        position: "fixed",
-        left: rect.left,
-        width: rect.width,
-        top: rect.bottom + 4,
-        zIndex: 9999,
-      });
-    }
-  }, []);
+  const displayValue = editing
+    ? digitsToDisplay(digits)
+    : parsedProp
+      ? `${parsedProp.hh}:${parsedProp.mm}`
+      : "";
 
-  // Update position on open, scroll, resize
-  useEffect(() => {
-    if (!open) return;
-    updatePosition();
-    window.addEventListener("scroll", updatePosition, true);
-    window.addEventListener("resize", updatePosition);
-    return () => {
-      window.removeEventListener("scroll", updatePosition, true);
-      window.removeEventListener("resize", updatePosition);
-    };
-  }, [open, updatePosition]);
-
-  // Close on outside click
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (
-        triggerRef.current?.contains(e.target as Node) ||
-        listRef.current?.contains(e.target as Node)
-      ) return;
-      setOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [open]);
-
-  // Scroll selected into view after dropdown appears
-  useEffect(() => {
-    if (!open || !listRef.current) return;
-    const selected = listRef.current.querySelector("[data-selected]") as HTMLElement | null;
-    if (selected) selected.scrollIntoView({ block: "center" });
-  }, [open]);
-
-  const handleSelect = (t: string) => {
-    onChange(t);
-    setOpen(false);
+  const commit = (raw: string) => {
+    const { hh, mm } = clampDigits(raw);
+    onChange(`${hh}:${mm}`);
+    setDigits(`${hh}${mm}`);
   };
 
-  const dropdown = open ? (
-    <ul
-      ref={listRef}
-      style={dropStyle}
-      className="bg-white border border-line rounded-xl shadow-float overflow-y-auto max-h-52 py-1"
-    >
-      {TIME_OPTIONS.map(t => (
-        <li key={t}>
-          <button
-            type="button"
-            data-selected={t === value ? true : undefined}
-            onClick={() => handleSelect(t)}
-            className={cn(
-              "w-full text-left px-4 py-2 text-sm font-mono font-semibold transition-colors",
-              t === value
-                ? "bg-ocean-600 text-white"
-                : "text-ink hover:bg-ocean-50 hover:text-ocean-700"
-            )}
-          >
-            {t}
-          </button>
-        </li>
-      ))}
-    </ul>
-  ) : null;
+  const handleFocus = () => {
+    setEditing(true);
+    setTouched(false);
+    setDigits(parsedProp ? `${parsedProp.hh}${parsedProp.mm}` : "");
+    requestAnimationFrame(() => inputRef.current?.select());
+  };
+
+  const applyDigits = (raw: string) => {
+    const next = raw.replace(/\D/g, "").slice(0, 4);
+    setTouched(true);
+    if (next.length === 4) {
+      commit(next);
+    } else {
+      setDigits(next);
+    }
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    applyDigits(e.target.value);
+  };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    applyDigits(e.clipboardData.getData("text"));
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Backspace") {
+      e.preventDefault();
+      setTouched(true);
+      setDigits(d => d.slice(0, -1));
+    }
+  };
+
+  const handleBlur = () => {
+    setEditing(false);
+    if (touched && digits.length > 0) {
+      commit(digits);
+    }
+    setTouched(false);
+  };
 
   return (
     <div className={cn("relative", className)}>
-      <button
-        ref={triggerRef}
-        type="button"
+      <input
+        ref={inputRef}
+        type="text"
+        inputMode="numeric"
+        pattern="[0-9]*"
+        autoComplete="off"
         disabled={disabled}
-        onClick={() => !disabled && setOpen(v => !v)}
+        value={displayValue}
+        placeholder={placeholder || t("common.timePicker.placeholder")}
+        onFocus={handleFocus}
+        onBlur={handleBlur}
+        onChange={handleChange}
+        onPaste={handlePaste}
+        onKeyDown={handleKeyDown}
         className={cn(
-          "w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl border text-sm transition-colors",
-          "bg-white border-line text-ink",
-          disabled ? "opacity-50 cursor-not-allowed" : "hover:border-ocean-400 cursor-pointer",
-          open && "border-ocean-500 ring-2 ring-ocean-500/20",
-          !value && "text-ink-faint",
+          "w-full px-3.5 py-2.5 min-h-[44px] rounded-xl border border-line bg-white text-sm font-mono font-semibold tracking-wider text-center text-ink",
+          "placeholder:text-ink-faint placeholder:font-sans placeholder:font-normal placeholder:tracking-normal",
+          "focus:border-wave-400 focus:ring-2 focus:ring-wave-100 outline-none transition",
+          disabled && "opacity-50 cursor-not-allowed bg-paper-tint",
         )}
-      >
-        <span className="font-mono font-semibold tracking-wider">
-          {value || placeholder || t("common.timePicker.placeholder")}
-        </span>
-        <svg viewBox="0 0 24 24" className={cn("w-4 h-4 text-ink-mute transition-transform shrink-0", open && "rotate-180")} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-          <path d="M6 9l6 6 6-6" />
-        </svg>
-      </button>
-
-      {typeof window !== "undefined" && createPortal(dropdown, document.body)}
+      />
+      <p className="text-[11px] text-ink-faint mt-1">{t("common.timePicker.hint")}</p>
     </div>
   );
 }

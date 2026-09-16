@@ -85,6 +85,13 @@ export async function POST(
   });
 
   if (insertError) {
+    // Unique violation on (coach_id, branch_id) — a concurrent request won the race first.
+    if (insertError.code === "23505") {
+      return NextResponse.json(
+        { error: "Coach sudah terdaftar di cabang ini", code: "ALREADY_LINKED" },
+        { status: 409 }
+      );
+    }
     return NextResponse.json({ error: insertError.message }, { status: 500 });
   }
 
@@ -133,6 +140,21 @@ export async function DELETE(
     );
   }
 
+  // Clean up any class assignments this coach has at this branch — otherwise
+  // they'd stay assigned to classes at a center they're no longer linked to.
+  const { data: branchClasses } = await db.from("classes").select("id").eq("branch_id", branch_id);
+  const classIds = (branchClasses ?? []).map(c => c.id);
+  let removedClassAssignments = 0;
+  if (classIds.length > 0) {
+    const { data: deleted } = await db
+      .from("class_coaches")
+      .delete()
+      .eq("coach_id", coachId)
+      .in("class_id", classIds)
+      .select("class_id");
+    removedClassAssignments = deleted?.length ?? 0;
+  }
+
   const { error } = await db
     .from("coach_branches")
     .delete()
@@ -143,5 +165,5 @@ export async function DELETE(
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ success: true });
+  return NextResponse.json({ success: true, removedClassAssignments });
 }

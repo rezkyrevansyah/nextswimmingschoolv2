@@ -6,6 +6,7 @@ import Status from "@/components/ui/Status";
 import Avatar from "@/components/ui/Avatar";
 import { createClient } from "@/utils/supabase/client";
 import { useLocale } from "@/components/providers/LocaleProvider";
+import { memberDbToUi, memberStatusKind } from "@/lib/attendance";
 import type { ClassRow, AttendanceRow } from "../_types";
 
 export default function AdminDashboard({ branchId }: { branchId: string }) {
@@ -28,7 +29,7 @@ export default function AdminDashboard({ branchId }: { branchId: string }) {
         .order("clock_in_at", { ascending: false }).limit(6),
       supabase.from("member_attendances")
         .select("id, session_date, status, member:members(profile:profiles(full_name)), class:classes(name)")
-        .eq("session_date", today).eq("status", "hadir")
+        .eq("session_date", today).in("status", ["hadir", "telat"])
         .order("created_at", { ascending: false }).limit(6),
     ]);
     if (coachRes.data) setRecentCoachAtt(coachRes.data as unknown as AttendanceRow[]);
@@ -205,14 +206,16 @@ export default function AdminDashboard({ branchId }: { branchId: string }) {
             ))}
             {recentMemberAtt.map((a) => (
               <div key={`m-${a.id}`} className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-paper-tint">
-                <span className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-ok-50 text-ok-600">
+                <span className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${memberStatusKind(a.status) === "late" ? "bg-warn-50 text-warn-600" : "bg-ok-50 text-ok-600"}`}>
                   <Icon name="users" className="w-3.5 h-3.5" />
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="text-xs font-semibold text-ink truncate">{a.member_name}</div>
                   <div className="text-[10px] text-ink-mute">{t("admin.dashboard.memberAttendanceLine", { class: a.class_name })}</div>
                 </div>
-                <span className="text-[10px] font-mono text-ink-faint text-ok-500">{t("admin.dashboard.presentLabel")}</span>
+                <span className={`text-[10px] font-mono ${memberDbToUi(a.status) === "late" ? "text-warn-600" : "text-ok-500"}`}>
+                  {memberDbToUi(a.status) === "late" ? t("admin.absensi.statusLate") : t("admin.dashboard.presentLabel")}
+                </span>
               </div>
             ))}
           </div>

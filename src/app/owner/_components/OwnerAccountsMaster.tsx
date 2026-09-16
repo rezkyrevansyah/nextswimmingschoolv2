@@ -5,7 +5,8 @@ import { useToast } from "@/components/providers/ToastProvider";
 import { useLocale } from "@/components/providers/LocaleProvider";
 import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
-import { Field, Input, Select } from "@/components/ui/FormFields";
+import { Field, Input, PasswordInput, Select, Switch, SectionLabel } from "@/components/ui/FormFields";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 import { Card } from "@/components/ui/Card";
 import Status from "@/components/ui/Status";
 import Avatar from "@/components/ui/Avatar";
@@ -18,8 +19,15 @@ import {
   type QRCardAccount,
 } from "@/lib/qrCardGenerator";
 
-type RoleFilter = "all" | "owner" | "admin" | "coach" | "member" | "school" | "staff";
-type CreatableRole = "admin" | "coach" | "member" | "school" | "staff";
+type RoleFilter = "all" | "owner" | "admin" | "manager_center" | "coach" | "member" | "school" | "staff";
+type CreatableRole = "admin" | "manager_center" | "coach" | "member" | "school" | "staff";
+
+/** "budi@sekolah.com" -> "budistaff@sekolah.com"; "" if the email isn't complete yet. */
+const deriveStaffEmail = (email: string): string => {
+  const at = email.indexOf("@");
+  if (at <= 0) return "";
+  return `${email.slice(0, at)}staff${email.slice(at)}`;
+};
 
 const EMPTY_FORM = {
   role: "staff" as CreatableRole,
@@ -31,7 +39,11 @@ const EMPTY_FORM = {
   custom_role_label: "",
   member_type: "reguler" as "reguler" | "private" | "school_affiliate",
   school_id: "",
+  school_grade: "",
   total_sessions: "",
+  bank_name: "",
+  bank_account: "",
+  bank_holder: "",
 };
 
 export default function OwnerAccountsMaster({ branches }: { branches: { id: string; name: string }[] }) {
@@ -50,12 +62,12 @@ export default function OwnerAccountsMaster({ branches }: { branches: { id: stri
   const [selected, setSelected] = useState<AccountProfile | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
-  const [showPwd, setShowPwd] = useState(false);
   const [saving, setSaving] = useState(false);
   const [autoCreateStaff, setAutoCreateStaff] = useState(false);
   const [staffFullName, setStaffFullName] = useState("");
   const [staffEmail, setStaffEmail] = useState("");
   const [staffPassword, setStaffPassword] = useState("");
+  const [sameStaffPassword, setSameStaffPassword] = useState(true);
 
   // ── Batch QR Download State ──────────────────────────────────────────────────
   const [qrSelectMode, setQrSelectMode] = useState(false);
@@ -101,11 +113,14 @@ export default function OwnerAccountsMaster({ branches }: { branches: { id: stri
     ({
       owner: t("owner.accounts.roleOwner"),
       admin: t("owner.accounts.roleAdmin"),
+      manager_center: t("owner.accounts.roleManagerCenter"),
       coach: t("owner.accounts.roleCoach"),
       member: t("owner.accounts.roleMember"),
       school: t("owner.accounts.roleSchool"),
       staff: t("owner.accounts.roleStaff"),
     })[role] ?? role;
+  const KNOWN_ROLES = ["owner", "admin", "manager_center", "coach", "member", "school", "staff"];
+  const isKnownRole = (role: string) => KNOWN_ROLES.includes(role);
 
   const filtered = useMemo(() => {
     return accounts
@@ -173,7 +188,7 @@ export default function OwnerAccountsMaster({ branches }: { branches: { id: stri
   // ── Batch Downloads ─────────────────────────────────────────────────────────
   const handleDownloadSelectedZip = async () => {
     const selectedAccounts = accounts.filter((a) => selectedQRIds.has(a.id)).map(toQRCardAccount);
-    if (selectedAccounts.length === 0) return toast.error("Pilih setidaknya 1 akun untuk diunduh.");
+    if (selectedAccounts.length === 0) return toast.error(t("owner.accounts.selectMinOneDownload"));
 
     setGeneratingQR(true);
     setQrProgress({ current: 0, total: selectedAccounts.length });
@@ -183,12 +198,12 @@ export default function OwnerAccountsMaster({ branches }: { branches: { id: stri
       await downloadBulkQRZip(selectedAccounts, zipName, (curr, tot) => {
         setQrProgress({ current: curr, total: tot });
       });
-      toast.success("Berhasil mengunduh ZIP!", `${selectedAccounts.length} file QR code tersimpan.`);
+      toast.success(t("owner.accounts.downloadZipSuccess"), t("owner.accounts.downloadZipSuccessSub", { count: selectedAccounts.length }));
       setQrSelectMode(false);
       setSelectedQRIds(new Set());
     } catch (err) {
       console.error(err);
-      toast.error("Gagal membuat file ZIP");
+      toast.error(t("owner.accounts.zipCreateFailed"));
     }
 
     setGeneratingQR(false);
@@ -197,13 +212,13 @@ export default function OwnerAccountsMaster({ branches }: { branches: { id: stri
 
   const handlePrintSelectedSheet = async () => {
     const selectedAccounts = accounts.filter((a) => selectedQRIds.has(a.id)).map(toQRCardAccount);
-    if (selectedAccounts.length === 0) return toast.error("Pilih setidaknya 1 akun untuk dicetak.");
+    if (selectedAccounts.length === 0) return toast.error(t("owner.accounts.selectMinOnePrint"));
 
     try {
       await printQRCardSheet(selectedAccounts);
     } catch (err) {
       console.error(err);
-      toast.error("Gagal membuka jendela cetak");
+      toast.error(t("owner.accounts.printWindowOpenFailed"));
     }
   };
 
@@ -214,7 +229,7 @@ export default function OwnerAccountsMaster({ branches }: { branches: { id: stri
     if (quickBranch !== "all") target = target.filter((a) => a.branch_id === quickBranch);
 
     if (target.length === 0) {
-      return toast.error("Tidak ada akun yang cocok dengan filter yang dipilih.");
+      return toast.error(t("owner.accounts.noAccountsMatchFilter"));
     }
 
     const cardAccounts = target.map(toQRCardAccount);
@@ -238,10 +253,10 @@ export default function OwnerAccountsMaster({ branches }: { branches: { id: stri
       await downloadBulkQRZip(cardAccounts, zipName, (curr, tot) => {
         setQrProgress({ current: curr, total: tot });
       });
-      toast.success("Berhasil mengunduh ZIP!", `${cardAccounts.length} file QR code tersimpan.`);
+      toast.success(t("owner.accounts.downloadZipSuccess"), t("owner.accounts.downloadZipSuccessSub", { count: cardAccounts.length }));
     } catch (err) {
       console.error(err);
-      toast.error("Gagal membuat file ZIP");
+      toast.error(t("owner.accounts.zipCreateFailed"));
     }
 
     setGeneratingQR(false);
@@ -254,6 +269,7 @@ export default function OwnerAccountsMaster({ branches }: { branches: { id: stri
     setStaffFullName("");
     setStaffEmail("");
     setStaffPassword("");
+    setSameStaffPassword(true);
     setShowAdd(true);
   };
 
@@ -262,6 +278,7 @@ export default function OwnerAccountsMaster({ branches }: { branches: { id: stri
       return toast.error(t("owner.accounts.allFieldsRequired"));
     }
     setSaving(true);
+    const effectiveStaffPassword = sameStaffPassword ? form.password : staffPassword;
     const res = await fetch("/api/admin/users", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -273,16 +290,23 @@ export default function OwnerAccountsMaster({ branches }: { branches: { id: stri
         branch_id: form.branch_id,
         phone: form.phone || undefined,
         custom_role_label:
-          form.role === "staff" || form.role === "admin" ? form.custom_role_label || undefined : undefined,
+          form.role === "staff" || form.role === "admin" || form.role === "manager_center" ? form.custom_role_label || undefined : undefined,
+        ...(form.role === "staff"
+          ? {
+              bank_name: form.bank_name.trim() || undefined,
+              bank_account: form.bank_account.trim() || undefined,
+              bank_holder: form.bank_holder.trim() || undefined,
+            }
+          : {}),
         ...(form.role === "member"
           ? {
               member_type: form.member_type,
               school_id: form.member_type === "school_affiliate" ? form.school_id || undefined : undefined,
-              total_sessions: form.member_type === "private" ? Number(form.total_sessions) || undefined : undefined,
+              school_grade: form.member_type === "school_affiliate" ? form.school_grade.trim() || undefined : undefined,
             }
           : {}),
-        ...(form.role === "admin" && autoCreateStaff && staffEmail && staffPassword
-          ? { auto_staff: { email: staffEmail, password: staffPassword, full_name: staffFullName.trim() || undefined } }
+        ...((form.role === "admin" || form.role === "manager_center") && autoCreateStaff && staffEmail && effectiveStaffPassword
+          ? { auto_staff: { email: staffEmail, password: effectiveStaffPassword, full_name: staffFullName.trim() || undefined } }
           : {}),
       }),
     });
@@ -294,7 +318,7 @@ export default function OwnerAccountsMaster({ branches }: { branches: { id: stri
       return;
     }
     if (json.staff_warning) {
-      toast.error("Perhatian", json.staff_warning);
+      toast.error(t("owner.accounts.attentionTitle"), json.staff_warning);
     }
     if (form.role === "school" && json.user_id) {
       await supabase.from("schools").insert({
@@ -332,6 +356,7 @@ export default function OwnerAccountsMaster({ branches }: { branches: { id: stri
             <option value="all">{t("owner.accounts.roleFilterAll")}</option>
             <option value="owner">{t("owner.accounts.roleOwner")}</option>
             <option value="admin">{t("owner.accounts.roleAdmin")}</option>
+            <option value="manager_center">{t("owner.accounts.roleManagerCenter")}</option>
             <option value="coach">{t("owner.accounts.roleCoach")}</option>
             <option value="member">{t("owner.accounts.roleMember")}</option>
             <option value="school">{t("owner.accounts.roleSchool")}</option>
@@ -344,7 +369,7 @@ export default function OwnerAccountsMaster({ branches }: { branches: { id: stri
           >
             <option value="">{t("owner.accounts.branchFilterAll")}</option>
             {branches.map((b) => (
-              <option key={b.id} value={b.id}>
+              <option key={b.id} value={b.id} translate="no" className="notranslate">
                 {b.name}
               </option>
             ))}
@@ -371,7 +396,7 @@ export default function OwnerAccountsMaster({ branches }: { branches: { id: stri
               setShowQuickDownloadModal(true);
             }}
           >
-            Unduh Cepat QR
+            {t("owner.accounts.quickDownloadQr")}
           </Btn>
 
           {/* Toggle Checkbox Select Mode */}
@@ -383,7 +408,7 @@ export default function OwnerAccountsMaster({ branches }: { branches: { id: stri
               if (qrSelectMode) setSelectedQRIds(new Set());
             }}
           >
-            {qrSelectMode ? "Selesai Memilih" : "Mode Unduh QR"}
+            {qrSelectMode ? "Done Selecting" : "QR Select Mode"}
           </Btn>
 
           <Btn variant="primary" icon="plus" onClick={openCreate}>
@@ -402,11 +427,11 @@ export default function OwnerAccountsMaster({ branches }: { branches: { id: stri
             <div>
               <div className="font-bold text-sm">
                 {selectedQRIds.size > 0
-                  ? `${selectedQRIds.size} Akun Terpilih`
-                  : "Pilih akun pada tabel untuk mengunduh QR Code"}
+                  ? t("owner.accounts.accountsSelectedCount", { count: selectedQRIds.size })
+                  : t("owner.accounts.selectAccountsToDownloadHint")}
               </div>
               <div className="text-xs text-ocean-300">
-                {filtered.length} akun cocok dengan filter saat ini
+                {t("owner.accounts.accountsMatchFilter", { count: filtered.length })}
               </div>
             </div>
           </div>
@@ -429,7 +454,7 @@ export default function OwnerAccountsMaster({ branches }: { branches: { id: stri
               disabled={selectedQRIds.size === 0 || generatingQR}
               onClick={handleDownloadSelectedZip}
             >
-              {generatingQR ? "Menghasilkan…" : `Unduh ZIP (${selectedQRIds.size})`}
+              {generatingQR ? t("common.actions.saving") : `Download ZIP (${selectedQRIds.size})`}
             </Btn>
             <Btn
               variant="soft"
@@ -439,7 +464,7 @@ export default function OwnerAccountsMaster({ branches }: { branches: { id: stri
               onClick={handlePrintSelectedSheet}
               className="!bg-ocean-800 !text-white hover:!bg-ocean-700"
             >
-              Cetak Lembar A4
+              Print A4 Sheet
             </Btn>
             <button
               onClick={() => {
@@ -514,28 +539,35 @@ export default function OwnerAccountsMaster({ branches }: { branches: { id: stri
                           <Avatar name={displayName} src={a.avatar_url ?? undefined} size={36} />
                           <div className="min-w-0">
                             <div className="font-semibold text-ink-strong truncate max-w-[160px] sm:max-w-none">
-                              {displayName}
+                              <NoTranslate>{displayName}</NoTranslate>
                             </div>
                             <div className="text-xs text-ink-mute truncate max-w-[160px] sm:max-w-none">
-                              {a.email ?? "—"}
+                              <NoTranslate>{a.email ?? "—"}</NoTranslate>
                             </div>
                           </div>
                         </div>
                       </td>
                       <td className="text-ink-soft">
-                        <span className="font-medium">{roleLabel(a.role)}</span>
+                        <span className="font-medium">
+                          {isKnownRole(a.role) ? roleLabel(a.role) : <NoTranslate>{roleLabel(a.role)}</NoTranslate>}
+                        </span>
                         {a.custom_role_label && !a.custom_role_label.includes("@") && (
-                          <span className="text-ink-faint text-xs"> · {a.custom_role_label}</span>
+                          <span className="text-ink-faint text-xs">
+                            {" · "}
+                            <NoTranslate>{a.custom_role_label}</NoTranslate>
+                          </span>
                         )}
                       </td>
                       <td className="hidden sm:table-cell">
                         <div className="flex items-center gap-1.5">
                           <span className="font-mono text-xs font-semibold text-ocean-700 bg-ocean-50 px-2 py-0.5 rounded border border-ocean-200">
-                            {code}
+                            <NoTranslate>{code}</NoTranslate>
                           </span>
                         </div>
                       </td>
-                      <td className="text-ink-soft hidden md:table-cell">{a.branch?.name ?? "—"}</td>
+                      <td className="text-ink-soft hidden md:table-cell">
+                        <NoTranslate>{a.branch?.name ?? "—"}</NoTranslate>
+                      </td>
                       <td>
                         {a.is_archived ? (
                           <Status kind="archived">{t("owner.accountDetail.inactiveBadge")}</Status>
@@ -548,14 +580,14 @@ export default function OwnerAccountsMaster({ branches }: { branches: { id: stri
                           <button
                             onClick={() => downloadSingleQRCard(toQRCardAccount(a))}
                             className="w-8 h-8 rounded-lg border border-line bg-white hover:bg-ocean-50 text-ink-mute hover:text-ocean-700 flex items-center justify-center transition-colors"
-                            title="Unduh ID Card (PNG)"
+                            title={t("owner.accountDetail.downloadIdCardPng")}
                           >
                             <Icon name="download" className="w-3.5 h-3.5" />
                           </button>
                           <button
                             onClick={() => setSelected(a)}
                             className="w-8 h-8 rounded-lg border border-line bg-white hover:bg-paper-tint text-ink-mute hover:text-ink-strong flex items-center justify-center transition-colors"
-                            title="Lihat Detail Akun"
+                            title={t("owner.accountDetail.viewTitle")}
                           >
                             <Icon name="eye" className="w-3.5 h-3.5" />
                           </button>
@@ -590,7 +622,7 @@ export default function OwnerAccountsMaster({ branches }: { branches: { id: stri
       <Modal
         open={showQuickDownloadModal}
         onClose={() => setShowQuickDownloadModal(false)}
-        title="Unduh Cepat QR Code Akun"
+        title={t("owner.accounts.quickDownloadModalTitle")}
         size="md"
         footer={
           <div className="flex gap-2 justify-end w-full">
@@ -598,35 +630,36 @@ export default function OwnerAccountsMaster({ branches }: { branches: { id: stri
               {t("common.actions.cancel")}
             </Btn>
             <Btn variant="soft" icon="print" onClick={() => handleExecuteQuickDownload("print")}>
-              Cetak Lembar A4
+              {t("owner.accounts.printA4SheetBtn")}
             </Btn>
             <Btn variant="primary" icon="download" onClick={() => handleExecuteQuickDownload("zip")}>
-              Unduh ZIP
+              {t("owner.accounts.downloadZipBtn")}
             </Btn>
           </div>
         }
       >
         <div className="space-y-4">
           <p className="text-sm text-ink-soft">
-            Pilih filter role atau cabang untuk mengunduh semua QR Code sekaligus tanpa harus mencentang manual.
+            {t("owner.accounts.quickDownloadModalHint")}
           </p>
 
-          <Field label="Filter Role">
+          <Field label={t("owner.accounts.filterRoleLabel")}>
             <Select value={quickRole} onChange={(e) => setQuickRole(e.target.value as RoleFilter)}>
-              <option value="all">Semua Role</option>
-              <option value="coach">Semua Coach</option>
-              <option value="member">Semua Member</option>
-              <option value="staff">Semua Staff</option>
-              <option value="admin">Semua Admin</option>
-              <option value="school">Semua Sekolah</option>
+              <option value="all">{t("owner.accounts.filterRoleAll")}</option>
+              <option value="coach">{t("owner.accounts.filterRoleCoachOnly")}</option>
+              <option value="member">{t("owner.accounts.filterRoleMemberOnly")}</option>
+              <option value="staff">{t("owner.accounts.filterRoleStaffOnly")}</option>
+              <option value="admin">{t("owner.accounts.filterRoleAdminOnly")}</option>
+              <option value="manager_center">{t("owner.accounts.filterRoleManagerCenterOnly")}</option>
+              <option value="school">{t("owner.accounts.filterRoleSchoolOnly")}</option>
             </Select>
           </Field>
 
-          <Field label="Filter Cabang">
+          <Field label={t("owner.accounts.filterCenterLabel")}>
             <Select value={quickBranch} onChange={(e) => setQuickBranch(e.target.value)}>
-              <option value="all">Semua Cabang</option>
+              <option value="all">{t("owner.accounts.filterCenterAll")}</option>
               {branches.map((b) => (
-                <option key={b.id} value={b.id}>
+                <option key={b.id} value={b.id} translate="no" className="notranslate">
                   {b.name}
                 </option>
               ))}
@@ -634,12 +667,12 @@ export default function OwnerAccountsMaster({ branches }: { branches: { id: stri
           </Field>
 
           <div className="p-3 bg-paper-tint rounded-xl border border-line text-xs text-ink-mute space-y-1">
-            <div className="font-semibold text-ink">Format Gambar yang Dihasilkan:</div>
-            <div>• Setiap kartu ID dilengkapi nama, role badge, nomor identitas, dan QR Code.</div>
+            <div className="font-semibold text-ink">{t("owner.accounts.generatedImageFormatTitle")}</div>
+            <div>• {t("owner.accounts.generatedImageFormatBullet1")}</div>
             <div>
-              • Penamaan file otomatis:{" "}
+              • {t("owner.accounts.generatedImageFormatBullet2")}{" "}
               <code className="font-mono text-ocean-700 bg-white px-1 rounded">
-                [ROLE]_[NAMA]_[USER_NO].png
+                [ROLE]_[NAME]_[USER_NO].png
               </code>
             </div>
           </div>
@@ -647,17 +680,17 @@ export default function OwnerAccountsMaster({ branches }: { branches: { id: stri
       </Modal>
 
       {/* ── Modal: Batch QR Generation Progress ── */}
-      <Modal open={generatingQR && qrProgress !== null} onClose={() => {}} title="Membuat File ZIP..." size="sm">
+      <Modal open={generatingQR && qrProgress !== null} onClose={() => {}} title={t("owner.accounts.creatingZipTitle")} size="sm">
         <div className="py-6 space-y-4 text-center">
           <div className="w-12 h-12 rounded-2xl bg-ocean-50 text-ocean-600 mx-auto flex items-center justify-center animate-pulse">
             <Icon name="download" className="w-6 h-6" />
           </div>
           <div>
             <div className="text-base font-bold text-ink">
-              Sedang Menghasilkan Kartu QR...
+              Generating QR Cards...
             </div>
             <div className="text-xs text-ink-mute mt-1">
-              Memproses {qrProgress?.current || 0} dari {qrProgress?.total || 0} akun
+              Processing {qrProgress?.current || 0} of {qrProgress?.total || 0} accounts
             </div>
           </div>
           {qrProgress && (
@@ -676,7 +709,7 @@ export default function OwnerAccountsMaster({ branches }: { branches: { id: stri
         open={showAdd}
         onClose={() => setShowAdd(false)}
         title={t("owner.accounts.createModalTitle")}
-        size="sm"
+        size="md"
         footer={
           <>
             <Btn variant="ghost" onClick={() => setShowAdd(false)}>
@@ -695,24 +728,20 @@ export default function OwnerAccountsMaster({ branches }: { branches: { id: stri
               onChange={(e) => setForm((f) => ({ ...f, role: e.target.value as CreatableRole }))}
             >
               <option value="admin">{t("owner.accounts.roleAdmin")}</option>
+              <option value="manager_center">{t("owner.accounts.roleManagerCenter")}</option>
               <option value="coach">{t("owner.accounts.roleCoach")}</option>
               <option value="member">{t("owner.accounts.roleMember")}</option>
               <option value="school">{t("owner.accounts.roleSchool")}</option>
               <option value="staff">{t("owner.accounts.roleStaff")}</option>
             </Select>
           </Field>
+
+          {/* ── Section 1: Personal Data ── */}
+          <SectionLabel>{t("owner.accounts.sectionPersonalData")}</SectionLabel>
           <Field label={t("owner.accounts.fieldFullName")} required>
             <Input
               value={form.full_name}
               onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))}
-              autoComplete="off"
-            />
-          </Field>
-          <Field label={t("owner.accounts.fieldEmail")} required>
-            <Input
-              type="email"
-              value={form.email}
-              onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
               autoComplete="off"
             />
           </Field>
@@ -725,22 +754,7 @@ export default function OwnerAccountsMaster({ branches }: { branches: { id: stri
               autoComplete="off"
             />
           </Field>
-          <Field label={t("owner.accounts.fieldBranch")} required>
-            <Select
-              value={form.branch_id}
-              onChange={(e) => setForm((f) => ({ ...f, branch_id: e.target.value }))}
-            >
-              <option value="" disabled>
-                {t("owner.accounts.fieldBranchPlaceholder")}
-              </option>
-              {branches.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          {(form.role === "staff" || form.role === "admin") && (
+          {(form.role === "staff" || form.role === "admin" || form.role === "manager_center") && (
             <Field
               label={t("owner.accounts.fieldCustomRoleLabel")}
               hint={t("owner.accounts.customRoleLabelHint")}
@@ -753,61 +767,6 @@ export default function OwnerAccountsMaster({ branches }: { branches: { id: stri
               />
             </Field>
           )}
-          {form.role === "admin" && (
-            <div className="rounded-xl border border-line bg-paper-tint p-4 space-y-3">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold text-ink">Buat akun Staff otomatis</p>
-                  <p className="text-xs text-ink-mute mt-0.5">
-                    Admin juga mendapat akun Staff terpisah untuk absen &amp; payslip
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setAutoCreateStaff((v) => !v)}
-                  className={`w-10 h-6 rounded-full transition-colors shrink-0 ${
-                    autoCreateStaff ? "bg-ocean-600" : "bg-line"
-                  }`}
-                >
-                  <span
-                    className={`block w-4 h-4 bg-white rounded-full shadow transition-transform mx-1 ${
-                      autoCreateStaff ? "translate-x-4" : "translate-x-0"
-                    }`}
-                  />
-                </button>
-              </div>
-              {autoCreateStaff && (
-                <>
-                  <Field label="Nama Staff" hint="Opsional, contoh: Dewi (Staff)">
-                    <Input
-                      value={staffFullName}
-                      onChange={(e) => setStaffFullName(e.target.value)}
-                      placeholder="Nama staff..."
-                      autoComplete="off"
-                    />
-                  </Field>
-                  <Field label="Email akun Staff" required>
-                    <Input
-                      type="email"
-                      value={staffEmail}
-                      onChange={(e) => setStaffEmail(e.target.value)}
-                      placeholder="staff@example.com"
-                      autoComplete="off"
-                    />
-                  </Field>
-                  <Field label="Password akun Staff" required>
-                    <Input
-                      type="password"
-                      value={staffPassword}
-                      onChange={(e) => setStaffPassword(e.target.value)}
-                      placeholder="Min 8 karakter"
-                      autoComplete="new-password"
-                    />
-                  </Field>
-                </>
-              )}
-            </div>
-          )}
           {form.role === "member" && (
             <>
               <Field label={t("owner.accounts.fieldMemberType")}>
@@ -818,60 +777,176 @@ export default function OwnerAccountsMaster({ branches }: { branches: { id: stri
                   }
                 >
                   <option value="reguler">{t("owner.accounts.memberTypeRegular")}</option>
-                  <option value="private">{t("owner.accounts.memberTypePrivate")}</option>
                   <option value="school_affiliate">{t("owner.accounts.memberTypeSchoolAffiliate")}</option>
                 </Select>
               </Field>
               {form.member_type === "school_affiliate" && (
-                <Field label={t("owner.accounts.fieldSchool")}>
-                  <Select
-                    value={form.school_id}
-                    onChange={(e) => setForm((f) => ({ ...f, school_id: e.target.value }))}
-                  >
-                    <option value="">{t("owner.accounts.fieldSchoolPlaceholder")}</option>
-                    {schools.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-              )}
-              {form.member_type === "private" && (
-                <Field label={t("owner.accounts.fieldTotalSessions")}>
-                  <Input
-                    type="number"
-                    min={0}
-                    value={form.total_sessions}
-                    onChange={(e) => setForm((f) => ({ ...f, total_sessions: e.target.value }))}
-                  />
-                </Field>
+                <>
+                  <Field label={t("owner.accounts.fieldSchool")}>
+                    <Select
+                      value={form.school_id}
+                      onChange={(e) => setForm((f) => ({ ...f, school_id: e.target.value }))}
+                    >
+                      <option value="">{t("owner.accounts.fieldSchoolPlaceholder")}</option>
+                      {schools.map((s) => (
+                        <option key={s.id} value={s.id} translate="no" className="notranslate">
+                          {s.name}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                  <Field label={t("owner.accounts.fieldSchoolGrade")} hint={t("owner.accounts.fieldSchoolGradeHint")}>
+                    <Input
+                      value={form.school_grade}
+                      onChange={(e) => setForm((f) => ({ ...f, school_grade: e.target.value }))}
+                      placeholder={t("owner.accounts.fieldSchoolGradePlaceholder")}
+                      autoComplete="off"
+                    />
+                  </Field>
+                </>
               )}
             </>
           )}
+          {form.role === "staff" && (
+            <div className="rounded-xl border border-line bg-paper-tint p-4 space-y-3">
+              <div>
+                <p className="text-sm font-semibold text-ink">{t("owner.accountDetail.bankAccountTitle")}</p>
+                <p className="text-xs text-ink-mute mt-0.5">{t("owner.accounts.bankSectionHint")}</p>
+              </div>
+              <Field label={t("owner.accountDetail.fieldBankName")}>
+                <Input
+                  value={form.bank_name}
+                  onChange={(e) => setForm((f) => ({ ...f, bank_name: e.target.value }))}
+                  placeholder={t("owner.accountDetail.bankNamePlaceholder")}
+                  autoComplete="off"
+                />
+              </Field>
+              <Field label={t("owner.accountDetail.fieldBankAccount")}>
+                <Input
+                  value={form.bank_account}
+                  onChange={(e) => setForm((f) => ({ ...f, bank_account: e.target.value }))}
+                  placeholder={t("owner.accountDetail.bankAccountPlaceholder")}
+                  autoComplete="off"
+                />
+              </Field>
+              <Field label={t("owner.accountDetail.fieldBankHolder")}>
+                <Input
+                  value={form.bank_holder}
+                  onChange={(e) => setForm((f) => ({ ...f, bank_holder: e.target.value }))}
+                  placeholder={t("owner.accountDetail.bankHolderPlaceholder")}
+                  autoComplete="off"
+                />
+              </Field>
+            </div>
+          )}
+
+          {/* ── Section 2: Center Login Account ── */}
+          <SectionLabel sub={t("owner.accounts.sectionBranchLoginSub")}>{t("owner.accounts.sectionBranchLogin")}</SectionLabel>
+          <Field label={t("owner.accounts.fieldBranch")} required>
+            <Select
+              value={form.branch_id}
+              onChange={(e) => setForm((f) => ({ ...f, branch_id: e.target.value }))}
+            >
+              <option value="" disabled>
+                {t("owner.accounts.fieldBranchPlaceholder")}
+              </option>
+              {branches.map((b) => (
+                <option key={b.id} value={b.id} translate="no" className="notranslate">
+                  {b.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label={t("owner.accounts.fieldEmail")} required>
+            <Input
+              type="email"
+              value={form.email}
+              onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+              autoComplete="off"
+            />
+          </Field>
           <Field
             label={t("owner.accounts.fieldPassword")}
             required
             hint={t("owner.accounts.fieldPasswordHint")}
           >
-            <div className="relative">
-              <Input
-                type={showPwd ? "text" : "password"}
-                value={form.password}
-                onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-                placeholder="••••••••"
-                className="pr-10"
-              />
-              <button
-                type="button"
-                tabIndex={-1}
-                onClick={() => setShowPwd((v) => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-mute hover:text-ink transition-colors"
-              >
-                <Icon name={showPwd ? "eye-off" : "eye"} className="w-4 h-4" />
-              </button>
-            </div>
+            <PasswordInput
+              value={form.password}
+              onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+              placeholder="••••••••"
+            />
           </Field>
+
+          {/* ── Section 3: Staff Panel Account (admin / manager_center only) ── */}
+          {(form.role === "admin" || form.role === "manager_center") && (
+            <>
+              <SectionLabel sub={t("owner.accounts.sectionStaffPanelSub")}>{t("owner.accounts.sectionStaffPanel")}</SectionLabel>
+              <div className="rounded-xl border border-line bg-paper-tint p-4 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-ink">Auto-create Staff account</p>
+                    <p className="text-xs text-ink-mute mt-0.5">
+                      Admin also receives a separate Staff account for attendance &amp; payslips
+                    </p>
+                  </div>
+                  <Switch
+                    checked={autoCreateStaff}
+                    onChange={(next) => {
+                      setAutoCreateStaff(next);
+                      if (next) {
+                        setStaffEmail((v) => v || deriveStaffEmail(form.email));
+                        setSameStaffPassword(true);
+                        setStaffPassword("");
+                      }
+                    }}
+                  />
+                </div>
+                {autoCreateStaff && (
+                  <>
+                    <Field label={t("owner.accounts.fieldStaffName")} hint={t("owner.accounts.fieldStaffNameHint")}>
+                      <Input
+                        value={staffFullName}
+                        onChange={(e) => setStaffFullName(e.target.value)}
+                        placeholder={t("owner.accounts.fieldStaffNamePlaceholder")}
+                        autoComplete="off"
+                      />
+                    </Field>
+                    <Field label={t("owner.accounts.fieldStaffEmail")} required hint={t("owner.accounts.fieldStaffEmailHint")}>
+                      <Input
+                        type="email"
+                        value={staffEmail}
+                        onChange={(e) => setStaffEmail(e.target.value)}
+                        placeholder="staff@example.com"
+                        autoComplete="off"
+                      />
+                    </Field>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-[13px] font-semibold text-ink-soft">{t("owner.accounts.staffPasswordDifferentToggle")}</span>
+                      <Switch
+                        checked={!sameStaffPassword}
+                        onChange={(differs) => {
+                          setSameStaffPassword(!differs);
+                          setStaffPassword("");
+                        }}
+                      />
+                    </div>
+                    {sameStaffPassword ? (
+                      <p className="text-xs text-ink-mute">{t("owner.accounts.staffPasswordSameNote")}</p>
+                    ) : (
+                      <Field label={t("owner.accounts.fieldStaffPassword")} required>
+                        <PasswordInput
+                          value={staffPassword}
+                          onChange={(e) => setStaffPassword(e.target.value)}
+                          placeholder={t("owner.accounts.fieldStaffPasswordPlaceholder")}
+                          autoComplete="new-password"
+                        />
+                      </Field>
+                    )}
+                  </>
+                )}
+              </div>
+            </>
+          )}
         </div>
       </Modal>
     </div>

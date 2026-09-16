@@ -1,7 +1,7 @@
 import { common } from "./common";
 import { member } from "./member";
 import { landing } from "./landing";
-import { owner } from "./owner";
+import { owner } from "../en/owner";
 import { coach } from "./coach";
 import { admin } from "./admin";
 import { staff } from "./staff";

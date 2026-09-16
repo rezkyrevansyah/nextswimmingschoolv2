@@ -1,6 +1,7 @@
 "use client";
-import React from "react";
+import React, { useState } from "react";
 import { cn } from "@/lib/utils";
+import Icon from "@/components/ui/Icon";
 
 // ── Field wrapper ─────────────────────────────────────────────────────────────
 interface FieldProps {
@@ -48,6 +49,28 @@ export const Input = React.forwardRef<
 ));
 Input.displayName = "Input";
 
+// ── Password input (with show/hide toggle) ───────────────────────────────────
+export const PasswordInput = React.forwardRef<
+  HTMLInputElement,
+  Omit<React.InputHTMLAttributes<HTMLInputElement>, "type">
+>(({ className, ...props }, ref) => {
+  const [show, setShow] = useState(false);
+  return (
+    <div className="relative">
+      <Input ref={ref} type={show ? "text" : "password"} className={cn("pr-10", className)} {...props} />
+      <button
+        type="button"
+        tabIndex={-1}
+        onClick={() => setShow((v) => !v)}
+        className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-mute hover:text-ink transition-colors"
+      >
+        <Icon name={show ? "eye-off" : "eye"} className="w-4 h-4" />
+      </button>
+    </div>
+  );
+});
+PasswordInput.displayName = "PasswordInput";
+
 // ── Select ────────────────────────────────────────────────────────────────────
 export const Select = React.forwardRef<
   HTMLSelectElement,
@@ -90,6 +113,23 @@ export const Textarea = React.forwardRef<
   />
 ));
 Textarea.displayName = "Textarea";
+
+// ── Section label ─────────────────────────────────────────────────────────────
+interface SectionLabelProps {
+  children: React.ReactNode;
+  sub?: string;
+  className?: string;
+}
+
+/** Compact heading for grouping fields within a form (e.g. a multi-part modal). */
+export function SectionLabel({ children, sub, className }: SectionLabelProps) {
+  return (
+    <div className={cn("pt-4 mt-1 border-t border-line first:pt-0 first:mt-0 first:border-0", className)}>
+      <div className="text-xs font-bold uppercase tracking-widest text-ink-faint">{children}</div>
+      {sub && <p className="text-xs text-ink-mute mt-0.5">{sub}</p>}
+    </div>
+  );
+}
 
 // ── Switch ────────────────────────────────────────────────────────────────────
 interface SwitchProps {

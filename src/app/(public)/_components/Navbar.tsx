@@ -2,6 +2,7 @@
 
 import CardNav, { type CardNavItem } from "@/components/CardNav";
 import { useLocale } from "@/components/providers/LocaleProvider";
+import { GoogleLanguageSwitcher } from "@/components/GoogleTranslate";
 
 export default function Navbar() {
   const { t } = useLocale();
@@ -45,6 +46,7 @@ export default function Navbar() {
       menuColor="#0B3F73"
       ctaText={t("landing.nav.login")}
       ctaHref="/login"
+      rightElement={<GoogleLanguageSwitcher />}
     />
   );
 }

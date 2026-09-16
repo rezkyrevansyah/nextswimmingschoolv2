@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Image from "next/image";
+import { motion, AnimatePresence, type Variants } from "framer-motion";
 import Icon from "@/components/ui/Icon";
 
 function extractYouTubeId(url: string | null | undefined): string | null {
@@ -41,7 +42,7 @@ function YouTubeFacade({ videoId, title, sizes }: { videoId: string; title?: str
       type="button"
       onClick={() => setPlaying(true)}
       aria-label={title ? `Putar video: ${title}` : "Putar video"}
-      className="group relative block w-full h-full"
+      className="group relative block w-full h-full cursor-pointer"
     >
       <Image
         src={`https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`}
@@ -60,6 +61,34 @@ function YouTubeFacade({ videoId, title, sizes }: { videoId: string; title?: str
     </button>
   );
 }
+
+const slideVariants: Variants = {
+  enter: (direction: number) => ({
+    x: direction > 0 ? 60 : -60,
+    opacity: 0,
+    scale: 0.94,
+  }),
+  center: {
+    x: 0,
+    opacity: 1,
+    scale: 1,
+    transition: {
+      x: { type: "spring", stiffness: 280, damping: 28 },
+      opacity: { duration: 0.35, ease: "easeOut" },
+      scale: { duration: 0.35, ease: [0.25, 1, 0.5, 1] },
+    },
+  },
+  exit: (direction: number) => ({
+    x: direction > 0 ? -60 : 60,
+    opacity: 0,
+    scale: 0.94,
+    transition: {
+      x: { type: "spring", stiffness: 280, damping: 28 },
+      opacity: { duration: 0.25, ease: "easeIn" },
+      scale: { duration: 0.25 },
+    },
+  }),
+};
 
 export default function VideoSection({
   videoUrl,
@@ -81,6 +110,7 @@ export default function VideoSection({
   ].filter(Boolean) as string[];
 
   const [active, setActive] = useState(0);
+  const [direction, setDirection] = useState(0);
 
   if (videos.length === 0) return null;
 
@@ -113,9 +143,22 @@ export default function VideoSection({
     );
   }
 
-  // 2–3 videos — carousel with center focus
-  const prev = () => setActive(i => (i - 1 + videos.length) % videos.length);
-  const next = () => setActive(i => (i + 1) % videos.length);
+  // 2–3 videos — animated carousel with center focus
+  const prev = () => {
+    setDirection(-1);
+    setActive((i) => (i - 1 + videos.length) % videos.length);
+  };
+
+  const next = () => {
+    setDirection(1);
+    setActive((i) => (i + 1) % videos.length);
+  };
+
+  const goTo = (index: number) => {
+    setDirection(index > active ? 1 : -1);
+    setActive(index);
+  };
+
   const leftIdx = (active - 1 + videos.length) % videos.length;
   const rightIdx = (active + 1) % videos.length;
 
@@ -127,67 +170,113 @@ export default function VideoSection({
 
         <div className="flex items-center gap-3 sm:gap-4">
           {/* Prev button */}
-          <button
+          <motion.button
+            whileHover={{ scale: 1.12 }}
+            whileTap={{ scale: 0.92 }}
             onClick={prev}
             aria-label="Video sebelumnya"
-            className="shrink-0 w-10 h-10 rounded-full bg-white shadow-card flex items-center justify-center text-ink-soft hover:text-ocean-700 hover:shadow-lift transition-all"
+            className="shrink-0 w-10 h-10 rounded-full bg-white shadow-card flex items-center justify-center text-ink-soft hover:text-ocean-700 hover:shadow-lift transition-shadow cursor-pointer"
           >
             <Icon name="chevron-left" className="w-5 h-5" />
-          </button>
+          </motion.button>
 
           {/* Cards row */}
           <div className="flex-1 flex items-center justify-center gap-3 sm:gap-4">
-            {/* Left side card (hidden on mobile) — thumbnail only, never plays inline */}
+            {/* Left side card (hidden on mobile) — thumbnail only */}
             {videos.length === 3 && (
-              <button
+              <motion.button
+                key={`left-${videos[leftIdx]}`}
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 0.45, scale: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.35 }}
+                whileHover={{ opacity: 0.75, scale: 1.03 }}
+                whileTap={{ scale: 0.96 }}
                 onClick={prev}
                 tabIndex={-1}
                 aria-hidden="true"
-                className="hidden sm:block shrink-0 w-[26%] aspect-video rounded-2xl overflow-hidden opacity-40 hover:opacity-60 transition-opacity shadow-card relative ring-1 ring-slate-900/10"
+                className="hidden sm:block shrink-0 w-[26%] aspect-video rounded-2xl overflow-hidden shadow-card relative ring-1 ring-slate-900/10 cursor-pointer"
               >
-                <Image src={`https://i.ytimg.com/vi/${videos[leftIdx]}/hqdefault.jpg`} alt="" fill sizes="200px" className="object-cover" />
-              </button>
+                <Image
+                  src={`https://i.ytimg.com/vi/${videos[leftIdx]}/hqdefault.jpg`}
+                  alt=""
+                  fill
+                  sizes="200px"
+                  className="object-cover"
+                />
+                <div className="absolute inset-0 bg-slate-900/10" />
+              </motion.button>
             )}
 
-            {/* Center (active) card */}
-            <div className="flex-1 max-w-[640px] relative rounded-3xl overflow-hidden shadow-2xl border-4 border-white bg-slate-950 aspect-video ring-2 ring-ocean-400/40">
-              <YouTubeFacade key={videos[active]} videoId={videos[active]} title={title} sizes="640px" />
+            {/* Center (active) card with animated slide and scale */}
+            <div className="flex-1 max-w-[640px] relative">
+              <AnimatePresence mode="popLayout" custom={direction} initial={false}>
+                <motion.div
+                  key={videos[active]}
+                  custom={direction}
+                  variants={slideVariants}
+                  initial="enter"
+                  animate="center"
+                  exit="exit"
+                  className="w-full relative rounded-3xl overflow-hidden shadow-2xl border-4 border-white bg-slate-950 aspect-video ring-2 ring-ocean-400/40"
+                >
+                  <YouTubeFacade key={videos[active]} videoId={videos[active]} title={title} sizes="640px" />
+                </motion.div>
+              </AnimatePresence>
             </div>
 
-            {/* Right side card (hidden on mobile) — thumbnail only, never plays inline */}
+            {/* Right side card (hidden on mobile) — thumbnail only */}
             {videos.length >= 2 && (
-              <button
+              <motion.button
+                key={`right-${videos[rightIdx]}`}
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 0.45, scale: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.35 }}
+                whileHover={{ opacity: 0.75, scale: 1.03 }}
+                whileTap={{ scale: 0.96 }}
                 onClick={next}
                 tabIndex={-1}
                 aria-hidden="true"
-                className="hidden sm:block shrink-0 w-[26%] aspect-video rounded-2xl overflow-hidden opacity-40 hover:opacity-60 transition-opacity shadow-card relative ring-1 ring-slate-900/10"
+                className="hidden sm:block shrink-0 w-[26%] aspect-video rounded-2xl overflow-hidden shadow-card relative ring-1 ring-slate-900/10 cursor-pointer"
               >
-                <Image src={`https://i.ytimg.com/vi/${videos[rightIdx]}/hqdefault.jpg`} alt="" fill sizes="200px" className="object-cover" />
-              </button>
+                <Image
+                  src={`https://i.ytimg.com/vi/${videos[rightIdx]}/hqdefault.jpg`}
+                  alt=""
+                  fill
+                  sizes="200px"
+                  className="object-cover"
+                />
+                <div className="absolute inset-0 bg-slate-900/10" />
+              </motion.button>
             )}
           </div>
 
           {/* Next button */}
-          <button
+          <motion.button
+            whileHover={{ scale: 1.12 }}
+            whileTap={{ scale: 0.92 }}
             onClick={next}
             aria-label="Video berikutnya"
-            className="shrink-0 w-10 h-10 rounded-full bg-white shadow-card flex items-center justify-center text-ink-soft hover:text-ocean-700 hover:shadow-lift transition-all"
+            className="shrink-0 w-10 h-10 rounded-full bg-white shadow-card flex items-center justify-center text-ink-soft hover:text-ocean-700 hover:shadow-lift transition-shadow cursor-pointer"
           >
             <Icon name="chevron-right" className="w-5 h-5" />
-          </button>
+          </motion.button>
         </div>
 
-        {/* Dot indicators */}
-        <div className="flex justify-center gap-2 mt-6">
+        {/* Dot indicators with smooth spring width expansion */}
+        <div className="flex justify-center items-center gap-2 mt-6">
           {videos.map((_, i) => (
-            <button
+            <motion.button
               key={i}
-              onClick={() => setActive(i)}
+              onClick={() => goTo(i)}
               aria-label={`Video ${i + 1}`}
-              className={`h-2 rounded-full transition-all duration-300 ${
-                i === active
-                  ? "w-6 bg-ocean-600"
-                  : "w-2 bg-line hover:bg-ink-soft"
+              animate={{
+                width: i === active ? 26 : 8,
+              }}
+              transition={{ type: "spring", stiffness: 350, damping: 25 }}
+              className={`h-2 rounded-full cursor-pointer hover:opacity-80 transition-colors ${
+                i === active ? "bg-ocean-600" : "bg-line hover:bg-ink-soft"
               }`}
             />
           ))}

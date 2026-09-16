@@ -36,9 +36,13 @@ export async function POST(req: NextRequest) {
     health_notes?: string;
     member_type?: string;
     school_id?: string;
+    school_grade?: string;
     class_id?: string;
     total_sessions?: number | null;
     custom_role_label?: string;
+    bank_name?: string;
+    bank_account?: string;
+    bank_holder?: string;
     // Admin-specific: auto-create a paired staff account
     auto_staff?: { email: string; password: string; full_name?: string } | null;
     // When approving a public registration: link + close out the
@@ -114,7 +118,7 @@ export async function POST(req: NextRequest) {
   // fall back to an explicit update so all fields (branch_id, role, etc.) are set.
   const profileData = {
     id: userId,
-    role: role as "owner" | "admin" | "coach" | "member" | "school" | "staff",
+    role: role as "owner" | "admin" | "manager_center" | "coach" | "member" | "school" | "staff",
     full_name,
     email,
     phone: phone || null,
@@ -123,9 +127,12 @@ export async function POST(req: NextRequest) {
     gender: body.gender || null,
     address: body.address || null,
     health_notes: body.health_notes || null,
+    bank_name: body.bank_name || null,
+    bank_account: body.bank_account || null,
+    bank_holder: body.bank_holder || null,
     is_profile_complete: false,
     ...(role !== "member" ? { user_no: userNo } : {}),
-    ...(role === "staff" || role === "admin" ? { custom_role_label: body.custom_role_label || null } : {}),
+    ...(role === "staff" || role === "admin" || role === "manager_center" ? { custom_role_label: body.custom_role_label || null } : {}),
   };
 
   const { error: insertError } = await db.from("profiles").insert(profileData);
@@ -176,6 +183,7 @@ export async function POST(req: NextRequest) {
         type: (body.member_type ?? "reguler") as "reguler" | "private" | "school_affiliate",
         status: "active",
         school_id: body.school_id || null,
+        school_grade: body.member_type === "school_affiliate" ? (body.school_grade?.trim() || null) : null,
         date_start: new Date().toISOString().split("T")[0],
         total_sessions: isPrivateMember ? (body.total_sessions ?? null) : null,
         remaining_sessions: isPrivateMember ? (body.total_sessions ?? null) : null,
@@ -230,10 +238,10 @@ export async function POST(req: NextRequest) {
     }).eq("id", body.registration_id);
   }
 
-  // For admin accounts: optionally auto-create a paired staff account
+  // For admin/manager_center accounts: optionally auto-create a paired staff account
   let staffWarning: string | null = null;
   let staffUserId: string | null = null;
-  if (role === "admin" && body.auto_staff?.email && body.auto_staff?.password) {
+  if ((role === "admin" || role === "manager_center") && body.auto_staff?.email && body.auto_staff?.password) {
     const staffName = body.auto_staff.full_name?.trim() || `Staff - ${full_name}`;
     const { data: staffAuth, error: staffAuthError } = await db.auth.admin.createUser({
       email: body.auto_staff.email,

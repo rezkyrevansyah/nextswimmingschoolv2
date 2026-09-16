@@ -10,6 +10,8 @@ export const keys = {
   logo:       (branchId: string)                      => `logos/${branchId}/logo.jpg`,
   selfie:     (coachId: string, date: string, classId: string) =>
                 `attendances/${coachId}/${date}/${classId}.jpg`,
+  staffSelfie:(staffId: string, date: string) =>
+                `attendances/${staffId}/${date}/staff.jpg`,
   payment:    (billId: string)                        => `payments/${billId}/proof.jpg`,
   cert:       (coachId: string, certId: string)       => `certs/${coachId}/${certId}.jpg`,
   classPhoto: (classId: string)                       => `classes/${classId}/cover.jpg`,
@@ -27,7 +29,7 @@ export const keys = {
   landingCoach:       (id: string)   => `landing/coaches/${id}.jpg`,
   landingTestimonialV2: (id: string) => `landing/testimonials-v2/${id}.jpg`,
   landingBranch:      (id: string)   => `landing/branches/${id}.jpg`,
-  competitionDoc:     (partId: string) => `competitions/${partId}/cert.jpg`,
+  competitionDoc:     (competitionId: string, memberId: string) => `competitions/${competitionId}/${memberId}/cert.jpg`,
 } as const;
 
 // ── Upload from a Buffer ─────────────────────────────────────────────────────

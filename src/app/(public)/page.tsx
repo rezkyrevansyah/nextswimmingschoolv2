@@ -12,6 +12,7 @@ import Branches from "./_components/Branches";
 import Faq from "./_components/Faq";
 import Footer from "./_components/Footer";
 import FloatingWhatsapp from "./_components/FloatingWhatsapp";
+import { GoogleTranslate } from "@/components/GoogleTranslate";
 
 export const metadata: Metadata = {
   title: "Next Swimming School",
@@ -78,6 +79,7 @@ export default async function LandingPage() {
 
   return (
     <div className="min-h-screen bg-white">
+      <GoogleTranslate />
       <Navbar />
       <Hero waPhone={footerConfig?.footer_wa_number ?? null} waMessage={footerConfig?.floating_wa_message ?? null} />
       <Partners partners={partners ?? []} />

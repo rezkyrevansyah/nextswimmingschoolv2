@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
     .eq("id", user.id)
     .single();
 
-  if (!profile || !["admin", "owner"].includes(profile.role)) {
+  if (!profile || !["admin", "owner", "staff", "coach"].includes(profile.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -44,7 +44,11 @@ export async function POST(req: NextRequest) {
   const key = keys.payment(billId);
   await uploadToBucket(BUCKET_PRIVATE, key, buffer, file.type || "image/jpeg");
 
-  await supabase.from("bills").update({ proof_url: key }).eq("id", billId);
+  // Only update bills table if billId is a real bill UUID and user is admin/owner
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(billId);
+  if (["admin", "owner"].includes(profile.role) && isUuid && !billId.startsWith("staff-") && !billId.startsWith("coach-")) {
+    await supabase.from("bills").update({ proof_url: key }).eq("id", billId);
+  }
 
   return NextResponse.json({ url: key });
 }

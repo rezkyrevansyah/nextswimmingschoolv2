@@ -21,6 +21,15 @@ interface ImportMemberRow {
   total_sessions?: number | null;
   class_id?: string | null;
   school_id?: string | null;
+  school_grade?: string | null;
+  // Private-only — a private member always gets its own dedicated 1:1 class,
+  // always at this branch's own pool (location_type: "branch").
+  package_price?: number | null;
+  schedule_days?: string[] | null;
+  time_start?: string | null;
+  time_end?: string | null;
+  head_coach_id?: string | null;
+  assistant_coach_ids?: string[] | null;
 }
 
 export async function POST(req: NextRequest) {
@@ -59,6 +68,36 @@ export async function POST(req: NextRequest) {
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
     const rowNum = i + 2; // row 1 = header in Excel
+    const isPrivate = row.member_type === "private";
+
+    // For a private member, create their dedicated 1:1 class first — always
+    // at this branch's own pool (location_type: "branch"). Rolled back below
+    // if any later step in this row fails.
+    let privateClassId: string | null = null;
+    if (isPrivate) {
+      const { data: newClass, error: classErr } = await db
+        .from("classes")
+        .insert({
+          name: `Private - ${row.full_name}`,
+          branch_id,
+          class_type: "private",
+          capacity: 1,
+          enrolled: 0,
+          status: "active",
+          price_monthly: 0,
+          schedule_days: row.schedule_days ?? [],
+          time_start: row.time_start,
+          time_end: row.time_end,
+          location_type: "branch",
+        })
+        .select("id")
+        .single();
+      if (classErr || !newClass) {
+        failed.push({ row: rowNum, email: row.email, error: classErr?.message ?? "Gagal membuat kelas private" });
+        continue;
+      }
+      privateClassId = newClass.id;
+    }
 
     // 1. Create auth user
     const { data: authData, error: authError } = await db.auth.admin.createUser({
@@ -74,6 +113,7 @@ export async function POST(req: NextRequest) {
         authError.message.toLowerCase().includes("already registered") ||
         authError.message.toLowerCase().includes("email address is already") ||
         authError.message.toLowerCase().includes("duplicate");
+      if (privateClassId) await db.from("classes").delete().eq("id", privateClassId);
       failed.push({
         row: rowNum,
         email: row.email,
@@ -88,6 +128,7 @@ export async function POST(req: NextRequest) {
     const { data: userNo, error: userNoError } = await db.rpc("generate_user_no", { p_role: "member" });
     if (userNoError || !userNo) {
       await db.auth.admin.deleteUser(userId);
+      if (privateClassId) await db.from("classes").delete().eq("id", privateClassId);
       failed.push({ row: rowNum, email: row.email, error: userNoError?.message ?? "Gagal membuat nomor akun" });
       continue;
     }
@@ -115,26 +156,28 @@ export async function POST(req: NextRequest) {
         const { error: updateError } = await db.from("profiles").update(updateData).eq("id", userId);
         if (updateError) {
           await db.auth.admin.deleteUser(userId);
+          if (privateClassId) await db.from("classes").delete().eq("id", privateClassId);
           failed.push({ row: rowNum, email: row.email, error: updateError.message });
           continue;
         }
       } else {
         await db.auth.admin.deleteUser(userId);
+        if (privateClassId) await db.from("classes").delete().eq("id", privateClassId);
         failed.push({ row: rowNum, email: row.email, error: insertError.message });
         continue;
       }
     }
 
     // 3. Insert members row
-    const isPrivate = row.member_type === "private";
     const { data: memberRow, error: memberError } = await db
       .from("members")
       .insert({
         profile_id: userId,
         branch_id,
-        type: (row.member_type ?? "reguler") as "reguler" | "private" | "school_affiliate",
+        type: row.member_type ?? "reguler",
         status: "active",
         school_id: row.member_type === "school_affiliate" ? (row.school_id ?? null) : null,
+        school_grade: row.member_type === "school_affiliate" ? (row.school_grade ?? null) : null,
         date_start: new Date().toISOString().split("T")[0],
         total_sessions: isPrivate ? (row.total_sessions ?? null) : null,
         remaining_sessions: isPrivate ? (row.total_sessions ?? null) : null,
@@ -145,12 +188,61 @@ export async function POST(req: NextRequest) {
 
     if (memberError) {
       await db.auth.admin.deleteUser(userId);
+      if (privateClassId) await db.from("classes").delete().eq("id", privateClassId);
       failed.push({ row: rowNum, email: row.email, error: memberError.message });
       continue;
     }
 
-    // 4. Assign to class (non-fatal — member row already exists either way)
-    if (row.class_id && memberRow) {
+    if (isPrivate && privateClassId && memberRow) {
+      // 4a. Link the member to their dedicated private class (no capacity
+      // check needed — it's a fresh capacity-1 class created above).
+      await db.from("member_classes").insert({
+        member_id: memberRow.id,
+        class_id: privateClassId,
+        joined_at: new Date().toISOString(),
+      });
+
+      // 4b. Assign head/assistant coach(es), re-validating they still exist
+      // and are coaches (they may have been deleted since the preview step).
+      // Non-fatal — the member row already exists either way.
+      const candidateCoachIds = [row.head_coach_id, ...(row.assistant_coach_ids ?? [])].filter((id): id is string => !!id);
+      let validCoachIds = new Set<string>();
+      if (candidateCoachIds.length > 0) {
+        const { data: validCoaches } = await db.from("profiles").select("id").eq("role", "coach").in("id", candidateCoachIds);
+        validCoachIds = new Set((validCoaches ?? []).map(c => c.id));
+      }
+      const coachRows: { class_id: string; coach_id: string; role: "head" | "assistant" }[] = [];
+      if (row.head_coach_id && validCoachIds.has(row.head_coach_id)) {
+        coachRows.push({ class_id: privateClassId, coach_id: row.head_coach_id, role: "head" });
+      }
+      for (const id of row.assistant_coach_ids ?? []) {
+        if (id !== row.head_coach_id && validCoachIds.has(id)) coachRows.push({ class_id: privateClassId, coach_id: id, role: "assistant" });
+      }
+      if (coachRows.length > 0) {
+        const { error: coachErr } = await db.from("class_coaches").insert(coachRows);
+        if (coachErr) classWarnings.push({ row: rowNum, email: row.email, warning: "Gagal assign coach — bisa diatur manual lewat menu Private Members" });
+      }
+
+      // 4c. Optional bill for the session package price.
+      const packagePrice = row.package_price ?? 0;
+      if (packagePrice > 0) {
+        const { error: billErr } = await db.from("bills").insert({
+          member_id: memberRow.id,
+          branch_id,
+          class_id: privateClassId,
+          period_label: `Tambah ${row.total_sessions ?? 0} sesi`,
+          type: "session_pack",
+          sessions_total: row.total_sessions ?? 0,
+          sessions_used: 0,
+          amount: packagePrice,
+          discount: 0,
+          total: packagePrice,
+          status: "unpaid",
+        });
+        if (billErr) classWarnings.push({ row: rowNum, email: row.email, warning: "Gagal membuat tagihan paket — bisa dibuat manual lewat menu Private Members" });
+      }
+    } else if (row.class_id && memberRow) {
+      // 4. Assign to an existing class (non-fatal — member row already exists either way)
       const { data: classRow } = await db.from("classes").select("capacity").eq("id", row.class_id).single();
       const { count: enrolledCount } = await db
         .from("member_classes")

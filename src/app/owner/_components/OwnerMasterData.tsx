@@ -10,6 +10,7 @@ import Btn from "@/components/ui/Btn";
 import Icon from "@/components/ui/Icon";
 import { Field, Input } from "@/components/ui/FormFields";
 import { useUpload } from "@/hooks/useUpload";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 
 interface Category {
   id: string;
@@ -22,7 +23,7 @@ export default function OwnerMasterData() {
   const supabase = createClient();
   const toast = useToast();
   const confirm = useConfirm();
-  const { t } = useLocale();
+  const { t, tNode } = useLocale();
   const { upload, uploading } = useUpload();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -141,7 +142,7 @@ export default function OwnerMasterData() {
         head_signature_url: null,
         updated_at: new Date().toISOString(),
       } as any);
-    toast.success(t("common.status.active"));
+    toast.success(t("owner.masterData.headProfileSaved"));
   };
 
   // Add Category
@@ -187,7 +188,7 @@ export default function OwnerMasterData() {
   // Delete Category
   const handleDeleteCategory = async (cat: Category) => {
     const ok = await confirm({
-      title: t("owner.masterData.deleteCategoryConfirm", { name: cat.name }),
+      title: tNode("owner.masterData.deleteCategoryConfirm", { name: cat.name }),
       body: t("common.actions.delete"),
       danger: true,
     });
@@ -229,19 +230,19 @@ export default function OwnerMasterData() {
               <div className="py-10 text-center text-ink-mute text-sm animate-pulse">{t("common.actions.saving")}</div>
             ) : (
               <div className="space-y-4">
-                <Field label={t("owner.masterData.fieldHeadName")} hint="Nama penandatangan resmi di rapor">
+                <Field label={t("owner.masterData.fieldHeadName")} hint="Official signer name on report cards">
                   <Input
                     value={headName}
                     onChange={(e) => setHeadName(e.target.value)}
-                    placeholder="Contoh: Syahril Sidik"
+                    placeholder="E.g. Syahril Sidik"
                   />
                 </Field>
 
-                <Field label={t("owner.masterData.fieldHeadTitle")} hint="Teks jabatan di bawah nama">
+                <Field label={t("owner.masterData.fieldHeadTitle")} hint="Official title below name">
                   <Input
                     value={headTitle}
                     onChange={(e) => setHeadTitle(e.target.value)}
-                    placeholder="Contoh: HEAD OF NEXT SWIMMING"
+                    placeholder="E.g. HEAD OF NEXT SWIMMING"
                   />
                 </Field>
 
@@ -412,7 +413,7 @@ export default function OwnerMasterData() {
                     ) : (
                       <>
                         <span className="flex-1 text-sm font-semibold text-ink truncate">
-                          {c.name}
+                          <NoTranslate>{c.name}</NoTranslate>
                         </span>
                         <button
                           onClick={() => { setEditCatId(c.id); setEditCatName(c.name); }}

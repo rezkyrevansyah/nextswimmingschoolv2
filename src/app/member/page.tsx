@@ -15,6 +15,7 @@ import type { NavItem as MobileNavItem } from "@/components/layout/Sidebar";
 import Bell from "@/components/layout/Bell";
 import BetaFeedback, { BETA_FEEDBACK_ENABLED } from "@/components/layout/BetaFeedback";
 import { fmtIDR, fmtDate, waLink, toLocalDateStr } from "@/lib/utils";
+import { isMemberPresentLike, memberDbToUi, memberStatusKind, memberStatusIcon } from "@/lib/attendance";
 import { downloadRaporPdf, printSingleRaporPopup, type PrintCriterion, type PrintBestTime } from "@/lib/printRapor";
 import { resolveRaporSigner, buildSchoolRaporSignatures, type SchoolForSignerConfig } from "@/lib/rapor";
 import { createClient } from "@/utils/supabase/client";
@@ -81,8 +82,26 @@ function Shell({ children, active, setActive, name, branchName, userId, avatarUr
   isSchoolAffiliate?: boolean;
 }) {
   const { t } = useLocale();
-  const navItems = getNavItems(t);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
   const allItems = getAllItems(t);
+
+  const isMoreActive = ["bills", "leave", "profile"].includes(active);
+  const mobileNavItems: MobileNavItem[] = [
+    { id: "home", label: t("member.nav.home"), short: t("member.nav.shortHome") || "Home", icon: "home" },
+    { id: "schedule", label: t("member.nav.schedule"), short: t("member.nav.shortSchedule") || "Jadwal", icon: "calendar" },
+    { id: "absen", label: t("member.nav.attendance"), short: t("member.nav.shortAttendance") || "Presensi", icon: "check" },
+    { id: "rapor", label: t("member.nav.rapor"), short: t("member.nav.shortRapor") || "Rapor", icon: "book" },
+    { id: "more", label: "Menu", short: "Menu", icon: "menu" },
+  ];
+
+  const handleMobileNavSelect = (id: string) => {
+    if (id === "more") {
+      setShowMoreMenu(true);
+    } else {
+      setShowMoreMenu(false);
+      setActive(id as TabId);
+    }
+  };
 
   const title = active === "home" ? t("member.shell.greeting", { name: name || "…" }) : {
     schedule: t("member.nav.schedule"), absen: t("member.nav.attendance"), bills: t("member.nav.bills"),
@@ -120,7 +139,81 @@ function Shell({ children, active, setActive, name, branchName, userId, avatarUr
         </div>
       </header>
       <main className="max-w-3xl mx-auto p-4 lg:p-7 anim-in">{children}</main>
-      <MobileNav items={navItems.filter(it => !(isSchoolAffiliate && it.id === "bills"))} active={active} onSelect={(id) => setActive(id as TabId)} />
+
+      {/* Mobile More Menu Sheet */}
+      {showMoreMenu && (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          <div className="fixed inset-0 bg-ink/40 backdrop-blur-xs transition-opacity" onClick={() => setShowMoreMenu(false)} />
+          <div className="fixed inset-x-0 bottom-0 bg-white rounded-t-3xl shadow-2xl p-5 pb-[max(env(safe-area-inset-bottom,0px),20px)] space-y-4 z-10 anim-in">
+            <div className="flex items-center justify-between border-b border-line pb-3">
+              <div className="flex items-center gap-3">
+                <Avatar name={name} src={avatarUrl ?? undefined} size={40} />
+                <div>
+                  <div className="font-display font-bold text-sm text-ink">{name}</div>
+                  <div className="text-xs text-ink-mute">{branchName || "Next Swimming"}</div>
+                </div>
+              </div>
+              <button onClick={() => setShowMoreMenu(false)} className="w-8 h-8 rounded-full flex items-center justify-center text-ink-mute hover:bg-paper-tint">
+                <Icon name="close" className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 gap-2">
+              <button
+                onClick={() => { setActive("profile"); setShowMoreMenu(false); }}
+                className={`flex items-center gap-3 p-3 rounded-xl border text-left transition ${
+                  active === "profile" ? "bg-ocean-50 border-ocean-300 text-ocean-800 font-bold" : "border-line hover:bg-paper-tint text-ink"
+                }`}
+              >
+                <div className="w-10 h-10 rounded-lg bg-paper-tint flex items-center justify-center text-ink-soft">
+                  <Icon name="user" className="w-5 h-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-bold text-sm">{t("member.nav.profile")}</div>
+                  <div className="text-xs text-ink-mute">Data diri, nomor kontak & kartu QR</div>
+                </div>
+                <Icon name="arrowRight" className="w-4 h-4 text-ink-faint" />
+              </button>
+
+              {!isSchoolAffiliate && (
+                <button
+                  onClick={() => { setActive("bills"); setShowMoreMenu(false); }}
+                  className={`flex items-center gap-3 p-3 rounded-xl border text-left transition ${
+                    active === "bills" ? "bg-ocean-50 border-ocean-300 text-ocean-800 font-bold" : "border-line hover:bg-paper-tint text-ink"
+                  }`}
+                >
+                  <div className="w-10 h-10 rounded-lg bg-ocean-100/60 flex items-center justify-center text-ocean-700">
+                    <Icon name="wallet" className="w-5 h-5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-bold text-sm">{t("member.nav.bills")}</div>
+                    <div className="text-xs text-ink-mute">Status iuran bulanan & upload bukti bayar</div>
+                  </div>
+                  <Icon name="arrowRight" className="w-4 h-4 text-ink-faint" />
+                </button>
+              )}
+
+              <button
+                onClick={() => { setActive("leave"); setShowMoreMenu(false); }}
+                className={`flex items-center gap-3 p-3 rounded-xl border text-left transition ${
+                  active === "leave" ? "bg-ocean-50 border-ocean-300 text-ocean-800 font-bold" : "border-line hover:bg-paper-tint text-ink"
+                }`}
+              >
+                <div className="w-10 h-10 rounded-lg bg-amber-50 flex items-center justify-center text-amber-700">
+                  <Icon name="clipboard" className="w-5 h-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-bold text-sm">{t("member.nav.leave")}</div>
+                  <div className="text-xs text-ink-mute">Form pengajuan izin tidak hadir</div>
+                </div>
+                <Icon name="arrowRight" className="w-4 h-4 text-ink-faint" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <MobileNav items={mobileNavItems} active={isMoreActive ? "more" : active} onSelect={handleMobileNavSelect} />
     </div>
   );
 }
@@ -159,7 +252,7 @@ function MemberHome({
       .gte("session_date", monthStart)
       .then(({ data }) => {
         if (data) {
-          setMonthAttend({ present: data.filter((r) => r.status === "hadir").length, total: data.length });
+          setMonthAttend({ present: data.filter((r) => isMemberPresentLike(r.status)).length, total: data.length });
         }
       });
 
@@ -652,7 +745,7 @@ function MemberSchedule({ memberId }: { memberId: string }) {
 
 // ── Absensi ────────────────────────────────────────────────────────────────────
 
-function MemberAbsensi({ memberId }: { memberId: string }) {
+function MemberAbsensi({ memberId, onSwitchToLeave }: { memberId: string; onSwitchToLeave?: () => void }) {
   const { t, tArray } = useLocale();
   const supabase = createClient();
   const now = new Date();
@@ -693,24 +786,42 @@ function MemberAbsensi({ memberId }: { memberId: string }) {
   });
 
   const stats = {
-    present: rows.filter((r) => r.status === "hadir").length,
-    excused: rows.filter((r) => r.status === "izin").length,
-    sick: rows.filter((r) => r.status === "sakit").length,
-    absent: rows.filter((r) => r.status === "tidak_hadir" || r.status === "absent").length,
+    present: rows.filter((r) => isMemberPresentLike(r.status)).length,
+    excused: rows.filter((r) => memberDbToUi(r.status) === "izin").length,
+    sick: rows.filter((r) => memberDbToUi(r.status) === "sick").length,
+    absent: rows.filter((r) => memberDbToUi(r.status) === "absent").length,
   };
 
   const monthNames = tArray("common.months.short");
 
   const getStatusText = (status: string) => {
-    if (status === "hadir") return t("member.attendance.statusPresent");
-    if (status === "telat") return t("member.attendance.statusLate");
-    if (status === "tidak_hadir" || status === "absent") return t("member.attendance.statusAbsent");
-    if (status === "izin") return t("member.attendance.statusExcused");
+    const ui = memberDbToUi(status);
+    if (ui === "present") return t("member.attendance.statusPresent");
+    if (ui === "late") return t("member.attendance.statusLate");
+    if (ui === "absent") return t("member.attendance.statusAbsent");
+    if (ui === "izin") return t("member.attendance.statusExcused");
     return t("member.attendance.statusSick");
   };
 
   return (
     <div className="space-y-5">
+      {onSwitchToLeave && (
+        <div className="flex p-1 bg-white border border-line rounded-xl gap-1 shadow-2xs">
+          <button
+            type="button"
+            className="flex-1 py-2 text-xs font-bold rounded-lg bg-ocean-50 text-ocean-700 shadow-2xs text-center"
+          >
+            {t("member.nav.attendance")}
+          </button>
+          <button
+            type="button"
+            onClick={onSwitchToLeave}
+            className="flex-1 py-2 text-xs font-semibold rounded-lg text-ink-mute hover:text-ink text-center transition"
+          >
+            {t("member.nav.leave")}
+          </button>
+        </div>
+      )}
       {/* Filters */}
       <div className="flex gap-2">
         <input
@@ -743,14 +854,14 @@ function MemberAbsensi({ memberId }: { memberId: string }) {
             const dateStr = `${d.getDate()} ${monthNames[d.getMonth()]} ${d.getFullYear()}`;
             return (
               <div key={r.id} className="px-5 py-3 flex items-center gap-3">
-                <span className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${r.status === "hadir" ? "bg-ok-50 text-ok-600" : r.status === "telat" ? "bg-warn-50 text-warn-600" : (r.status === "tidak_hadir" || r.status === "absent") ? "bg-danger-50 text-danger-500" : "bg-warn-50 text-warn-600"}`}>
-                  <Icon name={r.status === "hadir" ? "check" : (r.status === "tidak_hadir" || r.status === "absent") ? "x" : "info"} className="w-4 h-4" strokeWidth={2.5} />
+                <span className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${memberDbToUi(r.status) === "present" ? "bg-ok-50 text-ok-600" : memberDbToUi(r.status) === "absent" ? "bg-danger-50 text-danger-500" : "bg-warn-50 text-warn-600"}`}>
+                  <Icon name={memberStatusIcon(r.status)} className="w-4 h-4" strokeWidth={2.5} />
                 </span>
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-semibold text-ink">{r.class_name}</div>
                   <div className="text-xs text-ink-mute font-mono">{dateStr} · {r.time}{r.notes ? ` · ${r.notes}` : ""}</div>
                 </div>
-                <Status kind={r.status === "hadir" ? "present" : r.status === "telat" ? "telat" : (r.status === "tidak_hadir" || r.status === "absent") ? "absent" : r.status === "izin" ? "excused" : "sick"}>
+                <Status kind={memberStatusKind(r.status)}>
                   {getStatusText(r.status)}
                 </Status>
               </div>
@@ -773,6 +884,11 @@ function MemberBills({ memberId, memberName, branchId }: { memberId: string; mem
   const [history, setHistory] = useState<{ id: string; period_label: string; amount: number; paid_at: string; payment_method: string | null }[]>([]);
   const [adminWa, setAdminWa] = useState<string | null>(null);
   const [bankInfo, setBankInfo] = useState<{ bank_name: string | null; bank_account: string | null; bank_holder: string | null } | null>(null);
+  // Single source of truth for "sessions left" — same members.remaining_sessions/
+  // total_sessions the home dashboard reads, kept in sync by
+  // record_private_session_attendance on clock-in. Avoids showing a different
+  // number here from per-bill sessions_used.
+  const [sessionsInfo, setSessionsInfo] = useState<{ remaining: number | null; total: number | null } | null>(null);
 
 
   useEffect(() => {
@@ -790,10 +906,14 @@ function MemberBills({ memberId, memberName, branchId }: { memberId: string; mem
 
   const load = useCallback(async () => {
     if (!memberId) return;
-    const [actRes, hisRes] = await Promise.all([
+    const [actRes, hisRes, memberRes] = await Promise.all([
       supabase.from("bills").select("id, period_label, amount, discount, discount_reason, total, type, sessions_total, sessions_used, classes(name)").eq("member_id", memberId).in("status", ["unpaid", "partial"]).order("created_at", { ascending: false }),
       supabase.from("bills").select("id, period_label, amount, total, paid_at, paid_method").eq("member_id", memberId).eq("status", "paid").order("paid_at", { ascending: false }),
+      supabase.from("members").select("remaining_sessions, total_sessions").eq("id", memberId).single(),
     ]);
+    if (memberRes.data) {
+      setSessionsInfo({ remaining: memberRes.data.remaining_sessions, total: memberRes.data.total_sessions });
+    }
     if (actRes.data) {
       setActiveBills(actRes.data.map((b) => {
         const bx = b as unknown as { amount: number; discount: number; discount_reason: string | null; total: number; classes: { name: string } | null };
@@ -861,11 +981,11 @@ function MemberBills({ memberId, memberName, branchId }: { memberId: string; mem
                 )}
                 <div className="flex justify-between font-display font-bold text-xl text-ink pt-2 border-t border-warn-500/20"><span>{t("member.bills.total")}</span><span className="font-mono text-ocean-700">{fmtIDR(b.total)}</span></div>
               </div>
-              {b.type === "session_pack" && b.sessions_total != null && (
-                <div className={`mt-3 flex items-center gap-2 px-3 py-2 rounded-xl border text-sm font-semibold ${(b.sessions_total - b.sessions_used) <= 1 ? "bg-warn-50 border-warn-300 text-warn-800" : "bg-paper-tint border-line text-ink-soft"}`}>
+              {b.type === "session_pack" && sessionsInfo?.total != null && (
+                <div className={`mt-3 flex items-center gap-2 px-3 py-2 rounded-xl border text-sm font-semibold ${(sessionsInfo.remaining ?? 0) <= 1 ? "bg-warn-50 border-warn-300 text-warn-800" : "bg-paper-tint border-line text-ink-soft"}`}>
                   <Icon name="calendar" className="w-4 h-4 shrink-0" />
-                  <span>{t("member.bills.sessionPackInfo", { remaining: b.sessions_total - b.sessions_used, total: b.sessions_total })}</span>
-                  {(b.sessions_total - b.sessions_used) <= 1 && <span className="ml-auto text-warn-700 font-bold text-xs">{t("member.bills.almostOut")}</span>}
+                  <span>{t("member.bills.sessionPackInfo", { remaining: sessionsInfo.remaining ?? 0, total: sessionsInfo.total })}</span>
+                  {(sessionsInfo.remaining ?? 0) <= 1 && <span className="ml-auto text-warn-700 font-bold text-xs">{t("member.bills.almostOut")}</span>}
                 </div>
               )}
               {bankInfo?.bank_name && (
@@ -932,7 +1052,7 @@ function MemberBills({ memberId, memberName, branchId }: { memberId: string; mem
 
 // ── Izin ───────────────────────────────────────────────────────────────────────
 
-function MemberLeave({ memberId }: { memberId: string }) {
+function MemberLeave({ memberId, onSwitchToAbsen }: { memberId: string; onSwitchToAbsen?: () => void }) {
   const { t, tArray } = useLocale();
   const supabase = createClient();
   const toast = useToast();
@@ -1020,6 +1140,23 @@ function MemberLeave({ memberId }: { memberId: string }) {
 
   return (
     <div className="space-y-5">
+      {onSwitchToAbsen && (
+        <div className="flex p-1 bg-white border border-line rounded-xl gap-1 shadow-2xs">
+          <button
+            type="button"
+            onClick={onSwitchToAbsen}
+            className="flex-1 py-2 text-xs font-semibold rounded-lg text-ink-mute hover:text-ink text-center transition"
+          >
+            {t("member.nav.attendance")}
+          </button>
+          <button
+            type="button"
+            className="flex-1 py-2 text-xs font-bold rounded-lg bg-ocean-50 text-ocean-700 shadow-2xs text-center"
+          >
+            {t("member.nav.leave")}
+          </button>
+        </div>
+      )}
       <Btn variant="primary" size="lg" icon="plus" className="w-full" onClick={() => setOpenForm(true)}>{t("member.leave.newLeaveBtn")}</Btn>
       <SectionTitle sub={t("member.leave.historySub")}>{t("member.leave.historyTitle")}</SectionTitle>
       <Card padded={false}>
@@ -1977,9 +2114,9 @@ export default function MemberPage() {
   const pages: Record<TabId, React.ReactNode> = {
     home:     <>{SuspendBanner}<MemberHome setActive={setActive} memberId={memberId} memberName={memberName} branchId={branchId} /></>,
     schedule: <>{SuspendBanner}<MemberSchedule memberId={memberId} /></>,
-    absen:    <>{SuspendBanner}<MemberAbsensi memberId={memberId} /></>,
+    absen:    <>{SuspendBanner}<MemberAbsensi memberId={memberId} onSwitchToLeave={() => setActive("leave")} /></>,
     bills:    <>{SuspendBanner}<MemberBills memberId={memberId} memberName={memberName} branchId={branchId} /></>,
-    leave:    <>{SuspendBanner}<MemberLeave memberId={memberId} /></>,
+    leave:    <>{SuspendBanner}<MemberLeave memberId={memberId} onSwitchToAbsen={() => setActive("absen")} /></>,
     rapor:    <>{SuspendBanner}<MemberRapor memberId={memberId} memberName={memberName} branchId={branchId} avatarUrl={memberAvatarUrl} memberNo={memberNo} birthDate={memberBirthDate} location={branchName} /></>,
     profile:  <MemberProfile memberId={memberId} memberName={memberName} onLogout={logout} onProfileComplete={onProfileComplete} onAvatarChange={url => setMemberAvatarUrl(url)} />,
   };

@@ -1,7 +1,8 @@
 "use client";
 /**
  * useSignedUrl — resolves a private-bucket storage key (e.g. bills.proof_url,
- * certifications.photo_url, coach_attendances.selfie_url) into a short-lived
+ * certifications.photo_url, coach_attendances.selfie_url,
+ * staff_attendances.selfie_url) into a short-lived
  * signed URL for rendering.
  *
  * Usage:

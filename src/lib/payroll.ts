@@ -128,6 +128,13 @@ export async function deletePayslipCascade(
   supabase: SupabaseClient<any>,
   payslipId: string
 ): Promise<{ error: string } | null> {
+  // Capture any loans affected by this payslip before deleting payments
+  const { data: payments } = await supabase
+    .from("coach_loan_payments")
+    .select("loan_id")
+    .eq("payslip_id", payslipId);
+  const affectedLoanIds = Array.from(new Set((payments ?? []).map((p: { loan_id: string }) => p.loan_id)));
+
   const { error: loanPaymentsError } = await supabase
     .from("coach_loan_payments")
     .delete()
@@ -142,6 +149,24 @@ export async function deletePayslipCascade(
 
   const { error: payslipError } = await supabase.from("payslips").delete().eq("id", payslipId);
   if (payslipError) return { error: payslipError.message };
+
+  // If any affected loan was previously closed (paid_off), check if it should be reactivated
+  for (const loanId of affectedLoanIds) {
+    const { data: loanRow } = await supabase
+      .from("coach_loans")
+      .select("id, coach_id, branch_id, principal_amount, tenor_months, installment_amount, reason, status, notes, created_at, closed_at")
+      .eq("id", loanId)
+      .single();
+    if (loanRow && loanRow.status === "paid_off") {
+      const next = await nextInstallmentForLoan(supabase, loanRow as CoachLoan);
+      if (next) {
+        await supabase
+          .from("coach_loans")
+          .update({ status: "active", closed_at: null })
+          .eq("id", loanId);
+      }
+    }
+  }
 
   return null;
 }

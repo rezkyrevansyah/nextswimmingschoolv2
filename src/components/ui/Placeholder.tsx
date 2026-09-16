@@ -2,7 +2,7 @@ import React from "react";
 import { cn } from "@/lib/utils";
 
 interface PlaceholderProps {
-  label?: string;
+  label?: React.ReactNode;
   ratio?: string;
   className?: string;
 }

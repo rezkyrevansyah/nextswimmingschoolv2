@@ -15,8 +15,10 @@ import Avatar from "@/components/ui/Avatar";
 import Placeholder from "@/components/ui/Placeholder";
 import TimePicker from "@/components/ui/TimePicker";
 import Modal from "@/components/ui/Modal";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 import type { Database, Json } from "@/types/database";
 import { fmtIDR } from "@/lib/utils";
+import { coachDbToUi, memberDbToUi } from "@/lib/attendance";
 
 export interface ScheduleSlot {
   day: string;
@@ -144,7 +146,7 @@ export default function OwnerClassesMaster({ branches }: { branches: { id: strin
   const { upload } = useUpload();
   const toast = useToast();
   const confirm = useConfirm();
-  const { t, locale } = useLocale();
+  const { t, tNode, locale } = useLocale();
   const localeTag = locale === "id" ? "id-ID" : "en-US";
 
   const dayLabels: Record<string, string> = {
@@ -197,6 +199,10 @@ export default function OwnerClassesMaster({ branches }: { branches: { id: strin
       .select(
         "id, name, branch_id, status, capacity, enrolled, price_monthly, price_per_session, class_type, location_type, external_location_name, external_location_address, google_maps_url, schedule_days, time_start, time_end, schedule_times, goals, description, photo_url, spreadsheet_url, spreadsheet_filled, rapor_signer_coach_id, branch:branches(id, name), class_coaches(coach_id, role, profile:profiles(id, full_name, phone, avatar_url)), coach_spreadsheets:class_coach_spreadsheets(coach_id, spreadsheet_url, updated_at, coach:profiles(full_name))"
       )
+      // Private classes are excluded — they're managed exclusively via the
+      // dedicated "Member Private" menu now, which keeps the 1:1
+      // class-to-student relationship intact.
+      .neq("class_type", "private")
       .order("branch_id")
       .order("name");
 
@@ -334,13 +340,13 @@ export default function OwnerClassesMaster({ branches }: { branches: { id: strin
 
   const saveClass = async () => {
     if (!form.branch_id) return toast.error(t("owner.classes.fieldBranchPlaceholder"));
-    if (!form.name.trim()) return toast.error(t("admin.classes.classNameRequired"));
-    if (!isPrivate && form.schedule_days.length === 0) return toast.error(t("admin.classes.scheduleDaysRequired"));
+    if (!form.name.trim()) return toast.error(t("owner.classes.classNameRequired"));
+    if (!isPrivate && form.schedule_days.length === 0) return toast.error(t("owner.classes.scheduleDaysRequired"));
     if (isPrivate && form.location_type === "external" && !form.external_location_name.trim()) {
-      return toast.error(t("admin.classes.externalLocationNameRequired"));
+      return toast.error(t("owner.classes.externalLocationNameRequired"));
     }
     if (!isPrivate && (!Number(form.capacity) || Number(form.capacity) <= 0)) {
-      return toast.error(t("admin.classes.capacityRequired"));
+      return toast.error(t("owner.classes.capacityRequired"));
     }
 
     setSaving(true);
@@ -425,7 +431,7 @@ export default function OwnerClassesMaster({ branches }: { branches: { id: strin
         try {
           await upload.classPhoto(photoFile, newClass.id);
         } catch (photoErr) {
-          toast.error("Gagal mengupload foto kelas", (photoErr as Error).message);
+          toast.error(t("owner.classes.uploadPhotoFailed"), (photoErr as Error).message);
         }
       }
 
@@ -454,7 +460,7 @@ export default function OwnerClassesMaster({ branches }: { branches: { id: strin
   const archiveClass = async (c: ClassRow) => {
     const yes = await confirm({
       title: t("owner.classes.archiveConfirmTitle"),
-      body: t("owner.classes.archiveConfirmBody", { name: c.name }),
+      body: tNode("owner.classes.archiveConfirmBody", { name: c.name }),
     });
     if (!yes) return;
     const { error } = await supabase.from("classes").update({ status: "archived" }).eq("id", c.id);
@@ -466,7 +472,7 @@ export default function OwnerClassesMaster({ branches }: { branches: { id: strin
   const restoreClass = async (c: ClassRow) => {
     const yes = await confirm({
       title: t("owner.classes.restoreConfirmTitle"),
-      body: t("owner.classes.restoreConfirmBody", { name: c.name }),
+      body: tNode("owner.classes.restoreConfirmBody", { name: c.name }),
     });
     if (!yes) return;
     const { error } = await supabase.from("classes").update({ status: "active" }).eq("id", c.id);
@@ -478,7 +484,7 @@ export default function OwnerClassesMaster({ branches }: { branches: { id: strin
   const deleteClass = async (c: ClassRow) => {
     const yes = await confirm({
       title: t("owner.classes.deleteConfirmTitle"),
-      body: t("owner.classes.deleteConfirmBody", { name: c.name }),
+      body: tNode("owner.classes.deleteConfirmBody", { name: c.name }),
       danger: true,
     });
     if (!yes) return;
@@ -511,7 +517,7 @@ export default function OwnerClassesMaster({ branches }: { branches: { id: strin
             }));
           setDetailCoaches(list);
         }
-        if (error) toast.error("Error loading coaches", error.message);
+        if (error) toast.error(t("owner.classes.loadingCoachesFailed"), error.message);
       } else if (tab === "member") {
         const { data, error } = await supabase
           .from("member_classes")
@@ -547,7 +553,7 @@ export default function OwnerClassesMaster({ branches }: { branches: { id: strin
             }));
           setDetailMembers(list);
         }
-        if (error) toast.error("Error loading members", error.message);
+        if (error) toast.error(t("owner.classes.loadingMembersFailed"), error.message);
       } else if (tab === "att_coach") {
         const { data, error } = await supabase
           .from("coach_attendances")
@@ -558,7 +564,7 @@ export default function OwnerClassesMaster({ branches }: { branches: { id: strin
           .order("session_date", { ascending: false })
           .limit(100);
         if (data) setDetailCoachAtt(data as unknown as CoachAttendanceDetail[]);
-        if (error) toast.error("Error loading coach attendances", error.message);
+        if (error) toast.error(t("owner.classes.loadingCoachAttendanceFailed"), error.message);
       } else if (tab === "att_member") {
         const { data, error } = await supabase
           .from("member_attendances")
@@ -569,11 +575,11 @@ export default function OwnerClassesMaster({ branches }: { branches: { id: strin
           .order("session_date", { ascending: false })
           .limit(100);
         if (data) setDetailMemberAtt(data as unknown as MemberAttendanceDetail[]);
-        if (error) toast.error("Error loading member attendances", error.message);
+        if (error) toast.error(t("owner.classes.loadingMemberAttendanceFailed"), error.message);
       }
       setDetailLoading(false);
     },
-    [supabase, toast]
+    [supabase, toast, t]
   );
 
   const openDetail = (c: ClassRow) => {
@@ -618,26 +624,32 @@ export default function OwnerClassesMaster({ branches }: { branches: { id: strin
       role: "assistant",
     });
     setAddingCoach(false);
-    if (error) return toast.error(t("owner.classes.saveFailed"), error.message);
-    toast.success("Coach berhasil ditugaskan");
-    setAddCoachId("");
-    loadDetailTab("coach", detailClass.id);
-    load();
+    if (error) {
+      toast.error(t("owner.classes.roleChangeFailed"), error.message);
+    } else {
+      toast.success(t("owner.classes.coachAssigned"));
+      setAddCoachId("");
+      loadDetailTab("coach", detailClass.id);
+      load();
+    }
   };
 
   const removeCoachFromClass = async (coachId: string, coachName: string) => {
     if (!detailClass) return;
     const ok = await confirm({
-      title: "Hapus Coach?",
-      body: t("owner.classes.removeCoachConfirm", { name: coachName }),
+      title: t("owner.classes.removeCoachTitle"),
+      body: tNode("owner.classes.removeCoachConfirm", { name: coachName }),
       danger: true,
     });
     if (!ok) return;
     const { error } = await supabase.from("class_coaches").delete().eq("class_id", detailClass.id).eq("coach_id", coachId);
-    if (error) return toast.error(t("owner.classes.saveFailed"), error.message);
-    toast.success("Coach berhasil dihapus dari kelas");
-    loadDetailTab("coach", detailClass.id);
-    load();
+    if (error) {
+      toast.error(t("owner.classes.roleChangeFailed"), error.message);
+    } else {
+      toast.success(t("owner.classes.coachRemoved"));
+      loadDetailTab("coach", detailClass.id);
+      load();
+    }
   };
 
   const setRaporSigner = async (classId: string, coachId: string | null) => {
@@ -697,7 +709,7 @@ export default function OwnerClassesMaster({ branches }: { branches: { id: strin
             >
               <option value="">{t("owner.classes.allBranches")}</option>
               {branches.map((b) => (
-                <option key={b.id} value={b.id}>
+                <option key={b.id} value={b.id} translate="no">
                   {b.name}
                 </option>
               ))}
@@ -747,7 +759,7 @@ export default function OwnerClassesMaster({ branches }: { branches: { id: strin
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <div className="w-2.5 h-2.5 rounded-full bg-ocean-500" />
-                <h3 className="font-display font-bold text-lg text-ink">{branch.name}</h3>
+                <h3 className="font-display font-bold text-lg text-ink"><NoTranslate>{branch.name}</NoTranslate></h3>
                 <span className="text-xs text-ink-mute font-semibold">
                   ({t("owner.classes.classCount", { count: bClasses.length })})
                 </span>
@@ -780,7 +792,7 @@ export default function OwnerClassesMaster({ branches }: { branches: { id: strin
                             loading="lazy"
                           />
                         ) : (
-                          <Placeholder label={c.name} ratio="16/9" className="rounded-none border-0" />
+                          <Placeholder label={<NoTranslate>{c.name}</NoTranslate>} ratio="16/9" className="rounded-none border-0" />
                         )}
                         <div className="absolute top-2.5 right-2.5 flex gap-1.5">
                           {isArchived ? (
@@ -798,7 +810,7 @@ export default function OwnerClassesMaster({ branches }: { branches: { id: strin
                       {/* Info Body */}
                       <div className="p-4 space-y-2.5">
                         <div>
-                          <h4 className="font-display font-bold text-base text-ink line-clamp-1">{c.name}</h4>
+                          <h4 className="font-display font-bold text-base text-ink line-clamp-1"><NoTranslate>{c.name}</NoTranslate></h4>
                           <div className="text-xs text-ink-mute mt-0.5">
                             {(c.schedule_days ?? []).length > 0 ? (
                               <span>
@@ -821,7 +833,7 @@ export default function OwnerClassesMaster({ branches }: { branches: { id: strin
                           {headCoach?.profile ? (
                             <>
                               <Avatar name={headCoach.profile.full_name} size={22} />
-                              <span className="font-semibold text-ink-soft truncate">{headCoach.profile.full_name}</span>
+                              <span className="font-semibold text-ink-soft truncate"><NoTranslate>{headCoach.profile.full_name}</NoTranslate></span>
                               {headCoach.role === "head" && (
                                 <span className="px-1.5 py-0.5 rounded-full bg-ocean-50 text-ocean-700 text-[9px] font-bold uppercase tracking-wider">
                                   Head
@@ -903,7 +915,7 @@ export default function OwnerClassesMaster({ branches }: { branches: { id: strin
       <Modal
         open={openForm}
         onClose={() => setOpenForm(false)}
-        title={editTarget ? t("owner.classes.editModalTitleFull", { name: editTarget.name }) : t("owner.classes.addModalTitle")}
+        title={editTarget ? tNode("owner.classes.editModalTitleFull", { name: editTarget.name }) : t("owner.classes.addModalTitle")}
         size="lg"
         footer={
           <>
@@ -925,7 +937,7 @@ export default function OwnerClassesMaster({ branches }: { branches: { id: strin
             >
               <option value="">{t("owner.classes.fieldBranchPlaceholder")}</option>
               {branches.map((b) => (
-                <option key={b.id} value={b.id}>
+                <option key={b.id} value={b.id} translate="no">
                   {b.name}
                 </option>
               ))}
@@ -985,27 +997,10 @@ export default function OwnerClassesMaster({ branches }: { branches: { id: strin
             )}
           </Field>
 
-          {/* Class Type Selector */}
-          <Field label={t("owner.classes.fieldClassType")} required>
-            <div className="flex gap-2">
-              {[
-                ["reguler", t("owner.classes.typeRegular"), t("owner.classes.typeRegularDesc")],
-                ["private", t("owner.classes.typePrivate"), t("owner.classes.typePrivateDesc")],
-              ].map(([val, label, desc]) => (
-                <button
-                  key={val}
-                  type="button"
-                  onClick={() => setForm((f) => ({ ...f, class_type: val, capacity: val === "private" ? "1" : f.capacity }))}
-                  className={`flex-1 p-3 rounded-xl border-2 text-left transition-colors ${
-                    form.class_type === val ? "border-ocean-500 bg-ocean-50" : "border-line hover:bg-paper-tint"
-                  }`}
-                >
-                  <div className={`font-bold text-sm ${form.class_type === val ? "text-ocean-700" : "text-ink"}`}>{label}</div>
-                  <div className="text-xs text-ink-mute mt-0.5">{desc}</div>
-                </button>
-              ))}
-            </div>
-          </Field>
+          {/* Private classes are no longer created/edited here — see the
+              dedicated "Member Private" menu, which creates the member and
+              its class slot together and keeps the 1:1 relationship intact.
+              This screen now only ever manages regular (shared) classes. */}
 
           {/* Private class location settings */}
           {isPrivate && (
@@ -1039,7 +1034,7 @@ export default function OwnerClassesMaster({ branches }: { branches: { id: strin
                     <Input
                       value={form.external_location_name}
                       onChange={(e) => setForm((f) => ({ ...f, external_location_name: e.target.value }))}
-                      placeholder="e.g. Apartemen Oakwood Pool"
+                      placeholder="e.g. Oakwood Apartment Pool"
                     />
                   </Field>
                   <Field label={t("owner.classes.fieldExtAddress")}>
@@ -1253,7 +1248,7 @@ export default function OwnerClassesMaster({ branches }: { branches: { id: strin
                 <Select value={newHeadCoachId} onChange={(e) => setNewHeadCoachId(e.target.value)}>
                   <option value="">-- {t("owner.classes.fieldHeadCoach")} --</option>
                   {allCoaches.map((c) => (
-                    <option key={c.id} value={c.id}>
+                    <option key={c.id} value={c.id} translate="no">
                       {c.full_name}
                     </option>
                   ))}
@@ -1280,7 +1275,7 @@ export default function OwnerClassesMaster({ branches }: { branches: { id: strin
                             }}
                             className="rounded border-line-strong text-ocean-600 focus:ring-ocean-500"
                           />
-                          <span className="font-semibold text-ink">{c.full_name}</span>
+                          <span className="font-semibold text-ink"><NoTranslate>{c.full_name}</NoTranslate></span>
                         </label>
                       );
                     })}
@@ -1313,7 +1308,7 @@ export default function OwnerClassesMaster({ branches }: { branches: { id: strin
       <Modal
         open={!!detailClass}
         onClose={() => setDetailClass(null)}
-        title={t("owner.classes.detailModalTitle", { name: detailClass?.name ?? "" })}
+        title={tNode("owner.classes.detailModalTitle", { name: detailClass?.name ?? "" })}
         size="xl"
         footer={
           <Btn variant="ghost" onClick={() => setDetailClass(null)}>
@@ -1426,7 +1421,7 @@ export default function OwnerClassesMaster({ branches }: { branches: { id: strin
                         {t("owner.classes.infoLocation")}
                       </div>
                       <div className="text-xs text-ink">
-                        🏡 {detailClass.external_location_name || "—"} ({detailClass.external_location_address || "—"})
+                        🏡 <NoTranslate>{detailClass.external_location_name || "—"}</NoTranslate> (<NoTranslate>{detailClass.external_location_address || "—"}</NoTranslate>)
                         {detailClass.google_maps_url && (
                           <a
                             href={detailClass.google_maps_url}
@@ -1450,7 +1445,7 @@ export default function OwnerClassesMaster({ branches }: { branches: { id: strin
                         {detailClass.coach_spreadsheets!.map((s) => (
                           <div key={s.coach_id} className="flex items-center gap-2.5 p-2.5 rounded-xl border border-line bg-paper-tint">
                             <Avatar name={s.coach?.full_name ?? "?"} size={24} />
-                            <span className="flex-1 text-xs font-semibold text-ink truncate">{s.coach?.full_name ?? "—"}</span>
+                            <span className="flex-1 text-xs font-semibold text-ink truncate"><NoTranslate>{s.coach?.full_name ?? "—"}</NoTranslate></span>
                             <a
                               href={s.spreadsheet_url}
                               target="_blank"
@@ -1472,7 +1467,7 @@ export default function OwnerClassesMaster({ branches }: { branches: { id: strin
                     <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-1">
                       {t("owner.classes.goalsLabel")}
                     </div>
-                    <p className="text-xs text-ink-soft leading-relaxed">{detailClass.goals}</p>
+                    <p className="text-xs text-ink-soft leading-relaxed"><NoTranslate as="span">{detailClass.goals}</NoTranslate></p>
                   </div>
                 )}
 
@@ -1481,7 +1476,7 @@ export default function OwnerClassesMaster({ branches }: { branches: { id: strin
                     <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-1">
                       {t("owner.classes.descriptionLabel")}
                     </div>
-                    <p className="text-xs text-ink-soft leading-relaxed">{detailClass.description}</p>
+                    <p className="text-xs text-ink-soft leading-relaxed"><NoTranslate as="span">{detailClass.description}</NoTranslate></p>
                   </div>
                 )}
               </div>
@@ -1510,7 +1505,7 @@ export default function OwnerClassesMaster({ branches }: { branches: { id: strin
                         >
                           <option value="">{t("owner.classes.selectCoachPlaceholder")}</option>
                           {availableCoachesForDetail.map((c) => (
-                            <option key={c.id} value={c.id}>
+                            <option key={c.id} value={c.id} translate="no">
                               {c.full_name}
                             </option>
                           ))}
@@ -1529,7 +1524,7 @@ export default function OwnerClassesMaster({ branches }: { branches: { id: strin
                           <div key={c.id} className="flex items-center gap-3 p-3 bg-white hover:bg-paper-tint transition-colors">
                             <Avatar name={c.full_name} size={32} />
                             <div className="flex-1 min-w-0">
-                              <div className="font-bold text-ink text-xs">{c.full_name}</div>
+                              <div className="font-bold text-ink text-xs"><NoTranslate>{c.full_name}</NoTranslate></div>
                               <div className="text-[11px] text-ink-mute">{c.phone ?? "—"}</div>
                             </div>
                             <div className="flex items-center gap-1.5 shrink-0">
@@ -1582,7 +1577,7 @@ export default function OwnerClassesMaster({ branches }: { branches: { id: strin
                       >
                         <option value="">{t("owner.classes.raporSignerAuto")}</option>
                         {detailCoaches.map((c) => (
-                          <option key={c.id} value={c.id}>
+                          <option key={c.id} value={c.id} translate="no">
                             {c.full_name}
                           </option>
                         ))}
@@ -1607,7 +1602,7 @@ export default function OwnerClassesMaster({ branches }: { branches: { id: strin
                       <div key={m.id} className="flex items-center gap-3 p-3 bg-white hover:bg-paper-tint transition-colors">
                         <Avatar name={m.full_name} size={32} />
                         <div className="flex-1 min-w-0">
-                          <div className="font-bold text-ink text-xs">{m.full_name}</div>
+                          <div className="font-bold text-ink text-xs"><NoTranslate>{m.full_name}</NoTranslate></div>
                           <div className="text-[11px] text-ink-mute">
                             No: {m.member_no ?? "—"} · Telp: {m.phone ?? "—"}
                           </div>
@@ -1653,22 +1648,30 @@ export default function OwnerClassesMaster({ branches }: { branches: { id: strin
                             <td className="py-2 px-3 font-mono font-semibold text-ink">
                               {a.session_date} {a.clock_in_time && <span className="text-ink-mute">({a.clock_in_time})</span>}
                             </td>
-                            <td className="py-2 px-3 font-bold text-ink">{a.profile?.full_name ?? "—"}</td>
+                            <td className="py-2 px-3 font-bold text-ink"><NoTranslate>{a.profile?.full_name ?? "—"}</NoTranslate></td>
                             <td className="py-2 px-3">
                               <span
                                 className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                                  a.status === "present" || a.status === "hadir"
+                                  coachDbToUi(a.status) === "present"
                                     ? "bg-ok-50 text-ok-700"
-                                    : a.status === "absent" || a.status === "alpha"
+                                    : coachDbToUi(a.status) === "absent"
                                     ? "bg-danger-50 text-danger-700"
                                     : "bg-warn-50 text-warn-700"
                                 }`}
                               >
-                                {t(`owner.classes.attStatus.${a.status}`) || a.status}
+                                {t(`owner.classes.attStatus.${coachDbToUi(a.status)}`) || a.status}
                               </span>
                             </td>
                             <td className="py-2 px-3 text-ink-mute">
-                              {a.is_manual ? `Manual: ${a.manual_note || "—"}` : a.distance_meters ? `${a.distance_meters}m` : "—"}
+                              {a.is_manual ? (
+                                <>
+                                  Manual: <NoTranslate>{a.manual_note || "—"}</NoTranslate>
+                                </>
+                              ) : a.distance_meters ? (
+                                `${a.distance_meters}m`
+                              ) : (
+                                "—"
+                              )}
                             </td>
                           </tr>
                         ))}
@@ -1702,19 +1705,19 @@ export default function OwnerClassesMaster({ branches }: { branches: { id: strin
                           <tr key={a.id} className="hover:bg-paper-tint/50">
                             <td className="py-2 px-3 font-mono font-semibold text-ink">{a.session_date}</td>
                             <td className="py-2 px-3 font-bold text-ink">
-                              {a.member?.profile?.full_name ?? a.member?.member_no ?? "—"}
+                              <NoTranslate>{a.member?.profile?.full_name ?? a.member?.member_no ?? "—"}</NoTranslate>
                             </td>
                             <td className="py-2 px-3">
                               <span
                                 className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                                  a.status === "hadir" || a.status === "present"
+                                  memberDbToUi(a.status) === "present"
                                     ? "bg-ok-50 text-ok-700"
-                                    : a.status === "alpha" || a.status === "absent"
+                                    : memberDbToUi(a.status) === "absent"
                                     ? "bg-danger-50 text-danger-700"
                                     : "bg-warn-50 text-warn-700"
                                 }`}
                               >
-                                {t(`owner.classes.attStatus.${a.status}`) || a.status}
+                                {t(`owner.classes.attStatus.${memberDbToUi(a.status)}`) || a.status}
                               </span>
                             </td>
                             <td className="py-2 px-3 text-ink-mute uppercase font-mono text-[10px]">

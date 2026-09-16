@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
 import type { Database } from "@/types/database";
+import { roleHomePath } from "@/lib/utils";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!;
@@ -47,7 +48,7 @@ export const updateSession = async (request: NextRequest) => {
   if (user && pathname === "/login") {
     const role = user.user_metadata?.role as string | undefined;
     const url = request.nextUrl.clone();
-    url.pathname = role ? `/${role}` : "/member";
+    url.pathname = roleHomePath(role);
     return NextResponse.redirect(url);
   }
 

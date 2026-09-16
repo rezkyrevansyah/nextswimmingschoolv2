@@ -5,6 +5,7 @@ export interface Branch {
   id: string; name: string; city: string; address: string | null;
   lat: number | null; lng: number | null; wa_numbers: string[] | null;
   logo_url: string | null;
+  show_payments_to_admin?: boolean;
 }
 
 export interface ScheduleSlot { day: string; time_start: string; time_end: string }
@@ -53,6 +54,7 @@ export interface CoachProfile {
   education_level: string | null; education_institution: string | null;
   bank_name: string | null; bank_account: string | null; bank_holder: string | null;
   avatar_url?: string | null;
+  branch_id?: string | null;
   certifications?: { id: string; name: string; title: string | null; status: string; valid_from: string | null; valid_until: string | null }[];
 }
 

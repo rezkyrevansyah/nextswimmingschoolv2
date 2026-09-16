@@ -55,9 +55,13 @@ export function useUpload() {
     avatarForProfile: (file: File, profileId: string) =>
       run(async () => postForm("/api/upload/avatar", { file: await compressIfImage(file), profile_id: profileId })),
 
-    /** Coach clock-in selfie */
+    /** Coach clock-in selfie (private-bucket key). */
     selfie: (file: File, classId: string, date: string) =>
       run(async () => postForm("/api/upload/selfie", { file: await compressIfImage(file), classId, date })),
+
+    /** Staff clock-in selfie (private-bucket key). */
+    staffSelfie: (file: File, date: string) =>
+      run(async () => postForm("/api/upload/selfie", { file: await compressIfImage(file), date })),
 
     /** Payment proof (admin uploads) */
     paymentProof: (file: File, billId: string) =>

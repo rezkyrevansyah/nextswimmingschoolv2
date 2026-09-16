@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 import Icon from "./Icon";
@@ -7,7 +7,7 @@ import Icon from "./Icon";
 interface ModalProps {
   open: boolean;
   onClose?: () => void;
-  title?: string;
+  title?: React.ReactNode;
   children?: React.ReactNode;
   footer?: React.ReactNode;
   size?: "sm" | "md" | "lg" | "xl";
@@ -20,15 +20,33 @@ const SIZE_CLASSES = {
   xl: "max-w-4xl",
 };
 
+// Tracks every currently-open Modal instance (most-recently-opened last) so that
+// when modals are nested (e.g. a form popup opened on top of a list popup),
+// Escape only closes the top-most one, and body scroll is only restored once
+// every modal in the stack has closed — not after each individual one.
+let openModalStack: number[] = [];
+let nextModalId = 0;
+
 export default function Modal({ open, onClose, title, children, footer, size = "md" }: ModalProps) {
+  const idRef = useRef<number | null>(null);
+
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose?.(); };
+    if (idRef.current === null) idRef.current = ++nextModalId;
+    const id = idRef.current;
+    openModalStack.push(id);
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && openModalStack[openModalStack.length - 1] === id) {
+        onClose?.();
+      }
+    };
     window.addEventListener("keydown", onKey);
     document.body.style.overflow = "hidden";
     return () => {
       window.removeEventListener("keydown", onKey);
-      document.body.style.overflow = "";
+      openModalStack = openModalStack.filter((x) => x !== id);
+      if (openModalStack.length === 0) document.body.style.overflow = "";
     };
   }, [open, onClose]);
 
@@ -36,7 +54,7 @@ export default function Modal({ open, onClose, title, children, footer, size = "
 
   return createPortal(
     <div className="fixed inset-0 z-[90] flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className="absolute inset-0 bg-ink/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-ink/50" onClick={onClose} />
       <div
         className={cn(
           "relative w-full bg-white sm:rounded-2xl rounded-t-3xl shadow-lift border border-line max-h-[92vh] flex flex-col",

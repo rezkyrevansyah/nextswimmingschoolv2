@@ -56,7 +56,7 @@ export async function printPayslip(supabase: SupabaseClient, payslipId: string):
     </head>
     <body>
       <div class="spinner"></div>
-      <div class="text">Memuat data slip gaji...</div>
+      <div class="text">Loading payslip data...</div>
     </body>
     </html>
   `);
@@ -64,7 +64,7 @@ export async function printPayslip(supabase: SupabaseClient, payslipId: string):
 
   try {
     // 1. Fetch the payslip record along with coach and branch relation snapshots
-    const { data: payslip, error: payslipError } = await supabase
+    let { data: payslip, error: payslipError } = await supabase
       .from("payslips")
       .select(`
         id,
@@ -77,13 +77,84 @@ export async function printPayslip(supabase: SupabaseClient, payslipId: string):
         published_at,
         coach_id,
         invoice_id,
-        coach:profiles!payslips_coach_id_fkey(id, full_name, email, bank_name, bank_account, bank_holder),
+        coach:profiles!payslips_coach_id_fkey(id, full_name, email, role, bank_name, bank_account, bank_holder),
         branch:branches(id, name)
       `)
       .eq("id", payslipId)
-      .single();
+      .maybeSingle();
 
-    if (payslipError || !payslip) {
+    let staffSalaryFallback: any = null;
+
+    if (!payslip) {
+      // Fallback: check if payslipId is an ID from staff_salaries table
+      const { data: staffSal } = await supabase
+        .from("staff_salaries")
+        .select(`
+          id,
+          staff_id,
+          branch_id,
+          period_month,
+          base_salary,
+          allowances,
+          deductions,
+          reimburse_amount,
+          total_salary,
+          status,
+          notes,
+          paid_at,
+          created_at,
+          staff:profiles!staff_salaries_staff_id_fkey(id, full_name, email, role, bank_name, bank_account, bank_holder),
+          branch:branches(id, name)
+        `)
+        .eq("id", payslipId)
+        .maybeSingle();
+
+      if (staffSal) {
+        staffSalaryFallback = staffSal;
+        // Check if there is a matching unified payslip in payslips table
+        const { data: matchedSlip } = await supabase
+          .from("payslips")
+          .select(`
+            id,
+            period_label,
+            gross_amount,
+            deductions,
+            net_amount,
+            notes,
+            status,
+            published_at,
+            coach_id,
+            invoice_id,
+            coach:profiles!payslips_coach_id_fkey(id, full_name, email, role, bank_name, bank_account, bank_holder),
+            branch:branches(id, name)
+          `)
+          .eq("coach_id", staffSal.staff_id)
+          .ilike("period_label", `%${staffSal.period_month}%`)
+          .maybeSingle();
+
+        if (matchedSlip) {
+          payslip = matchedSlip;
+          payslipId = matchedSlip.id;
+        } else {
+          payslip = {
+            id: staffSal.id,
+            period_label: staffSal.period_month,
+            gross_amount: (staffSal.base_salary || 0) + (staffSal.allowances || 0) + (staffSal.reimburse_amount || 0),
+            deductions: staffSal.deductions || 0,
+            net_amount: staffSal.total_salary || 0,
+            notes: staffSal.notes,
+            status: staffSal.status,
+            published_at: staffSal.paid_at || staffSal.created_at,
+            coach_id: staffSal.staff_id,
+            invoice_id: null,
+            coach: staffSal.staff,
+            branch: staffSal.branch,
+          };
+        }
+      }
+    }
+
+    if (!payslip) {
       throw new Error(payslipError?.message || "Payslip not found");
     }
 
@@ -134,8 +205,10 @@ export async function printPayslip(supabase: SupabaseClient, payslipId: string):
     }
     const classMap = new Map<string, ClassRowDetail>();
 
-    // Seed with currently assigned classes (with qty 0/'-' by default)
-    if (coachClasses) {
+    const isStaff = coach?.role === "staff";
+
+    // Seed with currently assigned classes (with qty 0/'-' by default) - only for coaches
+    if (coachClasses && !isStaff) {
       coachClasses.forEach((cc: any) => {
         if (!cc.class) return;
         const c = cc.class;
@@ -159,21 +232,29 @@ export async function printPayslip(supabase: SupabaseClient, payslipId: string):
     // Overlay or add classes from actual invoice items
     invoiceItems.forEach((item: any) => {
       if (item.item_type && item.item_type !== "class") {
-        // Extra/Reimburse: keyed by item.id, never collides, never overwrites classMap entries seeded from class_coaches
+        let labelName = item.description?.trim() || (isStaff ? "Staff Base Salary / Honor" : "Session / Class Fee");
+        if (item.item_type === "extra") {
+          labelName = item.description ? `Extra Session — ${item.description}` : "Extra Session";
+        } else if (item.item_type === "reimburse") {
+          labelName = item.description ? `Reimbursement — ${item.description}` : "Reimbursement";
+        } else if (item.item_type === "manual_fee") {
+          labelName = item.description?.trim() ? item.description.trim() : (isStaff ? "Staff Base Salary / Honor" : "Manual Fee");
+        }
+
         classMap.set(`item-${item.id}`, {
           id: item.id,
-          name: item.item_type === "extra" ? "Sesi Extra" : `Reimburse — ${item.description ?? ""}`,
+          name: labelName,
           branchName: (payslip.branch as any)?.name ?? "OTHER BRANCH",
-          qty: item.session_count,
+          qty: item.session_count || 1,
           rate: item.rate,
-          payment: item.subtotal,
+          payment: item.subtotal ?? (item.rate * (item.session_count || 1)),
         });
         return;
       }
       const c = item.class;
       const classId = item.class_id;
       const branchName = c?.branch?.name ?? (payslip.branch as any)?.name ?? "OTHER BRANCH";
-      const className = c?.name ?? classId;
+      const className = c?.name ?? item.description ?? classId;
 
       classMap.set(classId, {
         id: classId,
@@ -181,9 +262,59 @@ export async function printPayslip(supabase: SupabaseClient, payslipId: string):
         branchName: branchName,
         qty: item.session_count,
         rate: item.rate,
-        payment: item.subtotal,
+        payment: item.subtotal ?? (item.rate * item.session_count),
       });
     });
+
+    const grossAmount = payslip.gross_amount ?? 0;
+    const totalDeductions = payslip.deductions ?? 0;
+
+    // If classMap is empty (e.g., staff payslip created manually, or payslip without invoice items)
+    if (classMap.size === 0) {
+      const branchName = (payslip.branch as any)?.name ?? "OTHER BRANCH";
+      if (staffSalaryFallback && (staffSalaryFallback.base_salary > 0 || staffSalaryFallback.allowances > 0 || staffSalaryFallback.reimburse_amount > 0)) {
+        if (staffSalaryFallback.base_salary > 0) {
+          classMap.set("staff-base", {
+            id: "staff-base",
+            name: "Base Salary",
+            branchName,
+            qty: 1,
+            rate: staffSalaryFallback.base_salary,
+            payment: staffSalaryFallback.base_salary,
+          });
+        }
+        if (staffSalaryFallback.allowances > 0) {
+          classMap.set("staff-allowance", {
+            id: "staff-allowance",
+            name: "Allowances",
+            branchName,
+            qty: 1,
+            rate: staffSalaryFallback.allowances,
+            payment: staffSalaryFallback.allowances,
+          });
+        }
+        if (staffSalaryFallback.reimburse_amount > 0) {
+          classMap.set("staff-reimburse", {
+            id: "staff-reimburse",
+            name: "Reimbursement",
+            branchName,
+            qty: 1,
+            rate: staffSalaryFallback.reimburse_amount,
+            payment: staffSalaryFallback.reimburse_amount,
+          });
+        }
+      } else {
+        const entryName = payslip.notes?.trim() || (isStaff ? "Staff Base Salary & Allowances" : "Teaching Fee");
+        classMap.set("manual-entry", {
+          id: "manual-entry",
+          name: entryName,
+          branchName: branchName,
+          qty: 1,
+          rate: grossAmount,
+          payment: grossAmount,
+        });
+      }
+    }
 
     // 6. Group classes by Branch Name
     const branchesMap = new Map<string, ClassRowDetail[]>();
@@ -197,8 +328,6 @@ export async function printPayslip(supabase: SupabaseClient, payslipId: string):
     const sortedBranches = Array.from(branchesMap.keys()).sort();
 
     // 7. Fetch real deduction breakdown; fall back to the legacy 2%-cap split for payslips predating this feature
-    const grossAmount = payslip.gross_amount ?? 0;
-    const totalDeductions = payslip.deductions ?? 0;
 
     const { data: deductionRows } = await supabase
       .from("payslip_deductions")
@@ -234,7 +363,7 @@ export async function printPayslip(supabase: SupabaseClient, payslipId: string):
 
     const tableRowsHtml = sortedBranches.map((branchName) => {
       const classes = branchesMap.get(branchName) ?? [];
-      
+
       const branchHeader = `
         <tr class="branch-row">
           <td colspan="4">${branchName}</td>
@@ -259,6 +388,8 @@ export async function printPayslip(supabase: SupabaseClient, payslipId: string):
       return branchHeader + classRows;
     }).join("");
 
+    const displayNotes = payslip.notes?.trim() || invoiceItems.map((it: any) => it.description?.trim()).filter(Boolean).join(", ");
+
     const documentHtml = `
       <!DOCTYPE html>
       <html>
@@ -267,13 +398,13 @@ export async function printPayslip(supabase: SupabaseClient, payslipId: string):
         <title>Salary Slip — ${payslip.period_label}</title>
         <style>
           @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-          
+
           * {
             box-sizing: border-box;
             margin: 0;
             padding: 0;
           }
-          
+
           body {
             font-family: 'Inter', sans-serif;
             color: #000;
@@ -281,25 +412,25 @@ export async function printPayslip(supabase: SupabaseClient, payslipId: string):
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
           }
-          
+
           .page {
             width: 595px; /* A4 width */
             margin: 0 auto;
             padding: 40px 48px;
             background: #fff;
           }
-          
+
           .logo-container {
             text-align: center;
             margin-bottom: 12px;
           }
-          
+
           .logo-container img {
             height: 85px;
             width: auto;
             object-fit: contain;
           }
-          
+
           .slip-title {
             text-align: center;
             font-size: 13px;
@@ -309,7 +440,7 @@ export async function printPayslip(supabase: SupabaseClient, payslipId: string):
             text-transform: uppercase;
             margin-bottom: 2px;
           }
-          
+
           .slip-period {
             text-align: center;
             font-size: 13px;
@@ -319,12 +450,12 @@ export async function printPayslip(supabase: SupabaseClient, payslipId: string):
             text-transform: uppercase;
             margin-bottom: 12px;
           }
-          
+
           .header-line {
             border-bottom: 2.5px solid #000;
             margin-bottom: 16px;
           }
-          
+
           .info-grid {
             display: grid;
             grid-template-columns: 85px 10px 1fr;
@@ -334,23 +465,23 @@ export async function printPayslip(supabase: SupabaseClient, payslipId: string):
             color: #000;
             margin-bottom: 20px;
           }
-          
+
           .info-label {
             text-transform: uppercase;
           }
-          
+
           .info-value {
             font-weight: 500;
             text-transform: uppercase;
           }
-          
+
           table {
             width: 100%;
             border-collapse: collapse;
             font-size: 12px;
             color: #000;
           }
-          
+
           th {
             font-weight: 700;
             text-transform: uppercase;
@@ -358,7 +489,7 @@ export async function printPayslip(supabase: SupabaseClient, payslipId: string):
             border-top: 1.5px solid #000;
             border-bottom: 1.5px solid #000;
           }
-          
+
           .branch-row td {
             font-weight: 700;
             text-transform: uppercase;
@@ -366,107 +497,107 @@ export async function printPayslip(supabase: SupabaseClient, payslipId: string):
             padding-bottom: 4px;
             font-size: 12.5px;
           }
-          
+
           .class-row td {
             padding: 3px 0;
             font-weight: 500;
             text-transform: uppercase;
           }
-          
+
           .desc-cell {
             text-align: left;
             padding-left: 2px;
           }
-          
+
           .qty-cell {
             text-align: center;
             width: 50px;
           }
-          
+
           .rate-cell {
             text-align: right;
             width: 110px;
             padding-right: 20px;
             font-variant-numeric: tabular-nums;
           }
-          
+
           .payment-cell {
             text-align: right;
             width: 120px;
             font-variant-numeric: tabular-nums;
           }
-          
+
           .totals-wrapper {
             margin-top: 20px;
             display: flex;
             justify-content: flex-end;
           }
-          
+
           .totals-table {
             width: 300px;
             border-collapse: collapse;
             font-size: 12px;
             color: #000;
           }
-          
+
           .totals-table td {
             padding: 4px 0;
             font-weight: 700;
             text-transform: uppercase;
           }
-          
+
           .totals-table .label-col {
             text-align: left;
           }
-          
+
           .totals-table .val-col {
             text-align: right;
             font-variant-numeric: tabular-nums;
           }
-          
+
           .border-top {
             border-top: 1px solid #000;
           }
-          
+
           .double-border-top {
             border-top: 1.5px solid #000;
             margin-top: 2px;
           }
-          
+
           .take-home-pay-row td {
             font-size: 13px;
             font-weight: 800;
             padding-top: 6px;
             padding-bottom: 6px;
           }
-          
+
           .transfer-section {
             margin-top: 28px;
             font-size: 12px;
             color: #000;
             line-height: 1.4;
           }
-          
+
           .transfer-title {
             font-weight: 700;
             margin-bottom: 4px;
           }
-          
+
           .transfer-grid {
             display: grid;
             grid-template-columns: 85px 10px 1fr;
             row-gap: 3px;
             font-weight: 700;
           }
-          
+
           .transfer-value {
             font-weight: 500;
           }
-          
+
           .transfer-email {
             font-weight: 500;
           }
-          
+
           .notes-section {
             margin-top: 24px;
             border-top: 1px dashed #ccc;
@@ -474,13 +605,13 @@ export async function printPayslip(supabase: SupabaseClient, payslipId: string):
             font-size: 11px;
             color: #475569;
           }
-          
+
           .notes-title {
             font-weight: 700;
             text-transform: uppercase;
             margin-bottom: 2px;
           }
-          
+
           @media print {
             body {
               background: #fff;
@@ -503,24 +634,24 @@ export async function printPayslip(supabase: SupabaseClient, payslipId: string):
           <div class="logo-container">
             <img src="${logoUrl}" alt="NEXT Swimming School" onerror="this.style.display='none'" />
           </div>
-          
+
           <!-- Title -->
           <div class="slip-title">Salary Slip</div>
           <div class="slip-period">${payslip.period_label}</div>
-          
+
           <div class="header-line"></div>
-          
+
           <!-- Info Details -->
           <div class="info-grid">
             <div class="info-label">Name</div>
             <div>:</div>
             <div class="info-value">${coach?.full_name ?? "—"}</div>
-            
+
             <div class="info-label">Position</div>
             <div>:</div>
-            <div class="info-value">Coach</div>
+            <div class="info-value">${coach?.role === "staff" ? "Staff" : "Coach"}</div>
           </div>
-          
+
           <!-- Classes and Session Details Table -->
           <table>
             <thead>
@@ -535,7 +666,7 @@ export async function printPayslip(supabase: SupabaseClient, payslipId: string):
               ${tableRowsHtml}
             </tbody>
           </table>
-          
+
           <!-- Totals Section -->
           <div class="totals-wrapper">
             <table class="totals-table">
@@ -550,7 +681,7 @@ export async function printPayslip(supabase: SupabaseClient, payslipId: string):
               </tr>
             </table>
           </div>
-          
+
           <!-- Transfer Information -->
           <div class="transfer-section">
             <div class="transfer-title">Transferred to,</div>
@@ -558,15 +689,15 @@ export async function printPayslip(supabase: SupabaseClient, payslipId: string):
               <div>Email</div>
               <div>:</div>
               <div class="transfer-email">${coach?.email ?? "—"}</div>
-              
+
               <div>Bank</div>
               <div>:</div>
               <div class="transfer-value">${coach?.bank_name ?? "—"}</div>
-              
+
               <div>Number</div>
               <div>:</div>
               <div class="transfer-value">${coach?.bank_account ?? "—"}</div>
-              
+
               <div>Name</div>
               <div>:</div>
               <div class="transfer-value">${coach?.bank_holder ?? "—"}</div>
@@ -574,10 +705,10 @@ export async function printPayslip(supabase: SupabaseClient, payslipId: string):
           </div>
 
           <!-- Notes (if any) -->
-          ${payslip.notes ? `
+          ${displayNotes ? `
             <div class="notes-section">
               <div class="notes-title">Catatan</div>
-              <div>${payslip.notes}</div>
+              <div>${displayNotes}</div>
             </div>
           ` : ""}
         </div>
@@ -590,7 +721,7 @@ export async function printPayslip(supabase: SupabaseClient, payslipId: string):
     w.document.write(documentHtml);
     w.document.close();
     w.focus();
-    
+
     // Slight timeout to let fonts and resources render before printing
     setTimeout(() => {
       w.print();
@@ -608,3 +739,4 @@ export async function printPayslip(supabase: SupabaseClient, payslipId: string):
     w.document.close();
   }
 }
+

@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
@@ -93,10 +93,13 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
   // link existing coach
   const [openLink, setOpenLink] = useState(false);
   const [linkSearch, setLinkSearch] = useState("");
-  const [linkResult, setLinkResult] = useState<{ id: string; full_name: string } | null>(null);
+  const [linkSelectedIds, setLinkSelectedIds] = useState<Set<string>>(new Set());
   const [linkSaving, setLinkSaving] = useState(false);
   const [linkCandidates, setLinkCandidates] = useState<{ id: string; full_name: string; phone: string | null; avatar_url: string | null; branches: { name: string; city: string | null }[] }[]>([]);
   const [linkLoadingCandidates, setLinkLoadingCandidates] = useState(false);
+  const [linkShowFilters, setLinkShowFilters] = useState(false);
+  const [linkFilterBranch, setLinkFilterBranch] = useState("");
+  const [linkFilterCity, setLinkFilterCity] = useState("");
 
   // assign class
   const [openAssign, setOpenAssign] = useState(false);
@@ -365,24 +368,89 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
     setLinkLoadingCandidates(false);
   };
 
-  const linkCoachToBranch = async () => {
-    if (!linkResult) return;
-    setLinkSaving(true);
-    const res = await fetch(`/api/admin/coaches/${linkResult.id}/branches`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ branch_id: branchId }),
+  const linkFilteredCandidates = useMemo(() => {
+    const q = linkSearch.trim().toLowerCase();
+    return linkCandidates.filter(c => {
+      if (q && !(c.full_name.toLowerCase().includes(q) || (c.phone ?? "").includes(q))) return false;
+      if (linkFilterBranch && !c.branches.some(b => b.name === linkFilterBranch)) return false;
+      if (linkFilterCity && !c.branches.some(b => b.city === linkFilterCity)) return false;
+      return true;
     });
-    const j = await res.json() as { error?: string; code?: string };
+  }, [linkCandidates, linkSearch, linkFilterBranch, linkFilterCity]);
+
+  const linkBranchOptions = useMemo(
+    () => Array.from(new Set(linkCandidates.flatMap(c => c.branches.map(b => b.name)))).sort(),
+    [linkCandidates]
+  );
+  const linkCityOptions = useMemo(
+    () => Array.from(new Set(linkCandidates.flatMap(c => c.branches.map(b => b.city).filter((v): v is string => !!v)))).sort(),
+    [linkCandidates]
+  );
+  const linkActiveFilterCount = [linkFilterBranch, linkFilterCity].filter(Boolean).length;
+
+  const linkCoachToBranch = async () => {
+    if (linkSelectedIds.size === 0) return;
+    setLinkSaving(true);
+    const ids = Array.from(linkSelectedIds);
+    const outcomes = await Promise.allSettled(
+      ids.map(id =>
+        fetch(`/api/admin/coaches/${id}/branches`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ branch_id: branchId }),
+        }).then(async res => ({ ok: res.ok, json: await res.json() as { error?: string; code?: string } }))
+      )
+    );
     setLinkSaving(false);
-    if (!res.ok) {
-      if (j.code === "ALREADY_LINKED") return toast.error(t("admin.coaches.alreadyLinkedToast"));
-      return toast.error(t("admin.coaches.linkCoachFailed"), j.error);
+
+    let succeeded = 0, alreadyLinked = 0, failed = 0;
+    for (const outcome of outcomes) {
+      if (outcome.status !== "fulfilled") { failed++; continue; }
+      if (outcome.value.ok) succeeded++;
+      else if (outcome.value.json.code === "ALREADY_LINKED") alreadyLinked++;
+      else failed++;
     }
-    toast.success(t("admin.coaches.linkedSuccessToast", { name: linkResult.full_name }));
+
+    const parts = [
+      succeeded > 0 ? t("admin.coaches.linkBulkSuccessPart", { count: succeeded }) : null,
+      alreadyLinked > 0 ? t("admin.coaches.linkBulkAlreadyPart", { count: alreadyLinked }) : null,
+      failed > 0 ? t("admin.coaches.linkBulkFailedPart", { count: failed }) : null,
+    ].filter(Boolean).join(", ");
+    if (failed > 0 && succeeded === 0) toast.error(t("admin.coaches.linkCoachFailed"), parts);
+    else toast.success(parts);
+
     setOpenLink(false);
     setLinkSearch("");
-    setLinkResult(null);
+    setLinkSelectedIds(new Set());
     setLinkCandidates([]);
+    setLinkFilterBranch("");
+    setLinkFilterCity("");
+    load();
+  };
+
+  const unlinkCoachFromBranch = async (c: CoachFull, classCount: number) => {
+    const ok = await confirm({
+      body: classCount > 0
+        ? t("admin.coaches.unlinkConfirmBodyWithClasses", { name: c.full_name, count: classCount })
+        : t("admin.coaches.unlinkConfirmBody", { name: c.full_name }),
+      danger: true,
+      confirmLabel: t("admin.coaches.unlinkBtn"),
+    });
+    if (!ok) return;
+    const res = await fetch(`/api/admin/coaches/${c.id}/branches`, {
+      method: "DELETE", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch_id: branchId }),
+    });
+    const j = await res.json() as { error?: string; removedClassAssignments?: number };
+    if (!res.ok) return toast.error(t("admin.coaches.unlinkFailed"), j.error);
+    setDetail(prev => prev ? {
+      ...prev,
+      coach_branches: prev.coach_branches?.filter(cb => cb.branch_id !== branchId),
+      class_coaches: prev.class_coaches?.filter(cc => cc.class?.branch_id !== branchId),
+    } : prev);
+    const removed = j.removedClassAssignments ?? 0;
+    toast.success(removed > 0
+      ? t("admin.coaches.unlinkSuccessWithClassesToast", { name: c.full_name, count: removed })
+      : t("admin.coaches.unlinkSuccessToast", { name: c.full_name }));
     load();
   };
 
@@ -456,7 +524,7 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
               {showArchived ? t("admin.coaches.hideArchivedBtn") : t("admin.coaches.showArchivedBtn", { count: coaches.filter(c => c.is_archived).length })}
             </Btn>
           )}
-          <Btn variant="soft" icon="link" onClick={() => { setLinkSearch(""); setLinkResult(null); setOpenLink(true); loadLinkCandidates(); }}>{t("admin.coaches.linkExistingCoachBtn")}</Btn>
+          <Btn variant="soft" icon="link" onClick={() => { setLinkSearch(""); setLinkSelectedIds(new Set()); setLinkShowFilters(false); setLinkFilterBranch(""); setLinkFilterCity(""); setOpenLink(true); loadLinkCandidates(); }}>{t("admin.coaches.linkExistingCoachBtn")}</Btn>
           <Btn variant="primary" icon="plus" onClick={() => { setForm(EMPTY_COACH_FORM); setCreateAvatarFile(null); setCreateAvatarPreview(null); setOpenAdd(true); }}>{t("admin.coaches.addCoachBtn")}</Btn>
         </div>
       </div>
@@ -768,6 +836,11 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
                               <div className="flex items-center gap-2">
                                 {cb.is_primary && <span className="text-[10px] font-bold text-ocean-600 bg-ocean-50 px-1.5 py-0.5 rounded">{t("admin.coaches.primaryBadge")}</span>}
                                 <span className="text-xs text-ink-faint">{t("admin.coaches.classesCountSince", { count: classCount, date: fmtDate(cb.joined_at) })}</span>
+                                {cb.branch_id === branchId && (
+                                  <button type="button" onClick={() => unlinkCoachFromBranch(detail, classCount)} className="p-1 rounded hover:bg-danger-50 text-danger-500 transition-colors" title={t("admin.coaches.unlinkBtn")}>
+                                    <Icon name="unlink" className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
                               </div>
                             </div>
                           );
@@ -846,60 +919,102 @@ export default function AdminCoach({ branchId }: { branchId: string }) {
       })()}
 
       {/* ── Link existing coach modal ── */}
-      <Modal open={openLink} onClose={() => { setOpenLink(false); setLinkSearch(""); setLinkResult(null); setLinkCandidates([]); }} title={t("admin.coaches.linkModalTitle")} size="sm"
+      <Modal open={openLink} onClose={() => { setOpenLink(false); setLinkSearch(""); setLinkSelectedIds(new Set()); setLinkCandidates([]); }} title={t("admin.coaches.linkModalTitle")} size="md"
         footer={
-          linkResult
-            ? <><Btn variant="ghost" onClick={() => { setOpenLink(false); setLinkSearch(""); setLinkResult(null); setLinkCandidates([]); }}>{t("common.actions.cancel")}</Btn><Btn variant="primary" icon="link" onClick={linkCoachToBranch} disabled={linkSaving}>{linkSaving ? t("admin.coaches.linkingBtn") : t("admin.coaches.linkBtn")}</Btn></>
-            : <Btn variant="ghost" onClick={() => { setOpenLink(false); setLinkSearch(""); setLinkResult(null); setLinkCandidates([]); }}>{t("common.actions.close")}</Btn>
+          <>
+            <Btn variant="ghost" onClick={() => { setOpenLink(false); setLinkSearch(""); setLinkSelectedIds(new Set()); setLinkCandidates([]); }}>{t("common.actions.cancel")}</Btn>
+            <Btn variant="primary" icon="link" onClick={linkCoachToBranch} disabled={linkSelectedIds.size === 0 || linkSaving}>
+              {linkSaving ? t("admin.coaches.linkingBtn") : t("admin.coaches.linkBtnCount", { count: linkSelectedIds.size })}
+            </Btn>
+          </>
         }>
         <div className="space-y-3">
           <p className="text-sm text-ink-soft">{t("admin.coaches.linkIntroText")}</p>
-          {linkResult ? (
-            <div className="flex items-center gap-3 p-3 rounded-xl bg-ok-50 border border-ok-200">
-              <Avatar name={linkResult.full_name} size={40} />
-              <div className="flex-1 min-w-0">
-                <div className="font-semibold text-ink text-sm">{linkResult.full_name}</div>
-                <div className="text-xs text-ok-700">{t("admin.coaches.readyToLinkLabel")}</div>
+
+          <div className="flex items-center gap-2">
+            <div className="flex-1"><Input placeholder={t("admin.coaches.searchNameOrPhonePlaceholder")} value={linkSearch} onChange={e => setLinkSearch(e.target.value)} autoComplete="off" /></div>
+            <button
+              type="button"
+              onClick={() => setLinkShowFilters(v => !v)}
+              className={`relative inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-2.5 rounded-xl border transition shrink-0 ${linkShowFilters ? "bg-ocean-600 text-white border-ocean-600" : "bg-white border-line text-ink-soft hover:border-ocean-400"}`}
+            >
+              <Icon name="settings" className="w-3.5 h-3.5" />
+              {t("admin.coaches.linkFilterBtn")}
+              {linkActiveFilterCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-danger-500 text-white text-[10px] font-bold flex items-center justify-center">{linkActiveFilterCount}</span>
+              )}
+            </button>
+          </div>
+
+          {linkShowFilters && (
+            <div className="bg-paper-tint border border-line rounded-xl p-3 grid sm:grid-cols-2 gap-3">
+              <div>
+                <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-1.5">{t("admin.coaches.linkFilterByBranch")}</div>
+                <select value={linkFilterBranch} onChange={e => setLinkFilterBranch(e.target.value)} className="w-full text-sm border border-line rounded-lg px-2.5 py-1.5 bg-white outline-none">
+                  <option value="">{t("admin.coaches.linkAllBranchesOpt")}</option>
+                  {linkBranchOptions.map(name => <option key={name} value={name}>{name}</option>)}
+                </select>
               </div>
-              <button type="button" onClick={() => setLinkResult(null)} className="p-1 rounded hover:bg-ok-100 text-ok-600 transition-colors shrink-0">
-                <Icon name="x" className="w-4 h-4" />
-              </button>
-            </div>
-          ) : (
-            <>
-              <Input placeholder={t("admin.coaches.searchNameOrPhonePlaceholder")} value={linkSearch} onChange={e => setLinkSearch(e.target.value)} autoComplete="off" />
-              {linkLoadingCandidates ? (
-                <div className="py-6 text-center text-sm text-ink-mute">{t("admin.classes.loadingEllipsis")}</div>
-              ) : linkCandidates.length === 0 ? (
-                <div className="py-6 text-center text-sm text-ink-mute">{t("admin.coaches.allLinkedOrNoneHint")}</div>
-              ) : (
-                <div className="max-h-72 overflow-y-auto space-y-1.5 pr-0.5">
-                  {linkCandidates
-                    .filter(c => {
-                      const q = linkSearch.trim().toLowerCase();
-                      if (!q) return true;
-                      return c.full_name.toLowerCase().includes(q) || (c.phone ?? "").includes(q);
-                    })
-                    .map(c => (
-                      <button key={c.id} type="button" onClick={() => setLinkResult({ id: c.id, full_name: c.full_name })}
-                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border border-line bg-paper-tint hover:bg-white hover:border-ocean-300 transition-colors text-left">
-                        <Avatar name={c.full_name} src={c.avatar_url ?? undefined} size={36} />
-                        <div className="flex-1 min-w-0">
-                          <div className="font-semibold text-sm text-ink">{c.full_name}</div>
-                          <div className="text-xs text-ink-mute">{c.phone ?? "—"}</div>
-                          {c.branches.length > 0 && (
-                            <div className="flex flex-wrap gap-1 mt-1">
-                              {c.branches.map(b => (
-                                <span key={b.name} className="text-[10px] font-semibold bg-ocean-50 text-ocean-700 px-1.5 py-0.5 rounded-full">{b.name}{b.city ? ` · ${b.city}` : ""}</span>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </button>
-                    ))}
+              <div>
+                <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-1.5">{t("admin.coaches.linkFilterByCity")}</div>
+                <select value={linkFilterCity} onChange={e => setLinkFilterCity(e.target.value)} className="w-full text-sm border border-line rounded-lg px-2.5 py-1.5 bg-white outline-none">
+                  <option value="">{t("admin.coaches.linkAllCitiesOpt")}</option>
+                  {linkCityOptions.map(city => <option key={city} value={city}>{city}</option>)}
+                </select>
+              </div>
+              {linkActiveFilterCount > 0 && (
+                <div className="sm:col-span-2 flex justify-end">
+                  <button type="button" onClick={() => { setLinkFilterBranch(""); setLinkFilterCity(""); }} className="text-xs font-semibold text-danger-600 hover:underline">{t("admin.coaches.linkResetFilterBtn")}</button>
                 </div>
               )}
-            </>
+            </div>
+          )}
+
+          {linkCandidates.length > 0 && (
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs text-ink-mute font-medium">
+                {linkSelectedIds.size > 0 ? t("admin.coaches.linkSelectedCount", { count: linkSelectedIds.size }) : ""}
+              </span>
+              <div className="flex items-center gap-3">
+                {linkSelectedIds.size > 0 && (
+                  <button type="button" onClick={() => setLinkSelectedIds(new Set())} className="text-xs font-semibold text-ink-mute hover:text-danger-600 transition">{t("admin.coaches.linkClearSelectionBtn")}</button>
+                )}
+                <button type="button" onClick={() => setLinkSelectedIds(new Set(linkFilteredCandidates.map(c => c.id)))} className="text-xs font-semibold text-ocean-600 hover:underline">
+                  {t("admin.coaches.linkSelectAllBtn", { count: linkFilteredCandidates.length })}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {linkLoadingCandidates ? (
+            <div className="py-6 text-center text-sm text-ink-mute">{t("admin.classes.loadingEllipsis")}</div>
+          ) : linkCandidates.length === 0 ? (
+            <div className="py-6 text-center text-sm text-ink-mute">{t("admin.coaches.allLinkedOrNoneHint")}</div>
+          ) : (
+            <div className="max-h-72 overflow-y-auto space-y-1.5 pr-0.5">
+              {linkFilteredCandidates.map(c => {
+                const isChecked = linkSelectedIds.has(c.id);
+                const toggle = () => setLinkSelectedIds(prev => { const next = new Set(prev); if (next.has(c.id)) next.delete(c.id); else next.add(c.id); return next; });
+                return (
+                  <button key={c.id} type="button" onClick={toggle}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border transition-colors text-left ${isChecked ? "bg-ocean-50 border-ocean-300" : "bg-paper-tint border-line hover:bg-white hover:border-ocean-300"}`}>
+                    <input type="checkbox" checked={isChecked} onChange={toggle} onClick={e => e.stopPropagation()} className="rounded border-line accent-ocean-600 shrink-0" />
+                    <Avatar name={c.full_name} src={c.avatar_url ?? undefined} size={36} />
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-sm text-ink">{c.full_name}</div>
+                      <div className="text-xs text-ink-mute">{c.phone ?? "—"}</div>
+                      {c.branches.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {c.branches.map(b => (
+                            <span key={b.name} className="text-[10px] font-semibold bg-ocean-50 text-ocean-700 px-1.5 py-0.5 rounded-full">{b.name}{b.city ? ` · ${b.city}` : ""}</span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
           )}
         </div>
       </Modal>

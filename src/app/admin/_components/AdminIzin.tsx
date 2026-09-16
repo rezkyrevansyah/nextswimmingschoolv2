@@ -13,6 +13,7 @@ import Modal from "@/components/ui/Modal";
 import type { CoachProfile, ClassRow } from "../_types";
 import type { Database } from "@/types/database";
 import { fmtDate } from "@/lib/utils";
+import { memberLeaveTypeToStatus, MEMBER_ATTENDANCE_CONFLICT, COACH_ATTENDANCE_CONFLICT } from "@/lib/attendance";
 
 interface LeaveRow {
   id: string; type: string; reason: string | null;
@@ -120,7 +121,7 @@ export default function AdminIzin({ branchId }: { branchId: string }) {
       member_id: string; date_from: string; date_to: string; type: string;
       member_leave_classes: { class_id: string; class: { schedule_days: string[] } | null }[];
     };
-    const leaveStatus = detail.type === "sakit" ? "sakit" : detail.type === "izin" ? "izin" : "izin";
+    const leaveStatus = memberLeaveTypeToStatus(detail.type);
     const dayNames = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
     const from = new Date(detail.date_from);
     const to   = new Date(detail.date_to);
@@ -138,7 +139,7 @@ export default function AdminIzin({ branchId }: { branchId: string }) {
       }
     }
     if (rows.length > 0) {
-      await supabase.from("member_attendances").upsert(rows, { onConflict: "class_id,member_id,session_date" });
+      await supabase.from("member_attendances").upsert(rows, { onConflict: MEMBER_ATTENDANCE_CONFLICT });
     }
   };
 
@@ -265,7 +266,7 @@ export default function AdminIzin({ branchId }: { branchId: string }) {
             d.setDate(d.getDate() + 1);
           }
         }
-        if (rows.length > 0) await supabase.from("coach_attendances").upsert(rows, { onConflict: "coach_id,class_id,session_date" });
+        if (rows.length > 0) await supabase.from("coach_attendances").upsert(rows, { onConflict: COACH_ATTENDANCE_CONFLICT });
       }
     } else {
       const { data, error } = await supabase.from("member_leaves").insert({ member_id: createForm.target_id, type: createForm.type as Database["public"]["Enums"]["leave_type"], date_from: createForm.date_from, date_to: createForm.date_to, reason: createForm.reason || null, status: "approved" as Database["public"]["Enums"]["leave_status"], created_by_admin: true, reviewed_at: new Date().toISOString() }).select("id").single();
@@ -355,7 +356,7 @@ export default function AdminIzin({ branchId }: { branchId: string }) {
         }
       }
       if (rows.length > 0) {
-        await supabase.from("coach_attendances").upsert(rows, { onConflict: "coach_id,class_id,session_date" });
+        await supabase.from("coach_attendances").upsert(rows, { onConflict: COACH_ATTENDANCE_CONFLICT });
       }
     }
 

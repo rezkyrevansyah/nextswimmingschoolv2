@@ -6,7 +6,8 @@
  * Resolves a private-bucket storage key to a short-lived signed URL.
  * Authenticated only. No per-key role check: the caller only ever learns a
  * private key by having already passed RLS on the row that stores it
- * (bills.proof_url, certifications.photo_url, coach_attendances.selfie_url),
+ * (bills.proof_url, certifications.photo_url, coach_attendances.selfie_url,
+ *  staff_attendances.selfie_url),
  * so re-checking here would duplicate access control that already happened.
  */
 import { NextRequest, NextResponse } from "next/server";

@@ -23,6 +23,7 @@ export const common: typeof CommonEn = {
     view: "Lihat",
     approve: "Setujui",
     reject: "Tolak",
+    uploading: "Mengunggah...",
   },
   status: {
     active: "Aktif",
@@ -44,6 +45,7 @@ export const common: typeof CommonEn = {
   },
   timePicker: {
     placeholder: "Pilih jam",
+    hint: "Format 24 jam, contoh: 07:00 pagi, 14:00 siang",
   },
   photoLightbox: {
     uploading: "Mengupload…",
@@ -51,6 +53,14 @@ export const common: typeof CommonEn = {
   },
   mapPicker: {
     hint: "Klik peta untuk pin lokasi, atau seret marker. Koordinat otomatis terisi di bawah.",
+    searchPlaceholder: "Cari tempat, kolam renang, atau jalan...",
+    useCurrentLocation: "Gunakan Lokasi GPS Saya",
+    locating: "Mendeteksi lokasi...",
+    mapRoad: "Peta (Google)",
+    mapSatellite: "Satelit",
+    openGoogleMaps: "Buka di Google Maps",
+    noResults: "Lokasi tidak ditemukan",
+    searching: "Mencari lokasi...",
   },
   bell: {
     justNow: "Baru saja",

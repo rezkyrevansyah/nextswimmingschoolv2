@@ -21,6 +21,7 @@ export const common = {
     view: "View",
     approve: "Approve",
     reject: "Reject",
+    uploading: "Uploading…",
   },
   status: {
     active: "Active",
@@ -42,6 +43,7 @@ export const common = {
   },
   timePicker: {
     placeholder: "Select time",
+    hint: "24-hour format, e.g. 07:00, 14:00",
   },
   photoLightbox: {
     uploading: "Uploading…",
@@ -49,6 +51,14 @@ export const common = {
   },
   mapPicker: {
     hint: "Click the map to pin a location, or drag the marker. Coordinates fill in automatically below.",
+    searchPlaceholder: "Search place, pool, or street...",
+    useCurrentLocation: "Use My GPS Location",
+    locating: "Detecting location...",
+    mapRoad: "Map (Google)",
+    mapSatellite: "Satellite",
+    openGoogleMaps: "Open in Google Maps",
+    noResults: "No locations found",
+    searching: "Searching locations...",
   },
   bell: {
     justNow: "Just now",

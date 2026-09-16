@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import Logo from "@/components/ui/Logo";
 import Icon from "@/components/ui/Icon";
@@ -8,28 +8,35 @@ import { Field, Input, Select, Textarea, Switch } from "@/components/ui/FormFiel
 import { Card, SectionTitle, Stat } from "@/components/ui/Card";
 import Status from "@/components/ui/Status";
 import Avatar from "@/components/ui/Avatar";
-import LanguageSwitcher from "@/components/ui/LanguageSwitcher";
+import { NoTranslate } from "@/components/ui/NoTranslate";
+import { GoogleLanguageSwitcher } from "@/components/GoogleTranslate";
 import Modal from "@/components/ui/Modal";
 import Sidebar, { type NavItem } from "@/components/layout/Sidebar";
 import Topbar from "@/components/layout/Topbar";
 import Bell from "@/components/layout/Bell";
 import BetaFeedback, { BETA_FEEDBACK_ENABLED } from "@/components/layout/BetaFeedback";
-import { fmtIDR, clampPercent, fmtDate, fmtDateLong, waLink, cn } from "@/lib/utils";
+import { fmtIDR, clampPercent, fmtDate, fmtDateLong, cn } from "@/lib/utils";
 import { logActivity } from "@/lib/activityLog";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
 import { useLocale } from "@/components/providers/LocaleProvider";
+import dynamic from "next/dynamic";
 import LandingCMS from "./_components/LandingCMS";
 import OwnerSchools from "./_components/OwnerSchools";
 import OwnerMasterData from "./_components/OwnerMasterData";
 import OwnerAccountsMaster from "./_components/OwnerAccountsMaster";
-import PayslipGenerator from "./payroll/PayslipGenerator";
+import OwnerMemberPrivate from "./_components/OwnerMemberPrivate";
+import PayslipGenerator, { parsePeriodToMonth } from "./payroll/PayslipGenerator";
 import CoachLoans from "./payroll/CoachLoans";
 import AdminCompetition from "../admin/_components/AdminCompetition";
-import OwnerDatabaseManager from "./_components/OwnerDatabaseManager";
 import OwnerClassesMaster from "./_components/OwnerClassesMaster";
+import ProofViewer from "@/components/ui/ProofViewer";
 
+const MapPicker = dynamic(() => import("@/components/ui/MapPicker"), {
+  ssr: false,
+  loading: () => <div className="h-[220px] rounded-xl border border-line bg-paper-tint flex items-center justify-center text-xs text-ink-mute">Loading map...</div>,
+});
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -38,14 +45,18 @@ interface Branch {
   name: string;
   city: string;
   address: string;
+  lat?: number | null;
+  lng?: number | null;
   status: string;
   wa_numbers?: string[];
   bank_name?: string | null;
   bank_account?: string | null;
   bank_holder?: string | null;
+  show_payments_to_admin?: boolean;
   color?: string;
   member_count?: number;
   coach_count?: number;
+  staff_count?: number;
   class_count?: number;
 }
 
@@ -207,10 +218,10 @@ function Dashboard({ branches }: { branches: Branch[] }) {
                       <span className="w-9 h-9 rounded-lg flex items-center justify-center bg-ocean-600 text-white">
                         <Icon name="pin" className="w-4 h-4" />
                       </span>
-                      <div className="font-semibold text-ink">{b.name}</div>
+                      <div className="font-semibold text-ink"><NoTranslate>{b.name}</NoTranslate></div>
                     </div>
                   </td>
-                  <td className="text-ink-mute">{b.address}</td>
+                  <td className="text-ink-mute"><NoTranslate>{b.address}</NoTranslate></td>
                   <td className="text-right font-mono font-semibold">{b.member_count ?? 0}</td>
                   <td className="text-right font-mono font-semibold">{b.coach_count ?? 0}</td>
                   <td className="text-right font-mono font-semibold">{b.class_count ?? 0}</td>
@@ -229,8 +240,8 @@ function Dashboard({ branches }: { branches: Branch[] }) {
               <div key={iv.id} className="flex items-center gap-3 p-3 rounded-xl bg-paper-tint">
                 <Avatar name={iv.coach?.full_name ?? "?"} size={36} />
                 <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-sm text-ink truncate">{iv.coach?.full_name}</div>
-                  <div className="text-[11px] text-ink-mute">{iv.period_label} · {iv.branch?.name}</div>
+                  <div className="font-semibold text-sm text-ink truncate"><NoTranslate>{iv.coach?.full_name}</NoTranslate></div>
+                  <div className="text-[11px] text-ink-mute"><NoTranslate>{iv.period_label}</NoTranslate> · <NoTranslate>{iv.branch?.name}</NoTranslate></div>
                 </div>
                 <div className="text-sm font-bold text-ink font-mono">{fmtIDR(iv.total_amount)}</div>
               </div>
@@ -243,7 +254,7 @@ function Dashboard({ branches }: { branches: Branch[] }) {
 }
 
 function Branches({ branches, onRefresh, userId, userName }: { branches: Branch[]; onRefresh: () => void; userId: string; userName: string }) {
-  const { t } = useLocale();
+  const { t, tNode } = useLocale();
   const toast = useToast();
   const confirm = useConfirm();
   const router = useRouter();
@@ -255,10 +266,13 @@ function Branches({ branches, onRefresh, userId, userName }: { branches: Branch[
   const [name, setName] = useState("");
   const [city, setCity] = useState("");
   const [address, setAddress] = useState("");
+  const [lat, setLat] = useState("");
+  const [lng, setLng] = useState("");
   const [waPhone, setWaPhone] = useState("");
   const [bankName, setBankName] = useState("");
   const [bankAccount, setBankAccount] = useState("");
   const [bankHolder, setBankHolder] = useState("");
+  const [showPaymentsToAdmin, setShowPaymentsToAdmin] = useState(true);
   const [saving, setSaving] = useState(false);
 
   const openAdminPanel = (b: Branch) => {
@@ -266,8 +280,21 @@ function Branches({ branches, onRefresh, userId, userName }: { branches: Branch[
     router.push("/admin");
   };
 
-  const openAdd = () => { setName(""); setCity(""); setAddress(""); setWaPhone(""); setBankName(""); setBankAccount(""); setBankHolder(""); setEditItem(null); setShowAdd(true); };
-  const openEdit = (b: Branch) => { setName(b.name); setCity(b.city); setAddress(b.address); setWaPhone(b.wa_numbers?.[0] ?? ""); setBankName(b.bank_name ?? ""); setBankAccount(b.bank_account ?? ""); setBankHolder(b.bank_holder ?? ""); setEditItem(b); setShowAdd(true); };
+  const openAdd = () => {
+    setName(""); setCity(""); setAddress(""); setWaPhone("");
+    setLat(""); setLng("");
+    setBankName(""); setBankAccount(""); setBankHolder("");
+    setShowPaymentsToAdmin(true);
+    setEditItem(null); setShowAdd(true);
+  };
+  const openEdit = (b: Branch) => {
+    setName(b.name); setCity(b.city); setAddress(b.address);
+    setWaPhone(b.wa_numbers?.[0] ?? "");
+    setLat(b.lat?.toString() ?? ""); setLng(b.lng?.toString() ?? "");
+    setBankName(b.bank_name ?? ""); setBankAccount(b.bank_account ?? ""); setBankHolder(b.bank_holder ?? "");
+    setShowPaymentsToAdmin(b.show_payments_to_admin ?? true);
+    setEditItem(b); setShowAdd(true);
+  };
 
   const save = async () => {
     if (!name || !city) return toast.error(t("owner.branches.nameCityRequired"));
@@ -278,13 +305,17 @@ function Branches({ branches, onRefresh, userId, userName }: { branches: Branch[
       bank_account: bankAccount.trim() || null,
       bank_holder: bankHolder.trim() || null,
     };
+    const geoFields = {
+      lat: lat ? parseFloat(lat) : null,
+      lng: lng ? parseFloat(lng) : null,
+    };
     if (editItem) {
-      const { error } = await supabase.from("branches").update({ name, city, address, wa_numbers: cleanWa, ...bankFields }).eq("id", editItem.id);
+      const { error } = await supabase.from("branches").update({ name, city, address, wa_numbers: cleanWa, show_payments_to_admin: showPaymentsToAdmin, ...bankFields, ...geoFields }).eq("id", editItem.id);
       if (error) { toast.error(t("owner.branches.saveFailed"), error.message); setSaving(false); return; }
       toast.success(t("owner.branches.updated"));
       logActivity(supabase, { userId, userRole: "owner", userName, entityType: "branches", entityId: editItem.id, entityLabel: name, action: "update", label: t("owner.branches.activityUpdated", { name }) });
     } else {
-      const { data: inserted, error } = await supabase.from("branches").insert({ name, city, address, wa_numbers: cleanWa, status: "active", ...bankFields }).select("id").single();
+      const { data: inserted, error } = await supabase.from("branches").insert({ name, city, address, wa_numbers: cleanWa, status: "active", show_payments_to_admin: showPaymentsToAdmin, ...bankFields, ...geoFields }).select("id").single();
       if (error) { toast.error(t("owner.branches.createFailed"), error.message); setSaving(false); return; }
       toast.success(t("owner.branches.created"));
       logActivity(supabase, { userId, userRole: "owner", userName, entityType: "branches", entityId: inserted?.id ?? "new", entityLabel: name, action: "create", label: t("owner.branches.activityCreated", { name, city }) });
@@ -295,7 +326,7 @@ function Branches({ branches, onRefresh, userId, userName }: { branches: Branch[
   };
 
   const archive = async (b: Branch) => {
-    const yes = await confirm({ title: t("owner.branches.archiveConfirmTitle", { name: b.name }), body: t("owner.branches.archiveConfirmBody") });
+    const yes = await confirm({ title: tNode("owner.branches.archiveConfirmTitle", { name: b.name }), body: t("owner.branches.archiveConfirmBody") });
     if (!yes) return;
     const { error } = await supabase.from("branches").update({ status: "archived" }).eq("id", b.id);
     if (error) return toast.error(t("owner.branches.archiveFailed"), error.message);
@@ -306,7 +337,7 @@ function Branches({ branches, onRefresh, userId, userName }: { branches: Branch[
 
   const unarchive = async (b: Branch) => {
     const yes = await confirm({
-      title: t("owner.branches.unarchiveConfirmTitle", { name: b.name }),
+      title: tNode("owner.branches.unarchiveConfirmTitle", { name: b.name }),
       body: t("owner.branches.unarchiveConfirmBody"),
       confirmLabel: t("owner.branches.unarchiveBtn"),
     });
@@ -320,7 +351,7 @@ function Branches({ branches, onRefresh, userId, userName }: { branches: Branch[
 
   const deleteBranch = async (b: Branch) => {
     const yes = await confirm({
-      title: t("owner.branches.deleteConfirmTitle", { name: b.name }),
+      title: tNode("owner.branches.deleteConfirmTitle", { name: b.name }),
       body: t("owner.branches.deleteConfirmBody"),
       danger: true,
     });
@@ -330,7 +361,7 @@ function Branches({ branches, onRefresh, userId, userName }: { branches: Branch[
     const json = await res.json() as { error?: string; deleted_auth_users?: number };
 
     if (!res.ok) return toast.error(t("owner.branches.deleteFailed"), json.error ?? "Unknown error");
-    toast.success(t("owner.branches.deleted", { name: b.name, count: json.deleted_auth_users ?? 0 }));
+    toast.success(tNode("owner.branches.deleted", { name: b.name, count: json.deleted_auth_users ?? 0 }));
     onRefresh();
   };
 
@@ -398,7 +429,7 @@ function Branches({ branches, onRefresh, userId, userName }: { branches: Branch[
                 <div className="relative p-5 h-full flex items-end justify-between text-white">
                   <div>
                     <div className="text-[10px] uppercase tracking-widest font-bold opacity-80">{t("owner.branches.branchLabel")}</div>
-                    <div className="font-display font-bold text-xl">{b.name}</div>
+                    <div className="font-display font-bold text-xl"><NoTranslate>{b.name}</NoTranslate></div>
                   </div>
                   <div>
                     {isArchived ? (
@@ -415,18 +446,33 @@ function Branches({ branches, onRefresh, userId, userName }: { branches: Branch[
               </div>
               <div className="p-5">
                 <div className="flex items-center gap-2 text-sm text-ink-mute">
-                  <Icon name="pin" className={cn("w-4 h-4", isArchived ? "text-slate-400" : "text-ocean-500")} />{b.address || b.city}
+                  <Icon name="pin" className={cn("w-4 h-4", isArchived ? "text-slate-400" : "text-ocean-500")} />
+                  <span className="truncate"><NoTranslate>{b.address || b.city}</NoTranslate></span>
                 </div>
+                {b.lat && b.lng && (
+                  <div className="mt-1">
+                    <a
+                      href={`https://www.google.com/maps?q=${b.lat},${b.lng}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 text-[11px] text-ocean-600 hover:text-ocean-800 font-semibold"
+                    >
+                      <Icon name="link" className="w-3 h-3" />
+                      Buka di Google Maps
+                    </a>
+                  </div>
+                )}
                 {b.bank_name && (
                   <div className="mt-1.5 flex items-center gap-1.5 text-xs text-ink-mute">
                     <Icon name="card" className="w-3.5 h-3.5 shrink-0" />
-                    <span className="font-mono">{b.bank_name} · {b.bank_account}</span>
+                    <span className="font-mono"><NoTranslate>{b.bank_name}</NoTranslate> · <NoTranslate>{b.bank_account}</NoTranslate></span>
                   </div>
                 )}
-                <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-                  <div className="p-2.5 rounded-xl bg-paper-tint"><div className="font-display font-bold text-lg text-ink">{b.member_count ?? 0}</div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("owner.branches.memberStat")}</div></div>
-                  <div className="p-2.5 rounded-xl bg-paper-tint"><div className="font-display font-bold text-lg text-ink">{b.coach_count ?? 0}</div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("owner.branches.coachStat")}</div></div>
-                  <div className="p-2.5 rounded-xl bg-paper-tint"><div className="font-display font-bold text-lg text-ink">{b.class_count ?? 0}</div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("owner.branches.classStat")}</div></div>
+                <div className="mt-4 grid grid-cols-4 gap-1.5 text-center">
+                  <div className="p-2 rounded-xl bg-paper-tint"><div className="font-display font-bold text-base text-ink">{b.member_count ?? 0}</div><div className="text-[9px] uppercase tracking-wider font-bold text-ink-faint">{t("owner.branches.memberStat")}</div></div>
+                  <div className="p-2 rounded-xl bg-paper-tint"><div className="font-display font-bold text-base text-ink">{b.coach_count ?? 0}</div><div className="text-[9px] uppercase tracking-wider font-bold text-ink-faint">{t("owner.branches.coachStat")}</div></div>
+                  <div className="p-2 rounded-xl bg-paper-tint"><div className="font-display font-bold text-base text-ink">{b.staff_count ?? 0}</div><div className="text-[9px] uppercase tracking-wider font-bold text-ink-faint">Staff</div></div>
+                  <div className="p-2 rounded-xl bg-paper-tint"><div className="font-display font-bold text-base text-ink">{b.class_count ?? 0}</div><div className="text-[9px] uppercase tracking-wider font-bold text-ink-faint">{t("owner.branches.classStat")}</div></div>
                 </div>
                 <div className="mt-4 flex flex-wrap gap-2">
                   <Btn variant="primary" size="sm" icon="grid" onClick={() => openAdminPanel(b)}>{t("owner.branches.openAdminPanel")}</Btn>
@@ -448,7 +494,7 @@ function Branches({ branches, onRefresh, userId, userName }: { branches: Branch[
         })}
         {filteredBranches.length === 0 && (
           <div className="lg:col-span-3 py-12 text-center text-ink-mute text-sm border-2 border-dashed border-line rounded-2xl">
-            {filterTab === "archived" ? "Tidak ada center yang diarsipkan." : "Belum ada center."}
+            {filterTab === "archived" ? "No archived centers." : "No centers yet."}
           </div>
         )}
         <button onClick={openAdd} className="rounded-2xl border-2 border-dashed border-line hover:border-ocean-300 hover:bg-ocean-50/40 transition flex flex-col items-center justify-center min-h-[280px] text-ink-mute hover:text-ocean-600 group">
@@ -459,7 +505,7 @@ function Branches({ branches, onRefresh, userId, userName }: { branches: Branch[
         </button>
       </div>
 
-      <Modal open={showAdd} onClose={() => setShowAdd(false)} title={editItem ? t("owner.branches.editModalTitle") : t("owner.branches.addModalTitle")} size="sm"
+      <Modal open={showAdd} onClose={() => setShowAdd(false)} title={editItem ? t("owner.branches.editModalTitle") : t("owner.branches.addModalTitle")} size="md"
         footer={
           <>
             <Btn variant="ghost" onClick={() => setShowAdd(false)}>{t("common.actions.cancel")}</Btn>
@@ -468,9 +514,29 @@ function Branches({ branches, onRefresh, userId, userName }: { branches: Branch[
         }
       >
         <div className="space-y-4">
-          <Field label={t("owner.branches.fieldName")} required><Input value={name} onChange={e => setName(e.target.value)} placeholder={t("owner.branches.fieldNamePlaceholder")} /></Field>
-          <Field label={t("owner.branches.fieldCity")} required><Input value={city} onChange={e => setCity(e.target.value)} placeholder={t("owner.branches.fieldCityPlaceholder")} /></Field>
+          <div className="grid sm:grid-cols-2 gap-4">
+            <Field label={t("owner.branches.fieldName")} required><Input value={name} onChange={e => setName(e.target.value)} placeholder={t("owner.branches.fieldNamePlaceholder")} /></Field>
+            <Field label={t("owner.branches.fieldCity")} required><Input value={city} onChange={e => setCity(e.target.value)} placeholder={t("owner.branches.fieldCityPlaceholder")} /></Field>
+          </div>
           <Field label={t("owner.branches.fieldAddress")}><Input value={address} onChange={e => setAddress(e.target.value)} placeholder={t("owner.branches.fieldAddressPlaceholder")} /></Field>
+
+          {/* Google Maps Location Picker */}
+          <Field label="Center Location & Map Coordinates" hint="Search for a location name or drag the pin on the map to set coordinates">
+            <MapPicker
+              lat={lat}
+              lng={lng}
+              onChange={(newLat, newLng) => { setLat(newLat); setLng(newLng); }}
+              onSelectAddress={(addr) => {
+                if (!address) setAddress(addr);
+              }}
+              height={220}
+            />
+            <div className="grid grid-cols-2 gap-2 mt-2">
+              <Input value={lat} onChange={e => setLat(e.target.value)} placeholder="Latitude" className="font-mono text-xs" />
+              <Input value={lng} onChange={e => setLng(e.target.value)} placeholder="Longitude" className="font-mono text-xs" />
+            </div>
+          </Field>
+
           <Field label={t("owner.branches.fieldWaPhone")} hint={t("owner.branches.fieldWaPhoneHint")}>
             <Input type="tel" value={waPhone} onChange={e => setWaPhone(e.target.value)} placeholder={t("owner.branches.fieldWaPhonePlaceholder")} className="font-mono" />
           </Field>
@@ -480,6 +546,9 @@ function Branches({ branches, onRefresh, userId, userName }: { branches: Branch[
               <Input value={bankAccount} onChange={e => setBankAccount(e.target.value)} placeholder={t("owner.branches.fieldBankAccount")} className="font-mono" />
               <Input value={bankHolder} onChange={e => setBankHolder(e.target.value)} placeholder={t("owner.branches.fieldBankHolder")} />
             </div>
+          </Field>
+          <Field label={t("owner.branches.fieldShowPaymentsToAdmin")} hint={t("owner.branches.fieldShowPaymentsToAdminHint")}>
+            <Switch checked={showPaymentsToAdmin} onChange={setShowPaymentsToAdmin} label={showPaymentsToAdmin ? t("owner.branches.showPaymentsOn") : t("owner.branches.showPaymentsOff")} />
           </Field>
         </div>
       </Modal>
@@ -526,7 +595,7 @@ interface LevelStrokeRow { id: string; name: string; sort_order: number }
 interface BestTimeTargetRow { id: string; stroke_id: string; distance_id: string; target_time_seconds: number | null }
 
 function OwnerRaporLevels() {
-  const { t } = useLocale();
+  const { t, tNode } = useLocale();
   const supabase = createClient();
   const toast = useToast();
   const confirm = useConfirm();
@@ -616,7 +685,7 @@ function OwnerRaporLevels() {
   };
 
   const deleteLevel = async (lvl: RaporLevel) => {
-    const yes = await confirm({ body: t("owner.raporLevels.deleteConfirmBody", { name: lvl.name }) });
+    const yes = await confirm({ body: tNode("owner.raporLevels.deleteConfirmBody", { name: lvl.name }) });
     if (!yes) return;
     const { error } = await supabase.from("rapor_levels").delete().eq("id", lvl.id);
     if (error) return toast.error(t("owner.raporLevels.deleteFailed"), error.message);
@@ -868,7 +937,7 @@ function OwnerRaporLevels() {
                 ) : (
                   <>
                     <div className="flex-1 min-w-0">
-                      <div className="font-semibold text-ink text-sm">{lvl.name}</div>
+                      <div className="font-semibold text-ink text-sm"><NoTranslate>{lvl.name}</NoTranslate></div>
                       {!lvl.active && <div className="text-xs text-ink-faint">{t("owner.raporLevels.inactive")}</div>}
                     </div>
                     <Btn variant="ghost" size="sm" icon="book" onClick={() => openCriteria(lvl)}>{t("owner.raporLevels.criteriaBtn")}</Btn>
@@ -889,7 +958,7 @@ function OwnerRaporLevels() {
       </Card>
 
       <Modal open={!!criteriaLevel} onClose={() => { setCriteriaLevel(null); setCriterionForm({ label: "", kind: "score_10", options: [] }); setEditingCriterion(null); }}
-        title={t("owner.raporLevels.criteriaModalTitle", { level: criteriaLevel?.name ?? "" })} size="lg"
+        title={tNode("owner.raporLevels.criteriaModalTitle", { level: criteriaLevel?.name ?? "" })} size="lg"
         footer={<Btn variant="ghost" onClick={() => { setCriteriaLevel(null); setCriterionForm({ label: "", kind: "score_10", options: [] }); setEditingCriterion(null); }}>{t("common.actions.close")}</Btn>}>
         <div className="space-y-5">
           {loadingCriteria ? <div className="text-ink-mute text-sm text-center py-6">{t("owner.raporLevels.criteriaLoading")}</div> : (
@@ -948,8 +1017,8 @@ function OwnerRaporLevels() {
                         <div className="flex items-center gap-3 p-3 hover:bg-paper-tint">
                           <span className="w-6 h-6 rounded-full bg-ocean-50 text-ocean-700 text-xs font-bold flex items-center justify-center shrink-0">{i + 1}</span>
                           <div className="flex-1 min-w-0">
-                            <div className="font-semibold text-ink text-sm">{cr.label}</div>
-                            <div className="text-xs text-ink-mute">{kindLabel[cr.kind] ?? cr.kind}{cr.options && ` · ${cr.options.join(", ")}`}</div>
+                            <div className="font-semibold text-ink text-sm"><NoTranslate>{cr.label}</NoTranslate></div>
+                            <div className="text-xs text-ink-mute">{kindLabel[cr.kind] ?? <NoTranslate>{cr.kind}</NoTranslate>}{cr.options && ` · ${cr.options.join(", ")}`}</div>
                           </div>
                           <button onClick={() => duplicateCriterion(cr)} disabled={savingCriterion}
                             className="w-7 h-7 rounded-lg hover:bg-ocean-50 text-ink-faint hover:text-ocean-600 flex items-center justify-center shrink-0 disabled:opacity-50" title={t("owner.raporLevels.duplicateTitle")}>
@@ -1009,7 +1078,7 @@ function OwnerRaporLevels() {
       </Modal>
 
       <Modal open={!!bestTimeLevel} onClose={() => setBestTimeLevel(null)}
-        title={t("owner.raporLevels.bestTimeModalTitle", { level: bestTimeLevel?.name ?? "" })} size="lg"
+        title={tNode("owner.raporLevels.bestTimeModalTitle", { level: bestTimeLevel?.name ?? "" })} size="lg"
         footer={<Btn variant="ghost" onClick={() => setBestTimeLevel(null)}>{t("common.actions.close")}</Btn>}>
         <div className="space-y-6">
           <p className="text-xs text-ink-mute">{t("owner.raporLevels.bestTimeHint")}</p>
@@ -1040,7 +1109,7 @@ function OwnerRaporLevels() {
                 <div className="flex flex-wrap gap-2">
                   {strokes.map(s => (
                     <span key={s.id} className="inline-flex items-center gap-1.5 pl-3 pr-1.5 py-1.5 rounded-full bg-wave-50 text-wave-700 text-sm font-semibold">
-                      {s.name}
+                      <NoTranslate>{s.name}</NoTranslate>
                       <button type="button" onClick={() => deleteStroke(s.id)} className="w-5 h-5 rounded-full hover:bg-danger-100 text-wave-700 hover:text-danger-600 flex items-center justify-center">
                         <Icon name="x" className="w-3 h-3" />
                       </button>
@@ -1072,7 +1141,7 @@ function OwnerRaporLevels() {
                       <tbody>
                         {strokes.map(s => (
                           <tr key={s.id}>
-                            <td className="p-2 font-semibold text-ink border-b border-line">{s.name}</td>
+                            <td className="p-2 font-semibold text-ink border-b border-line"><NoTranslate>{s.name}</NoTranslate></td>
                             {distances.map(d => {
                               const key = targetKey(s.id, d.id);
                               const existing = targets.find(tg => tg.stroke_id === s.id && tg.distance_id === d.id);
@@ -1105,7 +1174,7 @@ function OwnerRaporLevels() {
       </Modal>
 
       <Modal open={!!classScopeLevel} onClose={() => setClassScopeLevel(null)}
-        title={t("owner.raporLevels.classScopeModalTitle", { level: classScopeLevel?.name ?? "" })} size="md"
+        title={tNode("owner.raporLevels.classScopeModalTitle", { level: classScopeLevel?.name ?? "" })} size="md"
         footer={<Btn variant="ghost" onClick={() => setClassScopeLevel(null)}>{t("common.actions.close")}</Btn>}>
         {classScopeLevel && (
           <div className="space-y-4">
@@ -1131,8 +1200,8 @@ function OwnerRaporLevels() {
                       <input type="checkbox" className="rounded border-line accent-ocean-600"
                         checked={selectedClassIds.has(c.id)} onChange={() => toggleClassSelection(c.id)} />
                       <div className="flex-1 min-w-0">
-                        <div className="font-semibold text-ink text-sm">{c.name}</div>
-                        {c.branch_name && <div className="text-xs text-ink-mute">{c.branch_name}</div>}
+                        <div className="font-semibold text-ink text-sm"><NoTranslate>{c.name}</NoTranslate></div>
+                        {c.branch_name && <div className="text-xs text-ink-mute"><NoTranslate>{c.branch_name}</NoTranslate></div>}
                       </div>
                     </label>
                   ))}
@@ -1364,13 +1433,13 @@ function SettingsTarif({ branches }: { branches: Branch[] }) {
                   <button onClick={() => toggleExpand(c.id)} className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-paper-tint text-left">
                     <Avatar name={c.full_name} size={36} />
                     <div className="flex-1 min-w-0">
-                      <div className="font-semibold text-sm text-ink">{c.full_name}</div>
+                      <div className="font-semibold text-sm text-ink"><NoTranslate>{c.full_name}</NoTranslate></div>
                       <div className="text-xs text-ink-mute mt-0.5 flex items-center gap-1.5 flex-wrap">
                         {c.branchIds.length === 0 ? (
                           <span className="text-ink-faint">{t("owner.ratesTarif.noClassYet")}</span>
                         ) : (
                           c.branchIds.map(bid => (
-                            <span key={bid} className="px-1.5 py-0.5 rounded-full bg-paper-deep text-ink-mute text-[10px] font-semibold">{branches.find(b => b.id === bid)?.name ?? "—"}</span>
+                            <span key={bid} className="px-1.5 py-0.5 rounded-full bg-paper-deep text-ink-mute text-[10px] font-semibold"><NoTranslate>{branches.find(b => b.id === bid)?.name ?? "—"}</NoTranslate></span>
                           ))
                         )}
                         <span>{t("owner.ratesTarif.classCount", { count: c.classCount })}</span>
@@ -1404,9 +1473,9 @@ function SettingsTarif({ branches }: { branches: Branch[] }) {
                                 return (
                                   <div key={cls.id} className="bg-white border border-line rounded-xl p-3.5 space-y-3">
                                     <div>
-                                      <div className="font-semibold text-sm text-ink">{cls.name}</div>
+                                      <div className="font-semibold text-sm text-ink"><NoTranslate>{cls.name}</NoTranslate></div>
                                       <div className="text-xs text-ink-mute mt-0.5">
-                                        {cls.branch?.name ?? "—"}
+                                        <NoTranslate>{cls.branch?.name ?? "—"}</NoTranslate>
                                         {cls.time_start && <span className="font-mono"> · {cls.time_start.slice(0,5)}{cls.time_end ? `–${cls.time_end.slice(0,5)}` : ""}</span>}
                                       </div>
                                     </div>
@@ -1473,20 +1542,12 @@ function SettingsTarif({ branches }: { branches: Branch[] }) {
 }
 
 function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: string; userName: string }) {
-  const { t } = useLocale();
+  const { t, tNode } = useLocale();
   const supabase = createClient();
   const toast = useToast();
   const confirm = useConfirm();
   const [subTab, setSubTab] = useState<"invoices" | "periods">("invoices");
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [loading, setLoading] = useState(true);
   const [branchFilter, setBranchFilter] = useState("all");
-  const [marking, setMarking] = useState<string | null>(null);
-  const [approving, setApproving] = useState<string | null>(null);
-  const [rejecting, setRejecting] = useState<string | null>(null);
-  const [rejectModal, setRejectModal] = useState<Invoice | null>(null);
-  const [rejectReason, setRejectReason] = useState("");
-  const [detail, setDetail] = useState<Invoice | null>(null);
 
   // Periods state
   const [periods, setPeriods] = useState<InvoicePeriod[]>([]);
@@ -1497,26 +1558,6 @@ function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: 
   const [editPeriodTarget, setEditPeriodTarget] = useState<InvoicePeriod | null>(null);
   const [editPeriodForm, setEditPeriodForm] = useState({ label: "", branch_id: "", date_from: "", date_to: "" });
   const [savingEditPeriod, setSavingEditPeriod] = useState(false);
-
-  const totPending  = invoices.filter(i => i.status === "pending");
-  const totApproved = invoices.filter(i => i.status === "approved");
-  const totPaid     = invoices.filter(i => i.status === "paid");
-
-  /* eslint-disable react-hooks/set-state-in-effect -- async data loader */
-  useEffect(() => {
-    setLoading(true);
-    const q = supabase
-      .from("coach_invoices")
-      .select("id, invoice_number, period_label, total_amount, status, bank_info, branch_id, submitted_at, paid_at, approved_at, rejected_at, rejection_reason, branch:branches(name), coach:profiles!coach_invoices_coach_id_fkey(id, full_name), coach_invoice_items(id, item_type, class_id, session_count, rate, description, proof_url, class:classes(name))")
-      .not("status", "eq", "cancelled")
-      .order("submitted_at", { ascending: false });
-    if (branchFilter !== "all") q.eq("branch_id", branchFilter);
-    q.then(({ data }) => {
-      if (data) setInvoices(data as unknown as Invoice[]);
-      setLoading(false);
-    });
-  }, [branchFilter]); // eslint-disable-line react-hooks/exhaustive-deps
-  /* eslint-enable react-hooks/set-state-in-effect */
 
   const loadPeriods = useCallback(async () => {
     setPeriodsLoading(true);
@@ -1540,7 +1581,7 @@ function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: 
 
   const createPeriod = async () => {
     if (!periodForm.label.trim() || !periodForm.date_from || !periodForm.date_to) {
-      return toast.error("Semua field periode wajib diisi");
+      return toast.error("All period fields are required");
     }
     setSavingPeriod(true);
     const { error } = await supabase.from("invoice_periods").insert({
@@ -1590,7 +1631,7 @@ function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: 
   const saveEditPeriod = async () => {
     if (!editPeriodTarget) return;
     if (!editPeriodForm.label.trim() || !editPeriodForm.date_from || !editPeriodForm.date_to) {
-      return toast.error("Semua field periode wajib diisi");
+      return toast.error("All period fields are required");
     }
     setSavingEditPeriod(true);
     const { error } = await supabase.from("invoice_periods").update({
@@ -1605,95 +1646,6 @@ function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: 
     toast.success(t("owner.invoices.periodUpdatedToast"));
     setEditPeriodTarget(null);
     loadPeriods();
-  };
-
-  const invoicesWithoutSlip = useMemo(() => {
-    return invoices.filter(i => i.status === "paid");
-  }, [invoices]);
-
-  const markPaid = async (id: string) => {
-    setMarking(id);
-    const { error } = await supabase.from("coach_invoices").update({ status: "paid", paid_at: new Date().toISOString() }).eq("id", id);
-    setMarking(null);
-    if (error) return toast.error(t("owner.invoices.updateFailed"), error.message);
-    const inv = invoices.find(i => i.id === id);
-    setInvoices(prev => prev.map(i => i.id === id ? { ...i, status: "paid", paid_at: new Date().toISOString() } : i));
-    if (detail?.id === id) setDetail(prev => prev ? { ...prev, status: "paid", paid_at: new Date().toISOString() } : prev);
-    toast.success(t("owner.invoices.markedPaid"));
-    logActivity(supabase, { userId, userRole: "owner", userName, branchId: inv?.branch?.name ? undefined : undefined, entityType: "coach_invoices", entityId: id, entityLabel: inv?.invoice_number ?? id, action: "update", label: t("owner.invoices.activityMarkedPaid", { number: inv?.invoice_number ?? id, coach: inv?.coach?.full_name ?? "coach", amount: fmtIDR(inv?.total_amount ?? 0) }), meta: { amount: inv?.total_amount, coach: inv?.coach?.full_name } });
-  };
-
-  const approveInvoice = async (id: string) => {
-    setApproving(id);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error } = await (supabase as any).from("coach_invoices").update({ status: "approved", approved_at: new Date().toISOString() }).eq("id", id);
-    setApproving(null);
-    if (error) return toast.error(t("owner.invoices.approveFailed"), error.message);
-    const inv = invoices.find(i => i.id === id);
-    setInvoices(prev => prev.map(i => i.id === id ? { ...i, status: "approved", approved_at: new Date().toISOString() } : i));
-    if (detail?.id === id) setDetail(prev => prev ? { ...prev, status: "approved" } : prev);
-    if (inv?.coach?.id) {
-      await supabase.from("notifications").insert({ user_id: inv.coach.id, title: t("owner.invoices.notifApprovedTitle"), body: t("owner.invoices.notifApprovedBody", { number: inv.invoice_number, period: inv.period_label }), icon: "check", kind: "success" });
-    }
-    toast.success(t("owner.invoices.approved"));
-    logActivity(supabase, { userId, userRole: "owner", userName, entityType: "coach_invoices", entityId: id, entityLabel: inv?.invoice_number ?? id, action: "update", label: t("owner.invoices.activityApproved", { number: inv?.invoice_number ?? id }) });
-  };
-
-  const rejectInvoice = async (id: string, reason: string) => {
-    if (!reason.trim()) return toast.error(t("owner.invoices.reasonRequired"));
-    setRejecting(id);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error } = await (supabase as any).from("coach_invoices").update({ status: "rejected", rejected_at: new Date().toISOString(), rejection_reason: reason.trim() }).eq("id", id);
-    setRejecting(null);
-    if (error) return toast.error(t("owner.invoices.rejectFailed"), error.message);
-    const inv = invoices.find(i => i.id === id);
-    setInvoices(prev => prev.map(i => i.id === id ? { ...i, status: "rejected", rejection_reason: reason } : i));
-    if (detail?.id === id) setDetail(prev => prev ? { ...prev, status: "rejected", rejection_reason: reason } : prev);
-    if (inv?.coach?.id) {
-      await supabase.from("notifications").insert({ user_id: inv.coach.id, title: t("owner.invoices.notifRejectedTitle"), body: t("owner.invoices.notifRejectedBody", { number: inv.invoice_number, period: inv.period_label, reason }), icon: "warning", kind: "warn" });
-    }
-    setRejectModal(null);
-    setRejectReason("");
-    toast.success(t("owner.invoices.rejected"));
-    logActivity(supabase, { userId, userRole: "owner", userName, entityType: "coach_invoices", entityId: id, entityLabel: inv?.invoice_number ?? id, action: "update", label: t("owner.invoices.activityRejected", { number: inv?.invoice_number ?? id, reason }) });
-  };
-
-  const printInvoice = (iv: Invoice) => {
-    const w = window.open("", "_blank", "width=700,height=900");
-    if (!w) return;
-    // Group items by class (or unique per extra/reimburse row)
-    const itemMap: Record<string, { name: string; sessions: number; rate: number }> = {};
-    (iv.coach_invoice_items ?? []).forEach(item => {
-      const key = item.item_type === "class" ? (item.class_id ?? item.id) : item.id;
-      const label = item.item_type === "extra" ? t("owner.invoices.printItemExtra")
-        : item.item_type === "reimburse" ? t("owner.invoices.printItemReimburse", { description: item.description ?? "" })
-        : (item.class?.name ?? item.class_id ?? "—");
-      if (!itemMap[key]) itemMap[key] = { name: label, sessions: 0, rate: item.rate };
-      itemMap[key].sessions += item.session_count;
-    });
-    const itemRows = Object.values(itemMap).map(item =>
-      `<div class="row"><span>${item.name}</span><span>${item.sessions} sesi × Rp ${item.rate.toLocaleString("id-ID")} = <b>Rp ${(item.sessions * item.rate).toLocaleString("id-ID")}</b></span></div>`
-    ).join("");
-    w.document.write(`<!DOCTYPE html><html><head><title>${iv.invoice_number}</title>
-      <style>body{font-family:sans-serif;padding:32px;color:#0f172a;max-width:640px;margin:auto}
-      h1{font-size:22px;font-weight:700;margin-bottom:2px}.sub{font-size:13px;color:#64748b;margin-bottom:20px}
-      .section{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94a3b8;margin:20px 0 6px}
-      .meta{background:#f8fafc;border-radius:8px;padding:12px 16px;font-size:13px;line-height:1.8}
-      .row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #e2e8f0;font-size:13px}
-      .total{display:flex;justify-content:space-between;padding:12px 0;font-weight:700;font-size:16px;border-top:2px solid #0f172a;margin-top:4px}
-      .badge{display:inline-block;padding:2px 10px;border-radius:4px;font-size:11px;font-weight:700;background:${iv.status === "paid" ? "#dcfce7" : "#fef9c3"};color:${iv.status === "paid" ? "#166534" : "#854d0e"}}
-      footer{margin-top:40px;border-top:1px solid #e2e8f0;padding-top:12px;font-size:11px;color:#94a3b8;text-align:center}
-      </style></head><body>
-      <h1>${t("owner.invoices.printHeading")}</h1>
-      <div class="sub">${iv.invoice_number} &nbsp;·&nbsp; <span class="badge">${iv.status === "paid" ? t("owner.invoices.printStatusPaid") : t("owner.invoices.printStatusPending")}</span></div>
-      <div class="section">${t("owner.invoices.printInfoSectionTitle")}</div>
-      <div class="meta"><b>${t("owner.invoices.printPeriodLabel")}:</b> ${iv.period_label}<br/><b>${t("owner.invoices.printCoachLabel")}:</b> ${iv.coach?.full_name ?? "—"}<br/><b>${t("owner.invoices.printBranchLabel")}:</b> ${iv.branch?.name ?? "—"}<br/><b>${t("owner.invoices.printBankLabel")}:</b> ${iv.bank_info ?? "—"}${iv.paid_at ? `<br/><b>${t("owner.invoices.printPaidLabel")}:</b> ${new Date(iv.paid_at).toLocaleDateString("id-ID", { dateStyle: "long" })}` : ""}</div>
-      <div class="section">${t("owner.invoices.printItemsSectionTitle")}</div>
-      ${itemRows || `<div class="row"><span style="color:#94a3b8">${t("owner.invoices.printNoItems")}</span></div>`}
-      <div class="total"><span>${t("owner.invoices.printTotalLabel")}</span><span>Rp ${iv.total_amount.toLocaleString("id-ID")}</span></div>
-      <footer>${t("owner.invoices.printFooter", { date: new Date().toLocaleDateString("id-ID", { dateStyle: "long" }) })}</footer>
-      </body></html>`);
-    w.document.close(); w.focus(); w.print();
   };
 
   const activePeriod = periods.find(p => p.is_open);
@@ -1726,76 +1678,22 @@ function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: 
               {t("owner.invoices.tabPeriods")}
             </button>
           </div>
-          <Select value={branchFilter} onChange={e => setBranchFilter(e.target.value)} className="!w-44">
-            <option value="all">{t("owner.invoices.allBranches")}</option>
-            {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-          </Select>
+          {subTab === "periods" && (
+            <Select value={branchFilter} onChange={e => setBranchFilter(e.target.value)} className="!w-44">
+              <option value="all">{t("owner.invoices.allBranches")}</option>
+              {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </Select>
+          )}
         </div>
       </div>
 
       {subTab === "invoices" ? (
-        <>
-          <div className="grid sm:grid-cols-3 gap-4">
-            <Stat label={t("owner.invoices.statPending")}        value={totPending.length}                                                   icon="invoice" tone="warn"  sub={totPending.length > 0 ? t("owner.invoices.statPendingSub") : t("owner.invoices.statPendingSubNone")} />
-            <Stat label={t("owner.invoices.statApproved")} value={fmtIDR(totApproved.reduce((a, i) => a + i.total_amount, 0))}      icon="check"   tone="ocean" sub={t("owner.invoices.statApprovedSub", { count: totApproved.length })} />
-            <Stat label={t("owner.invoices.statPaid")}          value={fmtIDR(totPaid.reduce((a, i) => a + i.total_amount, 0))}            icon="wallet"  tone="ok"    sub={t("owner.invoices.statPaidSub", { count: totPaid.length })} />
-          </div>
-
-          <Card padded={false}>
-            {loading ? (
-              <div className="p-10 text-center text-ink-mute">{t("owner.invoices.loading")}</div>
-            ) : invoices.length === 0 ? (
-              <div className="p-10 text-center text-ink-mute">{t("owner.invoices.empty")}</div>
-            ) : (
-              <div className="divide-y divide-line">
-                {invoices.map((iv) => (
-                  <div key={iv.id} className="flex items-center gap-3 px-5 py-3.5 hover:bg-paper-tint">
-                    <span className="w-9 h-9 rounded-xl bg-ocean-50 text-ocean-700 flex items-center justify-center shrink-0">
-                      <Icon name="invoice" className="w-5 h-5" />
-                    </span>
-                    <div className="flex-1 min-w-0 cursor-pointer" onClick={() => setDetail(iv)}>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-mono text-xs font-bold text-ocean-700">{iv.invoice_number}</span>
-                        <Status kind={iv.status === "paid" ? "paid" : iv.status === "approved" ? "approved" : iv.status === "rejected" ? "rejected" : "pending"}>
-                          {iv.status === "paid" ? t("owner.invoices.statusPaid") : iv.status === "approved" ? t("owner.invoices.statusApproved") : iv.status === "rejected" ? t("owner.invoices.statusRejected") : t("owner.invoices.statusPending")}
-                        </Status>
-                      </div>
-                      <div className="text-xs text-ink-mute mt-0.5">
-                        {iv.coach?.full_name ?? "—"} · {iv.branch?.name ?? "—"} · {iv.period_label}
-                      </div>
-                    </div>
-                    <div className="font-mono font-bold text-sm shrink-0">{fmtIDR(iv.total_amount)}</div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <button onClick={() => printInvoice(iv)} className="w-8 h-8 rounded-lg border border-line hover:bg-paper-tint flex items-center justify-center text-ink-mute hover:text-ocean-600" title={t("owner.invoices.printTitle")}>
-                        <Icon name="print" className="w-4 h-4" />
-                      </button>
-                      {iv.status === "pending" && (
-                        <>
-                          <Btn variant="soft" size="sm" onClick={() => approveInvoice(iv.id)} disabled={approving === iv.id}>
-                            {approving === iv.id ? "…" : t("owner.invoices.approveBtn")}
-                          </Btn>
-                          <Btn variant="ghost" size="sm" onClick={() => { setRejectModal(iv); setRejectReason(""); }}>
-                            {t("owner.invoices.rejectBtn")}
-                          </Btn>
-                        </>
-                      )}
-                      {iv.status === "approved" && (
-                        <Btn variant="primary" size="sm" onClick={() => markPaid(iv.id)} disabled={marking === iv.id}>
-                          {marking === iv.id ? "…" : t("owner.invoices.paidBtn")}
-                        </Btn>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Card>
-        </>
+        <PayslipGenerator branches={branches} userId={userId} userName={userName} />
       ) : (
         /* Periods Tab */
         <div className="space-y-6">
           <div className="flex items-center justify-between gap-3">
-            <SectionTitle sub="Kelola jadwal dan batas waktu (deadline) pengiriman invoice untuk para coach.">
+            <SectionTitle sub="Manage schedules and invoice submission deadlines for coaches.">
               Periode Pengiriman Invoice
             </SectionTitle>
             <Btn
@@ -1818,10 +1716,10 @@ function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: 
                 <div className="flex items-center gap-2 text-wave-200 text-xs font-bold uppercase tracking-widest">
                   <span className="w-2.5 h-2.5 rounded-full bg-ok-400 animate-pulse" /> {t("owner.invoices.periodStatusOpen")}
                 </div>
-                <div className="mt-2 font-display font-extrabold text-2xl lg:text-3xl">{activePeriod.label}</div>
+                <div className="mt-2 font-display font-extrabold text-2xl lg:text-3xl"><NoTranslate>{activePeriod.label}</NoTranslate></div>
                 <div className="text-white/80 text-sm mt-1">
                   Mulai: {fmtDate(activePeriod.date_from)} · Batas Akhir: {fmtDate(activePeriod.date_to)}
-                  {activePeriod.branch?.name ? ` (Center: ${activePeriod.branch.name})` : " (Berlaku Semua Center)"}
+                  {activePeriod.branch?.name ? <> (Center: <NoTranslate>{activePeriod.branch.name}</NoTranslate>)</> : " (All Centers Scope)"}
                 </div>
                 <div className="mt-5 flex items-center gap-2.5">
                   <button
@@ -1853,13 +1751,13 @@ function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: 
                   <div key={p.id} className="flex items-center justify-between gap-4 p-4 hover:bg-paper-tint transition-colors">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-semibold text-ink">{p.label}</span>
+                        <span className="font-semibold text-ink"><NoTranslate>{p.label}</NoTranslate></span>
                         <Status kind={p.is_open ? "active" : "archived"}>
                           {p.is_open ? t("owner.invoices.periodStatusOpen") : t("owner.invoices.periodStatusClosed")}
                         </Status>
                       </div>
                       <div className="text-xs text-ink-mute mt-1">
-                        Rentang: {fmtDate(p.date_from)} – {fmtDate(p.date_to)} · Scope: {p.branch?.name ?? t("owner.invoices.allCentersOption")}
+                        {tNode("owner.invoices.periodRangeScope", { from: fmtDate(p.date_from), to: fmtDate(p.date_to), scope: p.branch?.name ?? t("owner.invoices.allCentersOption") })}
                       </div>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
@@ -1940,7 +1838,7 @@ function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: 
               <>
                 <Btn variant="ghost" onClick={() => setEditPeriodTarget(null)}>{t("common.actions.cancel")}</Btn>
                 <Btn variant="primary" onClick={saveEditPeriod} disabled={savingEditPeriod}>
-                  {savingEditPeriod ? "Menyimpan..." : "Simpan Perubahan"}
+                  {savingEditPeriod ? t("common.actions.saving") : t("common.actions.save")}
                 </Btn>
               </>
             }
@@ -1970,113 +1868,6 @@ function Invoices({ branches, userId, userName }: { branches: Branch[]; userId: 
         </div>
       )}
 
-      {/* Detail modal */}
-      <Modal open={!!detail} onClose={() => setDetail(null)} title={detail?.invoice_number ?? t("owner.invoices.detailModalTitle")} size="md"
-        footer={
-          <div className="flex items-center gap-2 justify-between w-full">
-            <Btn variant="ghost" icon="print" onClick={() => detail && printInvoice(detail)}>{t("owner.invoices.printBtn")}</Btn>
-            <div className="flex gap-2">
-              {detail?.status === "pending" && (
-                <>
-                  <Btn variant="primary" onClick={() => detail && approveInvoice(detail.id)} disabled={approving === detail?.id}>
-                    {approving === detail?.id ? "…" : t("owner.invoices.approveBtn")}
-                  </Btn>
-                  <Btn variant="ghost" onClick={() => { setRejectModal(detail); setDetail(null); }}>{t("owner.invoices.rejectBtn")}</Btn>
-                </>
-              )}
-              {detail?.status === "approved" && (
-                <Btn variant="primary" onClick={() => detail && markPaid(detail.id)} disabled={marking === detail?.id}>
-                  {marking === detail?.id ? t("owner.invoices.marking") : t("owner.invoices.markPaidBtn")}
-                </Btn>
-              )}
-              <Btn variant="ghost" onClick={() => setDetail(null)}>{t("owner.invoices.closeBtn")}</Btn>
-            </div>
-          </div>
-        }>
-        {detail && (
-          <div className="space-y-4">
-            {/* Meta */}
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">{t("owner.invoices.metaCoach")}</div><div className="font-semibold">{detail.coach?.full_name ?? "—"}</div></div>
-              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">{t("owner.invoices.metaBranch")}</div><div className="font-semibold">{detail.branch?.name ?? "—"}</div></div>
-              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">{t("owner.invoices.metaPeriod")}</div><div>{detail.period_label}</div></div>
-              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">{t("owner.invoices.metaStatus")}</div><Status kind={detail.status === "paid" ? "paid" : detail.status === "approved" ? "approved" : detail.status === "rejected" ? "rejected" : "pending"}>{detail.status === "paid" ? t("owner.invoices.statusPaid") : detail.status === "approved" ? t("owner.invoices.statusApproved") : detail.status === "rejected" ? t("owner.invoices.statusRejected") : t("owner.invoices.statusPending")}</Status></div>
-              <div className="col-span-2"><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">{t("owner.invoices.metaBankInfo")}</div><div className="font-mono text-sm">{detail.bank_info ?? "—"}</div></div>
-              {detail.paid_at && <div className="col-span-2"><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">{t("owner.invoices.metaPaidAt")}</div><div>{new Date(detail.paid_at).toLocaleDateString("id-ID", { dateStyle: "long" })}</div></div>}
-            </div>
-
-            {/* Items breakdown */}
-            <div className="border-t border-line pt-4">
-              <div className="text-xs font-bold uppercase tracking-widest text-ink-faint mb-2">{t("owner.invoices.itemsBreakdownTitle")}</div>
-              {(detail.coach_invoice_items ?? []).length === 0 ? (
-                <p className="text-sm text-ink-mute">{t("owner.invoices.itemsEmpty")}</p>
-              ) : (
-                <div className="space-y-1.5">
-                  {/* Group by class (or unique per extra/reimburse row) */}
-                  {(() => {
-                    const map: Record<string, { name: string; sessions: number; rate: number; proofUrl: string | null }> = {};
-                    (detail.coach_invoice_items ?? []).forEach(item => {
-                      const key = item.item_type === "class" ? (item.class_id ?? item.id) : item.id;
-                      const label = item.item_type === "extra" ? t("owner.invoices.printItemExtra")
-                        : item.item_type === "reimburse" ? t("owner.invoices.printItemReimburse", { description: item.description ?? "" })
-                        : (item.class?.name ?? item.class_id ?? "—");
-                      if (!map[key]) map[key] = { name: label, sessions: 0, rate: item.rate, proofUrl: item.proof_url };
-                      map[key].sessions += item.session_count;
-                    });
-                    return Object.values(map).map((item, i) => (
-                      <div key={i} className="flex items-center justify-between py-2 border-b border-line text-sm">
-                        <div>
-                          <div className="font-semibold text-ink">{item.name}</div>
-                          <div className="text-xs text-ink-mute">{item.sessions} sesi × {fmtIDR(item.rate)}</div>
-                          {item.proofUrl && (
-                            <a href={item.proofUrl} target="_blank" rel="noreferrer" className="text-xs text-ocean-600 hover:underline inline-flex items-center gap-1 mt-0.5">
-                              <Icon name="link" className="w-3 h-3" />{t("owner.invoices.viewProof")}
-                            </a>
-                          )}
-                        </div>
-                        <div className="font-mono font-bold">{fmtIDR(item.sessions * item.rate)}</div>
-                      </div>
-                    ));
-                  })()}
-                  <div className="flex items-center justify-between pt-2 font-bold text-sm">
-                    <span>{t("owner.invoices.totalLabel")}</span>
-                    <span className="font-mono text-ocean-700 text-base">{fmtIDR(detail.total_amount)}</span>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-      </Modal>
-
-      {/* Reject Modal */}
-      <Modal open={!!rejectModal} onClose={() => { setRejectModal(null); setRejectReason(""); }} title={t("owner.invoices.rejectModalTitle")} size="sm"
-        footer={
-          <>
-            <Btn variant="ghost" onClick={() => { setRejectModal(null); setRejectReason(""); }}>{t("common.actions.cancel")}</Btn>
-            <Btn variant="danger" onClick={() => rejectModal && rejectInvoice(rejectModal.id, rejectReason)} disabled={!!rejecting}>
-              {rejecting ? t("owner.invoices.rejecting") : t("owner.invoices.rejectConfirmBtn")}
-            </Btn>
-          </>
-        }>
-        {rejectModal && (
-          <div className="space-y-4">
-            <div className="bg-paper-tint border border-line rounded-xl px-4 py-3 text-sm">
-              <div className="text-xs text-ink-mute font-bold uppercase tracking-widest mb-1">{t("owner.invoices.rejectModalInvoiceLabel")}</div>
-              <div className="font-mono font-semibold text-ink">{rejectModal.invoice_number}</div>
-              <div className="text-xs text-ink-mute">{rejectModal.coach?.full_name} · {rejectModal.period_label} · {fmtIDR(rejectModal.total_amount)}</div>
-            </div>
-            <Field label={t("owner.invoices.fieldRejectReason")}>
-              <Textarea value={rejectReason} onChange={e => setRejectReason(e.target.value)} placeholder={t("owner.invoices.fieldRejectReasonPlaceholder")} rows={3} />
-            </Field>
-          </div>
-        )}
-      </Modal>
-
-      {/* ── SLIP GAJI ───────────────────────────────────────────────────────── */}
-      <div className="mt-8 pt-8 border-t border-line">
-        <PayslipGenerator branches={branches} userId={userId} userName={userName} invoices={invoices} invoicesWithoutSlip={invoicesWithoutSlip} />
-      </div>
     </div>
   );
 }
@@ -2110,12 +1901,59 @@ interface ManualTxnRow {
 type IncomeRow = (OwnerFinancialBill & { source: "bill" }) | (ManualTxnRow & { source: "manual" });
 type ExpenseRow = (OwnerFinancialExpense & { source: "invoice" }) | (ManualTxnRow & { source: "manual" });
 
+interface FinancialPayslipItem {
+  id: string;
+  coach_id: string;
+  branch_id: string;
+  invoice_id: string | null;
+  period_label: string;
+  gross_amount: number;
+  deductions: number;
+  net_amount: number;
+  notes: string | null;
+  status: string;
+  published_at: string | null;
+  created_at: string;
+  coach?: { id: string; full_name: string; role?: string; bank_name?: string | null; bank_account?: string | null; bank_holder?: string | null; phone?: string | null } | null;
+  branch?: { id: string; name: string } | null;
+  invoice?: { id: string; invoice_number: string; total_amount: number; bank_info: string | null; coach_invoice_items?: InvoiceItem[] } | null;
+  payslip_deductions?: { id: string; type: string; label: string; amount: number }[];
+}
+
+interface UnifiedExpenseItem {
+  id: string;
+  sourceType: "coach_payslip" | "staff_payslip" | "coach_invoice" | "staff_salary" | "staff_reimburse" | "manual";
+  categoryKey: "coach_salary" | "staff_salary" | "manual" | "reimburse";
+  categoryLabel: string;
+  branchId: string;
+  branchName: string;
+  receiverId: string | null;
+  receiverName: string;
+  receiverRole: "coach" | "staff" | "other";
+  referenceNumber: string;
+  periodLabel: string;
+  description: string;
+  grossAmount: number;
+  taxAmount: number;
+  loanDeduction: number;
+  otherDeductions: number;
+  netTransferredAmount: number;
+  status: "paid" | "approved" | "pending" | "draft" | "rejected";
+  date: string;
+  proofUrl?: string | null;
+  bankInfo?: { bankName?: string | null; bankAccount?: string | null; bankHolder?: string | null };
+  rawPayslip?: FinancialPayslipItem | null;
+  rawInvoice?: Invoice | null;
+  rawSalary?: any | null;
+  rawManual?: ManualTxnRow | null;
+}
+
 interface ManualTxnCategory { id: string; kind: "income" | "expense"; name: string; sort_order: number }
 
-type FinancialTab = "overview" | "income" | "expenses" | "coach_payouts" | "staff_payroll" | "admin_accounts" | "moneyflow";
+type FinancialTab = "overview" | "income" | "expenses" | "payroll" | "moneyflow";
 
 function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; userId: string; userName: string }) {
-  const { t } = useLocale();
+  const { t, tNode } = useLocale();
   const supabase = createClient();
   const toast = useToast();
   const confirm = useConfirm();
@@ -2127,82 +1965,71 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
   const [manualTxns, setManualTxns] = useState<ManualTxnRow[]>([]);
   const [paidStaffSalaries, setPaidStaffSalaries] = useState<{ id: string; total_salary: number; paid_at: string | null; created_at: string }[]>([]);
   const [paidStaffReimbursements, setPaidStaffReimbursements] = useState<{ id: string; amount: number; paid_at: string | null; created_at: string }[]>([]);
+  const [payslips, setPayslips] = useState<FinancialPayslipItem[]>([]);
+  const [allStaffSalaries, setAllStaffSalaries] = useState<StaffSalaryRow[]>([]);
   const [loadingBills, setLoadingBills] = useState(true);
   const [loadingExpenses, setLoadingExpenses] = useState(true);
+  const [selectedExpenseDetail, setSelectedExpenseDetail] = useState<UnifiedExpenseItem | null>(null);
 
-  // ── Coach Payouts / Reimbursements state ──────────────────────────────────
-  const [detailedInvoices, setDetailedInvoices] = useState<Invoice[]>([]);
-  const [loadingDetailedInvoices, setLoadingDetailedInvoices] = useState(false);
-  const [payoutBranchFilter, setPayoutBranchFilter] = useState("all");
-  const [payoutStatusFilter, setPayoutStatusFilter] = useState("all");
-  const [payoutSearch, setPayoutSearch] = useState("");
+  // ── Unified Payroll (Coach & Staff) state ──────────────────────────────────
+  const [payrollMonth, setPayrollMonth] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  });
+  const [payrollBranchFilter, setPayrollBranchFilter] = useState("all");
+  const [payrollRecipientFilter, setPayrollRecipientFilter] = useState<"all" | "coach" | "staff">("all");
+  const [payrollStatusFilter, setPayrollStatusFilter] = useState<"all" | "unpaid" | "paid">("all");
+  const [payrollSearch, setPayrollSearch] = useState("");
   const [markingPaidId, setMarkingPaidId] = useState<string | null>(null);
   const [selectedInvoiceDetail, setSelectedInvoiceDetail] = useState<Invoice | null>(null);
+  const [detailedInvoices, setDetailedInvoices] = useState<Invoice[]>([]);
+  const [loadingDetailedInvoices, setLoadingDetailedInvoices] = useState(false);
 
   const loadDetailedInvoices = useCallback(async () => {
     setLoadingDetailedInvoices(true);
     const { data } = await supabase
       .from("coach_invoices")
-      .select("id, invoice_number, period_label, total_amount, status, bank_info, branch_id, submitted_at, paid_at, approved_at, rejection_reason, branch:branches(name), coach:profiles!coach_invoices_coach_id_fkey(id, full_name, phone, bank_name, bank_account, bank_holder), coach_invoice_items(id, item_type, class_id, session_count, rate, description, proof_url, class:classes(name))")
+      .select("id, invoice_number, period_label, total_amount, status, bank_info, branch_id, submitted_at, paid_at, approved_at, rejection_reason, branch:branches(name), coach:profiles!coach_invoices_coach_id_fkey(id, full_name, role, phone, bank_name, bank_account, bank_holder), coach_invoice_items(id, item_type, class_id, session_count, rate, description, proof_url, class:classes(name))")
       .not("status", "eq", "cancelled")
       .order("submitted_at", { ascending: false });
-    if (data) setDetailedInvoices(data as unknown as Invoice[]);
+    // This tab is labeled/reported as coach-specific — staff self-invoices are reviewed
+    // separately in the Owner's "Staff Invoices" section, so exclude them here.
+    const coachOnly = ((data as unknown as (Invoice & { coach?: { role?: string } | null })[]) ?? [])
+      .filter((i) => i.coach?.role !== "staff");
+    if (data) setDetailedInvoices(coachOnly as unknown as Invoice[]);
     setLoadingDetailedInvoices(false);
   }, [supabase]);
 
-  // ── Admin Accounts state ──────────────────────────────────────────────────
-  const [adminList, setAdminList] = useState<{ id: string; full_name: string; email: string; phone: string | null; bank_name: string | null; bank_account: string | null; bank_holder: string | null; branch_id: string | null; branch?: { name: string; city: string | null } | null }[]>([]);
-  const [loadingAdmins, setLoadingAdmins] = useState(false);
-
-  const loadAdmins = useCallback(async () => {
-    setLoadingAdmins(true);
+  const loadPayslips = useCallback(async () => {
     const { data } = await supabase
-      .from("profiles")
-      .select("id, full_name, email, phone, bank_name, bank_account, bank_holder, branch_id, branch:branches(name, city)")
-      .eq("role", "admin")
-      .order("full_name");
-    if (data) setAdminList(data as any);
-    setLoadingAdmins(false);
+      .from("payslips")
+      .select(`
+        id, coach_id, branch_id, invoice_id, period_label, gross_amount, deductions, net_amount, notes, status, published_at, created_at,
+        coach:profiles!payslips_coach_id_fkey(id, full_name, role, phone, bank_name, bank_account, bank_holder),
+        branch:branches(id, name),
+        invoice:coach_invoices!payslips_invoice_id_fkey(id, invoice_number, total_amount, bank_info, coach_invoice_items(id, item_type, class_id, session_count, rate, description, proof_url, class:classes(name))),
+        payslip_deductions(id, type, label, amount)
+      `)
+      .order("created_at", { ascending: false });
+    if (data) setPayslips(data as unknown as FinancialPayslipItem[]);
+  }, [supabase]);
+
+  const loadAllStaffSalaries = useCallback(async () => {
+    const { data } = await supabase
+      .from("staff_salaries")
+      .select("id, staff_id, branch_id, period_month, base_salary, allowances, deductions, reimburse_amount, total_salary, status, notes, paid_at, created_at, staff:profiles!staff_salaries_staff_id_fkey(id, full_name, role, phone, bank_name, bank_account, bank_holder), branch:branches(name)")
+      .order("created_at", { ascending: false });
+    if (data) setAllStaffSalaries(data as unknown as StaffSalaryRow[]);
   }, [supabase]);
 
   // ── Staff Payroll state ───────────────────────────────────────────────────
   const [staffList, setStaffList] = useState<{ id: string; full_name: string; email: string; phone: string | null; bank_name: string | null; bank_account: string | null; bank_holder: string | null; branch_id: string | null; branch?: { name: string } | null }[]>([]);
   const [staffSalaries, setStaffSalaries] = useState<StaffSalaryRow[]>([]);
   const [loadingStaff, setLoadingStaff] = useState(false);
-  const [staffMonth, setStaffMonth] = useState(() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-  });
   const [editSalaryModal, setEditSalaryModal] = useState<{ staff: any; salary: StaffSalaryRow | null } | null>(null);
   const [salaryForm, setSalaryForm] = useState({ base_salary: "", allowances: "", reimburse: "", deductions: "", notes: "" });
   const [savingSalary, setSavingSalary] = useState(false);
   const [markingStaffSalaryId, setMarkingStaffSalaryId] = useState<string | null>(null);
-  // Attendance-based base salary helper — lets the owner compute the base
-  // salary from present-day count × a rate, instead of always typing a flat number.
-  const [staffPresentDays, setStaffPresentDays] = useState<number | null>(null);
-  const [ratePerDayInput, setRatePerDayInput] = useState("");
-
-  /* eslint-disable react-hooks/set-state-in-effect -- async data loader */
-  useEffect(() => {
-    if (!editSalaryModal) { setStaffPresentDays(null); return; }
-    const [y, m] = staffMonth.split("-");
-    const monthStart = `${y}-${m}-01`;
-    const monthEnd = new Date(Number(y), Number(m), 0).toISOString().split("T")[0];
-    supabase.from("staff_attendances")
-      .select("id", { count: "exact", head: true })
-      .eq("staff_id", editSalaryModal.staff.id)
-      .eq("status", "present")
-      .gte("attendance_date", monthStart)
-      .lte("attendance_date", monthEnd)
-      .then(({ count }) => setStaffPresentDays(count ?? 0));
-  }, [editSalaryModal, staffMonth, supabase]);
-  /* eslint-enable react-hooks/set-state-in-effect */
-
-  const applyAttendanceBasedSalary = () => {
-    const rate = Number(ratePerDayInput);
-    if (!rate || staffPresentDays == null) return;
-    setSalaryForm(f => ({ ...f, base_salary: String(rate * staffPresentDays) }));
-  };
 
   const loadStaffPayroll = useCallback(async () => {
     setLoadingStaff(true);
@@ -2216,11 +2043,11 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
     const { data: sals } = await supabase
       .from("staff_salaries")
       .select("*")
-      .eq("period_month", staffMonth);
+      .eq("period_month", payrollMonth);
     if (sals) setStaffSalaries(sals as unknown as StaffSalaryRow[]);
 
     setLoadingStaff(false);
-  }, [supabase, staffMonth]);
+  }, [supabase, payrollMonth]);
 
   // ── Staff reimbursements (staff_reimbursements table) ────────────────────────
   const [staffReimbursements, setStaffReimbursements] = useState<{
@@ -2243,21 +2070,25 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
   }, [supabase]);
 
   useEffect(() => {
-    if (tab === "coach_payouts") loadDetailedInvoices();
-    if (tab === "admin_accounts") loadAdmins();
-    if (tab === "staff_payroll") { loadStaffPayroll(); loadStaffReimbursements(); }
-  }, [tab, loadDetailedInvoices, loadAdmins, loadStaffPayroll, loadStaffReimbursements]);
+    loadPayslips();
+    loadAllStaffSalaries();
+    if (tab === "payroll") {
+      loadDetailedInvoices();
+      loadStaffPayroll();
+      loadStaffReimbursements();
+    }
+  }, [tab, payrollMonth, loadPayslips, loadAllStaffSalaries, loadDetailedInvoices, loadStaffPayroll, loadStaffReimbursements]);
 
-  const copyToClipboard = (text: string, label: string) => {
+  const copyToClipboard = (text: string, label: ReactNode) => {
     navigator.clipboard.writeText(text);
-    toast.success(`${label} disalin!`, text);
+    toast.success(tNode("owner.financial.copiedToast", { label }), text);
   };
 
   const markInvoicePaid = async (inv: Invoice) => {
     const ok = await confirm({
-      title: "Konfirmasi Pembayaran Coach",
-      body: `Tandai invoice ${inv.invoice_number} senilai ${fmtIDR(inv.total_amount)} untuk ${inv.coach?.full_name} sebagai Lunas?`,
-      confirmLabel: "Ya, Tandai Lunas",
+      title: t("owner.financial.confirmMarkInvoicePaidTitle"),
+      body: tNode("owner.financial.confirmMarkInvoicePaidBody", { number: inv.invoice_number, amount: fmtIDR(inv.total_amount), coach: inv.coach?.full_name ?? "" }),
+      confirmLabel: t("owner.financial.confirmMarkPaidLabel"),
     });
     if (!ok) return;
     setMarkingPaidId(inv.id);
@@ -2267,8 +2098,8 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
       .update({ status: "paid", paid_at: now })
       .eq("id", inv.id);
     setMarkingPaidId(null);
-    if (error) return toast.error("Gagal mengubah status invoice", error.message);
-    toast.success("Invoice berhasil ditandai Lunas!");
+    if (error) return toast.error(t("owner.financial.markInvoicePaidFailed"), error.message);
+    toast.success(t("owner.financial.markInvoicePaidSuccess"));
     loadDetailedInvoices();
   };
 
@@ -2284,7 +2115,7 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
     const payload = {
       staff_id: editSalaryModal.staff.id,
       branch_id: editSalaryModal.staff.branch_id,
-      period_month: staffMonth,
+      period_month: payrollMonth,
       base_salary: base,
       allowances: allowances,
       deductions: deductions,
@@ -2299,17 +2130,17 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
       : await supabase.from("staff_salaries").insert(payload);
 
     setSavingSalary(false);
-    if (error) return toast.error("Gagal menyimpan gaji staff", error.message);
-    toast.success("Gaji staff berhasil disimpan");
+    if (error) return toast.error(t("owner.financial.saveStaffSalaryFailed"), error.message);
+    toast.success(t("owner.financial.saveStaffSalarySuccess"));
     setEditSalaryModal(null);
     loadStaffPayroll();
   };
 
   const markStaffSalaryPaid = async (sal: StaffSalaryRow, staffName: string) => {
     const ok = await confirm({
-      title: "Konfirmasi Pembayaran Gaji Staff",
-      body: `Tandai gaji periode ${sal.period_month} senilai ${fmtIDR(sal.total_salary)} untuk ${staffName} sebagai Lunas?`,
-      confirmLabel: "Ya, Tandai Lunas",
+      title: t("owner.financial.confirmMarkSalaryPaidTitle"),
+      body: tNode("owner.financial.confirmMarkSalaryPaidBody", { period: sal.period_month, amount: fmtIDR(sal.total_salary), name: staffName }),
+      confirmLabel: t("owner.financial.confirmMarkPaidLabel"),
     });
     if (!ok) return;
     setMarkingStaffSalaryId(sal.id);
@@ -2319,8 +2150,8 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
       .update({ status: "paid", paid_at: now })
       .eq("id", sal.id);
     setMarkingStaffSalaryId(null);
-    if (error) return toast.error("Gagal mengubah status gaji staff", error.message);
-    toast.success("Gaji staff berhasil ditandai Lunas!");
+    if (error) return toast.error(t("owner.financial.markSalaryPaidFailed"), error.message);
+    toast.success(t("owner.financial.markSalaryPaidSuccess"));
     loadStaffPayroll();
   };
 
@@ -2328,34 +2159,34 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
     setProcessingReimburseId(id);
     const { error } = await supabase.from("staff_reimbursements").update({ status: "approved", approved_at: new Date().toISOString() }).eq("id", id);
     setProcessingReimburseId(null);
-    if (error) return toast.error("Gagal menyetujui reimburse", error.message);
-    toast.success("Reimburse disetujui");
+    if (error) return toast.error(t("owner.financial.approveReimburseFailed"), error.message);
+    toast.success(t("owner.financial.approveReimburseSuccess"));
     loadStaffReimbursements();
   };
 
   const rejectReimburse = async (id: string) => {
-    const reason = window.prompt("Alasan penolakan:");
+    const reason = window.prompt(t("owner.financial.rejectReasonPrompt"));
     if (reason == null) return;
     setProcessingReimburseId(id);
     const { error } = await supabase.from("staff_reimbursements").update({ status: "rejected", rejected_at: new Date().toISOString(), rejection_reason: reason || null }).eq("id", id);
     setProcessingReimburseId(null);
-    if (error) return toast.error("Gagal menolak reimburse", error.message);
-    toast.success("Reimburse ditolak");
+    if (error) return toast.error(t("owner.financial.rejectReimburseFailed"), error.message);
+    toast.success(t("owner.financial.rejectReimburseSuccess"));
     loadStaffReimbursements();
   };
 
   const markReimbursePaid = async (id: string, amount: number) => {
     const ok = await confirm({
-      title: "Konfirmasi Pembayaran Reimburse",
-      body: `Tandai reimburse senilai ${fmtIDR(amount)} sebagai Lunas?`,
-      confirmLabel: "Ya, Tandai Lunas",
+      title: t("owner.financial.confirmMarkReimbursePaidTitle"),
+      body: t("owner.financial.confirmMarkReimbursePaidBody", { amount: fmtIDR(amount) }),
+      confirmLabel: t("owner.financial.confirmMarkPaidLabel"),
     });
     if (!ok) return;
     setProcessingReimburseId(id);
     const { error } = await supabase.from("staff_reimbursements").update({ status: "paid", paid_at: new Date().toISOString() }).eq("id", id);
     setProcessingReimburseId(null);
-    if (error) return toast.error("Gagal mengubah status reimburse", error.message);
-    toast.success("Reimburse ditandai Lunas!");
+    if (error) return toast.error(t("owner.financial.markReimbursePaidFailed"), error.message);
+    toast.success(t("owner.financial.markReimbursePaidSuccess"));
     loadStaffReimbursements();
   };
 
@@ -2375,6 +2206,7 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
   const [expenseSearch, setExpenseSearch] = useState("");
   const [expenseStatus, setExpenseStatus] = useState("");
   const [expenseBranch, setExpenseBranch] = useState("all");
+  const [expenseCategoryFilter, setExpenseCategoryFilter] = useState("all");
   const [expenseReimburseFilter, setExpenseReimburseFilter] = useState("all");
   const [expensePage, setExpensePage] = useState(0);
 
@@ -2491,7 +2323,7 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
   };
 
   const deleteTxn = async (row: ManualTxnRow) => {
-    const ok = await confirm({ title: t("owner.financial.deleteConfirmTitle"), body: t("owner.financial.deleteConfirmBody", { description: row.description, amount: fmtIDR(row.amount) }), confirmLabel: t("common.actions.delete"), danger: true });
+    const ok = await confirm({ title: t("owner.financial.deleteConfirmTitle"), body: tNode("owner.financial.deleteConfirmBody", { description: row.description, amount: fmtIDR(row.amount) }), confirmLabel: t("common.actions.delete"), danger: true });
     if (!ok) return;
     const { error } = await supabase.from("manual_transactions").delete().eq("id", row.id);
     if (error) return toast.error(t("owner.financial.txnDeleteFailed"), error.message);
@@ -2511,13 +2343,206 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
   const manualExpense = useMemo(() => manualTxns.filter(t => t.kind === "expense"), [manualTxns]);
   const paidBills = useMemo(() => bills.filter(b => b.status === "paid"), [bills]);
   const totalIncome = useMemo(() => paidBills.reduce((s, b) => s + b.total, 0) + manualIncome.reduce((s, t) => s + t.amount, 0), [paidBills, manualIncome]);
-  const totalExpenses = useMemo(() =>
-    expenses.filter(e => e.status === "paid").reduce((s, e) => s + e.total_amount, 0)
-    + manualExpense.reduce((s, t) => s + t.amount, 0)
-    + paidStaffSalaries.reduce((s, sal) => s + sal.total_salary, 0)
-    + paidStaffReimbursements.reduce((s, r) => s + r.amount, 0),
-    [expenses, manualExpense, paidStaffSalaries, paidStaffReimbursements]);
-  const netAmount = totalIncome - totalExpenses;
+
+  // ── Unified Expenses (Payslips + Invoices + Salaries + Reimbursements + Manual)
+  const unifiedExpenses = useMemo<UnifiedExpenseItem[]>(() => {
+    const list: UnifiedExpenseItem[] = [];
+    const usedInvoiceIds = new Set<string>();
+    const usedStaffPeriods = new Set<string>(); // key: `${staff_id}_${period_month}`
+
+    // 1. Unified Payslips (Coach & Staff)
+    payslips.forEach((p) => {
+      if (p.invoice_id) usedInvoiceIds.add(p.invoice_id);
+      const isStaff = p.coach?.role === "staff";
+      const monthKey = `${p.coach_id}_${parsePeriodToMonth(p.period_label)}`;
+      usedStaffPeriods.add(monthKey);
+
+      const deductionsList = p.payslip_deductions ?? [];
+      const taxAmount = deductionsList.filter((d) => d.type === "tax").reduce((sum, d) => sum + d.amount, 0);
+      const loanDeduction = deductionsList.filter((d) => d.type === "loan").reduce((sum, d) => sum + d.amount, 0);
+      const otherDeds = deductionsList.filter((d) => d.type !== "tax" && d.type !== "loan").reduce((sum, d) => sum + d.amount, 0);
+      const otherDeductions = otherDeds > 0 ? otherDeds : Math.max(0, p.deductions - taxAmount - loanDeduction);
+
+      let bName = p.coach?.bank_name;
+      let bAcc = p.coach?.bank_account;
+      let bHolder = p.coach?.bank_holder;
+      if ((!bAcc || !bName) && p.invoice?.bank_info) {
+        try {
+          const parsed = JSON.parse(p.invoice.bank_info);
+          if (parsed.bank_name) bName = parsed.bank_name;
+          if (parsed.bank_account) bAcc = parsed.bank_account;
+          if (parsed.bank_holder) bHolder = parsed.bank_holder;
+        } catch {}
+      }
+
+      list.push({
+        id: p.id,
+        sourceType: isStaff ? "staff_payslip" : "coach_payslip",
+        categoryKey: isStaff ? "staff_salary" : "coach_salary",
+        categoryLabel: isStaff ? t("owner.financial.catStaffSalary") : t("owner.financial.catCoachSalary"),
+        branchId: p.branch_id,
+        branchName: p.branch?.name ?? "—",
+        receiverId: p.coach_id,
+        receiverName: p.coach?.full_name ?? (isStaff ? "Staff" : "Coach"),
+        receiverRole: isStaff ? "staff" : "coach",
+        referenceNumber: p.invoice?.invoice_number ?? `SLIP-${p.id.slice(0, 8).toUpperCase()}`,
+        periodLabel: p.period_label,
+        description: isStaff
+          ? `Slip Gaji Staff - ${p.coach?.full_name ?? "Staff"} (${p.period_label})`
+          : `Slip Gaji Coach - ${p.coach?.full_name ?? "Coach"} (${p.period_label})`,
+        grossAmount: p.gross_amount,
+        taxAmount,
+        loanDeduction,
+        otherDeductions,
+        netTransferredAmount: p.net_amount,
+        status: p.status === "published" ? "paid" : "draft",
+        date: p.published_at ?? p.created_at,
+        bankInfo: { bankName: bName, bankAccount: bAcc, bankHolder: bHolder },
+        rawPayslip: p,
+      });
+    });
+
+    // 2. Coach Invoices not yet in payslips
+    detailedInvoices.forEach((inv) => {
+      if (usedInvoiceIds.has(inv.id)) return;
+      let bName = inv.coach?.bank_name;
+      let bAcc = inv.coach?.bank_account;
+      let bHolder = inv.coach?.bank_holder;
+      if ((!bAcc || !bName) && inv.bank_info) {
+        try {
+          const parsed = JSON.parse(inv.bank_info);
+          if (parsed.bank_name) bName = parsed.bank_name;
+          if (parsed.bank_account) bAcc = parsed.bank_account;
+          if (parsed.bank_holder) bHolder = parsed.bank_holder;
+        } catch {}
+      }
+
+      const isStaff = (inv.coach as any)?.role === "staff";
+      list.push({
+        id: inv.id,
+        sourceType: "coach_invoice",
+        categoryKey: isStaff ? "staff_salary" : "coach_salary",
+        categoryLabel: isStaff ? t("owner.financial.catStaffSalary") : t("owner.financial.catCoachSalary"),
+        branchId: inv.branch_id ?? "",
+        branchName: inv.branch?.name ?? "—",
+        receiverId: (inv as any).coach_id ?? inv.coach?.id ?? null,
+        receiverName: inv.coach?.full_name ?? "Coach",
+        receiverRole: isStaff ? "staff" : "coach",
+        referenceNumber: inv.invoice_number,
+        periodLabel: inv.period_label,
+        description: `Invoice Coach - ${inv.coach?.full_name ?? "Coach"} (${inv.invoice_number})`,
+        grossAmount: inv.total_amount,
+        taxAmount: 0,
+        loanDeduction: 0,
+        otherDeductions: 0,
+        netTransferredAmount: inv.total_amount,
+        status: inv.status as any,
+        date: inv.paid_at ?? inv.submitted_at,
+        bankInfo: { bankName: bName, bankAccount: bAcc, bankHolder: bHolder },
+        rawInvoice: inv,
+      });
+    });
+
+    // 3. Staff Salaries not yet in payslips
+    allStaffSalaries.forEach((sal) => {
+      const monthKey = `${sal.staff_id}_${sal.period_month}`;
+      if (usedStaffPeriods.has(monthKey)) return;
+
+      const base = Number(sal.base_salary || 0);
+      const allowances = Number(sal.allowances || 0);
+      const reimburse = Number(sal.reimburse_amount || 0);
+      const deductions = Number(sal.deductions || 0);
+      const total = Number(sal.total_salary || base + allowances + reimburse - deductions);
+      const gross = base + allowances + reimburse;
+
+      list.push({
+        id: sal.id,
+        sourceType: "staff_salary",
+        categoryKey: "staff_salary",
+        categoryLabel: t("owner.financial.catStaffSalary"),
+        branchId: sal.branch_id,
+        branchName: (sal as any).branch?.name ?? (branches.find(b => b.id === sal.branch_id)?.name ?? "—"),
+        receiverId: sal.staff_id,
+        receiverName: (sal as any).staff?.full_name ?? "Staff",
+        receiverRole: "staff",
+        referenceNumber: `SAL-${sal.period_month}`,
+        periodLabel: sal.period_month,
+        description: `Staff Salary - ${(sal as any).staff?.full_name ?? "Staff"} (${sal.period_month})`,
+        grossAmount: gross,
+        taxAmount: 0,
+        loanDeduction: 0,
+        otherDeductions: deductions,
+        netTransferredAmount: total,
+        status: sal.status as any,
+        date: sal.paid_at ?? sal.created_at,
+        bankInfo: { bankName: (sal as any).staff?.bank_name, bankAccount: (sal as any).staff?.bank_account, bankHolder: (sal as any).staff?.bank_holder },
+        rawSalary: sal,
+      });
+    });
+
+    // 4. Staff Reimbursements
+    staffReimbursements.forEach((r) => {
+      list.push({
+        id: r.id,
+        sourceType: "staff_reimburse",
+        categoryKey: "reimburse",
+        categoryLabel: t("owner.financial.catReimburse"),
+        branchId: r.branch_id,
+        branchName: "—",
+        receiverId: r.profile_id,
+        receiverName: "Staff",
+        receiverRole: "staff",
+        referenceNumber: r.invoice_number ?? "REIMBURSE",
+        periodLabel: "—",
+        description: r.description || "Klaim Reimburse Staff",
+        grossAmount: r.amount,
+        taxAmount: 0,
+        loanDeduction: 0,
+        otherDeductions: 0,
+        netTransferredAmount: r.amount,
+        status: r.status as any,
+        date: r.submitted_at,
+        proofUrl: r.proof_url,
+      });
+    });
+
+    // 5. Manual Expenses
+    manualExpense.forEach((m) => {
+      list.push({
+        id: m.id,
+        sourceType: "manual",
+        categoryKey: m.is_reimburse ? "reimburse" : "manual",
+        categoryLabel: m.category ?? (m.is_reimburse ? t("owner.financial.catReimburse") : t("owner.financial.catManualExpense")),
+        branchId: m.branch_id,
+        branchName: m.branch?.name ?? "—",
+        receiverId: null,
+        receiverName: m.description,
+        receiverRole: "other",
+        referenceNumber: "—",
+        periodLabel: "—",
+        description: m.description,
+        grossAmount: m.amount,
+        taxAmount: 0,
+        loanDeduction: 0,
+        otherDeductions: 0,
+        netTransferredAmount: m.amount,
+        status: "paid",
+        date: m.occurred_at,
+        proofUrl: m.proof_url,
+        rawManual: m,
+      });
+    });
+
+    return list.sort((a, b) => (a.date < b.date ? 1 : -1));
+  }, [payslips, detailedInvoices, allStaffSalaries, staffReimbursements, manualExpense, t]);
+
+  const paidExpensesList = useMemo(() => unifiedExpenses.filter((e) => e.status === "paid"), [unifiedExpenses]);
+  const totalGrossExpenses = useMemo(() => paidExpensesList.reduce((s, e) => s + e.grossAmount, 0), [paidExpensesList]);
+  const totalTaxWithheld = useMemo(() => paidExpensesList.reduce((s, e) => s + e.taxAmount, 0), [paidExpensesList]);
+  const totalOtherDeductions = useMemo(() => paidExpensesList.reduce((s, e) => s + e.otherDeductions, 0), [paidExpensesList]);
+  const totalRealCashOut = useMemo(() => paidExpensesList.reduce((s, e) => s + e.netTransferredAmount, 0), [paidExpensesList]);
+  const totalExpenses = totalRealCashOut;
+  const netAmount = totalIncome - totalRealCashOut;
 
   // ── Chart period selector ────────────────────────────────────────────────────
   const [chartMonths, setChartMonths] = useState<3 | 6 | 12>(6);
@@ -2532,14 +2557,11 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
       const label = d.toLocaleDateString("id-ID", { month: "short", year: "2-digit" });
       const income = paidBills.filter(b => (b.paid_at ?? b.created_at).startsWith(key)).reduce((s, b) => s + b.total, 0)
         + manualIncome.filter(t => t.occurred_at.startsWith(key)).reduce((s, t) => s + t.amount, 0);
-      const expense = expenses.filter(e => e.status === "paid" && (e.paid_at ?? e.created_at).startsWith(key)).reduce((s, e) => s + e.total_amount, 0)
-        + manualExpense.filter(t => t.occurred_at.startsWith(key)).reduce((s, t) => s + t.amount, 0)
-        + paidStaffSalaries.filter(sal => (sal.paid_at ?? sal.created_at).startsWith(key)).reduce((s, sal) => s + sal.total_salary, 0)
-        + paidStaffReimbursements.filter(r => (r.paid_at ?? r.created_at).startsWith(key)).reduce((s, r) => s + r.amount, 0);
+      const expense = paidExpensesList.filter(e => e.date.startsWith(key)).reduce((s, e) => s + e.netTransferredAmount, 0);
       months.push({ label, key, income, expense, net: income - expense });
     }
     return months;
-  }, [paidBills, expenses, manualIncome, manualExpense, paidStaffSalaries, paidStaffReimbursements, chartMonths]);
+  }, [paidBills, manualIncome, paidExpensesList, chartMonths]);
 
   const barMax = useMemo(() => Math.max(1, ...barChartData.map(m => Math.max(m.income, m.expense))), [barChartData]);
 
@@ -2588,27 +2610,26 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
   const incomeSafePage = Math.min(incomePage, Math.max(0, incomeTotalPages - 1));
   const incomePagedRows = filteredIncome.slice(incomeSafePage * PAGE_SIZE, (incomeSafePage + 1) * PAGE_SIZE);
 
-  // ── Expenses table filtered (merges coach_invoices + manual expense) ───────
+  // ── Expenses table filtered (Unified: Payslips + Invoices + Salaries + Reimburse + Manual)
   const filteredExpenses = useMemo(() => {
-    let r: ExpenseRow[] = [
-      ...expenses.map(e => ({ ...e, source: "invoice" as const })),
-      ...manualExpense.map(t => ({ ...t, source: "manual" as const })),
-    ];
-    if (expenseStatus) r = r.filter(row => row.source === "manual" || row.status === expenseStatus);
-    if (expenseBranch !== "all") r = r.filter(row => row.branch_id === expenseBranch);
-    if (expenseReimburseFilter === "reimburse") r = r.filter(row => row.source === "manual" && row.is_reimburse);
-    if (expenseReimburseFilter === "non_reimburse") r = r.filter(row => !(row.source === "manual" && row.is_reimburse));
+    let r = unifiedExpenses;
+    if (expenseStatus) r = r.filter(e => e.status === expenseStatus);
+    if (expenseBranch !== "all") r = r.filter(e => e.branchId === expenseBranch);
+    if (expenseCategoryFilter !== "all") r = r.filter(e => e.categoryKey === expenseCategoryFilter);
     if (expenseSearch) {
       const q = expenseSearch.toLowerCase();
-      r = r.filter(row => row.source === "manual"
-        ? row.description.toLowerCase().includes(q) || (row.category ?? "").toLowerCase().includes(q) || row.branch?.name?.toLowerCase().includes(q)
-        : row.coach?.full_name?.toLowerCase().includes(q) || row.period_label.toLowerCase().includes(q) || row.branch?.name?.toLowerCase().includes(q) || (row.invoice_number ?? "").toLowerCase().includes(q)
+      r = r.filter(e =>
+        e.receiverName.toLowerCase().includes(q) ||
+        e.description.toLowerCase().includes(q) ||
+        e.referenceNumber.toLowerCase().includes(q) ||
+        e.periodLabel.toLowerCase().includes(q) ||
+        e.branchName.toLowerCase().includes(q)
       );
     }
     return r;
-  }, [expenses, manualExpense, expenseStatus, expenseBranch, expenseReimburseFilter, expenseSearch]);
+  }, [unifiedExpenses, expenseStatus, expenseBranch, expenseCategoryFilter, expenseSearch]);
 
-  useEffect(() => { setExpensePage(0); }, [expenseStatus, expenseBranch, expenseSearch]);
+  useEffect(() => { setExpensePage(0); }, [expenseStatus, expenseBranch, expenseCategoryFilter, expenseSearch]);
 
   const expenseTotalPages = Math.max(1, Math.ceil(filteredExpenses.length / PAGE_SIZE));
   const expenseSafePage = Math.min(expensePage, Math.max(0, expenseTotalPages - 1));
@@ -2616,7 +2637,7 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
 
   // ── Money Flow monthly data ─────────────────────────────────────────────────
   const moneyFlowData = useMemo(() => {
-    const months: { label: string; key: string; income: number; expense: number; net: number }[] = [];
+    const months: { label: string; key: string; income: number; expense: number; grossExpense: number; taxWithheld: number; net: number }[] = [];
     const now = new Date();
     for (let i = 11; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
@@ -2624,23 +2645,255 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
       const label = d.toLocaleDateString("id-ID", { month: "long", year: "numeric" });
       const income = paidBills.filter(b => (b.paid_at ?? b.created_at).startsWith(key)).reduce((s, b) => s + b.total, 0)
         + manualIncome.filter(t => t.occurred_at.startsWith(key)).reduce((s, t) => s + t.amount, 0);
-      const expense = expenses.filter(e => e.status === "paid" && (e.paid_at ?? e.created_at).startsWith(key)).reduce((s, e) => s + e.total_amount, 0)
-        + manualExpense.filter(t => t.occurred_at.startsWith(key)).reduce((s, t) => s + t.amount, 0)
-        + paidStaffSalaries.filter(sal => (sal.paid_at ?? sal.created_at).startsWith(key)).reduce((s, sal) => s + sal.total_salary, 0)
-        + paidStaffReimbursements.filter(r => (r.paid_at ?? r.created_at).startsWith(key)).reduce((s, r) => s + r.amount, 0);
-      months.push({ label, key, income, expense, net: income - expense });
+      const mExpenses = paidExpensesList.filter(e => e.date.startsWith(key));
+      const expense = mExpenses.reduce((s, e) => s + e.netTransferredAmount, 0);
+      const grossExpense = mExpenses.reduce((s, e) => s + e.grossAmount, 0);
+      const taxWithheld = mExpenses.reduce((s, e) => s + e.taxAmount, 0);
+      months.push({ label, key, income, expense, grossExpense, taxWithheld, net: income - expense });
     }
     return months.filter(m => m.income > 0 || m.expense > 0);
-  }, [paidBills, expenses, manualIncome, manualExpense, paidStaffSalaries, paidStaffReimbursements]);
+  }, [paidBills, manualIncome, paidExpensesList]);
+
+  // ── Unified Payroll items & filtering (Coach & Staff) ───────────────────────
+  const unifiedPayrollItems = useMemo(() => {
+    const list: {
+      id: string;
+      itemType: "coach_invoice" | "staff_salary" | "staff_reimburse";
+      recipientType: "coach" | "staff";
+      recipientId: string;
+      recipientName: string;
+      recipientRole: string;
+      branchId: string | null;
+      branchName: string;
+      periodMonth: string;
+      periodLabel: string;
+      title: string;
+      referenceNo?: string;
+      bankName: string | null;
+      bankAccount: string | null;
+      bankHolder: string | null;
+      baseAmount: number;
+      allowances: number;
+      reimburseAmount: number;
+      taxAmount: number;
+      loanDeduction: number;
+      otherDeductions: number;
+      grossAmount: number;
+      netTransferredAmount: number;
+      status: "draft" | "pending" | "approved" | "paid";
+      isPaid: boolean;
+      paidAt?: string | null;
+      proofUrl?: string | null;
+      rawInvoice?: Invoice | null;
+      rawSalary?: StaffSalaryRow | null;
+      rawPayslip?: FinancialPayslipItem | null;
+      rawExpense?: UnifiedExpenseItem | null;
+    }[] = [];
+
+    // 1. Coach Invoices (Sessions & Reimbursements)
+    for (const inv of detailedInvoices) {
+      const invMonth = inv.period_label ? parsePeriodToMonth(inv.period_label) : (inv.submitted_at ? inv.submitted_at.slice(0, 7) : "");
+      const items = inv.coach_invoice_items ?? [];
+      const sessionHonor = items.filter(it => it.item_type === "session" || it.item_type === "extra").reduce((s, it) => s + (it.session_count * it.rate), 0);
+      const reimburseTotal = items.filter(it => it.item_type === "reimburse").reduce((s, it) => s + it.rate, 0);
+
+      const matchingSlip = payslips.find(p => p.invoice_id === inv.id);
+      const taxAmount = matchingSlip?.payslip_deductions?.filter(d => d.type === "tax").reduce((s, d) => s + d.amount, 0) ?? 0;
+      const loanDeduction = matchingSlip?.payslip_deductions?.filter(d => d.type === "loan").reduce((s, d) => s + d.amount, 0) ?? 0;
+      const otherDeds = matchingSlip?.payslip_deductions?.filter(d => d.type !== "tax" && d.type !== "loan").reduce((s, d) => s + d.amount, 0) ?? 0;
+      const otherDeductions = otherDeds > 0 ? otherDeds : Math.max(0, (matchingSlip?.deductions ?? 0) - taxAmount - loanDeduction);
+      const grossAmount = matchingSlip ? matchingSlip.gross_amount : inv.total_amount;
+      const netPayout = matchingSlip ? matchingSlip.net_amount : inv.total_amount;
+      const isPaid = inv.status === "paid" || matchingSlip?.status === "published";
+
+      let bName = inv.coach?.bank_name;
+      let bAcc = inv.coach?.bank_account;
+      let bHolder = inv.coach?.bank_holder;
+      if ((!bAcc || !bName) && inv.bank_info) {
+        try {
+          const parsed = JSON.parse(inv.bank_info);
+          if (parsed.bank_name) bName = parsed.bank_name;
+          if (parsed.bank_account) bAcc = parsed.bank_account;
+          if (parsed.bank_holder) bHolder = parsed.bank_holder;
+        } catch {}
+      }
+
+      const totalSessions = items.filter(it => it.item_type === "session" || it.item_type === "extra").reduce((s, it) => s + it.session_count, 0);
+
+      list.push({
+        id: `coach_${inv.id}`,
+        itemType: "coach_invoice",
+        recipientType: "coach",
+        recipientId: inv.coach?.id ?? inv.id,
+        recipientName: inv.coach?.full_name ?? "Coach",
+        recipientRole: "Coach",
+        branchId: inv.branch_id ?? null,
+        branchName: inv.branch?.name ?? "Center",
+        periodMonth: invMonth,
+        periodLabel: inv.period_label || invMonth,
+        title: totalSessions > 0 ? `Teaching Fee (${totalSessions} Sessions)` : (reimburseTotal > 0 ? "Coach Reimbursement Claim" : "Coach Honor / Fee"),
+        referenceNo: inv.invoice_number,
+        bankName: bName ?? null,
+        bankAccount: bAcc ?? null,
+        bankHolder: bHolder ?? null,
+        baseAmount: sessionHonor > 0 ? sessionHonor : (inv.total_amount - reimburseTotal),
+        allowances: 0,
+        reimburseAmount: reimburseTotal,
+        taxAmount: taxAmount,
+        loanDeduction: loanDeduction,
+        otherDeductions: otherDeductions,
+        grossAmount: grossAmount,
+        netTransferredAmount: netPayout,
+        status: isPaid ? "paid" : (inv.status === "approved" ? "approved" : "pending"),
+        isPaid: isPaid,
+        paidAt: inv.paid_at ?? matchingSlip?.published_at ?? null,
+        rawInvoice: inv,
+        rawPayslip: matchingSlip ?? null,
+        rawExpense: matchingSlip ? (unifiedExpenses.find(e => e.id === matchingSlip.id) ?? null) : null,
+      });
+    }
+
+    // 2. Staff Salaries
+    for (const st of staffList) {
+      const sal = staffSalaries.find(s => s.staff_id === st.id)
+        ?? allStaffSalaries.find(s => s.staff_id === st.id && s.period_month === payrollMonth);
+      const matchingSlip = payslips.find(p => p.coach_id === st.id && parsePeriodToMonth(p.period_label) === payrollMonth);
+
+      const base = matchingSlip ? (matchingSlip.gross_amount - (sal?.allowances ?? 0) - (sal?.reimburse_amount ?? 0)) : (sal?.base_salary ?? 0);
+      const allowances = sal?.allowances ?? 0;
+      const reimburse = sal?.reimburse_amount ?? 0;
+      const taxAmount = matchingSlip?.payslip_deductions?.filter(d => d.type === "tax").reduce((s, d) => s + d.amount, 0) ?? 0;
+      const loanDeduction = matchingSlip?.payslip_deductions?.filter(d => d.type === "loan").reduce((s, d) => s + d.amount, 0) ?? 0;
+      const otherDeds = matchingSlip?.payslip_deductions?.filter(d => d.type !== "tax" && d.type !== "loan").reduce((s, d) => s + d.amount, 0) ?? 0;
+      const otherDeductions = otherDeds > 0 ? otherDeds : (matchingSlip ? Math.max(0, matchingSlip.deductions - taxAmount - loanDeduction) : (sal?.deductions ?? 0));
+      const grossAmount = matchingSlip ? matchingSlip.gross_amount : (base + allowances + reimburse);
+      const netPayout = matchingSlip ? matchingSlip.net_amount : (sal?.total_salary ?? (base + allowances + reimburse - otherDeductions - taxAmount));
+      const isPaid = matchingSlip?.status === "published" || sal?.status === "paid";
+      const status: "draft" | "pending" | "approved" | "paid" = isPaid ? "paid" : (sal?.status === "approved" ? "approved" : (sal ? "pending" : "draft"));
+
+      list.push({
+        id: `staff_${sal?.id ?? st.id}`,
+        itemType: "staff_salary",
+        recipientType: "staff",
+        recipientId: st.id,
+        recipientName: st.full_name,
+        recipientRole: "Staff",
+        branchId: st.branch_id,
+        branchName: st.branch?.name ?? "Center",
+        periodMonth: payrollMonth,
+        periodLabel: payrollMonth,
+        title: "Staff Salary & Allowances",
+        referenceNo: sal?.id ? `SAL-${sal.id.slice(0, 8)}` : undefined,
+        bankName: st.bank_name ?? null,
+        bankAccount: st.bank_account ?? null,
+        bankHolder: st.bank_holder ?? null,
+        baseAmount: base,
+        allowances: allowances,
+        reimburseAmount: reimburse,
+        taxAmount: taxAmount,
+        loanDeduction: loanDeduction,
+        otherDeductions: otherDeductions,
+        grossAmount: grossAmount,
+        netTransferredAmount: netPayout,
+        status: status,
+        isPaid: isPaid,
+        paidAt: sal?.paid_at ?? matchingSlip?.published_at ?? null,
+        rawSalary: sal ?? null,
+        rawPayslip: matchingSlip ?? null,
+        rawExpense: matchingSlip ? (unifiedExpenses.find(e => e.id === matchingSlip.id) ?? null) : null,
+      });
+    }
+
+    // 3. Standalone Staff Reimbursements
+    for (const rb of staffReimbursements) {
+      const rbMonth = rb.submitted_at ? rb.submitted_at.slice(0, 7) : payrollMonth;
+      const st = staffList.find(s => s.id === rb.profile_id);
+      const sal = staffSalaries.find(s => s.staff_id === rb.profile_id);
+      if (sal && sal.reimburse_amount >= rb.amount && rb.status === "approved") {
+        continue;
+      }
+      const isPaid = rb.status === "paid";
+      list.push({
+        id: `reimburse_${rb.id}`,
+        itemType: "staff_reimburse",
+        recipientType: "staff",
+        recipientId: rb.profile_id,
+        recipientName: st?.full_name ?? "Staff",
+        recipientRole: "Staff",
+        branchId: rb.branch_id ?? st?.branch_id ?? null,
+        branchName: branches.find(b => b.id === (rb.branch_id ?? st?.branch_id))?.name ?? st?.branch?.name ?? "Center",
+        periodMonth: rbMonth,
+        periodLabel: rbMonth,
+        title: `Reimburse: ${rb.description}`,
+        referenceNo: rb.invoice_number,
+        bankName: st?.bank_name ?? null,
+        bankAccount: st?.bank_account ?? null,
+        bankHolder: st?.bank_holder ?? null,
+        baseAmount: 0,
+        allowances: 0,
+        reimburseAmount: rb.amount,
+        taxAmount: 0,
+        loanDeduction: 0,
+        otherDeductions: 0,
+        grossAmount: rb.amount,
+        netTransferredAmount: rb.amount,
+        status: isPaid ? "paid" : (rb.status === "approved" ? "approved" : "pending"),
+        isPaid: isPaid,
+        paidAt: null,
+        proofUrl: rb.proof_url,
+      });
+    }
+
+    return list;
+  }, [detailedInvoices, payslips, staffList, staffSalaries, allStaffSalaries, staffReimbursements, payrollMonth, branches, unifiedExpenses]);
+
+  const filteredPayrollItems = useMemo(() => {
+    return unifiedPayrollItems.filter(item => {
+      if (payrollMonth && payrollMonth !== "all" && item.periodMonth && item.periodMonth !== payrollMonth) {
+        return false;
+      }
+      if (payrollBranchFilter !== "all" && item.branchId !== payrollBranchFilter) {
+        return false;
+      }
+      if (payrollRecipientFilter !== "all" && item.recipientType !== payrollRecipientFilter) {
+        return false;
+      }
+      if (payrollStatusFilter === "unpaid" && item.isPaid) {
+        return false;
+      }
+      if (payrollStatusFilter === "paid" && !item.isPaid) {
+        return false;
+      }
+      if (payrollSearch.trim()) {
+        const q = payrollSearch.toLowerCase();
+        const matchName = item.recipientName.toLowerCase().includes(q);
+        const matchBank = item.bankAccount?.includes(q) || item.bankName?.toLowerCase().includes(q);
+        const matchRef = item.referenceNo?.toLowerCase().includes(q);
+        const matchTitle = item.title.toLowerCase().includes(q);
+        const matchBranch = item.branchName.toLowerCase().includes(q);
+        if (!matchName && !matchBank && !matchRef && !matchTitle && !matchBranch) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [unifiedPayrollItems, payrollMonth, payrollBranchFilter, payrollRecipientFilter, payrollStatusFilter, payrollSearch]);
+
+  const payrollTotalHarusTransfer = filteredPayrollItems.filter(i => !i.isPaid).reduce((s, i) => s + i.netTransferredAmount, 0);
+  const payrollUnpaidCount = filteredPayrollItems.filter(i => !i.isPaid).length;
+  const payrollTotalSudahTransfer = filteredPayrollItems.filter(i => i.isPaid).reduce((s, i) => s + i.netTransferredAmount, 0);
+  const payrollPaidCount = filteredPayrollItems.filter(i => i.isPaid).length;
+  const payrollTotalGajiPokokDanHonor = filteredPayrollItems.reduce((s, i) => s + i.baseAmount + i.allowances, 0);
+  const payrollTotalReimburse = filteredPayrollItems.reduce((s, i) => s + i.reimburseAmount, 0);
+  const payrollTotalTax = filteredPayrollItems.reduce((s, i) => s + i.taxAmount, 0);
+  const payrollTotalLoanDeduction = filteredPayrollItems.reduce((s, i) => s + i.loanDeduction, 0);
 
   // ── Sub-tab nav ──────────────────────────────────────────────────────────────
   const FTABS: { id: FinancialTab; label: string; icon: string }[] = [
     { id: "overview",       label: t("owner.financial.tabOverview"),         icon: "grid"    },
     { id: "income",         label: t("owner.financial.tabIncome"),           icon: "wallet"  },
     { id: "expenses",       label: t("owner.financial.tabExpenses"),         icon: "invoice" },
-    { id: "coach_payouts",  label: "Honor & Reimburse Coach",               icon: "swim"    },
-    { id: "staff_payroll",  label: "Gaji & Payroll Staff",                   icon: "users"   },
-    { id: "admin_accounts", label: "Rekening Admin & Transfer",              icon: "card"    },
+    { id: "payroll",        label: t("owner.financial.tabPayroll"),          icon: "users"   },
     { id: "moneyflow",      label: t("owner.financial.tabMoneyFlow"),       icon: "chart"   },
   ];
 
@@ -2653,10 +2906,10 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
       </div>
 
       {/* Sub-tabs */}
-      <div className="flex gap-1 flex-wrap bg-paper-tint border border-line rounded-xl p-1">
+      <div className="flex gap-1.5 flex-wrap bg-paper-tint border border-line rounded-2xl p-1.5 shadow-xs">
         {FTABS.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
-            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-semibold transition-colors ${tab === t.id ? "bg-white text-ocean-700 shadow-card" : "text-ink-soft hover:bg-white/60"}`}>
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${tab === t.id ? "bg-white text-ocean-700 shadow-xs border border-line/60" : "text-ink-soft hover:text-ink hover:bg-white/60"}`}>
             <Icon name={t.icon} className="w-4 h-4" /> {t.label}
           </button>
         ))}
@@ -2665,11 +2918,132 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
       {/* ── OVERVIEW ────────────────────────────────────────────────────────── */}
       {tab === "overview" && (
         <div className="space-y-5">
-          {/* Stat cards */}
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Stat label={t("owner.financial.statTotalIncome")} value={fmtIDR(totalIncome)} icon="wallet" tone="ok" sub={t("owner.financial.statTotalIncomeSub", { count: paidBills.length })} />
-            <Stat label={t("owner.financial.statTotalExpenses")} value={fmtIDR(totalExpenses)} icon="invoice" tone="danger" sub={t("owner.financial.statTotalExpensesSub", { count: expenses.filter(e=>e.status==="paid").length })} />
-            <Stat label={t("owner.financial.statNet")} value={fmtIDR(netAmount)} icon="chart" tone={netAmount >= 0 ? "ocean" : "warn"} />
+          {/* Stat cards: 2-Tier Hierarchical Layout for executive clarity and zero clipping */}
+          <div className="space-y-3">
+            {/* Primary Cash Flow (3 Columns) */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Total Income */}
+              <div className="bg-white border border-line rounded-2xl p-5 shadow-xs flex flex-col justify-between space-y-4 hover:border-ok-300 hover:shadow-card transition-all">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-ok-500 inline-block" />
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-ink-faint">
+                      {t("owner.financial.statTotalIncome")}
+                    </span>
+                  </div>
+                  <span className="w-9 h-9 rounded-xl bg-ok-50 text-ok-600 border border-ok-200/60 flex items-center justify-center shrink-0">
+                    <Icon name="wallet" className="w-4 h-4" />
+                  </span>
+                </div>
+                <div>
+                  <div className="font-mono font-extrabold text-2xl lg:text-3xl text-ink tracking-tight">
+                    {fmtIDR(totalIncome)}
+                  </div>
+                  <div className="text-xs text-ink-mute mt-1.5 flex items-center gap-1.5">
+                    <span className="inline-block px-1.5 py-0.5 rounded bg-ok-50 text-ok-700 text-[11px] font-semibold">
+                      {paidBills.length} transaksi lunas
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Real Cash Outflow */}
+              <div className="bg-white border border-line rounded-2xl p-5 shadow-xs flex flex-col justify-between space-y-4 hover:border-danger-300 hover:shadow-card transition-all">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-danger-500 inline-block" />
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-ink-faint">
+                      {t("owner.financial.statNetCashOut")}
+                    </span>
+                  </div>
+                  <span className="w-9 h-9 rounded-xl bg-danger-50 text-danger-600 border border-danger-200/60 flex items-center justify-center shrink-0">
+                    <Icon name="invoice" className="w-4 h-4" />
+                  </span>
+                </div>
+                <div>
+                  <div className="font-mono font-extrabold text-2xl lg:text-3xl text-danger-700 tracking-tight">
+                    {fmtIDR(totalRealCashOut)}
+                  </div>
+                  <div className="text-xs text-ink-mute mt-1.5">
+                    Transfer riil ke rekening bank coach & staff
+                  </div>
+                </div>
+              </div>
+
+              {/* Net Cashflow (Surplus/Deficit) */}
+              <div className="bg-white border border-line rounded-2xl p-5 shadow-xs flex flex-col justify-between space-y-4 hover:border-ocean-300 hover:shadow-card transition-all">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <span className={`w-2 h-2 rounded-full ${netAmount >= 0 ? "bg-ok-500" : "bg-warn-500"} inline-block`} />
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-ink-faint">
+                      {t("owner.financial.statNet")}
+                    </span>
+                  </div>
+                  <span className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${netAmount >= 0 ? "bg-ocean-50 text-ocean-700 border border-ocean-200/60" : "bg-warn-50 text-warn-700 border border-warn-200/60"}`}>
+                    <Icon name="chart" className="w-4 h-4" />
+                  </span>
+                </div>
+                <div>
+                  <div className={`font-mono font-extrabold text-2xl lg:text-3xl tracking-tight ${netAmount >= 0 ? "text-ocean-800" : "text-warn-700"}`}>
+                    {fmtIDR(netAmount)}
+                  </div>
+                  <div className="text-xs font-semibold mt-1.5 flex items-center gap-1.5">
+                    <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${netAmount >= 0 ? "bg-ok-50 text-ok-700 border border-ok-200" : "bg-danger-50 text-danger-700 border border-danger-200"}`}>
+                      {netAmount >= 0 ? "Net Cash Surplus" : "Operating Cash Deficit"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Secondary Tax & Gross Breakdown (2 Columns) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Tax Withheld PPh 21 */}
+              <div className="bg-white border border-line rounded-2xl p-4 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:border-warn-300 transition-colors">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-warn-50 text-warn-800 border border-warn-200 uppercase tracking-wider">
+                      PPh 21
+                    </span>
+                    <span className="text-xs font-bold text-ink">
+                      {t("owner.financial.statTaxWithheld")}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-ink-mute">
+                    Pajak dipotong dari honor coach & staff (titipan untuk kas negara)
+                  </div>
+                </div>
+                <div className="text-left sm:text-right shrink-0">
+                  <div className="font-mono font-bold text-lg lg:text-xl text-warn-700">
+                    {fmtIDR(totalTaxWithheld)}
+                  </div>
+                  <div className="text-[10px] font-medium text-warn-600">Disetor ke Kas Negara</div>
+                </div>
+              </div>
+
+              {/* Total Gross Expenses */}
+              <div className="bg-white border border-line rounded-2xl p-4 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:border-ocean-300 transition-colors">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-ocean-50 text-ocean-800 border border-ocean-200 uppercase tracking-wider">
+                      Beban Bruto
+                    </span>
+                    <span className="text-xs font-bold text-ink">
+                      {t("owner.financial.statGrossExpenses")}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-ink-mute">
+                    Total beban operasional & payroll kotor sebelum pemotongan
+                  </div>
+                </div>
+                <div className="text-left sm:text-right shrink-0">
+                  <div className="font-mono font-bold text-lg lg:text-xl text-ink">
+                    {fmtIDR(totalGrossExpenses)}
+                  </div>
+                  <div className="text-[10px] font-medium text-ink-mute">Total Payroll & Operasional</div>
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Bar chart: Income vs Expenses per month */}
@@ -2798,7 +3172,7 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
                     <div key={b.id} className="rounded-2xl border border-line bg-paper-tint/70 p-3">
                       <div className="flex flex-wrap items-start justify-between gap-2">
                         <div className="min-w-0 flex-1">
-                          <div className="text-sm font-semibold text-ink break-words">{b.name}</div>
+                          <div className="text-sm font-semibold text-ink break-words"><NoTranslate>{b.name}</NoTranslate></div>
                           <div className="text-[11px] uppercase tracking-widest text-ink-faint mt-0.5">{t("owner.financial.branchIncomeContribution")}</div>
                         </div>
                         <div className="text-sm font-mono font-bold text-ocean-700 whitespace-nowrap">{fmtIDR(inc)}</div>
@@ -2899,13 +3273,13 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
                     <tbody className="divide-y divide-line">
                       {incomePagedRows.map(row => row.source === "manual" ? (
                         <tr key={row.id} className="hover:bg-paper-tint">
-                          <td className="px-4 py-2.5 text-xs text-ink-mute">{row.branch?.name ?? "—"}</td>
+                          <td className="px-4 py-2.5 text-xs text-ink-mute"><NoTranslate>{row.branch?.name ?? "—"}</NoTranslate></td>
                           <td className="px-4 py-2.5 font-medium">
-                            {row.description}
+                            <NoTranslate>{row.description}</NoTranslate>
                             <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-paper-deep text-ink-mute text-[10px] font-semibold align-middle">{t("owner.financial.manualBadge")}</span>
                           </td>
                           <td className="px-4 py-2.5 text-xs text-ink-mute">—</td>
-                          <td className="px-4 py-2.5 text-xs text-ink-mute">{row.category ?? "—"}</td>
+                          <td className="px-4 py-2.5 text-xs text-ink-mute"><NoTranslate>{row.category ?? "—"}</NoTranslate></td>
                           <td className="px-4 py-2.5 text-xs text-ink-mute">—</td>
                           <td className="px-4 py-2.5 text-xs text-ink-mute">—</td>
                           <td className="px-4 py-2.5 text-xs text-ink-mute">{new Date(row.occurred_at).toLocaleDateString("id-ID", { dateStyle: "short" })}</td>
@@ -2922,10 +3296,10 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
                         </tr>
                       ) : (
                         <tr key={row.id} className="hover:bg-paper-tint">
-                          <td className="px-4 py-2.5 text-xs text-ink-mute">{row.branch?.name ?? "—"}</td>
-                          <td className="px-4 py-2.5 font-medium">{row.member?.profile?.full_name ?? "—"}</td>
-                          <td className="px-4 py-2.5 text-xs text-ink-mute">{row.class?.name ?? "—"}</td>
-                          <td className="px-4 py-2.5 text-xs">{row.period_label}</td>
+                          <td className="px-4 py-2.5 text-xs text-ink-mute"><NoTranslate>{row.branch?.name ?? "—"}</NoTranslate></td>
+                          <td className="px-4 py-2.5 font-medium"><NoTranslate>{row.member?.profile?.full_name ?? "—"}</NoTranslate></td>
+                          <td className="px-4 py-2.5 text-xs text-ink-mute"><NoTranslate>{row.class?.name ?? "—"}</NoTranslate></td>
+                          <td className="px-4 py-2.5 text-xs"><NoTranslate>{row.period_label}</NoTranslate></td>
                           <td className="px-4 py-2.5 text-xs">
                             <span className="px-2 py-0.5 rounded-full bg-ocean-50 text-ocean-700 font-semibold">{row.type === "monthly" ? t("owner.financial.typeMonthly") : row.type === "session_pack" ? t("owner.financial.typeSessionPack") : row.type === "custom" ? t("owner.financial.typeCustom") : row.type}</span>
                           </td>
@@ -2979,18 +3353,21 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
                 <option value="all">{t("owner.financial.allBranches")}</option>
                 {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
+              <select value={expenseCategoryFilter} onChange={e => setExpenseCategoryFilter(e.target.value)} className="text-sm rounded-xl border border-line bg-paper-tint pl-3.5 pr-8 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
+                <option value="all">{t("owner.financial.filterAllCategories")}</option>
+                <option value="coach_salary">{t("owner.financial.filterCoachSalary")}</option>
+                <option value="staff_salary">{t("owner.financial.filterStaffSalary")}</option>
+                <option value="reimburse">{t("owner.financial.filterReimburse")}</option>
+                <option value="manual">{t("owner.financial.filterManual")}</option>
+              </select>
               <select value={expenseStatus} onChange={e => setExpenseStatus(e.target.value)} className="text-sm rounded-xl border border-line bg-paper-tint pl-3.5 pr-8 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
                 <option value="">{t("owner.financial.allStatus")}</option>
-                <option value="pending">{t("owner.financial.statusPending")}</option>
                 <option value="paid">{t("owner.financial.statusPaid")}</option>
+                <option value="approved">{t("owner.financial.statusApproved")}</option>
+                <option value="pending">{t("owner.financial.statusPending")}</option>
               </select>
-              <select value={expenseReimburseFilter} onChange={e => setExpenseReimburseFilter(e.target.value)} className="text-sm rounded-xl border border-line bg-paper-tint pl-3.5 pr-8 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
-                <option value="all">{t("owner.financial.allReimburseTypes")}</option>
-                <option value="reimburse">{t("owner.financial.reimburseOnly")}</option>
-                <option value="non_reimburse">{t("owner.financial.nonReimburse")}</option>
-              </select>
-              {(expenseSearch || expenseStatus || expenseBranch !== "all" || expenseReimburseFilter !== "all") && (
-                <button onClick={() => { setExpenseSearch(""); setExpenseStatus(""); setExpenseBranch("all"); setExpenseReimburseFilter("all"); }} className="text-xs text-ocean-600 hover:underline">{t("owner.financial.resetBtn")}</button>
+              {(expenseSearch || expenseStatus || expenseBranch !== "all" || expenseCategoryFilter !== "all") && (
+                <button onClick={() => { setExpenseSearch(""); setExpenseStatus(""); setExpenseBranch("all"); setExpenseCategoryFilter("all"); }} className="text-xs text-ocean-600 hover:underline">{t("owner.financial.resetBtn")}</button>
               )}
               <span className="text-xs text-ink-mute ml-auto">{t("owner.financial.invoiceCount", { count: filteredExpenses.length })}</span>
             </div>
@@ -3008,57 +3385,98 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
                     <thead>
                       <tr className="border-b border-line bg-paper-tint">
                         <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs">{t("owner.financial.colBranch")}</th>
-                        <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs">{t("owner.financial.colCoach")}</th>
-                        <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs">{t("owner.financial.colInvoiceNumber")}</th>
-                        <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs">{t("owner.financial.colPeriod")}</th>
-                        <th className="text-right px-4 py-2.5 font-semibold text-ink-mute text-xs">{t("owner.financial.colTotal")}</th>
-                        <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs">{t("owner.financial.colStatus")}</th>
-                        <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs">{t("owner.financial.colPaidAt")}</th>
-                        <th className="px-4 py-2.5 w-20"></th>
+                        <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs">{t("owner.financial.colCategory")}</th>
+                        <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs">{t("owner.financial.colReceiver")}</th>
+                        <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs">{t("owner.financial.colPeriodRef")}</th>
+                        <th className="text-right px-4 py-2.5 font-semibold text-ink-mute text-xs">{t("owner.financial.colGross")}</th>
+                        <th className="text-right px-4 py-2.5 font-semibold text-ink-mute text-xs">{t("owner.financial.colTax")}</th>
+                        <th className="text-right px-4 py-2.5 font-semibold text-ink-mute text-xs">{t("owner.financial.colOtherDeductions")}</th>
+                        <th className="text-right px-4 py-2.5 font-semibold text-ocean-800 text-xs">{t("owner.financial.colNetTransferred")}</th>
+                        <th className="text-center px-4 py-2.5 font-semibold text-ink-mute text-xs">{t("owner.financial.colStatus")}</th>
+                        <th className="text-left px-4 py-2.5 font-semibold text-ink-mute text-xs">{t("owner.financial.colDate")}</th>
+                        <th className="px-4 py-2.5 w-24 text-right"></th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-line">
-                      {expensePagedRows.map(row => row.source === "manual" ? (
-                        <tr key={row.id} className="hover:bg-paper-tint">
-                          <td className="px-4 py-2.5 text-xs text-ink-mute">{row.branch?.name ?? "—"}</td>
-                          <td className="px-4 py-2.5 font-medium">
-                            {row.description}
-                            <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-paper-deep text-ink-mute text-[10px] font-semibold align-middle">{t("owner.financial.manualBadge")}</span>
-                            {row.is_reimburse && <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-warn-50 text-warn-700 text-[10px] font-semibold align-middle">{t("owner.financial.reimburseBadge")}</span>}
-                            {row.proof_url && (
-                              <a href={row.proof_url} target="_blank" rel="noreferrer" className="block text-xs text-ocean-600 hover:underline mt-0.5 w-fit">
+                      {expensePagedRows.map((row) => (
+                        <tr key={row.id} className="hover:bg-paper-tint transition-colors">
+                          <td className="px-4 py-2.5 text-xs text-ink-mute"><NoTranslate>{row.branchName}</NoTranslate></td>
+                          <td className="px-4 py-2.5">
+                            <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold border ${
+                              row.categoryKey === "coach_salary" ? "bg-ocean-50 text-ocean-700 border-ocean-200" :
+                              row.categoryKey === "staff_salary" ? "bg-purple-50 text-purple-700 border-purple-200" :
+                              row.categoryKey === "reimburse" ? "bg-warn-50 text-warn-700 border-warn-200" :
+                              "bg-paper-deep text-ink-mute border-line"
+                            }`}>
+                              <NoTranslate>{row.categoryLabel}</NoTranslate>
+                            </span>
+                          </td>
+                          <td className="px-4 py-2.5 font-medium text-ink">
+                            <div><NoTranslate>{row.receiverName}</NoTranslate></div>
+                            {row.sourceType === "manual" && row.description !== row.receiverName && (
+                              <div className="text-xs text-ink-mute"><NoTranslate>{row.description}</NoTranslate></div>
+                            )}
+                            {row.proofUrl && (
+                              <a href={row.proofUrl} target="_blank" rel="noreferrer" className="block text-xs text-ocean-600 hover:underline mt-0.5 w-fit">
                                 <Icon name="link" className="w-3 h-3 inline mr-1" />{t("owner.financial.viewProof")}
                               </a>
                             )}
                           </td>
-                          <td className="px-4 py-2.5 text-xs text-ink-mute">—</td>
-                          <td className="px-4 py-2.5 text-xs">{row.category ?? "—"}</td>
-                          <td className="px-4 py-2.5 text-right font-mono font-bold">{fmtIDR(row.amount)}</td>
-                          <td className="px-4 py-2.5">
-                            <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-ok-50 text-ok-700">{t("owner.financial.recordedBadge")}</span>
+                          <td className="px-4 py-2.5 text-xs text-ink-soft">
+                            <div><NoTranslate>{row.periodLabel !== "—" ? row.periodLabel : row.referenceNumber}</NoTranslate></div>
+                            {row.periodLabel !== "—" && row.referenceNumber !== "—" && (
+                              <div className="font-mono text-[11px] text-ink-mute"><NoTranslate>{row.referenceNumber}</NoTranslate></div>
+                            )}
                           </td>
-                          <td className="px-4 py-2.5 text-xs text-ink-mute">{new Date(row.occurred_at).toLocaleDateString("id-ID", { dateStyle: "short" })}</td>
-                          <td className="px-4 py-2.5">
-                            <div className="flex items-center gap-1 justify-end">
-                              <button onClick={() => openEditTxn(row)} className="w-7 h-7 rounded-lg hover:bg-paper-deep flex items-center justify-center text-ink-mute hover:text-ocean-600" title={t("owner.financial.editBtn")}><Icon name="edit" className="w-3.5 h-3.5" /></button>
-                              <button onClick={() => deleteTxn(row)} className="w-7 h-7 rounded-lg hover:bg-danger-50 flex items-center justify-center text-ink-mute hover:text-danger-600" title={t("owner.financial.deleteBtn")}><Icon name="trash" className="w-3.5 h-3.5" /></button>
-                            </div>
+                          <td className="px-4 py-2.5 text-right font-mono text-ink-soft">{fmtIDR(row.grossAmount)}</td>
+                          <td className="px-4 py-2.5 text-right font-mono">
+                            {row.taxAmount > 0 ? (
+                              <span className="text-warn-700 font-semibold">-{fmtIDR(row.taxAmount)}</span>
+                            ) : (
+                              <span className="text-ink-mute">—</span>
+                            )}
                           </td>
-                        </tr>
-                      ) : (
-                        <tr key={row.id} className="hover:bg-paper-tint">
-                          <td className="px-4 py-2.5 text-xs text-ink-mute">{row.branch?.name ?? "—"}</td>
-                          <td className="px-4 py-2.5 font-medium">{row.coach?.full_name ?? "—"}</td>
-                          <td className="px-4 py-2.5 font-mono text-xs text-ocean-700">{row.invoice_number ?? "—"}</td>
-                          <td className="px-4 py-2.5 text-xs">{row.period_label}</td>
-                          <td className="px-4 py-2.5 text-right font-mono font-bold">{fmtIDR(row.total_amount)}</td>
-                          <td className="px-4 py-2.5">
-                            <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${row.status === "paid" ? "bg-ok-50 text-ok-700" : "bg-warn-50 text-warn-700"}`}>
-                              {row.status === "paid" ? t("owner.financial.statusPaid") : t("owner.financial.statusPending")}
+                          <td className="px-4 py-2.5 text-right font-mono">
+                            {row.otherDeductions > 0 ? (
+                              <span className="text-danger-700 font-semibold">-{fmtIDR(row.otherDeductions)}</span>
+                            ) : (
+                              <span className="text-ink-mute">—</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-2.5 text-right font-mono font-bold text-ocean-700 text-sm">
+                            {fmtIDR(row.netTransferredAmount)}
+                          </td>
+                          <td className="px-4 py-2.5 text-center">
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                              row.status === "paid" ? "bg-ok-50 text-ok-700" :
+                              row.status === "approved" ? "bg-ocean-50 text-ocean-700" :
+                              "bg-warn-50 text-warn-700"
+                            }`}>
+                              {row.status === "paid" ? t("owner.financial.statusPaid") :
+                               row.status === "approved" ? t("owner.financial.statusApproved") :
+                               t("owner.financial.statusPending")}
                             </span>
                           </td>
-                          <td className="px-4 py-2.5 text-xs text-ink-mute">{row.paid_at ? new Date(row.paid_at).toLocaleDateString("id-ID", { dateStyle: "short" }) : "—"}</td>
-                          <td className="px-4 py-2.5"></td>
+                          <td className="px-4 py-2.5 text-xs text-ink-mute">
+                            {row.date ? new Date(row.date).toLocaleDateString("id-ID", { dateStyle: "short" }) : "—"}
+                          </td>
+                          <td className="px-4 py-2.5">
+                            <div className="flex items-center gap-1 justify-end">
+                              {row.sourceType === "manual" && row.rawManual ? (
+                                <>
+                                  <button onClick={() => openEditTxn(row.rawManual!)} className="w-7 h-7 rounded-lg hover:bg-paper-deep flex items-center justify-center text-ink-mute hover:text-ocean-600" title={t("owner.financial.editBtn")}><Icon name="edit" className="w-3.5 h-3.5" /></button>
+                                  <button onClick={() => deleteTxn(row.rawManual!)} className="w-7 h-7 rounded-lg hover:bg-danger-50 flex items-center justify-center text-ink-mute hover:text-danger-600" title={t("owner.financial.deleteBtn")}><Icon name="trash" className="w-3.5 h-3.5" /></button>
+                                </>
+                              ) : (
+                                <button
+                                  onClick={() => setSelectedExpenseDetail(row)}
+                                  className="px-2.5 py-1 rounded-lg text-xs font-semibold border border-line bg-white hover:bg-paper-deep text-ink-soft transition-colors"
+                                >
+                                  {t("owner.financial.detailBtn")}
+                                </button>
+                              )}
+                            </div>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -3078,476 +3496,452 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
         </div>
       )}
 
-      {/* ── HONOR & REIMBURSE COACH ────────────────────────────────────────── */}
-      {tab === "coach_payouts" && (
+      {/* ── UNIFIED PAYROLL (COACH & STAFF) ────────────────────────────────── */}
+      {tab === "payroll" && (
         <div className="space-y-4">
-          {/* Metrics */}
-          <div className="grid sm:grid-cols-3 gap-4">
-            <Stat
-              label="Total Belum Ditransfer"
-              value={fmtIDR(detailedInvoices.filter(i => i.status !== "paid").reduce((s, i) => s + i.total_amount, 0))}
-              icon="wallet"
-              tone="warn"
-              sub={`${detailedInvoices.filter(i => i.status !== "paid").length} invoice belum lunas`}
-            />
-            <Stat
-              label="Total Sudah Dibayar (Paid)"
-              value={fmtIDR(detailedInvoices.filter(i => i.status === "paid").reduce((s, i) => s + i.total_amount, 0))}
-              icon="invoice"
-              tone="ok"
-              sub={`${detailedInvoices.filter(i => i.status === "paid").length} invoice terbayar`}
-            />
-            <Stat
-              label="Total Klaim Reimburse Terverifikasi"
-              value={fmtIDR(detailedInvoices.flatMap(i => i.coach_invoice_items ?? []).filter(it => it.item_type === "reimburse").reduce((s, it) => s + (it.rate || 0), 0))}
-              icon="check"
-              tone="ocean"
-              sub="Dari seluruh invoice diajukan"
-            />
-          </div>
-
-          {/* Filters & Table */}
-          <div className="bg-white border border-line rounded-2xl overflow-hidden shadow-card">
-            <div className="p-4 border-b border-line flex flex-col sm:flex-row gap-3 items-center justify-between">
-              <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-                <input
-                  value={payoutSearch}
-                  onChange={e => setPayoutSearch(e.target.value)}
-                  placeholder="Cari nama coach / no invoice..."
-                  className="px-3 py-1.5 text-xs rounded-lg border border-line bg-paper-tint w-full sm:w-56"
-                />
-                <select
-                  value={payoutBranchFilter}
-                  onChange={e => setPayoutBranchFilter(e.target.value)}
-                  className="text-xs rounded-lg border border-line px-2.5 py-1.5 bg-paper-tint"
-                >
-                  <option value="all">Semua Center</option>
-                  {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                </select>
-                <select
-                  value={payoutStatusFilter}
-                  onChange={e => setPayoutStatusFilter(e.target.value)}
-                  className="text-xs rounded-lg border border-line px-2.5 py-1.5 bg-paper-tint"
-                >
-                  <option value="all">Semua Status</option>
-                  <option value="approved">Siap Bayar (Approved)</option>
-                  <option value="paid">Lunas (Paid)</option>
-                  <option value="pending">Menunggu Review (Pending)</option>
-                </select>
-              </div>
-              <Btn variant="soft" size="sm" icon="refresh" onClick={loadDetailedInvoices} disabled={loadingDetailedInvoices}>
-                Refresh Data
-              </Btn>
+          {/* Header & Subtitle */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h3 className="font-display font-bold text-lg text-ink">{t("owner.financial.payrollHeading")}</h3>
+              <p className="text-xs text-ink-mute mt-0.5">
+                {t("owner.financial.payrollSub")}
+              </p>
             </div>
-
-            {loadingDetailedInvoices ? (
-              <div className="p-10 text-center text-ink-mute text-sm">Memuat data pembayaran coach...</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-line bg-paper-tint text-[11px] uppercase tracking-wider text-ink-faint font-bold">
-                      <th className="text-left py-3 px-4">Coach & Center</th>
-                      <th className="text-left py-3 px-4">Rekening Bank Transfer</th>
-                      <th className="text-left py-3 px-4">Periode</th>
-                      <th className="text-right py-3 px-4">Honor Sesi</th>
-                      <th className="text-right py-3 px-4">Reimburse</th>
-                      <th className="text-right py-3 px-4">Total Transfer</th>
-                      <th className="text-center py-3 px-4">Status</th>
-                      <th className="text-right py-3 px-4">Aksi</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-line">
-                    {detailedInvoices
-                      .filter(inv => {
-                        if (payoutBranchFilter !== "all" && inv.branch_id !== payoutBranchFilter) return false;
-                        if (payoutStatusFilter !== "all" && inv.status !== payoutStatusFilter) return false;
-                        if (payoutSearch.trim()) {
-                          const q = payoutSearch.toLowerCase();
-                          const coachName = inv.coach?.full_name?.toLowerCase() ?? "";
-                          const invNum = inv.invoice_number.toLowerCase();
-                          if (!coachName.includes(q) && !invNum.includes(q)) return false;
-                        }
-                        return true;
-                      })
-                      .map(inv => {
-                        const items = inv.coach_invoice_items ?? [];
-                        const sessionHonor = items.filter(it => it.item_type === "session" || it.item_type === "extra").reduce((s, it) => s + (it.session_count * it.rate), 0);
-                        const reimburseTotal = items.filter(it => it.item_type === "reimburse").reduce((s, it) => s + it.rate, 0);
-
-                        let bName = inv.coach?.bank_name;
-                        let bAcc = inv.coach?.bank_account;
-                        let bHolder = inv.coach?.bank_holder;
-                        if ((!bAcc || !bName) && inv.bank_info) {
-                          try {
-                            const parsed = JSON.parse(inv.bank_info);
-                            if (parsed.bank_name) bName = parsed.bank_name;
-                            if (parsed.bank_account) bAcc = parsed.bank_account;
-                            if (parsed.bank_holder) bHolder = parsed.bank_holder;
-                          } catch {}
-                        }
-
-                        return (
-                          <tr key={inv.id} className="hover:bg-paper-tint">
-                            <td className="py-3 px-4">
-                              <div className="font-semibold text-ink">{inv.coach?.full_name ?? "Coach"}</div>
-                              <div className="text-xs text-ink-mute font-mono">{inv.branch?.name ?? "Center"} · {inv.invoice_number}</div>
-                            </td>
-                            <td className="py-3 px-4">
-                              {bAcc ? (
-                                <div className="space-y-1">
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="font-bold text-xs text-ink">{bName ?? "Bank"}</span>
-                                    <span className="font-mono text-xs font-semibold text-ocean-700 bg-ocean-50 px-1.5 py-0.5 rounded border border-ocean-200">{bAcc}</span>
-                                    <button
-                                      onClick={() => copyToClipboard(bAcc!, "Nomor Rekening")}
-                                      className="p-1 rounded hover:bg-ocean-100 text-ocean-700 transition"
-                                      title="Salin No Rekening"
-                                    >
-                                      <Icon name="copy" className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
-                                  <div className="text-[11px] text-ink-mute">a/n {bHolder ?? inv.coach?.full_name}</div>
-                                </div>
-                              ) : (
-                                <span className="text-xs text-ink-mute italic">Belum ada rekening</span>
-                              )}
-                            </td>
-                            <td className="py-3 px-4 text-xs font-medium text-ink-soft">{inv.period_label}</td>
-                            <td className="py-3 px-4 text-right font-mono text-xs text-ink">{fmtIDR(sessionHonor)}</td>
-                            <td className="py-3 px-4 text-right font-mono text-xs text-ok-600 font-semibold">
-                              {reimburseTotal > 0 ? fmtIDR(reimburseTotal) : "—"}
-                            </td>
-                            <td className="py-3 px-4 text-right font-mono font-bold text-ocean-700 text-sm">
-                              {fmtIDR(inv.total_amount)}
-                            </td>
-                            <td className="py-3 px-4 text-center">
-                              <span className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase ${
-                                inv.status === "paid" ? "bg-ok-50 text-ok-700" :
-                                inv.status === "approved" ? "bg-ocean-50 text-ocean-700" : "bg-warn-50 text-warn-700"
-                              }`}>
-                                {inv.status === "paid" ? "Lunas" : inv.status === "approved" ? "Siap Bayar" : "Pending"}
-                              </span>
-                            </td>
-                            <td className="py-3 px-4 text-right">
-                              <div className="flex items-center justify-end gap-1.5">
-                                <button
-                                  onClick={() => setSelectedInvoiceDetail(inv)}
-                                  className="px-2.5 py-1 rounded-lg text-xs font-semibold border border-line bg-white hover:bg-paper-deep text-ink-soft"
-                                >
-                                  Rincian
-                                </button>
-                                {inv.status !== "paid" && (
-                                  <Btn
-                                    variant="primary"
-                                    size="sm"
-                                    icon="check"
-                                    onClick={() => markInvoicePaid(inv)}
-                                    disabled={markingPaidId === inv.id}
-                                    className="bg-ok-600 hover:bg-ok-700 text-white"
-                                  >
-                                    {markingPaidId === inv.id ? "Memproses..." : "Tandai Lunas"}
-                                  </Btn>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                  </tbody>
-                </table>
+            {payrollTotalTax > 0 && (
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-warn-50 border border-warn-200 text-xs text-warn-800 shrink-0">
+                <span className="font-bold">{t("owner.financial.payrollTaxWithheldBadge")}</span>
+                <span className="font-mono font-extrabold">{fmtIDR(payrollTotalTax)}</span>
+                <span className="text-[10px] text-warn-600">{t("owner.financial.payrollTaxWithheldNote")}</span>
               </div>
             )}
           </div>
-        </div>
-      )}
 
-      {/* ── REKENING ADMIN & TRANSFER ────────────────────────────────────────── */}
-      {tab === "admin_accounts" && (
-        <div className="space-y-4">
-          <SectionTitle sub="Daftar rekening bank Admin di setiap cabang untuk kemudahan transfer operasional atau gaji oleh Owner.">
-            Rekening Bank Admin Cabang
-          </SectionTitle>
-
-          {loadingAdmins ? (
-            <div className="p-10 text-center text-ink-mute">Memuat data rekening admin...</div>
-          ) : (
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {adminList.map(a => (
-                <Card key={a.id} className="space-y-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-3">
-                      <Avatar name={a.full_name} size={40} />
-                      <div>
-                        <div className="font-bold text-ink text-sm">{a.full_name}</div>
-                        <div className="text-xs text-ocean-700 font-semibold">{a.branch?.name ?? "Center"}</div>
-                      </div>
-                    </div>
-                    {a.phone && (
-                      <a
-                        href={waLink(a.phone)}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="p-1.5 rounded-lg bg-ok-50 text-ok-600 hover:bg-ok-100 transition"
-                        title="Hubungi WhatsApp Admin"
-                      >
-                        <Icon name="whatsapp" className="w-4 h-4" />
-                      </a>
-                    )}
-                  </div>
-
-                  <div className="p-3 rounded-xl bg-paper-tint border border-line space-y-1.5">
-                    <div className="text-[10px] uppercase font-bold text-ink-faint tracking-wider">Detail Rekening Transfer</div>
-                    {a.bank_account ? (
-                      <div>
-                        <div className="flex items-center justify-between">
-                          <span className="font-bold text-ink text-sm">{a.bank_name ?? "Bank"}</span>
-                          <button
-                            onClick={() => copyToClipboard(a.bank_account!, "Nomor Rekening")}
-                            className="inline-flex items-center gap-1 text-xs font-bold text-ocean-700 hover:underline"
-                          >
-                            <Icon name="copy" className="w-3.5 h-3.5" /> Salin No. Rekening
-                          </button>
-                        </div>
-                        <div className="font-mono font-extrabold text-base text-ocean-800 tracking-wide mt-0.5">
-                          {a.bank_account}
-                        </div>
-                        <div className="text-xs text-ink-mute mt-0.5">
-                          a/n {a.bank_holder || a.full_name}
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="text-xs text-ink-mute italic py-1">
-                        Admin belum melengkapi data rekening bank di profilnya.
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="pt-1 flex items-center justify-between">
-                    <span className="text-xs text-ink-mute">{a.email}</span>
-                    <Btn
-                      variant="soft"
-                      size="sm"
-                      icon="plus"
-                      onClick={() => {
-                        openAddTxn("expense");
-                        setTxnForm(f => ({
-                          ...f,
-                          branch_id: a.branch_id ?? f.branch_id,
-                          description: `Transfer Operasional/Gaji ke Admin ${a.full_name}`,
-                        }));
-                      }}
-                    >
-                      Catat Transfer
-                    </Btn>
-                  </div>
-                </Card>
-              ))}
-              {adminList.length === 0 && (
-                <div className="col-span-full py-12 text-center text-ink-mute">
-                  Belum ada data admin terdaftar.
+          {/* Smart Financial Cards for Monthly Transfer Planning */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Card 1: Siap Ditransfer (Harus Ditransfer Bulan Ini) */}
+            <div className="bg-white border border-warn-300/80 rounded-2xl p-4.5 shadow-xs flex flex-col justify-between space-y-3 hover:shadow-card transition-all">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-warn-500 animate-pulse" />
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-warn-800">
+                    {t("owner.financial.payrollCardUnpaidLabel")}
+                  </span>
                 </div>
-              )}
+                <span className="w-8 h-8 rounded-lg bg-warn-50 text-warn-700 border border-warn-200 flex items-center justify-center shrink-0">
+                  <Icon name="wallet" className="w-4 h-4" />
+                </span>
+              </div>
+              <div>
+                <div className="font-mono font-extrabold text-2xl text-warn-700 tracking-tight">
+                  {fmtIDR(payrollTotalHarusTransfer)}
+                </div>
+                <div className="text-xs text-ink-mute mt-1 flex items-center gap-1">
+                  {t("owner.financial.payrollCardUnpaidSub", { count: payrollUnpaidCount })}
+                </div>
+              </div>
             </div>
-          )}
-        </div>
-      )}
 
-      {/* ── GAJI & PAYROLL STAFF ────────────────────────────────────────────── */}
-      {tab === "staff_payroll" && (
-        <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <SectionTitle sub="Atur nominal gaji pokok staff per bulan (nominal fleksibel), tambahkan tunjangan/potongan, dan terbitkan slip gaji.">
-              Penggajian Staff Bulanan
-            </SectionTitle>
-            <div className="w-48">
-              <input
-                type="month"
-                value={staffMonth}
-                onChange={e => setStaffMonth(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl border border-line bg-paper-tint text-sm font-semibold text-ink focus:outline-none focus:ring-2 focus:ring-wave-400"
-              />
+            {/* Card 2: Sudah Ditransfer (Lunas) */}
+            <div className="bg-white border border-line rounded-2xl p-4.5 shadow-xs flex flex-col justify-between space-y-3 hover:border-ok-300 hover:shadow-card transition-all">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-ok-500" />
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-ink-faint">
+                    {t("owner.financial.payrollCardPaidLabel")}
+                  </span>
+                </div>
+                <span className="w-8 h-8 rounded-lg bg-ok-50 text-ok-600 border border-ok-200 flex items-center justify-center shrink-0">
+                  <Icon name="check" className="w-4 h-4" />
+                </span>
+              </div>
+              <div>
+                <div className="font-mono font-extrabold text-2xl text-ink tracking-tight">
+                  {fmtIDR(payrollTotalSudahTransfer)}
+                </div>
+                <div className="text-xs text-ink-mute mt-1 flex items-center gap-1">
+                  {t("owner.financial.payrollCardPaidSub", { count: payrollPaidCount })}
+                </div>
+              </div>
+            </div>
+
+            {/* Card 3: Total Gaji Pokok & Honor Sesi */}
+            <div className="bg-white border border-line rounded-2xl p-4.5 shadow-xs flex flex-col justify-between space-y-3 hover:border-ocean-300 hover:shadow-card transition-all">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-ink-faint">
+                  {t("owner.financial.payrollCardGrossLabel")}
+                </span>
+                <span className="w-8 h-8 rounded-lg bg-ocean-50 text-ocean-700 border border-ocean-200 flex items-center justify-center shrink-0">
+                  <Icon name="invoice" className="w-4 h-4" />
+                </span>
+              </div>
+              <div>
+                <div className="font-mono font-extrabold text-2xl text-ink tracking-tight">
+                  {fmtIDR(payrollTotalGajiPokokDanHonor)}
+                </div>
+                <div className="text-xs text-ink-mute mt-1">
+                  {t("owner.financial.payrollCardGrossSub")}
+                </div>
+              </div>
+            </div>
+
+            {/* Card 4: Total Klaim Reimburse */}
+            <div className="bg-white border border-line rounded-2xl p-4.5 shadow-xs flex flex-col justify-between space-y-3 hover:border-purple-300 hover:shadow-card transition-all">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-ink-faint">
+                  {t("owner.financial.payrollCardReimburseLabel")}
+                </span>
+                <span className="w-8 h-8 rounded-lg bg-purple-50 text-purple-700 border border-purple-200 flex items-center justify-center shrink-0">
+                  <Icon name="card" className="w-4 h-4" />
+                </span>
+              </div>
+              <div>
+                <div className="font-mono font-extrabold text-2xl text-purple-700 tracking-tight">
+                  {fmtIDR(payrollTotalReimburse)}
+                </div>
+                <div className="text-xs text-ink-mute mt-1">
+                  {t("owner.financial.payrollCardReimburseSub")}
+                </div>
+              </div>
             </div>
           </div>
 
+          {/* Unified Payroll Table with Advanced Filters */}
           <div className="bg-white border border-line rounded-2xl overflow-hidden shadow-card">
-            {loadingStaff ? (
-              <div className="p-10 text-center text-ink-mute">Memuat data payroll staff...</div>
+            {/* Advanced Filter Bar */}
+            <div className="p-4 border-b border-line space-y-3 bg-paper-tint/30">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-display font-bold text-sm text-ink">{t("owner.financial.payrollListTitle")}</span>
+                  <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-ocean-50 text-ocean-700 border border-ocean-200">
+                    {t("owner.financial.payrollRecipientCount", { count: filteredPayrollItems.length })}
+                  </span>
+                  {payrollTotalLoanDeduction > 0 && (
+                    <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-purple-50 text-purple-700 border border-purple-200">
+                      {t("owner.financial.payrollLoanDeductionBadge", { amount: fmtIDR(payrollTotalLoanDeduction) })}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Btn
+                    variant="soft"
+                    size="sm"
+                    icon="refresh"
+                    onClick={() => {
+                      loadDetailedInvoices();
+                      loadStaffPayroll();
+                      loadStaffReimbursements();
+                      loadPayslips();
+                    }}
+                    disabled={loadingDetailedInvoices || loadingStaff}
+                  >
+                    {t("owner.financial.payrollRefreshBtn")}
+                  </Btn>
+                </div>
+              </div>
+
+              {/* Filter Inputs Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
+                {/* Month Picker */}
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-faint mb-1">
+                    {t("owner.financial.payrollFilterMonth")}
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="month"
+                      value={payrollMonth}
+                      onChange={e => setPayrollMonth(e.target.value)}
+                      className="w-full px-2.5 py-1.5 text-xs rounded-xl border border-line bg-white font-mono font-semibold text-ink focus:outline-none focus:ring-2 focus:ring-wave-400"
+                    />
+                    {payrollMonth && (
+                      <button
+                        onClick={() => {
+                          const now = new Date();
+                          setPayrollMonth(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`);
+                        }}
+                        title={t("owner.financial.payrollThisMonthBtn")}
+                        className="px-2 py-1.5 text-[11px] font-semibold text-ocean-700 hover:text-ocean-900 bg-ocean-50 border border-ocean-200 rounded-xl hover:bg-ocean-100 transition-colors whitespace-nowrap"
+                      >
+                        {t("owner.financial.payrollThisMonthBtn")}
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Branch Filter */}
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-faint mb-1">
+                    {t("owner.financial.payrollFilterBranch")}
+                  </label>
+                  <select
+                    value={payrollBranchFilter}
+                    onChange={e => setPayrollBranchFilter(e.target.value)}
+                    className="w-full text-xs rounded-xl border border-line px-2.5 py-1.5 bg-white font-medium text-ink focus:outline-none focus:ring-2 focus:ring-wave-400"
+                  >
+                    <option value="all">{t("owner.financial.allBranches")}</option>
+                    {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                  </select>
+                </div>
+
+                {/* Recipient Filter */}
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-faint mb-1">
+                    {t("owner.financial.payrollFilterRecipient")}
+                  </label>
+                  <select
+                    value={payrollRecipientFilter}
+                    onChange={e => setPayrollRecipientFilter(e.target.value as any)}
+                    className="w-full text-xs rounded-xl border border-line px-2.5 py-1.5 bg-white font-medium text-ink focus:outline-none focus:ring-2 focus:ring-wave-400"
+                  >
+                    <option value="all">{t("owner.financial.payrollRecipientAllOption")}</option>
+                    <option value="coach">{t("owner.financial.payrollRecipientCoachOnlyOption")}</option>
+                    <option value="staff">{t("owner.financial.payrollRecipientStaffOnlyOption")}</option>
+                  </select>
+                </div>
+
+                {/* Status Filter */}
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-faint mb-1">
+                    {t("owner.financial.payrollFilterStatus")}
+                  </label>
+                  <select
+                    value={payrollStatusFilter}
+                    onChange={e => setPayrollStatusFilter(e.target.value as any)}
+                    className="w-full text-xs rounded-xl border border-line px-2.5 py-1.5 bg-white font-medium text-ink focus:outline-none focus:ring-2 focus:ring-wave-400"
+                  >
+                    <option value="all">{t("owner.financial.allStatus")}</option>
+                    <option value="unpaid">{t("owner.financial.payrollStatusUnpaidOption")}</option>
+                    <option value="paid">{t("owner.financial.payrollStatusPaidOption")}</option>
+                  </select>
+                </div>
+
+                {/* Search Text */}
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-faint mb-1">
+                    {t("owner.financial.payrollFilterSearch")}
+                  </label>
+                  <input
+                    value={payrollSearch}
+                    onChange={e => setPayrollSearch(e.target.value)}
+                    placeholder={t("owner.financial.payrollSearchPlaceholder")}
+                    className="w-full px-2.5 py-1.5 text-xs rounded-xl border border-line bg-white text-ink placeholder:text-ink-mute focus:outline-none focus:ring-2 focus:ring-wave-400"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Table */}
+            {loadingDetailedInvoices || loadingStaff ? (
+              <div className="p-12 text-center text-ink-mute text-sm">
+                {t("owner.financial.payrollLoadingTable")}
+              </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-line bg-paper-tint text-[11px] uppercase tracking-wider text-ink-faint font-bold">
-                      <th className="text-left py-3 px-4">Nama Staff & Center</th>
-                      <th className="text-left py-3 px-4">Rekening Bank</th>
-                      <th className="text-right py-3 px-4">Gaji Pokok ({staffMonth})</th>
-                      <th className="text-right py-3 px-4">Tunjangan</th>
-                      <th className="text-right py-3 px-4">Potongan</th>
-                      <th className="text-right py-3 px-4">Total Gaji Bersih</th>
-                      <th className="text-center py-3 px-4">Status</th>
-                      <th className="text-right py-3 px-4">Aksi</th>
+                      <th className="text-left py-3.5 px-4">{t("owner.financial.payrollColRecipient")}</th>
+                      <th className="text-left py-3.5 px-4">{t("owner.financial.payrollColDescPeriod")}</th>
+                      <th className="text-left py-3.5 px-4">{t("owner.financial.payrollColBankDest")}</th>
+                      <th className="text-right py-3.5 px-4">{t("owner.financial.colGross")}</th>
+                      <th className="text-right py-3.5 px-4">{t("owner.financial.colTax")}</th>
+                      <th className="text-right py-3.5 px-4 text-purple-700">{t("owner.financial.payrollColLoanDeduction")}</th>
+                      <th className="text-right py-3.5 px-4">{t("owner.financial.colOtherDeductions")}</th>
+                      <th className="text-right py-3.5 px-4 text-ocean-900 font-extrabold bg-ocean-50/50">
+                        {t("owner.financial.colNetTransferred")}
+                      </th>
+                      <th className="text-center py-3.5 px-4">{t("owner.financial.colStatus")}</th>
+                      <th className="text-right py-3.5 px-4">{t("owner.financial.colAction")}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-line">
-                    {staffList.map(st => {
-                      const sal = staffSalaries.find(s => s.staff_id === st.id);
-                      const base = sal?.base_salary ?? 0;
-                      const allowances = sal?.allowances ?? 0;
-                      const deductions = sal?.deductions ?? 0;
-                      const total = sal?.total_salary ?? 0;
-                      const status = sal?.status ?? "draft";
+                    {filteredPayrollItems.map(item => (
+                      <tr key={item.id} className="hover:bg-paper-tint transition-colors">
+                        {/* Penerima & Center */}
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-full bg-ocean-100 text-ocean-700 font-bold text-xs flex items-center justify-center shrink-0">
+                              {item.recipientName.charAt(0).toUpperCase()}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="font-semibold text-ink text-sm truncate"><NoTranslate>{item.recipientName}</NoTranslate></div>
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold uppercase ${
+                                  item.recipientType === "coach"
+                                    ? "bg-ocean-50 text-ocean-700 border border-ocean-200"
+                                    : "bg-purple-50 text-purple-700 border border-purple-200"
+                                }`}>
+                                  {item.recipientRole}
+                                </span>
+                                <span className="text-xs text-ink-mute truncate">· <NoTranslate>{item.branchName}</NoTranslate></span>
+                              </div>
+                            </div>
+                          </div>
+                        </td>
 
-                      return (
-                        <tr key={st.id} className="hover:bg-paper-tint">
-                          <td className="py-3 px-4">
-                            <div className="font-semibold text-ink">{st.full_name}</div>
-                            <div className="text-xs text-ink-mute">{st.branch?.name ?? "Center"} · {st.phone ?? st.email}</div>
-                          </td>
-                          <td className="py-3 px-4">
-                            {st.bank_account ? (
-                              <div className="flex items-center gap-1.5 text-xs">
-                                <span className="font-semibold text-ink">{st.bank_name}</span>
-                                <span className="font-mono text-ocean-700 bg-ocean-50 px-1 py-0.5 rounded">{st.bank_account}</span>
-                                <button onClick={() => copyToClipboard(st.bank_account!, "Rekening Staff")} className="text-ocean-700 hover:text-ocean-900" title="Salin">
+                        {/* Keterangan & Periode */}
+                        <td className="py-3 px-4">
+                          <div className="font-medium text-ink text-xs"><NoTranslate>{item.title}</NoTranslate></div>
+                          <div className="text-[11px] text-ink-mute font-mono mt-0.5">
+                            <NoTranslate>{item.periodLabel}</NoTranslate> {item.referenceNo ? <>· <NoTranslate>{item.referenceNo}</NoTranslate></> : ""}
+                          </div>
+                        </td>
+
+                        {/* Rekening Bank Transfer */}
+                        <td className="py-3 px-4">
+                          {item.bankAccount ? (
+                            <div className="space-y-0.5">
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-bold text-xs text-ink"><NoTranslate>{item.bankName ?? "Bank"}</NoTranslate></span>
+                                <span className="font-mono text-ocean-800 bg-ocean-50 px-1.5 py-0.5 rounded text-xs font-semibold border border-ocean-200/50">
+                                  {item.bankAccount}
+                                </span>
+                                <button
+                                  onClick={() => copyToClipboard(item.bankAccount!, tNode("owner.financial.payrollCopyAccountLabel", { name: item.recipientName }))}
+                                  className="p-1 rounded hover:bg-paper-tint text-ocean-700 hover:text-ocean-900 transition-colors"
+                                  title={t("owner.financial.payrollCopyAccountTitle")}
+                                >
                                   <Icon name="copy" className="w-3.5 h-3.5" />
                                 </button>
                               </div>
-                            ) : (
-                              <span className="text-xs text-ink-mute italic">—</span>
-                            )}
-                          </td>
-                          <td className="py-3 px-4 text-right font-mono text-sm font-semibold text-ink">
-                            {base > 0 ? fmtIDR(base) : <span className="text-warn-600 font-normal italic">Belum diatur</span>}
-                          </td>
-                          <td className="py-3 px-4 text-right font-mono text-xs text-ok-600">{allowances > 0 ? `+${fmtIDR(allowances)}` : "—"}</td>
-                          <td className="py-3 px-4 text-right font-mono text-xs text-danger-600">{deductions > 0 ? `-${fmtIDR(deductions)}` : "—"}</td>
-                          <td className="py-3 px-4 text-right font-mono font-bold text-ocean-700 text-sm">
-                            {total > 0 ? fmtIDR(total) : "—"}
-                          </td>
-                          <td className="py-3 px-4 text-center">
-                            <span className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase ${
-                              status === "paid" ? "bg-ok-50 text-ok-700" :
-                              status === "approved" ? "bg-ocean-50 text-ocean-700" : "bg-paper-deep text-ink-mute"
-                            }`}>
-                              {status === "paid" ? "Lunas" : status === "approved" ? "Siap Bayar" : "Draft"}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4 text-right">
-                            <div className="flex items-center justify-end gap-1.5">
-                              <Btn
-                                variant="outline"
-                                size="sm"
-                                icon="edit"
-                                onClick={() => {
-                                  setSalaryForm({
-                                    base_salary: sal ? String(sal.base_salary) : "",
-                                    allowances: sal ? String(sal.allowances) : "",
-                                    reimburse: sal?.reimburse_amount ? String(sal.reimburse_amount) : "",
-                                    deductions: sal ? String(sal.deductions) : "",
-                                    notes: sal?.notes ?? "",
-                                  });
-                                  setRatePerDayInput("");
-                                  setEditSalaryModal({ staff: st, salary: sal ?? null });
-                                }}
-                              >
-                                Atur Gaji
-                              </Btn>
-                              {sal && sal.status !== "paid" && (
-                                <Btn
-                                  variant="primary"
-                                  size="sm"
-                                  icon="check"
-                                  onClick={() => markStaffSalaryPaid(sal, st.full_name)}
-                                  disabled={markingStaffSalaryId === sal.id}
-                                  className="bg-ok-600 hover:bg-ok-700 text-white"
-                                >
-                                  Tandai Lunas
-                                </Btn>
-                              )}
+                              <div className="text-[11px] text-ink-mute truncate max-w-xs">
+                                a.n. <NoTranslate>{item.bankHolder || item.recipientName}</NoTranslate>
+                              </div>
                             </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                    {staffList.length === 0 && (
-                      <tr>
-                        <td colSpan={8} className="py-10 text-center text-ink-mute">
-                          Belum ada akun staff terdaftar di sistem.
+                          ) : (
+                            <span className="text-xs text-ink-mute italic">{t("owner.financial.payrollNoBankAccount")}</span>
+                          )}
+                        </td>
+
+                        {/* Bruto */}
+                        <td className="py-3 px-4 text-right font-mono text-xs font-semibold text-ink">
+                          {fmtIDR(item.grossAmount)}
+                        </td>
+
+                        {/* Pajak PPh 21 */}
+                        <td className="py-3 px-4 text-right font-mono text-xs">
+                          {item.taxAmount > 0 ? (
+                            <span className="text-warn-700 font-semibold">-{fmtIDR(item.taxAmount)}</span>
+                          ) : (
+                            <span className="text-ink-mute">—</span>
+                          )}
+                        </td>
+
+                        {/* Potongan Kasbon / Pinjaman */}
+                        <td className="py-3 px-4 text-right font-mono text-xs">
+                          {item.loanDeduction > 0 ? (
+                            <span className="text-purple-700 font-bold bg-purple-50 px-1.5 py-0.5 rounded border border-purple-200/60">
+                              -{fmtIDR(item.loanDeduction)}
+                            </span>
+                          ) : (
+                            <span className="text-ink-mute">—</span>
+                          )}
+                        </td>
+
+                        {/* Potongan Lain */}
+                        <td className="py-3 px-4 text-right font-mono text-xs">
+                          {item.otherDeductions > 0 ? (
+                            <span className="text-danger-700 font-semibold">-{fmtIDR(item.otherDeductions)}</span>
+                          ) : (
+                            <span className="text-ink-mute">—</span>
+                          )}
+                        </td>
+
+                        {/* Transfer Riil (Net) */}
+                        <td className="py-3 px-4 text-right bg-ocean-50/40">
+                          <span className="font-mono font-extrabold text-sm text-ocean-900">
+                            {fmtIDR(item.netTransferredAmount)}
+                          </span>
+                        </td>
+
+                        {/* Status */}
+                        <td className="py-3 px-4 text-center">
+                          <span className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider ${
+                            item.isPaid
+                              ? "bg-ok-50 text-ok-700 border border-ok-200"
+                              : item.status === "approved"
+                              ? "bg-ocean-50 text-ocean-700 border border-ocean-200"
+                              : "bg-warn-50 text-warn-700 border border-warn-200"
+                          }`}>
+                            {item.isPaid ? t("owner.financial.payrollStatusPaidBadge") : item.status === "approved" ? t("owner.financial.payrollStatusReadyBadge") : t("owner.financial.payrollStatusPendingBadge")}
+                          </span>
+                        </td>
+
+                        {/* Aksi */}
+                        <td className="py-3 px-4 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => {
+                                if (item.rawExpense) return setSelectedExpenseDetail(item.rawExpense);
+                                if (item.rawInvoice) return setSelectedInvoiceDetail(item.rawInvoice);
+                                if (item.rawSalary) {
+                                  const st = staffList.find(s => s.id === item.recipientId);
+                                  if (st) {
+                                    setSalaryForm({
+                                      base_salary: String(item.rawSalary.base_salary || ""),
+                                      allowances: String(item.rawSalary.allowances || ""),
+                                      reimburse: String(item.rawSalary.reimburse_amount || ""),
+                                      deductions: String(item.rawSalary.deductions || ""),
+                                      notes: item.rawSalary.notes || "",
+                                    });
+                                    setEditSalaryModal({ staff: st, salary: item.rawSalary });
+                                  }
+                                }
+                              }}
+                              className="px-2.5 py-1 text-xs font-semibold text-ocean-700 hover:text-ocean-900 bg-ocean-50 hover:bg-ocean-100 rounded-lg border border-ocean-200/60 transition-colors"
+                            >
+                              {t("owner.financial.payrollDetailBtn")}
+                            </button>
+                            {!item.isPaid && (
+                              <Btn
+                                size="sm"
+                                onClick={async () => {
+                                  if (item.rawInvoice) {
+                                    markInvoicePaid(item.rawInvoice);
+                                  } else if (item.rawSalary) {
+                                    markStaffSalaryPaid(item.rawSalary, item.recipientName);
+                                  } else if (item.itemType === "staff_reimburse" && item.id.startsWith("reimburse_")) {
+                                    const rId = item.id.replace("reimburse_", "");
+                                    const { error } = await supabase
+                                      .from("coach_reimbursements")
+                                      .update({ status: "paid" })
+                                      .eq("id", rId);
+                                    if (!error) {
+                                      toast.success(t("owner.financial.payrollReimburseMarkedPaid"));
+                                      loadStaffReimbursements();
+                                    }
+                                  } else {
+                                    const st = staffList.find(s => s.id === item.recipientId);
+                                    if (st) {
+                                      setSalaryForm({
+                                        base_salary: String(item.baseAmount || ""),
+                                        allowances: String(item.allowances || ""),
+                                        reimburse: String(item.reimburseAmount || ""),
+                                        deductions: String(item.otherDeductions || ""),
+                                        notes: "",
+                                      });
+                                      setEditSalaryModal({ staff: st, salary: null });
+                                    }
+                                  }
+                                }}
+                                disabled={markingPaidId === item.rawInvoice?.id || markingStaffSalaryId === item.rawSalary?.id}
+                                className="bg-ok-600 hover:bg-ok-700 text-white font-semibold"
+                              >
+                                {t("owner.financial.payrollMarkPaidBtn")}
+                              </Btn>
+                            )}
+                          </div>
                         </td>
                       </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-
-          <div className="bg-white border border-line rounded-2xl overflow-hidden shadow-card">
-            <div className="p-4 border-b border-line">
-              <SectionTitle sub="Pengajuan reimburse biaya operasional yang dikirim staff.">Reimburse Staff</SectionTitle>
-            </div>
-            {loadingReimbursements ? (
-              <div className="p-10 text-center text-ink-mute">Memuat data reimburse...</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-line bg-paper-tint text-[11px] uppercase tracking-wider text-ink-faint font-bold">
-                      <th className="text-left py-3 px-4">Staff</th>
-                      <th className="text-left py-3 px-4">Keterangan</th>
-                      <th className="text-right py-3 px-4">Nominal</th>
-                      <th className="text-center py-3 px-4">Bukti</th>
-                      <th className="text-center py-3 px-4">Status</th>
-                      <th className="text-right py-3 px-4">Aksi</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-line">
-                    {staffReimbursements.map(rb => {
-                      const staffName = staffList.find(s => s.id === rb.profile_id)?.full_name ?? "—";
-                      return (
-                        <tr key={rb.id} className="hover:bg-paper-tint">
-                          <td className="py-3 px-4 font-semibold text-ink">{staffName}</td>
-                          <td className="py-3 px-4 text-ink-soft max-w-xs truncate">{rb.description}</td>
-                          <td className="py-3 px-4 text-right font-mono font-bold text-ink">{fmtIDR(rb.amount)}</td>
-                          <td className="py-3 px-4 text-center">
-                            {rb.proof_url ? (
-                              <a href={rb.proof_url} target="_blank" rel="noreferrer" className="text-xs font-bold text-ocean-600 hover:underline">
-                                <Icon name="link" className="w-3.5 h-3.5 inline" />
-                              </a>
-                            ) : <span className="text-xs text-ink-mute">—</span>}
-                          </td>
-                          <td className="py-3 px-4 text-center">
-                            <span className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase ${
-                              rb.status === "paid" ? "bg-ok-50 text-ok-700" :
-                              rb.status === "approved" ? "bg-ocean-50 text-ocean-700" :
-                              rb.status === "rejected" ? "bg-danger-50 text-danger-700" : "bg-paper-deep text-ink-mute"
-                            }`}>
-                              {rb.status === "paid" ? "Lunas" : rb.status === "approved" ? "Disetujui" : rb.status === "rejected" ? "Ditolak" : "Menunggu"}
-                            </span>
-                            {rb.status === "rejected" && rb.rejection_reason && (
-                              <div className="text-[10px] text-danger-500 mt-0.5">{rb.rejection_reason}</div>
-                            )}
-                          </td>
-                          <td className="py-3 px-4 text-right">
-                            <div className="flex items-center justify-end gap-1.5">
-                              {rb.status === "pending" && (
-                                <>
-                                  <Btn variant="outline" size="sm" onClick={() => approveReimburse(rb.id)} disabled={processingReimburseId === rb.id}>Setujui</Btn>
-                                  <Btn variant="ghost" size="sm" className="text-danger-600" onClick={() => rejectReimburse(rb.id)} disabled={processingReimburseId === rb.id}>Tolak</Btn>
-                                </>
-                              )}
-                              {rb.status === "approved" && (
-                                <Btn variant="primary" size="sm" onClick={() => markReimbursePaid(rb.id, rb.amount)} disabled={processingReimburseId === rb.id}>Tandai Lunas</Btn>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                    {staffReimbursements.length === 0 && (
+                    ))}
+                    {filteredPayrollItems.length === 0 && (
                       <tr>
-                        <td colSpan={6} className="py-10 text-center text-ink-mute">
-                          Belum ada pengajuan reimburse dari staff.
+                        <td colSpan={10} className="py-12 text-center text-ink-mute">
+                          <div className="flex flex-col items-center justify-center space-y-1">
+                            <Icon name="users" className="w-8 h-8 text-ink-faint" />
+                            <span className="font-semibold text-sm text-ink">{t("owner.financial.payrollEmptyTitle")}</span>
+                            <span className="text-xs text-ink-mute">{t("owner.financial.payrollEmptyBody")}</span>
+                          </div>
                         </td>
                       </tr>
                     )}
@@ -3663,28 +4057,194 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
         </div>
       </Modal>
 
+      {/* ── Modal: Rincian Pengeluaran Payroll / Expense ── */}
+      <Modal
+        open={!!selectedExpenseDetail}
+        onClose={() => setSelectedExpenseDetail(null)}
+        title={t("owner.financial.detailModalTitle")}
+        size="lg"
+        footer={
+          <div className="flex justify-end w-full">
+            <Btn variant="ghost" onClick={() => setSelectedExpenseDetail(null)}>{t("common.actions.close")}</Btn>
+          </div>
+        }
+      >
+        {selectedExpenseDetail && (
+          <div className="space-y-4">
+            {/* Header Info Card */}
+            <div className="p-3.5 rounded-xl bg-paper-tint border border-line flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-display font-bold text-base text-ink"><NoTranslate>{selectedExpenseDetail.receiverName}</NoTranslate></span>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                    selectedExpenseDetail.receiverRole === "coach" ? "bg-ocean-50 text-ocean-700 border border-ocean-200" :
+                    selectedExpenseDetail.receiverRole === "staff" ? "bg-purple-50 text-purple-700 border border-purple-200" :
+                    "bg-paper-deep text-ink-mute border border-line"
+                  }`}>
+                    <NoTranslate>{selectedExpenseDetail.categoryLabel}</NoTranslate>
+                  </span>
+                </div>
+                <div className="text-xs text-ink-mute mt-1 font-mono">
+                  <NoTranslate>{selectedExpenseDetail.branchName}</NoTranslate> · Ref: <NoTranslate>{selectedExpenseDetail.referenceNumber}</NoTranslate>
+                </div>
+                {selectedExpenseDetail.periodLabel && selectedExpenseDetail.periodLabel !== "—" && (
+                  <div className="text-xs text-ink-soft mt-0.5">
+                    Periode: <span className="font-semibold"><NoTranslate>{selectedExpenseDetail.periodLabel}</NoTranslate></span>
+                  </div>
+                )}
+              </div>
+              <div className="sm:text-right">
+                <span className={`inline-block px-2.5 py-1 rounded-full text-xs font-bold uppercase ${
+                  selectedExpenseDetail.status === "paid" ? "bg-ok-50 text-ok-700" :
+                  selectedExpenseDetail.status === "approved" ? "bg-ocean-50 text-ocean-700" :
+                  "bg-warn-50 text-warn-700"
+                }`}>
+                  {selectedExpenseDetail.status === "paid" ? t("owner.financial.detailStatusPaid") :
+                   selectedExpenseDetail.status === "approved" ? t("owner.financial.detailStatusReady") : t("owner.financial.detailStatusPending")}
+                </span>
+                <div className="text-[11px] text-ink-mute mt-1">
+                  {selectedExpenseDetail.date ? new Date(selectedExpenseDetail.date).toLocaleDateString("id-ID", { dateStyle: "long" }) : "—"}
+                </div>
+              </div>
+            </div>
+
+            {/* If coach invoice items available */}
+            {selectedExpenseDetail.rawInvoice?.coach_invoice_items && selectedExpenseDetail.rawInvoice.coach_invoice_items.length > 0 && (
+              <div className="border border-line rounded-xl overflow-hidden">
+                <div className="bg-paper-tint px-3 py-2 text-xs font-bold text-ink-mute uppercase tracking-wider border-b border-line">
+                  {t("owner.financial.detailItemsTitle")}
+                </div>
+                <table className="w-full text-xs">
+                  <thead className="bg-paper-tint/60 text-ink-faint uppercase font-bold border-b border-line">
+                    <tr>
+                      <th className="text-left py-2 px-3">{t("owner.financial.colItemType")}</th>
+                      <th className="text-left py-2 px-3">{t("owner.financial.colClass")}</th>
+                      <th className="text-right py-2 px-3">{t("owner.financial.colSession")}</th>
+                      <th className="text-right py-2 px-3">{t("owner.financial.colRate")}</th>
+                      <th className="text-right py-2 px-3">{t("owner.financial.colSubtotal")}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-line">
+                    {selectedExpenseDetail.rawInvoice.coach_invoice_items.map((it: any) => (
+                      <tr key={it.id}>
+                        <td className="py-2 px-3 font-semibold text-ink">
+                          <NoTranslate>{it.description || it.item_type}</NoTranslate>
+                          {it.proof_url && (
+                            <div className="mt-1">
+                              <ProofViewer proofUrl={it.proof_url} label={it.description || it.item_type} size="sm" />
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-2 px-3 text-ink-soft"><NoTranslate>{it.class?.name ?? "—"}</NoTranslate></td>
+                        <td className="py-2 px-3 text-right font-mono">{it.session_count || "—"}</td>
+                        <td className="py-2 px-3 text-right font-mono">{fmtIDR(it.rate)}</td>
+                        <td className="py-2 px-3 text-right font-mono font-bold text-ink">
+                          {fmtIDR(it.item_type === "reimburse" ? it.rate : it.session_count * it.rate)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Financial breakdown summary card */}
+            <div className="border border-line rounded-xl p-4 space-y-2.5 text-sm bg-white">
+              <div className="flex justify-between items-center text-ink">
+                <span>{t("owner.financial.detailGross")}</span>
+                <span className="font-mono font-bold text-base">{fmtIDR(selectedExpenseDetail.grossAmount)}</span>
+              </div>
+              {selectedExpenseDetail.taxAmount > 0 && (
+                <div className="flex justify-between items-center text-warn-700 bg-warn-50/50 px-3 py-1.5 rounded-lg">
+                  <span className="flex items-center gap-1.5 font-medium">
+                    <span className="w-2 h-2 rounded-full bg-warn-500 inline-block" />
+                    {t("owner.financial.detailTax")}
+                  </span>
+                  <span className="font-mono font-semibold">- {fmtIDR(selectedExpenseDetail.taxAmount)}</span>
+                </div>
+              )}
+              {selectedExpenseDetail.loanDeduction > 0 && (
+                <div className="flex justify-between items-center text-purple-700 bg-purple-50/70 px-3 py-1.5 rounded-lg border border-purple-200/50">
+                  <span className="flex items-center gap-1.5 font-medium">
+                    <span className="w-2 h-2 rounded-full bg-purple-500 inline-block" />
+                    {t("owner.financial.detailLoanDeduction")}
+                  </span>
+                  <span className="font-mono font-semibold">- {fmtIDR(selectedExpenseDetail.loanDeduction)}</span>
+                </div>
+              )}
+              {selectedExpenseDetail.otherDeductions > 0 && (
+                <div className="flex justify-between items-center text-danger-700 bg-danger-50/50 px-3 py-1.5 rounded-lg">
+                  <span className="flex items-center gap-1.5 font-medium">
+                    <span className="w-2 h-2 rounded-full bg-danger-500 inline-block" />
+                    {t("owner.financial.detailOtherDeductions")}
+                  </span>
+                  <span className="font-mono font-semibold">- {fmtIDR(selectedExpenseDetail.otherDeductions)}</span>
+                </div>
+              )}
+              <div className="flex justify-between items-center pt-3 border-t border-line">
+                <div>
+                  <div className="font-bold text-base text-ink">{t("owner.financial.detailNet")}</div>
+                  <div className="text-[11px] text-ink-mute">{t("owner.financial.detailNetHint")}</div>
+                </div>
+                <div className="font-mono font-extrabold text-xl text-ocean-700">
+                  {fmtIDR(selectedExpenseDetail.netTransferredAmount)}
+                </div>
+              </div>
+            </div>
+
+            {/* Bank account info card with copy button */}
+            {selectedExpenseDetail.bankInfo?.bankAccount && (
+              <div className="bg-ocean-50/70 border border-ocean-100 rounded-xl p-3.5 flex items-center justify-between">
+                <div>
+                  <div className="text-[11px] uppercase font-bold tracking-wider text-ocean-800">
+                    {t("owner.financial.detailBank")}
+                  </div>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="font-bold text-sm text-ink"><NoTranslate>{selectedExpenseDetail.bankInfo.bankName ?? "Bank"}</NoTranslate></span>
+                    <span className="font-mono font-bold text-ocean-800 bg-white px-2 py-0.5 rounded border border-ocean-200 text-sm">
+                      {selectedExpenseDetail.bankInfo.bankAccount}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(selectedExpenseDetail.bankInfo!.bankAccount!, t("owner.financial.accountNumberLabel"))}
+                      className="p-1 rounded hover:bg-ocean-200/60 text-ocean-700 transition"
+                      title={t("owner.financial.copyAccountNumberTitle")}
+                    >
+                      <Icon name="copy" className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="text-xs text-ink-mute mt-0.5">
+                    a/n <NoTranslate>{selectedExpenseDetail.bankInfo.bankHolder ?? selectedExpenseDetail.receiverName}</NoTranslate>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
+
       {/* ── Modal: Detail Invoice & Bukti Reimburse Coach ─────────────────── */}
       <Modal
         open={!!selectedInvoiceDetail}
         onClose={() => setSelectedInvoiceDetail(null)}
-        title={`Rincian Invoice: ${selectedInvoiceDetail?.invoice_number ?? ""}`}
+        title={t("owner.financial.invoiceDetailModalTitle", { number: selectedInvoiceDetail?.invoice_number ?? "" })}
         size="lg"
-        footer={<Btn variant="ghost" onClick={() => setSelectedInvoiceDetail(null)}>Tutup</Btn>}
+        footer={<Btn variant="ghost" onClick={() => setSelectedInvoiceDetail(null)}>{t("owner.financial.closeBtn")}</Btn>}
       >
         {selectedInvoiceDetail && (
           <div className="space-y-4 text-sm">
             <div className="p-3 rounded-xl bg-paper-tint border border-line grid grid-cols-2 sm:grid-cols-3 gap-3">
               <div>
-                <span className="text-xs text-ink-mute block">Coach</span>
-                <span className="font-bold text-ink">{selectedInvoiceDetail.coach?.full_name}</span>
+                <span className="text-xs text-ink-mute block">{t("owner.financial.invoiceDetailCoach")}</span>
+                <span className="font-bold text-ink"><NoTranslate>{selectedInvoiceDetail.coach?.full_name}</NoTranslate></span>
               </div>
               <div>
-                <span className="text-xs text-ink-mute block">Center</span>
-                <span className="font-bold text-ink">{selectedInvoiceDetail.branch?.name}</span>
+                <span className="text-xs text-ink-mute block">{t("owner.financial.invoiceDetailCenter")}</span>
+                <span className="font-bold text-ink"><NoTranslate>{selectedInvoiceDetail.branch?.name}</NoTranslate></span>
               </div>
               <div>
-                <span className="text-xs text-ink-mute block">Periode</span>
-                <span className="font-bold text-ink">{selectedInvoiceDetail.period_label}</span>
+                <span className="text-xs text-ink-mute block">{t("owner.financial.invoiceDetailPeriod")}</span>
+                <span className="font-bold text-ink"><NoTranslate>{selectedInvoiceDetail.period_label}</NoTranslate></span>
               </div>
             </div>
 
@@ -3693,11 +4253,11 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
               <table className="w-full text-xs">
                 <thead className="bg-paper-tint border-b border-line text-ink-faint uppercase font-bold">
                   <tr>
-                    <th className="text-left py-2 px-3">Tipe / Keterangan</th>
-                    <th className="text-left py-2 px-3">Kelas / Detail</th>
-                    <th className="text-right py-2 px-3">Sesi</th>
-                    <th className="text-right py-2 px-3">Tarif / Nilai</th>
-                    <th className="text-right py-2 px-3">Subtotal</th>
+                    <th className="text-left py-2 px-3">{t("owner.financial.invoiceDetailColType")}</th>
+                    <th className="text-left py-2 px-3">{t("owner.financial.invoiceDetailColClassDetail")}</th>
+                    <th className="text-right py-2 px-3">{t("owner.financial.invoiceDetailColSession")}</th>
+                    <th className="text-right py-2 px-3">{t("owner.financial.invoiceDetailColRateValue")}</th>
+                    <th className="text-right py-2 px-3">{t("owner.financial.invoiceDetailColSubtotal")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line">
@@ -3708,16 +4268,16 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
                           it.item_type === "reimburse" ? "bg-warn-100 text-warn-800" :
                           it.item_type === "extra" ? "bg-ocean-100 text-ocean-800" : "bg-paper-deep text-ink"
                         }`}>
-                          {it.item_type}
+                          <NoTranslate>{it.item_type}</NoTranslate>
                         </span>
-                        {it.description && <div className="text-ink-mute text-[11px] mt-0.5">{it.description}</div>}
+                        {it.description && <div className="text-ink-mute text-[11px] mt-0.5"><NoTranslate>{it.description}</NoTranslate></div>}
                         {it.proof_url && (
-                          <a href={it.proof_url} target="_blank" rel="noreferrer" className="text-ocean-600 hover:underline font-bold text-[11px] block mt-0.5">
-                            <Icon name="link" className="w-3 h-3 inline mr-0.5" /> Buka Bukti Struk/Kwitansi
-                          </a>
+                          <div className="mt-1">
+                            <ProofViewer proofUrl={it.proof_url} label={it.description || it.item_type} size="sm" />
+                          </div>
                         )}
                       </td>
-                      <td className="py-2.5 px-3 text-ink-soft">{it.class?.name ?? "—"}</td>
+                      <td className="py-2.5 px-3 text-ink-soft"><NoTranslate>{it.class?.name ?? "—"}</NoTranslate></td>
                       <td className="py-2.5 px-3 text-right font-mono">{it.session_count || "—"}</td>
                       <td className="py-2.5 px-3 text-right font-mono">{fmtIDR(it.rate)}</td>
                       <td className="py-2.5 px-3 text-right font-mono font-bold">
@@ -3730,7 +4290,7 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
             </div>
 
             <div className="flex justify-between items-center p-3 rounded-xl bg-ocean-50 border border-ocean-200">
-              <span className="font-bold text-ocean-900">Total Nominal Pembayaran</span>
+              <span className="font-bold text-ocean-900">{t("owner.financial.invoiceDetailTotalLabel")}</span>
               <span className="font-display font-extrabold text-xl text-ocean-900">{fmtIDR(selectedInvoiceDetail.total_amount)}</span>
             </div>
           </div>
@@ -3741,47 +4301,29 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
       <Modal
         open={!!editSalaryModal}
         onClose={() => setEditSalaryModal(null)}
-        title={`Atur Gaji Staff: ${editSalaryModal?.staff?.full_name ?? ""} (${staffMonth})`}
+        title={tNode("owner.financial.staffSalaryModalTitle", { name: editSalaryModal?.staff?.full_name ?? "", period: payrollMonth })}
         size="sm"
         footer={
           <div className="flex gap-2 justify-end w-full">
-            <Btn variant="ghost" onClick={() => setEditSalaryModal(null)}>Batal</Btn>
+            <Btn variant="ghost" onClick={() => setEditSalaryModal(null)}>{t("owner.financial.staffSalaryCancelBtn")}</Btn>
             <Btn variant="primary" onClick={saveStaffSalary} disabled={savingSalary}>
-              {savingSalary ? "Menyimpan..." : "Simpan Gaji"}
+              {savingSalary ? t("owner.financial.staffSalarySavingBtn") : t("owner.financial.staffSalarySaveBtn")}
             </Btn>
           </div>
         }
       >
         <div className="space-y-4">
-          <div className="rounded-xl border border-line bg-paper-tint p-3 space-y-2">
-            <div className="text-xs font-bold text-ink-mute uppercase tracking-widest">Hitung dari Absensi (Opsional)</div>
-            <div className="text-xs text-ink-soft">
-              {staffPresentDays == null ? "Memuat data absensi…" : `${staffPresentDays} hari hadir di bulan ${staffMonth}`}
-            </div>
-            <div className="flex gap-2">
-              <Input
-                type="number"
-                value={ratePerDayInput}
-                onChange={e => setRatePerDayInput(e.target.value)}
-                placeholder="Tarif per hari (Rp)"
-                className="font-mono flex-1"
-              />
-              <Btn variant="soft" size="sm" onClick={applyAttendanceBasedSalary} disabled={!ratePerDayInput || staffPresentDays == null}>
-                Hitung
-              </Btn>
-            </div>
-          </div>
-          <Field label="Gaji Pokok Bulan Ini (Rp)" required hint="Nominal dapat diubah setiap bulannya oleh Owner">
+          <Field label={t("owner.financial.fieldBaseSalary")} required hint={t("owner.financial.fieldBaseSalaryHint")}>
             <Input
               type="number"
               value={salaryForm.base_salary}
               onChange={e => setSalaryForm(f => ({ ...f, base_salary: e.target.value }))}
-              placeholder="Contoh: 3000000"
+              placeholder={t("owner.financial.fieldBaseSalaryPlaceholder")}
               className="font-mono"
             />
           </Field>
 
-          <Field label="Tunjangan / Bonus Tambahan (Rp)">
+          <Field label={t("owner.financial.fieldAllowancesExtra")}>
             <Input
               type="number"
               value={salaryForm.allowances}
@@ -3791,7 +4333,7 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
             />
           </Field>
 
-          <Field label="Reimburse Disetujui (Rp)" hint="Isi manual jika staff punya klaim reimburse yang belum masuk gaji ini">
+          <Field label={t("owner.financial.fieldApprovedReimburse")} hint={t("owner.financial.fieldApprovedReimburseHint")}>
             <Input
               type="number"
               value={salaryForm.reimburse}
@@ -3801,7 +4343,7 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
             />
           </Field>
 
-          <Field label="Potongan (Rp)">
+          <Field label={t("owner.financial.fieldDeductions")}>
             <Input
               type="number"
               value={salaryForm.deductions}
@@ -3811,17 +4353,17 @@ function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; us
             />
           </Field>
 
-          <Field label="Catatan Gaji (Opsional)">
+          <Field label={t("owner.financial.fieldSalaryNotes")}>
             <Textarea
               rows={2}
               value={salaryForm.notes}
               onChange={e => setSalaryForm(f => ({ ...f, notes: e.target.value }))}
-              placeholder="Catatan bonus atau potongan..."
+              placeholder={t("owner.financial.fieldSalaryNotesPlaceholder")}
             />
           </Field>
 
           <div className="p-3 rounded-xl bg-paper-tint border border-line flex justify-between items-center text-xs">
-            <span className="font-semibold text-ink-mute">Estimasi Total Bersih:</span>
+            <span className="font-semibold text-ink-mute">{t("owner.financial.estimatedNetTotal")}</span>
             <span className="font-mono font-bold text-ocean-700 text-sm">
               {fmtIDR(
                 Math.max(0, (Number(salaryForm.base_salary) || 0) + (Number(salaryForm.allowances) || 0) + (Number(salaryForm.reimburse) || 0) - (Number(salaryForm.deductions) || 0))
@@ -3919,7 +4461,7 @@ function CategoryManagerModal({ kind, categories, manualTxns, onClose, onChanged
                 </>
               ) : (
                 <>
-                  <span className="flex-1 text-sm font-semibold text-ink truncate">{c.name}</span>
+                  <span className="flex-1 text-sm font-semibold text-ink truncate"><NoTranslate>{c.name}</NoTranslate></span>
                   <button onClick={() => startEdit(c)} className="w-7 h-7 rounded-lg border border-line bg-white flex items-center justify-center hover:bg-paper-deep shrink-0"><Icon name="edit" className="w-3.5 h-3.5 text-ink-mute" /></button>
                   <button onClick={() => del(c)} className="w-7 h-7 rounded-lg border border-danger-200 bg-danger-50 flex items-center justify-center hover:bg-danger-100 shrink-0"><Icon name="trash" className="w-3.5 h-3.5 text-danger-500" /></button>
                 </>
@@ -3995,8 +4537,8 @@ function OwnerActivityLog({ branches }: { branches: Branch[] }) {
     if (filterEntity !== "all")   q = q.eq("entity_type", filterEntity);
     if (filterAction !== "all")   q = q.eq("action", filterAction);
     if (filterRole !== "all")     q = q.eq("user_role", filterRole);
-    if (filterDateFrom)           q = q.gte("created_at", filterDateFrom + "T00:00:00");
-    if (filterDateTo)             q = q.lte("created_at", filterDateTo + "T23:59:59");
+    if (filterDateFrom)           q = q.gte("created_at", new Date(filterDateFrom + "T00:00:00").toISOString());
+    if (filterDateTo)             q = q.lte("created_at", new Date(filterDateTo + "T23:59:59.999").toISOString());
     if (search.trim())            q = q.ilike("label", `%${search.trim()}%`);
 
     const { data, count } = await q;
@@ -4006,11 +4548,17 @@ function OwnerActivityLog({ branches }: { branches: Branch[] }) {
   }, [supabase, page, filterBranch, filterEntity, filterAction, filterRole, filterDateFrom, filterDateTo, search]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadStats = useCallback(async () => {
-    const today = new Date().toISOString().slice(0, 10);
-    const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+    const todayDate = new Date();
+    todayDate.setHours(0, 0, 0, 0);
+    const todayStr = todayDate.toISOString();
+
+    const weekAgoDate = new Date(todayDate);
+    weekAgoDate.setDate(weekAgoDate.getDate() - 7);
+    const weekAgoStr = weekAgoDate.toISOString();
+
     const [td, wk] = await Promise.all([
-      supabase.from("activity_logs").select("id", { count: "exact", head: true }).gte("created_at", today + "T00:00:00"),
-      supabase.from("activity_logs").select("id", { count: "exact", head: true }).gte("created_at", weekAgo + "T00:00:00"),
+      supabase.from("activity_logs").select("id", { count: "exact", head: true }).gte("created_at", todayStr),
+      supabase.from("activity_logs").select("id", { count: "exact", head: true }).gte("created_at", weekAgoStr),
     ]);
     setStatsToday(td.count ?? 0);
     setStatsWeek(wk.count ?? 0);
@@ -4160,27 +4708,27 @@ function OwnerActivityLog({ branches }: { branches: Branch[] }) {
                         <div className="text-xs font-semibold text-ink">{fmtShortDate(log.created_at)}</div>
                         <div className="text-xs text-ink-faint">{fmtTime(log.created_at)}</div>
                       </td>
-                      <td className="px-4 py-3 text-xs text-ink-mute whitespace-nowrap">{branchName(log)}</td>
+                      <td className="px-4 py-3 text-xs text-ink-mute whitespace-nowrap"><NoTranslate>{branchName(log)}</NoTranslate></td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
                           <Avatar name={log.user_name} size={26} />
                           <div>
-                            <div className="text-xs font-semibold leading-tight">{log.user_name}</div>
+                            <div className="text-xs font-semibold leading-tight"><NoTranslate>{log.user_name}</NoTranslate></div>
                             <div className={`text-[10px] font-bold uppercase tracking-wide ${log.user_role === "owner" ? "text-ocean-600" : log.user_role === "admin" ? "text-wave-600" : "text-ink-mute"}`}>{log.user_role}</div>
                           </div>
                         </div>
                       </td>
                       <td className="px-4 py-3">
                         <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${ENTITY_COLORS[log.entity_type] ?? "bg-paper-deep text-ink-soft"}`}>
-                          {entityLabel[log.entity_type] ?? log.entity_type}
+                          {entityLabel[log.entity_type] ?? <NoTranslate>{log.entity_type}</NoTranslate>}
                         </span>
                       </td>
                       <td className="px-4 py-3">
-                        <Status kind={ACTION_BADGE[log.action] ?? "manual"}>{actionLabel[log.action] ?? log.action}</Status>
+                        <Status kind={ACTION_BADGE[log.action] ?? "manual"}>{actionLabel[log.action] ?? <NoTranslate>{log.action}</NoTranslate>}</Status>
                       </td>
                       <td className="px-4 py-3 max-w-xs">
-                        <span className="text-sm text-ink truncate block">{log.label}</span>
-                        {log.entity_label && <span className="text-xs text-ink-mute">{log.entity_label}</span>}
+                        <span className="text-sm text-ink truncate block"><NoTranslate>{log.label}</NoTranslate></span>
+                        {log.entity_label && <span className="text-xs text-ink-mute"><NoTranslate>{log.entity_label}</NoTranslate></span>}
                       </td>
                     </tr>
                   ))}
@@ -4196,14 +4744,14 @@ function OwnerActivityLog({ branches }: { branches: Branch[] }) {
                     <Avatar name={log.user_name} size={32} />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-semibold text-sm text-ink">{log.user_name}</span>
-                        <Status kind={ACTION_BADGE[log.action] ?? "manual"}>{actionLabel[log.action] ?? log.action}</Status>
+                        <span className="font-semibold text-sm text-ink"><NoTranslate>{log.user_name}</NoTranslate></span>
+                        <Status kind={ACTION_BADGE[log.action] ?? "manual"}>{actionLabel[log.action] ?? <NoTranslate>{log.action}</NoTranslate>}</Status>
                         <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${ENTITY_COLORS[log.entity_type] ?? "bg-paper-deep text-ink-soft"}`}>
-                          {entityLabel[log.entity_type] ?? log.entity_type}
+                          {entityLabel[log.entity_type] ?? <NoTranslate>{log.entity_type}</NoTranslate>}
                         </span>
                       </div>
-                      <div className="text-sm text-ink mt-0.5 leading-snug">{log.label}</div>
-                      <div className="text-xs text-ink-faint mt-1">{branchName(log)} · {fmtShortDate(log.created_at)} {fmtTime(log.created_at)}</div>
+                      <div className="text-sm text-ink mt-0.5 leading-snug"><NoTranslate>{log.label}</NoTranslate></div>
+                      <div className="text-xs text-ink-faint mt-1"><NoTranslate>{branchName(log)}</NoTranslate> · {fmtShortDate(log.created_at)} {fmtTime(log.created_at)}</div>
                     </div>
                   </div>
                 </div>
@@ -4240,19 +4788,19 @@ function OwnerActivityLog({ branches }: { branches: Branch[] }) {
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">{t("owner.activityLog.detailTime")}</div><div>{fmtShortDate(detailLog.created_at)} {fmtTime(detailLog.created_at)}</div></div>
-              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">{t("owner.activityLog.detailBranch")}</div><div>{branchName(detailLog)}</div></div>
-              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">{t("owner.activityLog.detailBy")}</div><div className="font-semibold">{detailLog.user_name} <span className="text-xs text-ink-mute font-normal">({detailLog.user_role})</span></div></div>
+              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">{t("owner.activityLog.detailBranch")}</div><div><NoTranslate>{branchName(detailLog)}</NoTranslate></div></div>
+              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">{t("owner.activityLog.detailBy")}</div><div className="font-semibold"><NoTranslate>{detailLog.user_name}</NoTranslate> <span className="text-xs text-ink-mute font-normal">({detailLog.user_role})</span></div></div>
               <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">{t("owner.activityLog.detailEntity")}</div>
                 <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${ENTITY_COLORS[detailLog.entity_type] ?? "bg-paper-deep text-ink-soft"}`}>
-                  {entityLabel[detailLog.entity_type] ?? detailLog.entity_type}
+                  {entityLabel[detailLog.entity_type] ?? <NoTranslate>{detailLog.entity_type}</NoTranslate>}
                 </span>
               </div>
-              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">{t("owner.activityLog.detailAction")}</div><Status kind={ACTION_BADGE[detailLog.action] ?? "manual"}>{actionLabel[detailLog.action] ?? detailLog.action}</Status></div>
-              {detailLog.entity_label && <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">{t("owner.activityLog.detailSubject")}</div><div className="font-semibold">{detailLog.entity_label}</div></div>}
+              <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">{t("owner.activityLog.detailAction")}</div><Status kind={ACTION_BADGE[detailLog.action] ?? "manual"}>{actionLabel[detailLog.action] ?? <NoTranslate>{detailLog.action}</NoTranslate>}</Status></div>
+              {detailLog.entity_label && <div><div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">{t("owner.activityLog.detailSubject")}</div><div className="font-semibold"><NoTranslate>{detailLog.entity_label}</NoTranslate></div></div>}
             </div>
             <div className="border-t border-line pt-3">
               <div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-1">{t("owner.activityLog.detailDescription")}</div>
-              <p className="text-sm text-ink leading-relaxed">{detailLog.label}</p>
+              <p className="text-sm text-ink leading-relaxed"><NoTranslate>{detailLog.label}</NoTranslate></p>
             </div>
             {detailLog.meta && Object.keys(detailLog.meta).length > 0 && (
               <div>
@@ -4319,7 +4867,7 @@ const BACKUP_CATEGORIES = [
 const BACKUP_PAGE_SIZE = 20;
 
 function OwnerStorage({ userId, userName }: { userId: string; userName: string }) {
-  const { t } = useLocale();
+  const { t, tNode } = useLocale();
   const supabase = createClient();
   const toast = useToast();
 
@@ -4339,6 +4887,7 @@ function OwnerStorage({ userId, userName }: { userId: string; userName: string }
   const [selectMode, setSelectMode] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState(false);
+  const [deletingKey, setDeletingKey] = useState<string | null>(null);
   const confirm = useConfirm();
 
   const loadStats = useCallback(async () => {
@@ -4457,6 +5006,42 @@ function OwnerStorage({ userId, userName }: { userId: string; userName: string }
     setDeleting(false);
   };
 
+  const deleteSingle = async (f: BackupFile) => {
+    const yes = await confirm({
+      title: t("owner.storage.deleteFileConfirmTitle"),
+      body: tNode("owner.storage.deleteFileConfirmBody", { name: f.label }),
+      danger: true,
+    });
+    if (!yes) return;
+
+    setDeletingKey(f.key);
+    try {
+      const res = await fetch("/api/storage/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items: [{ bucket: f.bucket, key: f.key, dbRef: f.dbRef }] }),
+      });
+      const data = await res.json() as { deleted: number; failed: { key: string; error: string }[] };
+      if (!res.ok || data.failed.length > 0) throw new Error();
+
+      toast.success(t("owner.storage.deleteSuccess", { count: 1 }));
+      logActivity(supabase, {
+        userId, userRole: "owner", userName,
+        entityType: "system_storage", entityId: "delete",
+        action: "delete",
+        label: t("owner.storage.activityDeleted", { count: 1 }),
+        meta: { count: 1, keys: [f.key] },
+      });
+
+      setBackupList(prev => prev.filter(x => x.key !== f.key));
+      setSelectedFiles(prev => { const next = new Set(prev); next.delete(f.key); return next; });
+      loadStats();
+    } catch {
+      toast.error(t("owner.storage.deleteFailed"), t("owner.storage.deleteFailedGeneric"));
+    }
+    setDeletingKey(null);
+  };
+
   const downloadBackup = async () => {
     if (backupList.length === 0) return;
     setDownloading(true);
@@ -4513,6 +5098,8 @@ function OwnerStorage({ userId, userName }: { userId: string; userName: string }
     return map;
   }, [backupList]);
 
+  const STORAGE_LIMIT = 1024 * 1024 * 1024; // 1 GB (Supabase Free Tier)
+  
   return (
     <div className="space-y-5">
       {/* ── Stats hero ── */}
@@ -4541,9 +5128,20 @@ function OwnerStorage({ userId, userName }: { userId: string; userName: string }
           <div className="bg-ocean-700 text-white rounded-2xl shadow-card p-5 relative overflow-hidden">
             <div className="absolute -right-6 -bottom-6 w-24 h-24 rounded-full bg-wave-500/30 blur-2xl" />
             <div className="relative">
-              <div className="text-wave-200 text-[10px] uppercase tracking-widest font-bold">{t("owner.storage.totalSize")}</div>
-              <div className="font-display font-bold text-2xl mt-1">{fmtBytes(stats.totalSize)}</div>
-              <div className="text-white/60 text-xs mt-1">{t("owner.storage.totalSizeSub")}</div>
+              <div className="flex justify-between items-end">
+                <div>
+                  <div className="text-wave-200 text-[10px] uppercase tracking-widest font-bold">{t("owner.storage.totalSize")}</div>
+                  <div className="font-display font-bold text-2xl mt-1">{fmtBytes(stats.totalSize)} <span className="text-sm font-medium text-white/70">{t("owner.storage.storageUnitLimit")}</span></div>
+                </div>
+                <div className="text-right">
+                  <div className="font-display font-bold text-xl">{((stats.totalSize / STORAGE_LIMIT) * 100).toFixed(1)}%</div>
+                  <div className="text-[10px] text-white/70 uppercase tracking-widest font-bold">{t("owner.storage.usedLabel")}</div>
+                </div>
+              </div>
+              <div className="h-1.5 w-full bg-black/20 rounded-full mt-3 overflow-hidden">
+                <div className="h-full bg-wave-400 rounded-full" style={{ width: `${Math.min((stats.totalSize / STORAGE_LIMIT) * 100, 100)}%` }} />
+              </div>
+              <div className="text-white/60 text-xs mt-2">{t("owner.storage.totalSizeSub")}</div>
             </div>
           </div>
           <div className="bg-white rounded-2xl border border-line shadow-card p-5">
@@ -4570,24 +5168,24 @@ function OwnerStorage({ userId, userName }: { userId: string; userName: string }
       {stats && (
         <Card>
           <SectionTitle sub={t("owner.storage.distributionSub")}>{t("owner.storage.distributionTitle")}</SectionTitle>
-          {/* Stacked bar — every category renders (even size=0, in gray), so the bar always reads as a complete whole */}
-          <div className="h-4 rounded-full overflow-hidden flex mt-4 mb-5 bg-archive-500/30">
-            {stats.totalSize === 0 ? (
-              <div className="h-full w-full flex items-center justify-center">
+          {/* Stacked bar — calculated against STORAGE_LIMIT for realistic usage reflection */}
+          <div className="h-4 rounded-full overflow-hidden flex mt-4 mb-5 bg-archive-500/30 relative">
+            {stats.categories.map((cat) => {
+              const pct = (cat.size / STORAGE_LIMIT) * 100;
+              if (pct <= 0 && cat.size === 0) return null;
+              return (
+                <div
+                  key={cat.prefix}
+                  style={{ width: `${Math.max(pct, cat.size > 0 ? 0.5 : 0)}%` }}
+                  className={`h-full ${categoryColor(cat.prefix)} transition-all`}
+                  title={`${cat.label}: ${fmtBytes(cat.size)}`}
+                />
+              );
+            })}
+            {stats.totalSize === 0 && (
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                 <span className="text-[10px] font-semibold text-ink-faint">{t("owner.storage.noFilesYet")}</span>
               </div>
-            ) : (
-              stats.categories.map((cat) => {
-                const pct = (cat.size / stats.totalSize) * 100;
-                return (
-                  <div
-                    key={cat.prefix}
-                    style={{ width: `${Math.max(pct, cat.size > 0 ? 1 : 0)}%` }}
-                    className={`h-full ${categoryColor(cat.prefix)} transition-all`}
-                    title={`${cat.label}: ${fmtBytes(cat.size)}`}
-                  />
-                );
-              })
             )}
           </div>
           {/* Legend + table — same categoryColor() function as the bar, so colors always match */}
@@ -4598,7 +5196,8 @@ function OwnerStorage({ userId, userName }: { userId: string; userName: string }
               <div className="text-right">{t("owner.storage.colSize")}</div>
             </div>
             {stats.categories.map((cat) => {
-              const pct = stats.totalSize > 0 ? (cat.size / stats.totalSize) * 100 : 0;
+              const pctOfLimit = (cat.size / STORAGE_LIMIT) * 100;
+              const pctOfUsed = stats.totalSize > 0 ? (cat.size / stats.totalSize) * 100 : 0;
               const empty = cat.size === 0;
               return (
                 <div key={cat.prefix} className={`grid grid-cols-4 gap-2 py-2.5 border-b border-line last:border-0 items-center ${empty ? "opacity-50" : ""}`}>
@@ -4607,14 +5206,14 @@ function OwnerStorage({ userId, userName }: { userId: string; userName: string }
                     <div className="min-w-0">
                       <div className="text-sm font-medium text-ink truncate">{cat.label}</div>
                       <div className="h-1 bg-paper-deep rounded-full overflow-hidden mt-0.5 w-24">
-                        <div className={`h-full ${categoryColor(cat.prefix)}`} style={{ width: `${Math.max(pct, empty ? 0 : 1)}%` }} />
+                        <div className={`h-full ${categoryColor(cat.prefix)}`} style={{ width: `${Math.max(pctOfUsed, empty ? 0 : 1)}%` }} title={`${pctOfUsed.toFixed(1)}% of total used`} />
                       </div>
                     </div>
                   </div>
                   <div className="text-right text-sm text-ink-soft tabular-nums">{cat.count.toLocaleString("id-ID")}</div>
                   <div className="text-right">
                     <div className="text-sm font-semibold text-ink tabular-nums">{fmtBytes(cat.size)}</div>
-                    <div className="text-[10px] text-ink-faint">{empty ? t("owner.storage.emptyBadge") : `${pct.toFixed(1)}%`}</div>
+                    <div className="text-[10px] text-ink-faint">{empty ? t("owner.storage.emptyBadge") : t("owner.storage.pctOfLimitLabel", { pct: pctOfLimit.toFixed(2) })}</div>
                   </div>
                 </div>
               );
@@ -4709,10 +5308,25 @@ function OwnerStorage({ userId, userName }: { userId: string; userName: string }
                   )}
                   <Icon name="archive" className="w-4 h-4 text-ink-faint shrink-0" />
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm text-ink truncate font-medium">{f.label}</div>
+                    <div className="text-sm text-ink truncate font-medium"><NoTranslate>{f.label}</NoTranslate></div>
                     <div className="text-[11px] text-ink-faint truncate font-mono">{f.key}</div>
                   </div>
                   <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-ocean-50 text-ocean-700 shrink-0">{f.category}</span>
+                  {!selectMode && (
+                    <button
+                      type="button"
+                      title={t("owner.storage.deleteFileTitleAttr")}
+                      onClick={(e) => { e.stopPropagation(); deleteSingle(f); }}
+                      disabled={deletingKey === f.key}
+                      className="w-7 h-7 rounded-lg hover:bg-danger-50 flex items-center justify-center text-ink-mute hover:text-danger-600 transition-colors disabled:opacity-40 shrink-0"
+                    >
+                      {deletingKey === f.key ? (
+                        <Icon name="refresh" className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Icon name="trash" className="w-3.5 h-3.5" />
+                      )}
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
@@ -4784,12 +5398,13 @@ function buildNavItems(t: (key: string) => string): NavItem[] {
     { section: t("owner.nav.sectionOverview") },
     { id: "dashboard", label: t("owner.nav.dashboard"), icon: "grid"    },
     { section: t("owner.nav.sectionManagement") },
-    { id: "master",    label: "Master Data",            icon: "user"    },
+    { id: "master",    label: t("owner.nav.master"),    icon: "user"    },
     { id: "branches",  label: t("owner.nav.branches"),  icon: "pin"     },
-    { id: "schools",   label: "Schools",                icon: "book"    },
+    { id: "schools",   label: t("owner.nav.schools"),   icon: "book"    },
     { id: "accounts",  label: t("owner.nav.accounts"),  icon: "users"   },
+    { id: "memberPrivate", label: t("owner.nav.memberPrivate"), icon: "target" },
     { id: "classes",   label: t("owner.nav.classes"),   icon: "swim"    },
-    { id: "competitions", label: "Competitions",        icon: "flag"    },
+    { id: "competitions", label: t("owner.nav.competitions"), icon: "flag" },
     { id: "levels",    label: t("owner.nav.levels"),    icon: "book"    },
     { section: t("owner.nav.sectionFinance") },
     { id: "rates",     label: t("owner.nav.rates"),     icon: "settings"},
@@ -4801,19 +5416,18 @@ function buildNavItems(t: (key: string) => string): NavItem[] {
     { section: t("owner.nav.sectionSystem") },
     { id: "storage",   label: t("owner.nav.storage"),   icon: "archive"   },
     { id: "activity",  label: t("owner.nav.activity"),  icon: "clipboard" },
-    { id: "database",  label: "Database Manager",        icon: "archive"   },
   ];
 }
 
 function buildTitles(t: (key: string) => string): Record<string, [string, string]> {
   return {
     dashboard: [t("owner.titles.dashboard.title"), t("owner.titles.dashboard.sub")],
-    master:    ["Master Data Owner", "Kelola profil Head of NEXT & master kategori keuangan"],
+    master:    [t("owner.titles.master.title"),    t("owner.titles.master.sub")],
     branches:  [t("owner.titles.branches.title"),  t("owner.titles.branches.sub")],
-    schools:   ["Schools", "Manage school assets and signatures"],
+    schools:   [t("owner.titles.schools.title"),   t("owner.titles.schools.sub")],
     accounts:  [t("owner.titles.accounts.title"),  t("owner.titles.accounts.sub")],
     classes:   [t("owner.titles.classes.title"),   t("owner.titles.classes.sub")],
-    competitions: ["Competitions & Achievements", "Kelola perlombaan & prestasi member seluruh cabang"],
+    competitions: [t("owner.titles.competitions.title"), t("owner.titles.competitions.sub")],
     levels:    [t("owner.titles.levels.title"),    t("owner.titles.levels.sub")],
     rates:     [t("owner.titles.rates.title"),     t("owner.titles.rates.sub")],
     invoices:  [t("owner.titles.invoices.title"),  t("owner.titles.invoices.sub")],
@@ -4822,7 +5436,6 @@ function buildTitles(t: (key: string) => string): Record<string, [string, string
     landing:   [t("owner.titles.landing.title"),   t("owner.titles.landing.sub")],
     storage:   [t("owner.titles.storage.title"),   t("owner.titles.storage.sub")],
     activity:  [t("owner.titles.activity.title"),  t("owner.titles.activity.sub")],
-    database:  ["Database Manager", "Browse, delete, export & monitor database secara realtime"],
   };
 }
 
@@ -4840,10 +5453,11 @@ export default function OwnerPage() {
   const [initError, setInitError] = useState<string | null>(null);
 
   const loadBranches = useCallback(async () => {
-    const [{ data: branchData }, { data: members }, { data: coaches }, { data: classes }] = await Promise.all([
-      supabase.from("branches").select("id, name, city, address, status, wa_numbers, bank_name, bank_account, bank_holder").order("name"),
+    const [{ data: branchData }, { data: members }, { data: coaches }, { data: staffData }, { data: classes }] = await Promise.all([
+      supabase.from("branches").select("id, name, city, address, lat, lng, status, wa_numbers, bank_name, bank_account, bank_holder, show_payments_to_admin").order("name"),
       supabase.from("members").select("id, branch_id").eq("status", "active"),
       supabase.from("profiles").select("id, branch_id").eq("role", "coach"),
+      supabase.from("profiles").select("id, branch_id").eq("role", "staff"),
       supabase.from("classes").select("id, branch_id").eq("status", "active"),
     ]);
 
@@ -4856,6 +5470,10 @@ export default function OwnerPage() {
         if (c.branch_id) acc[c.branch_id] = (acc[c.branch_id] ?? 0) + 1;
         return acc;
       }, {});
+      const staffMap = (staffData ?? []).reduce<Record<string, number>>((acc, s) => {
+        if (s.branch_id) acc[s.branch_id] = (acc[s.branch_id] ?? 0) + 1;
+        return acc;
+      }, {});
       const classMap = (classes ?? []).reduce<Record<string, number>>((acc, c) => {
         if (c.branch_id) acc[c.branch_id] = (acc[c.branch_id] ?? 0) + 1;
         return acc;
@@ -4865,6 +5483,7 @@ export default function OwnerPage() {
         ...b,
         member_count: memberMap[b.id] ?? 0,
         coach_count:  coachMap[b.id]  ?? 0,
+        staff_count:  staffMap[b.id]  ?? 0,
         class_count:  classMap[b.id]  ?? 0,
       })) as Branch[];
       setBranches(flat);
@@ -4908,6 +5527,7 @@ export default function OwnerPage() {
     branches:  <Branches branches={branches} onRefresh={loadBranches} userId={userId} userName={ownerName} />,
     schools:   <OwnerSchools branches={branches} />,
     accounts:  <OwnerAccountsMaster branches={branches} />,
+    memberPrivate: <OwnerMemberPrivate branches={branches} />,
     classes:   <Classes branches={branches} />,
     competitions: <AdminCompetition branchId="" />,
     levels:    <OwnerRaporLevels />,
@@ -4918,7 +5538,6 @@ export default function OwnerPage() {
     landing:   <LandingCMS />,
     storage:   <OwnerStorage userId={userId} userName={ownerName} />,
     activity:  <OwnerActivityLog branches={branches} />,
-    database:  <OwnerDatabaseManager />,
   };
 
   const navItems = useMemo(() => buildNavItems(t), [t]);
@@ -4929,7 +5548,7 @@ export default function OwnerPage() {
       <Logo size={36} />
       <div className="min-w-0">
         <div className="font-display font-extrabold text-[14px] text-ocean-700 leading-tight">Owner Panel</div>
-        <div className="text-[10px] text-ink-mute tracking-wide">{profile?.full_name ?? "Owner"} · {t("owner.shell.role")}</div>
+        <div className="text-[10px] text-ink-mute tracking-wide"><NoTranslate>{profile?.full_name ?? "Owner"}</NoTranslate> · {t("owner.shell.role")}</div>
       </div>
     </div>
   ), [profile?.full_name, t]);
@@ -4993,7 +5612,7 @@ export default function OwnerPage() {
           onMenu={() => setMobileNav(true)}
           right={
             <>
-              <LanguageSwitcher />
+              <GoogleLanguageSwitcher />
               <Bell userId={userId} />
               <Avatar name={profile?.full_name ?? "O"} size={36} />
             </>

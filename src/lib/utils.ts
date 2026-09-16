@@ -60,6 +60,17 @@ export const cn = (...classes: (string | undefined | false | null)[]): string =>
   classes.filter(Boolean).join(" ");
 
 /**
+ * Map a profile role to the panel route it should land on after login.
+ * manager_center reuses the Admin panel shell (same route, role-aware nav)
+ * instead of having its own top-level page.
+ */
+export const roleHomePath = (role?: string | null): string => {
+  if (!role) return "/member";
+  if (role === "manager_center") return "/admin";
+  return `/${role}`;
+};
+
+/**
  * Return a percentage clamped between 0 and 100 for progress bars.
  */
 export const clampPercent = (value: number, max: number): number => {

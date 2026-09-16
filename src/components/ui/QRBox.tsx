@@ -8,9 +8,11 @@ interface QRBoxProps {
   /** If true, renders a download <a> below the QR */
   downloadable?: boolean;
   downloadName?: string;
+  /** If true, suppresses the mono value caption under the canvas (e.g. when the caller already displays the value itself). */
+  hideCaption?: boolean;
 }
 
-export default function QRBox({ size = 132, value = "NSS-XXX-000", downloadable, downloadName }: QRBoxProps) {
+export default function QRBox({ size = 132, value = "NSS-XXX-000", downloadable, downloadName, hideCaption }: QRBoxProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [dataUrl, setDataUrl] = useState<string | null>(null);
 
@@ -30,7 +32,9 @@ export default function QRBox({ size = 132, value = "NSS-XXX-000", downloadable,
       <div className="p-2.5 bg-white rounded-xl border border-line shadow-sm">
         <canvas ref={canvasRef} width={size} height={size} className="block rounded-md" />
       </div>
-      <div className="text-[10px] font-mono text-ink-mute tracking-wide">{value}</div>
+      {!hideCaption && (
+        <div className="text-[10px] font-mono text-ink-mute tracking-wide">{value}</div>
+      )}
       {downloadable && dataUrl && (
         <a
           href={dataUrl}
