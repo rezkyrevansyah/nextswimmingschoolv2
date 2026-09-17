@@ -15,11 +15,7 @@ import { useConfirm } from "@/components/providers/ConfirmProvider";
 import { useLocale } from "@/components/providers/LocaleProvider";
 import { computeInstallmentAmount } from "@/lib/payroll";
 import { NoTranslate } from "@/components/ui/NoTranslate";
-
-interface Branch {
-  id: string;
-  name: string;
-}
+import type { Branch } from "../_types";
 
 interface LoanRow {
   id: string;

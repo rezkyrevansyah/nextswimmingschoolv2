@@ -30,43 +30,6 @@ import OwnerStorage from "./_components/OwnerStorage";
 import OwnerFinancial from "./_components/OwnerFinancial";
 import type { Branch } from "./_types";
 
-// ── Types ──────────────────────────────────────────────────────────────────────
-
-interface CoachSpreadsheetEntry {
-  coach_id: string;
-  spreadsheet_url: string;
-  updated_at: string;
-  coach?: { full_name: string } | null;
-}
-
-interface ClassRow {
-  id: string;
-  name: string;
-  branch_id: string;
-  status: string;
-  capacity: number;
-  enrolled: number;
-  price_monthly: number;
-  schedule_days: string[];
-  time_start: string; time_end: string;
-  goals: string | null;
-  description: string | null;
-  spreadsheet_url?: string | null;
-  spreadsheet_filled?: boolean;
-  rapor_signer_coach_id?: string | null;
-  branch?: { name: string } | null;
-  class_coaches?: { coach_id: string; role: string; profile: { full_name: string } | null }[];
-  coach_spreadsheets?: CoachSpreadsheetEntry[];
-}
-
-interface StaffAttendanceSummary {
-  staff_id: string;
-  present_count: number;
-  late_count: number;
-  leave_count: number;
-  sick_count: number;
-}
-
 // ── Sub-pages ──────────────────────────────────────────────────────────────────
 
 

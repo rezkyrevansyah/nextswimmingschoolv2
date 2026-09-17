@@ -15,11 +15,7 @@ import PhotoLightbox from "@/components/ui/PhotoLightbox";
 import { useSignedUrl } from "@/hooks/useSignedUrl";
 import { fmtDate } from "@/lib/utils";
 import { staffStatusKind, staffLeaveTypeToStatus, STAFF_ATTENDANCE_CONFLICT, type StaffDbStatus } from "@/lib/attendance";
-
-interface Branch {
-  id: string;
-  name: string;
-}
+import type { Branch } from "../_types";
 
 interface StaffLeaveRow {
   id: string;

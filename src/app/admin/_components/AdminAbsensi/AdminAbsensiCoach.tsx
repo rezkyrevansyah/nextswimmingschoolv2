@@ -1,0 +1,372 @@
+"use client";
+import { useState, useEffect, useCallback } from "react";
+import { createClient } from "@/utils/supabase/client";
+import { useToast } from "@/components/providers/ToastProvider";
+import { useConfirm } from "@/components/providers/ConfirmProvider";
+import { useLocale } from "@/components/providers/LocaleProvider";
+import Icon from "@/components/ui/Icon";
+import Btn from "@/components/ui/Btn";
+import { Field, Input, Select, Textarea } from "@/components/ui/FormFields";
+import { Card } from "@/components/ui/Card";
+import Status from "@/components/ui/Status";
+import Modal from "@/components/ui/Modal";
+import TimePicker from "@/components/ui/TimePicker";
+import type { AttendanceRow, CoachProfile, ClassRow } from "../../_types";
+import { fmtDate } from "@/lib/utils";
+import { logActivity } from "@/lib/activityLog";
+import { coachDbToUi, COACH_DB_STATUSES, COACH_ATTENDANCE_CONFLICT, type CoachDbStatus } from "@/lib/attendance";
+import { useSignedUrl } from "@/hooks/useSignedUrl";
+import PhotoLightbox from "@/components/ui/PhotoLightbox";
+
+function SelfieThumb({ selfieKey, onOpen }: { selfieKey: string | null; onOpen: () => void }) {
+  const url = useSignedUrl(selfieKey);
+  if (!selfieKey) return <span className="text-ink-faint text-xs">—</span>;
+  return (
+    <button type="button" onClick={onOpen} className="w-9 h-9 rounded-lg overflow-hidden border border-line shrink-0">
+      {url ? (
+        // eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL, not a static asset
+        <img src={url} alt="" className="w-full h-full object-cover" />
+      ) : (
+        <span className="skeleton w-full h-full block" />
+      )}
+    </button>
+  );
+}
+
+export default function AdminAbsensiCoach({ branchId }: { branchId: string }) {
+  const supabase = createClient();
+  const toast = useToast();
+  const confirm = useConfirm();
+  const { t, locale } = useLocale();
+  const localeTag = locale === "id" ? "id-ID" : "en-US";
+
+  const today = new Date().toISOString().split("T")[0];
+  const defaultMonth = today.slice(0, 7);
+
+  const [records, setRecords] = useState<AttendanceRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [page, setPage] = useState(0);
+  const [lightboxKey, setLightboxKey] = useState<string | null>(null);
+  const lightboxUrl = useSignedUrl(lightboxKey);
+  const PAGE_SIZE_COACH = 30;
+
+  const [openManual, setOpenManual] = useState(false);
+  const [editTarget, setEditTarget] = useState<AttendanceRow | null>(null);
+  const [coaches, setCoaches] = useState<CoachProfile[]>([]);
+  const [classes, setClasses] = useState<ClassRow[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({ coach_id: "", class_id: "", session_date: "", clock_in_time: "", note: "" });
+  const [manualStatus, setManualStatus] = useState<CoachDbStatus>("present");
+  const [coachClassIds, setCoachClassIds] = useState<Set<string>>(new Set());
+  const [sessionDates, setSessionDates] = useState<{ value: string; label: string }[]>([]);
+
+  // Filters
+  const [filterCoach, setFilterCoach] = useState("all");
+  const [filterClass2, setFilterClass2] = useState("all");
+  const [filterDateFrom, setFilterDateFrom] = useState(`${defaultMonth}-01`);
+  const [filterDateTo, setFilterDateTo] = useState(today);
+
+  // Build month options for quick filter
+  const monthOptions = Array.from({ length: 12 }, (_, i) => {
+    const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - i);
+    const value = d.toISOString().slice(0, 7);
+    const label = d.toLocaleDateString(localeTag, { month: "long", year: "numeric" });
+    return { value, label };
+  });
+
+  const loadRecords = useCallback(async (pg: number, append = false) => {
+    setLoading(true);
+    let q = supabase.from("coach_attendances")
+      .select("id, coach_id, class_id, session_date, clock_in_time, status, selfie_url, distance_meters, is_manual, manual_note, profile:profiles!coach_attendances_coach_id_fkey(full_name), class:classes(name)")
+      .eq("branch_id", branchId)
+      .gte("session_date", filterDateFrom)
+      .lte("session_date", filterDateTo)
+      .order("session_date", { ascending: false })
+      .order("clock_in_time", { ascending: false })
+      .range(pg * PAGE_SIZE_COACH, pg * PAGE_SIZE_COACH + PAGE_SIZE_COACH - 1);
+
+    if (filterCoach !== "all") q = q.eq("coach_id", filterCoach);
+    if (filterClass2 !== "all") q = q.eq("class_id", filterClass2);
+
+    const { data } = await q;
+    const rows = (data ?? []) as unknown as AttendanceRow[];
+    if (append) {
+      setRecords(prev => [...prev, ...rows]);
+    } else {
+      setRecords(rows);
+    }
+    setHasMore(rows.length > PAGE_SIZE_COACH);
+    setLoading(false);
+  }, [branchId, filterCoach, filterClass2, filterDateFrom, filterDateTo]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* eslint-disable react-hooks/set-state-in-effect -- async data loader */
+  useEffect(() => {
+    supabase.from("profiles").select("id, full_name").eq("branch_id", branchId).eq("role", "coach").then(({ data }) => { if (data) setCoaches(data as unknown as CoachProfile[]); });
+    supabase.from("classes").select("id, name, time_start, time_end, status, branch_id, capacity, enrolled, schedule_days, price_monthly, class_coaches(coach_id)").eq("branch_id", branchId).eq("status", "active").then(({ data }) => { if (data) setClasses(data as unknown as ClassRow[]); });
+  }, [branchId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    setPage(0);
+    loadRecords(0, false);
+    // Realtime: any change to this branch's coach attendance → refresh (mirrors
+    // AdminDashboard.tsx's live_att channel). Merged into this effect so the
+    // channel is torn down and recreated whenever loadRecords' own deps change.
+    const channel = supabase.channel(`live_coach_att:${branchId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "coach_attendances", filter: `branch_id=eq.${branchId}` }, () => loadRecords(0, false))
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [loadRecords]); // eslint-disable-line react-hooks/exhaustive-deps
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  const loadMore = () => {
+    const next = page + 1;
+    setPage(next);
+    loadRecords(next, true);
+  };
+
+  // When coach changes → compute which classes they teach
+  const onCoachChange = (coachId: string) => {
+    const ids = new Set(
+      classes
+        .filter(c => (c as unknown as { class_coaches?: { coach_id: string }[] }).class_coaches?.some(cc => cc.coach_id === coachId))
+        .map(c => c.id)
+    );
+    setCoachClassIds(ids);
+    setForm(f => ({ ...f, coach_id: coachId, class_id: "", session_date: "", clock_in_time: "" }));
+    setSessionDates([]);
+  };
+
+  // When class changes → generate past session dates from schedule_days (last 8 weeks)
+  const onClassChange = (classId: string) => {
+    const cls = classes.find(c => c.id === classId);
+    const dates: { value: string; label: string }[] = [];
+    if (cls && cls.schedule_days?.length) {
+      const DAY_MAP: Record<string, number> = { Minggu: 0, Senin: 1, Selasa: 2, Rabu: 3, Kamis: 4, Jumat: 5, Sabtu: 6 };
+      const todayD = new Date(); todayD.setHours(0, 0, 0, 0);
+      for (let daysBack = 0; daysBack <= 56; daysBack++) {
+        const d = new Date(todayD); d.setDate(todayD.getDate() - daysBack);
+        const dayName = d.toLocaleDateString("id-ID", { weekday: "long" });
+        if (cls.schedule_days.includes(dayName) || cls.schedule_days.some(sd => DAY_MAP[sd] === d.getDay())) {
+          const iso = d.toISOString().split("T")[0];
+          const label = d.toLocaleDateString(localeTag, { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+          dates.push({ value: iso, label });
+        }
+      }
+    }
+    setSessionDates(dates);
+    setForm(f => ({
+      ...f, class_id: classId, session_date: dates[0]?.value ?? "",
+      clock_in_time: cls?.time_start?.slice(0, 5) ?? "",
+    }));
+  };
+
+  const saveManual = async () => {
+    if (!form.coach_id || !form.class_id || !form.session_date) return toast.error(t("admin.absensi.coachDateRequired"));
+    setSaving(true);
+    const user = (await supabase.auth.getUser()).data.user;
+    const clockInTime = form.clock_in_time || new Date().toTimeString().slice(0, 8);
+    if (editTarget) {
+      const { error } = await supabase.from("coach_attendances").update({
+        coach_id: form.coach_id, class_id: form.class_id,
+        session_date: form.session_date,
+        clock_in_time: clockInTime,
+        is_manual: true,
+        manual_by: user?.id ?? null,
+        manual_note: form.note || null,
+        status: manualStatus,
+      }).eq("id", editTarget.id);
+      setSaving(false);
+      if (error) return toast.error(t("admin.absensi.saveFailed"), error.message);
+      toast.success(t("admin.absensi.attendanceUpdatedToast"));
+      logActivity(supabase, { userId: user?.id ?? "unknown", userRole: "admin", userName: user?.user_metadata?.full_name ?? "Admin", branchId, entityType: "coach_attendances", entityId: editTarget.id, action: "update", label: t("admin.absensi.activityManualUpdated", { date: form.session_date }), meta: { coach_id: form.coach_id, session_date: form.session_date, status: manualStatus } });
+    } else {
+      // Upsert (not insert) — guards against creating a second attendance
+      // row for the same coach/class/date, which would double-count honor.
+      const { error } = await supabase.from("coach_attendances").upsert({
+        branch_id: branchId, coach_id: form.coach_id, class_id: form.class_id,
+        session_date: form.session_date,
+        clock_in_time: clockInTime,
+        is_manual: true, manual_by: user?.id ?? null,
+        manual_note: form.note || null, status: manualStatus,
+      }, { onConflict: COACH_ATTENDANCE_CONFLICT });
+      setSaving(false);
+      if (error) return toast.error(t("admin.absensi.saveFailed"), error.message);
+      toast.success(t("admin.absensi.attendanceSavedToast"));
+      logActivity(supabase, { userId: user?.id ?? "unknown", userRole: "admin", userName: user?.user_metadata?.full_name ?? "Admin", branchId, entityType: "coach_attendances", entityId: form.coach_id, action: "create", label: t("admin.absensi.activityManualAdded", { date: form.session_date }), meta: { coach_id: form.coach_id, session_date: form.session_date, status: manualStatus } });
+    }
+    setOpenManual(false);
+    setEditTarget(null);
+    setPage(0);
+    loadRecords(0, false);
+  };
+
+  const openEdit = (r: AttendanceRow) => {
+    setEditTarget(r);
+    const ids = new Set(
+      classes
+        .filter(c => (c as unknown as { class_coaches?: { coach_id: string }[] }).class_coaches?.some(cc => cc.coach_id === r.coach_id))
+        .map(c => c.id)
+    );
+    setCoachClassIds(ids);
+    const cls = classes.find(c => c.id === r.class_id);
+    const dates: { value: string; label: string }[] = [];
+    if (cls?.schedule_days?.length) {
+      const DAY_MAP: Record<string, number> = { Minggu: 0, Senin: 1, Selasa: 2, Rabu: 3, Kamis: 4, Jumat: 5, Sabtu: 6 };
+      const todayD = new Date(); todayD.setHours(0, 0, 0, 0);
+      for (let daysBack = 0; daysBack <= 56; daysBack++) {
+        const d = new Date(todayD); d.setDate(todayD.getDate() - daysBack);
+        if (cls.schedule_days.some(sd => DAY_MAP[sd] === d.getDay())) {
+          const iso = d.toISOString().split("T")[0];
+          dates.push({ value: iso, label: d.toLocaleDateString(localeTag, { weekday: "long", day: "numeric", month: "long", year: "numeric" }) });
+        }
+      }
+    }
+    if (r.session_date && !dates.find(d => d.value === r.session_date)) {
+      const d = new Date(r.session_date);
+      dates.push({ value: r.session_date, label: d.toLocaleDateString(localeTag, { weekday: "long", day: "numeric", month: "long", year: "numeric" }) });
+    }
+    setSessionDates(dates);
+    setForm({ coach_id: r.coach_id, class_id: r.class_id, session_date: r.session_date, clock_in_time: r.clock_in_time?.slice(0, 5) ?? "", note: r.manual_note ?? "" });
+    setManualStatus((r.status as CoachDbStatus) ?? "present");
+    setOpenManual(true);
+  };
+
+  const deleteRecord = async (r: AttendanceRow) => {
+    const ok = await confirm({ title: t("admin.absensi.deleteConfirmTitle"), body: t("admin.absensi.deleteConfirmBody", { name: r.profile?.full_name ?? "", date: fmtDate(r.session_date) }), confirmLabel: t("common.actions.delete"), danger: true });
+    if (!ok) return;
+    const { error } = await supabase.from("coach_attendances").delete().eq("id", r.id);
+    if (error) return toast.error(t("admin.absensi.deleteFailed"), error.message);
+    toast.success(t("admin.absensi.attendanceDeletedToast"));
+    setPage(0);
+    loadRecords(0, false);
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Filters */}
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <Select value={filterCoach} onChange={e => setFilterCoach(e.target.value)}>
+          <option value="all">{t("admin.absensi.allCoachesOpt")}</option>
+          {coaches.map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
+        </Select>
+        <Select value={filterClass2} onChange={e => setFilterClass2(e.target.value)}>
+          <option value="all">{t("admin.absensi.allClassesOpt")}</option>
+          {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </Select>
+        <div className="flex items-center gap-2">
+          <Input type="date" value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)} className="flex-1" />
+          <span className="text-ink-mute text-xs shrink-0">{t("admin.absensi.toDateSeparator")}</span>
+          <Input type="date" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)} className="flex-1" />
+        </div>
+        <div className="flex justify-end">
+          <Btn variant="primary" icon="plus" onClick={() => { setEditTarget(null); setForm({ coach_id: "", class_id: "", session_date: "", clock_in_time: "", note: "" }); setManualStatus("present"); setCoachClassIds(new Set()); setSessionDates([]); setOpenManual(true); }}>{t("admin.absensi.manualAttendanceBtn")}</Btn>
+        </div>
+      </div>
+      {/* Quick month filter */}
+      <div className="flex gap-2 flex-wrap">
+        {monthOptions.slice(0, 4).map(o => (
+          <button key={o.value} type="button"
+            onClick={() => {
+              const from = `${o.value}-01`;
+              const to = new Date(Number(o.value.slice(0, 4)), Number(o.value.slice(5, 7)), 0).toISOString().split("T")[0];
+              setFilterDateFrom(from); setFilterDateTo(to);
+            }}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${filterDateFrom.startsWith(o.value) ? "bg-ocean-600 text-white border-ocean-600" : "border-line text-ink-mute hover:border-ocean-300"}`}>
+            {o.label}
+          </button>
+        ))}
+      </div>
+
+      <Card padded={false}>
+        {loading && records.length === 0 ? <div className="p-10 text-center text-ink-mute">{t("admin.absensi.loadingData")}</div> : (
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead><tr className="text-[11px] uppercase tracking-widest text-ink-faint font-bold border-b border-line">
+                  <th className="text-left py-3 px-5 font-bold">{t("admin.absensi.colDate")}</th><th className="text-left py-3 font-bold">{t("admin.absensi.colCoach")}</th>
+                  <th className="text-left py-3 font-bold">{t("admin.absensi.colClass")}</th><th className="text-left py-3 font-bold">{t("admin.absensi.colClockIn")}</th>
+                  <th className="text-left py-3 font-bold hidden sm:table-cell">{t("admin.absensi.colDistance")}</th><th className="text-left py-3 font-bold hidden sm:table-cell">{t("admin.absensi.colMethod")}</th>
+                  <th className="text-left py-3 font-bold">{t("admin.absensi.colSelfie")}</th>
+                  <th className="text-left py-3 pr-5 font-bold"></th>
+                </tr></thead>
+                <tbody className="divide-y divide-line">
+                  {records.map((r) => (
+                    <tr key={r.id} className="hover:bg-paper-tint">
+                      <td className="py-3.5 px-5 text-ink-soft">{fmtDate(r.session_date)}</td>
+                      <td className="font-semibold">{r.profile?.full_name}</td>
+                      <td className="text-ink-soft">{r.class?.name}</td>
+                      <td className="font-mono">{r.clock_in_time?.slice(0, 5) ?? "—"}</td>
+                      <td className="font-mono hidden sm:table-cell">{r.distance_meters != null ? `${r.distance_meters} m` : "—"}</td>
+                      <td className="hidden sm:table-cell">
+                        <div className="flex flex-col gap-1">
+                          {r.is_manual ? <Status kind="manual">{t("admin.absensi.methodManual")}</Status> : <Status kind="active">{t("admin.absensi.methodSelfieGps")}</Status>}
+                          {coachDbToUi(r.status) === "late" && <Status kind="late">{t("admin.absensi.statusLate")}</Status>}
+                        </div>
+                      </td>
+                      <td>
+                        <SelfieThumb selfieKey={r.selfie_url} onOpen={() => setLightboxKey(r.selfie_url)} />
+                      </td>
+                      <td className="pr-5">
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => openEdit(r)} className="p-1.5 rounded hover:bg-paper-tint text-ink-mute hover:text-ink" title={t("common.actions.edit")}><Icon name="edit" className="w-4 h-4" /></button>
+                          <button onClick={() => deleteRecord(r)} className="p-1.5 rounded hover:bg-danger-50 text-ink-mute hover:text-danger-600" title={t("common.actions.delete")}><Icon name="trash" className="w-4 h-4" /></button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {records.length === 0 && !loading && <tr><td colSpan={8} className="py-10 text-center text-ink-mute">{t("admin.absensi.noAttendanceYet")}</td></tr>}
+                </tbody>
+              </table>
+            </div>
+            {hasMore && (
+              <div className="px-5 py-3 border-t border-line">
+                <Btn variant="ghost" onClick={loadMore} disabled={loading} className="w-full">{loading ? t("admin.absensi.loadingBtn") : t("admin.absensi.showMoreBtn")}</Btn>
+              </div>
+            )}
+          </>
+        )}
+      </Card>
+      <Modal open={openManual} onClose={() => { setOpenManual(false); setEditTarget(null); }} title={editTarget ? t("admin.absensi.editModalTitle") : t("admin.absensi.addModalTitle")}
+        footer={<><Btn variant="ghost" onClick={() => setOpenManual(false)}>{t("common.actions.cancel")}</Btn><Btn variant="primary" onClick={saveManual} disabled={saving}>{saving ? t("common.actions.saving") : t("admin.absensi.saveAttendanceBtn")}</Btn></>}>
+        <div className="space-y-4">
+          <Card className="!p-3 bg-manual-50 border-manual-500/20">
+            <div className="flex items-start gap-2.5 text-sm"><Icon name="info" className="w-5 h-5 text-manual-500 shrink-0" /><span>{t("admin.absensi.manualNoticePrefix")} <b>{t("admin.absensi.manualNoticeBold")}</b> {t("admin.absensi.manualNoticeSuffix")}</span></div>
+          </Card>
+          <div className="grid sm:grid-cols-2 gap-4">
+            <Field label={t("admin.absensi.colCoach")} required>
+              <Select value={form.coach_id} onChange={e => onCoachChange(e.target.value)}>
+                <option value="">{t("admin.absensi.selectCoachPlaceholder")}</option>
+                {coaches.map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
+              </Select>
+            </Field>
+            <Field label={t("admin.absensi.colClass")} required>
+              <Select value={form.class_id} onChange={e => onClassChange(e.target.value)} disabled={!form.coach_id}>
+                <option value="">{form.coach_id ? t("admin.absensi.selectClassPlaceholder") : t("admin.absensi.selectCoachFirstPlaceholder")}</option>
+                {classes.filter(c => coachClassIds.has(c.id)).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </Select>
+            </Field>
+            <Field label={t("admin.absensi.fieldSessionDate")} required>
+              <Select value={form.session_date} onChange={e => setForm(f => ({ ...f, session_date: e.target.value }))} disabled={!form.class_id}>
+                <option value="">{form.class_id ? t("admin.absensi.selectSessionPlaceholder") : t("admin.absensi.selectClassFirstPlaceholder")}</option>
+                {sessionDates.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+              </Select>
+            </Field>
+            <Field label={t("admin.absensi.fieldClockInTime")}><TimePicker value={form.clock_in_time} onChange={v => setForm(f => ({ ...f, clock_in_time: v }))} /></Field>
+          </div>
+          <Field label={t("admin.absensi.fieldAttendanceStatus")}>
+            <Select value={manualStatus} onChange={e => setManualStatus(e.target.value as CoachDbStatus)}>
+              {COACH_DB_STATUSES.map(s => (
+                <option key={s} value={s}>{s === "present" ? t("admin.absensi.statusPresentOnTime") : s === "late" ? t("admin.absensi.statusLate") : t("admin.absensi.statusAbsent")}</option>
+              ))}
+            </Select>
+          </Field>
+          <Field label={t("admin.absensi.fieldNoteReason")}><Textarea rows={3} value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} placeholder={t("admin.absensi.notePlaceholder")} /></Field>
+        </div>
+      </Modal>
+      {lightboxKey && (
+        <PhotoLightbox src={lightboxUrl} name={t("admin.absensi.colSelfie")} onClose={() => setLightboxKey(null)} />
+      )}
+    </div>
+  );
+}
