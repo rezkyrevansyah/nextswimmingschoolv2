@@ -7,7 +7,7 @@ export const member = {
   },
   shell: {
     greeting: "Hi, {name}",
-    subMember: "Member · {branch}",
+    subMember: "Student · {branch}",
     subSchedule: "Classes you're enrolled in",
     subAttendance: "Attendance history",
     subBills: "Class payments",
@@ -149,9 +149,9 @@ export const member = {
     downloadPdf: "Download PDF",
   },
   profile: {
-    ageMember: "{age} yo · Member",
-    roleMember: "Member",
-    memberSince: "Member since {date}",
+    ageMember: "{age} yo · Student",
+    roleMember: "Student",
+    memberSince: "Student since {date}",
     uploadingPhoto: "Uploading photo…",
     guardianName: "Guardian",
     guardianPhone: "Guardian Phone",

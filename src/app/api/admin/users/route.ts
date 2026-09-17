@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
 
   // Admins can only create coach/member/school/staff — not admin/owner
   if (callerRole === "admin" && !["coach", "member", "school", "staff"].includes(role)) {
-    return NextResponse.json({ error: "Admin can only create coach, member, school, or staff accounts" }, { status: 403 });
+    return NextResponse.json({ error: "Admin can only create coach, student, school, or staff accounts" }, { status: 403 });
   }
 
   // Admins may only create accounts in their own branch
@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
       .single();
     if (existingReg?.member_id) {
       return NextResponse.json(
-        { error: "Pendaftaran ini sudah disetujui sebelumnya dan sudah punya akun member.", code: "ALREADY_APPROVED" },
+        { error: "Pendaftaran ini sudah disetujui sebelumnya dan sudah punya akun student.", code: "ALREADY_APPROVED" },
         { status: 409 }
       );
     }
@@ -171,7 +171,7 @@ export async function POST(req: NextRequest) {
   if (role === "member") {
     if (!branch_id) {
       await db.auth.admin.deleteUser(userId);
-      return NextResponse.json({ error: "branch_id required for member" }, { status: 400 });
+      return NextResponse.json({ error: "branch_id required for student" }, { status: 400 });
     }
 
     const isPrivateMember = body.member_type === "private";
@@ -213,7 +213,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({
           user_id: userId,
           member_id: memberId,
-          class_assignment_error: "Kelas sudah penuh — member dibuat tanpa penugasan kelas. Silakan tetapkan kelas lain secara manual.",
+          class_assignment_error: "Kelas sudah penuh — student dibuat tanpa penugasan kelas. Silakan tetapkan kelas lain secara manual.",
         });
       }
       await db.from("member_classes").insert({

@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "branch_id is required" }, { status: 400 });
   }
   if (callerRole === "admin" && branch_id !== callerBranchId) {
-    return NextResponse.json({ error: "Anda hanya dapat mengimpor member ke cabang Anda sendiri" }, { status: 403 });
+    return NextResponse.json({ error: "Anda hanya dapat mengimpor student ke cabang Anda sendiri" }, { status: 403 });
   }
   if (!rows || !Array.isArray(rows) || rows.length === 0) {
     return NextResponse.json({ error: "rows array is required and must not be empty" }, { status: 400 });
@@ -124,7 +124,7 @@ export async function POST(req: NextRequest) {
 
     const userId = authData.user.id;
 
-    // Structured account ID (NEXT.xxx.SW.yy) — atomic sequence, generated once per row.
+    // Structured account ID (NEXT.xxx.ST.yy) — atomic sequence, generated once per row.
     const { data: userNo, error: userNoError } = await db.rpc("generate_user_no", { p_role: "member" });
     if (userNoError || !userNo) {
       await db.auth.admin.deleteUser(userId);
@@ -220,7 +220,7 @@ export async function POST(req: NextRequest) {
       }
       if (coachRows.length > 0) {
         const { error: coachErr } = await db.from("class_coaches").insert(coachRows);
-        if (coachErr) classWarnings.push({ row: rowNum, email: row.email, warning: "Gagal assign coach — bisa diatur manual lewat menu Private Members" });
+        if (coachErr) classWarnings.push({ row: rowNum, email: row.email, warning: "Gagal assign coach — bisa diatur manual lewat menu Private Students" });
       }
 
       // 4c. Optional bill for the session package price.
@@ -239,7 +239,7 @@ export async function POST(req: NextRequest) {
           total: packagePrice,
           status: "unpaid",
         });
-        if (billErr) classWarnings.push({ row: rowNum, email: row.email, warning: "Gagal membuat tagihan paket — bisa dibuat manual lewat menu Private Members" });
+        if (billErr) classWarnings.push({ row: rowNum, email: row.email, warning: "Gagal membuat tagihan paket — bisa dibuat manual lewat menu Private Students" });
       }
     } else if (row.class_id && memberRow) {
       // 4. Assign to an existing class (non-fatal — member row already exists either way)
@@ -250,7 +250,7 @@ export async function POST(req: NextRequest) {
         .eq("class_id", row.class_id);
       const capacity = classRow?.capacity ?? 0;
       if (capacity > 0 && (enrolledCount ?? 0) >= capacity) {
-        classWarnings.push({ row: rowNum, email: row.email, warning: "Kelas sudah penuh — member dibuat tanpa penugasan kelas" });
+        classWarnings.push({ row: rowNum, email: row.email, warning: "Kelas sudah penuh — student dibuat tanpa penugasan kelas" });
       } else {
         await db.from("member_classes").insert({
           member_id: memberRow.id,

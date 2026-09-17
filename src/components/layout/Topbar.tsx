@@ -21,8 +21,8 @@ export default function Topbar({ title, sub, search, right, onMenu }: TopbarProp
           <Icon name="menu" className="w-5 h-5" />
         </button>
         <div className="min-w-0 flex-1">
-          <h1 className="font-display font-bold text-base lg:text-lg text-ink leading-tight truncate">{title}</h1>
-          {sub && <p className="text-xs text-ink-mute truncate">{sub}</p>}
+          <h1 className="font-display font-bold text-lg lg:text-xl text-ink leading-tight truncate">{title}</h1>
+          {sub && <p className="text-xs text-ink-mute truncate mt-0.5">{sub}</p>}
         </div>
         {search && (
           <div className="hidden md:flex items-center gap-2 bg-paper-tint border border-line rounded-xl px-3 py-2 w-72">

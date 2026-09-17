@@ -338,20 +338,28 @@ export default function OwnerAccountsMaster({ branches }: { branches: { id: stri
     filtered.length > 0 && filtered.every((a) => selectedQRIds.has(a.id));
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {/* ── Top Action Toolbar ── */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-2 flex-wrap flex-1 min-w-[280px]">
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder={t("owner.accounts.searchPlaceholder")}
-            className="!w-56"
-          />
-          <Select
+          <div className="relative">
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={t("owner.accounts.searchPlaceholder")}
+              className="h-10 pl-9 pr-3 w-56 rounded-xl border border-line bg-paper text-sm text-ink placeholder:text-ink-faint focus:outline-hidden focus:border-ocean-500 focus:ring-1 focus:ring-ocean-500"
+            />
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint pointer-events-none">
+              <Icon name="search" className="w-4 h-4" />
+            </span>
+          </div>
+
+          <select
             value={roleFilter}
             onChange={(e) => setRoleFilter(e.target.value as RoleFilter)}
-            className="!w-40"
+            aria-label="Filter role"
+            className="h-10 px-3 rounded-xl border border-line bg-paper text-sm text-ink-soft focus:outline-hidden focus:border-ocean-500"
           >
             <option value="all">{t("owner.accounts.roleFilterAll")}</option>
             <option value="owner">{t("owner.accounts.roleOwner")}</option>
@@ -361,11 +369,13 @@ export default function OwnerAccountsMaster({ branches }: { branches: { id: stri
             <option value="member">{t("owner.accounts.roleMember")}</option>
             <option value="school">{t("owner.accounts.roleSchool")}</option>
             <option value="staff">{t("owner.accounts.roleStaff")}</option>
-          </Select>
-          <Select
+          </select>
+
+          <select
             value={branchFilter}
             onChange={(e) => setBranchFilter(e.target.value)}
-            className="!w-40"
+            aria-label="Filter center"
+            className="h-10 px-3 rounded-xl border border-line bg-paper text-sm text-ink-soft focus:outline-hidden focus:border-ocean-500"
           >
             <option value="">{t("owner.accounts.branchFilterAll")}</option>
             {branches.map((b) => (
@@ -373,13 +383,14 @@ export default function OwnerAccountsMaster({ branches }: { branches: { id: stri
                 {b.name}
               </option>
             ))}
-          </Select>
-          <label className="flex items-center gap-1.5 text-sm text-ink-soft cursor-pointer">
+          </select>
+
+          <label className="h-10 px-3 rounded-xl border border-line bg-paper flex items-center gap-2 text-xs font-medium text-ink-soft cursor-pointer hover:bg-paper-tint transition-colors">
             <input
               type="checkbox"
               checked={showArchived}
               onChange={(e) => setShowArchived(e.target.checked)}
-              className="rounded"
+              className="w-4 h-4 rounded accent-ocean-600 cursor-pointer"
             />
             {t("owner.accounts.showArchivedToggle")}
           </label>
@@ -387,33 +398,44 @@ export default function OwnerAccountsMaster({ branches }: { branches: { id: stri
 
         <div className="flex items-center gap-2">
           {/* Quick QR Download Preset Button */}
-          <Btn
-            variant="outline"
-            icon="qr"
+          <button
+            type="button"
             onClick={() => {
               setQuickRole(roleFilter);
               setQuickBranch(branchFilter || "all");
               setShowQuickDownloadModal(true);
             }}
+            className="h-10 px-3.5 rounded-xl border border-line bg-paper hover:bg-paper-tint text-ink-soft text-sm font-semibold flex items-center gap-2 transition-colors cursor-pointer"
           >
-            {t("owner.accounts.quickDownloadQr")}
-          </Btn>
+            <Icon name="qr" className="w-4 h-4 text-ink-mute" />
+            <span className="hidden sm:inline">{t("owner.accounts.quickDownloadQr")}</span>
+          </button>
 
           {/* Toggle Checkbox Select Mode */}
-          <Btn
-            variant={qrSelectMode ? "soft" : "outline"}
-            icon="check"
+          <button
+            type="button"
             onClick={() => {
               setQrSelectMode((prev) => !prev);
               if (qrSelectMode) setSelectedQRIds(new Set());
             }}
+            className={`h-10 px-3.5 rounded-xl border text-sm font-semibold flex items-center gap-2 transition-colors cursor-pointer ${
+              qrSelectMode
+                ? "bg-ocean-50 border-ocean-300 text-ocean-700"
+                : "border-line bg-paper hover:bg-paper-tint text-ink-soft"
+            }`}
           >
-            {qrSelectMode ? "Done Selecting" : "QR Select Mode"}
-          </Btn>
+            <Icon name="check" className="w-4 h-4" />
+            <span className="hidden sm:inline">{qrSelectMode ? "Done" : "QR Cards"}</span>
+          </button>
 
-          <Btn variant="primary" icon="plus" onClick={openCreate}>
-            {t("owner.accounts.addAccountBtn")}
-          </Btn>
+          <button
+            type="button"
+            onClick={openCreate}
+            className="h-10 px-4 rounded-xl bg-ocean-600 hover:bg-ocean-700 text-white text-sm font-semibold flex items-center gap-2 shadow-xs transition-colors cursor-pointer"
+          >
+            <Icon name="plus" className="w-4 h-4" />
+            <span>{t("owner.accounts.addAccountBtn")}</span>
+          </button>
         </div>
       </div>
 
@@ -437,41 +459,40 @@ export default function OwnerAccountsMaster({ branches }: { branches: { id: stri
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
-            <Btn
-              variant="soft"
-              size="sm"
+            <button
+              type="button"
               onClick={toggleSelectAllFiltered}
-              className="!bg-ocean-800 !text-white hover:!bg-ocean-700"
+              className="h-8 px-3 rounded-lg bg-ocean-800 hover:bg-ocean-700 text-white text-xs font-medium transition-colors cursor-pointer"
             >
               {isAllFilteredSelected
                 ? "Batalkan Pilihan Terfilter"
                 : `Pilih Semua Terfilter (${filtered.length})`}
-            </Btn>
-            <Btn
-              variant="primary"
-              size="sm"
-              icon="download"
+            </button>
+            <button
+              type="button"
               disabled={selectedQRIds.size === 0 || generatingQR}
               onClick={handleDownloadSelectedZip}
+              className="h-8 px-3 rounded-lg bg-ocean-500 hover:bg-ocean-600 disabled:opacity-50 text-white text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
             >
-              {generatingQR ? t("common.actions.saving") : `Download ZIP (${selectedQRIds.size})`}
-            </Btn>
-            <Btn
-              variant="soft"
-              size="sm"
-              icon="print"
+              <Icon name="download" className="w-3.5 h-3.5" />
+              <span>{generatingQR ? t("common.actions.saving") : `Download ZIP (${selectedQRIds.size})`}</span>
+            </button>
+            <button
+              type="button"
               disabled={selectedQRIds.size === 0 || generatingQR}
               onClick={handlePrintSelectedSheet}
-              className="!bg-ocean-800 !text-white hover:!bg-ocean-700"
+              className="h-8 px-3 rounded-lg bg-ocean-800 hover:bg-ocean-700 disabled:opacity-50 text-white text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
             >
-              Print A4 Sheet
-            </Btn>
+              <Icon name="print" className="w-3.5 h-3.5" />
+              <span>Print A4 Sheet</span>
+            </button>
             <button
+              type="button"
               onClick={() => {
                 setQrSelectMode(false);
                 setSelectedQRIds(new Set());
               }}
-              className="text-xs text-ocean-300 hover:text-white underline ml-2"
+              className="text-xs text-ocean-300 hover:text-white underline ml-2 cursor-pointer"
             >
               Batal
             </button>
@@ -480,16 +501,16 @@ export default function OwnerAccountsMaster({ branches }: { branches: { id: stri
       )}
 
       {/* ── Master Data Accounts Table ── */}
-      <Card padded={false}>
+      <div className="bg-paper rounded-2xl border border-line overflow-hidden shadow-xs">
         {loading ? (
           <div className="p-10 text-center text-ink-mute">{t("owner.accounts.loading")}</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-[11px] uppercase tracking-widest text-ink-faint font-bold border-b border-line">
+                <tr className="h-9 bg-paper-deep border-b border-line text-[10px] uppercase tracking-wider text-ink-faint font-bold">
                   {qrSelectMode && (
-                    <th className="py-3 pl-5 pr-2 w-10 text-left">
+                    <th className="py-2 pl-5 pr-2 w-10 text-left">
                       <input
                         type="checkbox"
                         checked={isAllFilteredSelected}
@@ -498,12 +519,12 @@ export default function OwnerAccountsMaster({ branches }: { branches: { id: stri
                       />
                     </th>
                   )}
-                  <th className="text-left py-3 px-5 font-bold">{t("owner.accounts.colName")}</th>
-                  <th className="text-left py-3 font-bold">{t("owner.accounts.colRole")}</th>
-                  <th className="text-left py-3 font-bold hidden sm:table-cell">ID &amp; QR</th>
-                  <th className="text-left py-3 font-bold hidden md:table-cell">{t("owner.accounts.colBranch")}</th>
-                  <th className="text-left py-3 font-bold">{t("owner.accounts.colStatus")}</th>
-                  <th className="text-right py-3 pr-5 font-bold">Aksi</th>
+                  <th className="text-left py-2 px-5 font-bold">{t("owner.accounts.colName")}</th>
+                  <th className="text-left py-2 px-3 font-bold w-[140px]">{t("owner.accounts.colRole")}</th>
+                  <th className="text-left py-2 px-3 font-bold w-[140px] hidden md:table-cell">{t("owner.accounts.colBranch")}</th>
+                  <th className="text-left py-2 px-3 font-bold w-[150px] hidden sm:table-cell">ACCOUNT ID</th>
+                  <th className="text-left py-2 px-3 font-bold w-[100px]">{t("owner.accounts.colStatus")}</th>
+                  <th className="text-right py-2 pr-5 font-bold w-[110px]">ACTIONS</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
@@ -516,7 +537,7 @@ export default function OwnerAccountsMaster({ branches }: { branches: { id: stri
                   return (
                     <tr
                       key={a.id}
-                      className={`hover:bg-paper-tint cursor-pointer transition-colors ${
+                      className={`h-[58px] hover:bg-paper-tint/60 cursor-pointer transition-colors ${
                         qrSelectMode && isChecked ? "bg-ocean-50/70" : ""
                       }`}
                       onClick={() => {
@@ -525,7 +546,7 @@ export default function OwnerAccountsMaster({ branches }: { branches: { id: stri
                       }}
                     >
                       {qrSelectMode && (
-                        <td className="py-3.5 pl-5 pr-2" onClick={(e) => e.stopPropagation()}>
+                        <td className="py-2.5 pl-5 pr-2" onClick={(e) => e.stopPropagation()}>
                           <input
                             type="checkbox"
                             checked={isChecked}
@@ -534,11 +555,11 @@ export default function OwnerAccountsMaster({ branches }: { branches: { id: stri
                           />
                         </td>
                       )}
-                      <td className="py-3.5 px-5">
+                      <td className="py-2.5 px-5">
                         <div className="flex items-center gap-3">
-                          <Avatar name={displayName} src={a.avatar_url ?? undefined} size={36} />
+                          <Avatar name={displayName} src={a.avatar_url ?? undefined} size={32} />
                           <div className="min-w-0">
-                            <div className="font-semibold text-ink-strong truncate max-w-[160px] sm:max-w-none">
+                            <div className="font-semibold text-[13px] text-ink truncate max-w-[160px] sm:max-w-none leading-tight">
                               <NoTranslate>{displayName}</NoTranslate>
                             </div>
                             <div className="text-xs text-ink-mute truncate max-w-[160px] sm:max-w-none">
@@ -547,49 +568,56 @@ export default function OwnerAccountsMaster({ branches }: { branches: { id: stri
                           </div>
                         </div>
                       </td>
-                      <td className="text-ink-soft">
-                        <span className="font-medium">
-                          {isKnownRole(a.role) ? roleLabel(a.role) : <NoTranslate>{roleLabel(a.role)}</NoTranslate>}
-                        </span>
-                        {a.custom_role_label && !a.custom_role_label.includes("@") && (
-                          <span className="text-ink-faint text-xs">
-                            {" · "}
-                            <NoTranslate>{a.custom_role_label}</NoTranslate>
+                      <td className="py-2.5 px-3">
+                        <div className="inline-flex items-center gap-1">
+                          <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-paper-deep text-ink-soft">
+                            {isKnownRole(a.role) ? roleLabel(a.role) : <NoTranslate>{roleLabel(a.role)}</NoTranslate>}
                           </span>
-                        )}
-                      </td>
-                      <td className="hidden sm:table-cell">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-mono text-xs font-semibold text-ocean-700 bg-ocean-50 px-2 py-0.5 rounded border border-ocean-200">
-                            <NoTranslate>{code}</NoTranslate>
-                          </span>
+                          {a.custom_role_label && !a.custom_role_label.includes("@") && (
+                            <span className="text-ink-faint text-xs truncate max-w-[80px]">
+                              <NoTranslate>{a.custom_role_label}</NoTranslate>
+                            </span>
+                          )}
                         </div>
                       </td>
-                      <td className="text-ink-soft hidden md:table-cell">
+                      <td className="py-2.5 px-3 text-[13px] text-ink-soft hidden md:table-cell">
                         <NoTranslate>{a.branch?.name ?? "—"}</NoTranslate>
                       </td>
-                      <td>
+                      <td className="py-2.5 px-3 hidden sm:table-cell">
+                        <span className="font-mono text-xs text-ink-soft bg-paper-deep px-2 py-0.5 rounded border border-line">
+                          <NoTranslate>{code}</NoTranslate>
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3">
                         {a.is_archived ? (
-                          <Status kind="archived">{t("owner.accountDetail.inactiveBadge")}</Status>
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600 border border-slate-300/60">
+                            <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                            {t("owner.accountDetail.inactiveBadge")}
+                          </span>
                         ) : (
-                          <Status kind="active">{t("owner.accountDetail.activeBadge")}</Status>
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-ok-50 text-ok-700 border border-ok-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-ok-600" />
+                            {t("owner.accountDetail.activeBadge")}
+                          </span>
                         )}
                       </td>
-                      <td className="text-right pr-5" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center justify-end gap-1">
+                      <td className="py-2.5 pr-5 text-right" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-1.5">
                           <button
+                            type="button"
                             onClick={() => downloadSingleQRCard(toQRCardAccount(a))}
-                            className="w-8 h-8 rounded-lg border border-line bg-white hover:bg-ocean-50 text-ink-mute hover:text-ocean-700 flex items-center justify-center transition-colors"
+                            className="w-8 h-8 rounded-lg border border-line bg-paper hover:bg-ocean-50 text-ink-mute hover:text-ocean-700 flex items-center justify-center transition-colors cursor-pointer"
                             title={t("owner.accountDetail.downloadIdCardPng")}
                           >
-                            <Icon name="download" className="w-3.5 h-3.5" />
+                            <Icon name="qr" className="w-4 h-4" />
                           </button>
                           <button
+                            type="button"
                             onClick={() => setSelected(a)}
-                            className="w-8 h-8 rounded-lg border border-line bg-white hover:bg-paper-tint text-ink-mute hover:text-ink-strong flex items-center justify-center transition-colors"
+                            className="w-8 h-8 rounded-lg border border-line bg-paper hover:bg-paper-deep text-ink-mute hover:text-ink flex items-center justify-center transition-colors cursor-pointer"
                             title={t("owner.accountDetail.viewTitle")}
                           >
-                            <Icon name="eye" className="w-3.5 h-3.5" />
+                            <Icon name="eye" className="w-4 h-4" />
                           </button>
                         </div>
                       </td>
@@ -607,7 +635,7 @@ export default function OwnerAccountsMaster({ branches }: { branches: { id: stri
             </table>
           </div>
         )}
-      </Card>
+      </div>
 
       {/* ── Detail Modal ── */}
       <OwnerAccountDetail

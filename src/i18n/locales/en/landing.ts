@@ -26,7 +26,7 @@ export const landing = {
   testimonials: {
     label: "Testimonials",
     headline: "What our swimming families say.",
-    subtitle: "Real stories from parents and members who've seen the progress firsthand.",
+    subtitle: "Real stories from parents and students who've seen the progress firsthand.",
     ctaText: "Ready to see the same progress for your child?",
     ctaButton: "Register Now",
   },

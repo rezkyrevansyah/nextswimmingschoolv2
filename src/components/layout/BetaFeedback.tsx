@@ -13,7 +13,7 @@ const ROLE_LABELS: Record<Role, string> = {
   owner:  "Owner Panel",
   admin:  "Admin Panel",
   coach:  "Coach Panel",
-  member: "Member Panel",
+  member: "Student Panel",
   school: "School Panel",
   staff:  "Staff Panel",
 };

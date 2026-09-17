@@ -120,7 +120,7 @@ export default function AdminPembayaran({ branchId }: { branchId: string }) {
       kind: "success",
     });
     toast.success(t("admin.pembayaran.paymentVerifiedToast"));
-    logActivity(supabase, { userId: user?.id ?? "unknown", userRole: "admin", userName: user?.user_metadata?.full_name ?? "Admin", branchId, entityType: "bills", entityId: verifyTarget.id, entityLabel: verifyTarget.member?.profile?.full_name ?? undefined, action: "update", label: t("admin.pembayaran.activityBillVerified", { period: verifyTarget.period_label, name: verifyTarget.member?.profile?.full_name ?? "member" }), meta: { amount: verifyTarget.total, paid_method: verifyForm.paid_method } });
+    logActivity(supabase, { userId: user?.id ?? "unknown", userRole: "admin", userName: user?.user_metadata?.full_name ?? "Admin", branchId, entityType: "bills", entityId: verifyTarget.id, entityLabel: verifyTarget.member?.profile?.full_name ?? undefined, action: "update", label: t("admin.pembayaran.activityBillVerified", { period: verifyTarget.period_label, name: verifyTarget.member?.profile?.full_name ?? "student" }), meta: { amount: verifyTarget.total, paid_method: verifyForm.paid_method } });
     setVerifyTarget(null);
     load();
   };

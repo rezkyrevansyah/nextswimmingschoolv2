@@ -9,7 +9,7 @@ export const member: typeof MemberEn = {
   },
   shell: {
     greeting: "Hai, {name}",
-    subMember: "Member · {branch}",
+    subMember: "Student · {branch}",
     subSchedule: "Kelas yang Anda ikuti",
     subAttendance: "History kehadiran",
     subBills: "Pembayaran kelas",
@@ -151,9 +151,9 @@ export const member: typeof MemberEn = {
     downloadPdf: "Download PDF",
   },
   profile: {
-    ageMember: "{age} thn · Member",
-    roleMember: "Member",
-    memberSince: "Member sejak {date}",
+    ageMember: "{age} thn · Student",
+    roleMember: "Student",
+    memberSince: "Student sejak {date}",
     uploadingPhoto: "Mengupload foto…",
     guardianName: "Wali",
     guardianPhone: "No HP wali",

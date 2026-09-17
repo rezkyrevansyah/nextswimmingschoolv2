@@ -5,7 +5,6 @@ import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
 import { useLocale } from "@/components/providers/LocaleProvider";
 import { Field, Input, Select, Textarea } from "@/components/ui/FormFields";
-import { Card, Stat } from "@/components/ui/Card";
 import Avatar from "@/components/ui/Avatar";
 import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
@@ -731,7 +730,7 @@ export default function AdminCompetition({ branchId }: { branchId: string }) {
   const handleRemoveParticipant = async (p: ParticipationRow) => {
     const ok = await confirm({
       title: t("admin.competition.deleteParticipantConfirmTitle"),
-      body: `${t("admin.competition.deleteParticipantConfirmBody", { name: (p.member?.profile as any)?.full_name ?? "Member", category: p.category })} ${t("admin.competition.deleteParticipantConfirmNote")}`,
+      body: `${t("admin.competition.deleteParticipantConfirmBody", { name: (p.member?.profile as any)?.full_name ?? "Student", category: p.category })} ${t("admin.competition.deleteParticipantConfirmNote")}`,
       confirmLabel: t("admin.competition.deleteParticipantConfirmLabel"),
       danger: true,
     });
@@ -802,70 +801,97 @@ export default function AdminCompetition({ branchId }: { branchId: string }) {
   const formEffectiveCompId = selectedComp?.id || partForm.competition_id;
 
   return (
-    <div className="space-y-6">
-      {/* ── Tab Switcher (member-first tab shown/selected by default) ── */}
-      <div className="flex gap-1 p-1 bg-paper-tint rounded-xl w-fit border border-line">
+    <div className="space-y-4">
+      {/* ── Summary Stats matching pen.dev qgz4S ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="bg-paper border border-line rounded-2xl p-5 space-y-1.5 shadow-xs">
+          <div className="text-[10px] uppercase font-bold text-ink-faint tracking-wider">{t("admin.competition.statTotalCompetitions")}</div>
+          <div className="text-2xl font-extrabold font-display text-ocean-600">{totalComps}</div>
+        </div>
+        <div className="bg-paper border border-line rounded-2xl p-5 space-y-1.5 shadow-xs">
+          <div className="text-[10px] uppercase font-bold text-ink-faint tracking-wider">{t("admin.competition.statTotalParticipations")}</div>
+          <div className="text-2xl font-extrabold font-display text-wave-600">{totalParticipations}</div>
+        </div>
+        <div className="bg-paper border border-line rounded-2xl p-5 space-y-1.5 shadow-xs">
+          <div className="text-[10px] uppercase font-bold text-ink-faint tracking-wider">{t("admin.competition.statTotalMedals")}</div>
+          <div className="text-2xl font-extrabold font-display text-ok-600">{totalMedals}</div>
+        </div>
+      </div>
+
+      {/* ── Tab Switcher matching pen.dev fxNZQ ── */}
+      <div className="flex items-center gap-2">
         <button
+          type="button"
           onClick={() => setActiveTab("awards")}
-          className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors ${activeTab === "awards" ? "bg-white shadow-card text-ocean-700" : "text-ink-soft hover:text-ink"}`}
+          className={`h-10 px-5 rounded-xl text-sm font-semibold transition-all ${
+            activeTab === "awards"
+              ? "bg-ocean-600 text-white shadow-xs"
+              : "bg-paper border border-line text-ink-soft hover:bg-paper-tint hover:text-ink"
+          }`}
         >
           {t("admin.competition.tabAwards")}
         </button>
         <button
+          type="button"
           onClick={() => setActiveTab("competitions")}
-          className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors ${activeTab === "competitions" ? "bg-white shadow-card text-ocean-700" : "text-ink-soft hover:text-ink"}`}
+          className={`h-10 px-5 rounded-xl text-sm font-semibold transition-all ${
+            activeTab === "competitions"
+              ? "bg-ocean-600 text-white shadow-xs"
+              : "bg-paper border border-line text-ink-soft hover:bg-paper-tint hover:text-ink"
+          }`}
         >
           {t("admin.competition.tabCompetitions")}
         </button>
       </div>
 
-      {/* ── Summary Stats ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Stat label={t("admin.competition.statTotalCompetitions")} value={totalComps} icon="flag" tone="ocean" sub={t("admin.competition.statTotalCompetitionsSub")} />
-        <Stat label={t("admin.competition.statTotalParticipations")} value={totalParticipations} icon="users" tone="wave" sub={t("admin.competition.statTotalParticipationsSub")} />
-        <Stat label={t("admin.competition.statTotalMedals")} value={totalMedals} icon="star" tone="warn" sub={t("admin.competition.statTotalMedalsSub")} />
-      </div>
-
-      {/* ── AWARDS TAB: Member-first landing view ── */}
+      {/* ── AWARDS TAB: Member-first landing view matching pen.dev CeNt0 & NmdyX ── */}
       {activeTab === "awards" && (
         <div className="space-y-4">
-          <Card className="p-5 space-y-4">
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <div>
-                <div className="font-bold text-ink-strong">{t("admin.competition.selectParticipantTitle")}</div>
-                <p className="text-xs text-ink-mute">{t("admin.competition.selectParticipantSub")}</p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 flex-wrap">
-              <Input
+          {/* Toolbar matching pen.dev CeNt0 */}
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <div className="relative w-64">
+              <Icon name="search" className="w-4 h-4 text-ink-faint absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
                 placeholder={t("admin.competition.searchMemberPlaceholder")}
                 value={pickerSearch}
                 onChange={e => setPickerSearch(e.target.value)}
-                className="!w-56"
+                className="w-full h-10 pl-9 pr-3 text-sm bg-paper border border-line rounded-xl text-ink placeholder:text-ink-faint focus:outline-none focus:border-ocean-500 transition-colors"
               />
-              <Select value={pickerTypeFilter} onChange={e => setPickerTypeFilter(e.target.value as typeof pickerTypeFilter)} className="!w-44">
-                <option value="all">{t("admin.competition.allMemberTypes")}</option>
-                <option value="reguler">{MEMBER_TYPE_LABELS.reguler}</option>
-                <option value="private">{MEMBER_TYPE_LABELS.private}</option>
-                <option value="school_affiliate">{MEMBER_TYPE_LABELS.school_affiliate}</option>
-              </Select>
-              {!branchId && pickerBranchOptions.length > 0 && (
-                <Select value={pickerBranchFilter} onChange={e => setPickerBranchFilter(e.target.value)} className="!w-44">
-                  <option value="all">{t("admin.competition.allBranches")}</option>
-                  {pickerBranchOptions.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                </Select>
-              )}
             </div>
+            <select
+              value={pickerTypeFilter}
+              onChange={e => setPickerTypeFilter(e.target.value as typeof pickerTypeFilter)}
+              className="h-10 text-sm border border-line rounded-xl px-3 bg-paper text-ink-soft outline-none focus:border-ocean-500 transition-colors"
+            >
+              <option value="all">{t("admin.competition.allMemberTypes")}</option>
+              <option value="reguler">{MEMBER_TYPE_LABELS.reguler}</option>
+              <option value="private">{MEMBER_TYPE_LABELS.private}</option>
+              <option value="school_affiliate">{MEMBER_TYPE_LABELS.school_affiliate}</option>
+            </select>
+            {!branchId && pickerBranchOptions.length > 0 && (
+              <select
+                value={pickerBranchFilter}
+                onChange={e => setPickerBranchFilter(e.target.value)}
+                className="h-10 text-sm border border-line rounded-xl px-3 bg-paper text-ink-soft outline-none focus:border-ocean-500 transition-colors"
+              >
+                <option value="all">{t("admin.competition.allBranches")}</option>
+                {pickerBranchOptions.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+            )}
+          </div>
 
-            <div className="border border-line rounded-xl overflow-hidden overflow-x-auto">
-              <table className="w-full text-sm min-w-[500px]">
-                <thead>
-                  <tr className="text-[11px] uppercase tracking-widest text-ink-faint font-bold border-b border-line bg-paper-tint">
-                    <th className="text-left py-2.5 px-4">{t("admin.competition.colName")}</th>
-                    <th className="text-left py-2.5 px-4">No. Anggota</th>
-                    <th className="text-left py-2.5 px-4">Tipe</th>
-                    {!branchId && <th className="text-left py-2.5 px-4">{t("admin.competition.colBranch")}</th>}
+          {/* Card matching pen.dev NmdyX */}
+          <div className="bg-paper border border-line rounded-2xl overflow-hidden shadow-xs">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="h-9 bg-paper-deep border-b border-line text-left text-[10px] uppercase font-bold text-ink-faint tracking-wider">
+                  <tr>
+                    <th className="py-2 px-5">{t("admin.competition.colName")}</th>
+                    <th className="py-2 px-5">No. Anggota</th>
+                    <th className="py-2 px-5">Tipe</th>
+                    {!branchId && <th className="py-2 px-5">{t("admin.competition.colBranch")}</th>}
+                    <th className="py-2 px-5 text-right">Aksi</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line">
@@ -873,22 +899,33 @@ export default function AdminCompetition({ branchId }: { branchId: string }) {
                     <tr
                       key={m.id}
                       onClick={() => { setAwardMemberId(m.id); setAwardMemberSearch(m.full_name); }}
-                      className="hover:bg-paper-tint cursor-pointer transition-colors"
+                      className="hover:bg-paper-tint/60 cursor-pointer transition-colors"
                     >
-                      <td className="py-2.5 px-4">
-                        <div className="flex items-center gap-2.5">
-                          <Avatar name={m.full_name} size={28} />
-                          <span className="font-medium text-ink-strong">{m.full_name}</span>
+                      <td className="py-3 px-5">
+                        <div className="flex items-center gap-3">
+                          <Avatar name={m.full_name} size={32} />
+                          <div>
+                            <div className="font-semibold text-sm text-ink">{m.full_name}</div>
+                          </div>
                         </div>
                       </td>
-                      <td className="py-2.5 px-4 text-ink-mute font-mono text-xs">{m.member_no ?? "—"}</td>
-                      <td className="py-2.5 px-4 text-ink-soft">{MEMBER_TYPE_LABELS[m.type] ?? m.type}</td>
-                      {!branchId && <td className="py-2.5 px-4 text-ink-soft">{m.branch_name || "—"}</td>}
+                      <td className="py-3 px-5 text-ink-mute font-mono text-xs">{m.member_no ?? "—"}</td>
+                      <td className="py-3 px-5 text-ink-soft text-sm">{MEMBER_TYPE_LABELS[m.type] ?? m.type}</td>
+                      {!branchId && <td className="py-3 px-5 text-ink-soft text-sm">{m.branch_name || "—"}</td>}
+                      <td className="py-3 px-5 text-right">
+                        <button
+                          type="button"
+                          onClick={e => { e.stopPropagation(); setAwardMemberId(m.id); setAwardMemberSearch(m.full_name); }}
+                          className="w-8 h-8 rounded-lg border border-line bg-paper hover:bg-paper-deep text-ink-mute hover:text-ink inline-flex items-center justify-center transition-colors"
+                        >
+                          <Icon name="eye" className="w-4 h-4" />
+                        </button>
+                      </td>
                     </tr>
                   ))}
                   {pickerPaginatedMembers.length === 0 && (
                     <tr>
-                      <td colSpan={branchId ? 3 : 4} className="text-center py-8 text-ink-mute text-sm">
+                      <td colSpan={branchId ? 4 : 5} className="text-center py-12 text-ink-mute text-sm">
                         {t("admin.competition.noMemberMatchFilter")}
                       </td>
                     </tr>
@@ -898,14 +935,14 @@ export default function AdminCompetition({ branchId }: { branchId: string }) {
             </div>
 
             {pickerTotalPages > 1 && (
-              <div className="flex items-center justify-between gap-2 text-xs text-ink-mute">
-                <span>{pickerFilteredMembers.length} member · hal. {pickerSafePage + 1}/{pickerTotalPages}</span>
+              <div className="flex items-center justify-between gap-2 px-5 py-3 border-t border-line text-xs text-ink-mute bg-paper-tint/30">
+                <span>{pickerFilteredMembers.length} student · hal. {pickerSafePage + 1}/{pickerTotalPages}</span>
                 <div className="flex items-center gap-1">
                   <button
                     type="button"
                     disabled={pickerSafePage === 0}
                     onClick={() => setPickerPage(p => p - 1)}
-                    className="px-2.5 py-1 rounded-lg border border-line text-ink-soft disabled:opacity-40 disabled:cursor-not-allowed hover:bg-paper-tint transition"
+                    className="px-3 py-1 rounded-lg border border-line bg-paper text-ink-soft disabled:opacity-40 disabled:cursor-not-allowed hover:bg-paper-tint transition"
                   >
                     ‹ Sebelumnya
                   </button>
@@ -913,14 +950,14 @@ export default function AdminCompetition({ branchId }: { branchId: string }) {
                     type="button"
                     disabled={pickerSafePage >= pickerTotalPages - 1}
                     onClick={() => setPickerPage(p => p + 1)}
-                    className="px-2.5 py-1 rounded-lg border border-line text-ink-soft disabled:opacity-40 disabled:cursor-not-allowed hover:bg-paper-tint transition"
+                    className="px-3 py-1 rounded-lg border border-line bg-paper text-ink-soft disabled:opacity-40 disabled:cursor-not-allowed hover:bg-paper-tint transition"
                   >
                     Selanjutnya ›
                   </button>
                 </div>
               </div>
             )}
-          </Card>
+          </div>
         </div>
       )}
 
@@ -1041,134 +1078,139 @@ export default function AdminCompetition({ branchId }: { branchId: string }) {
       )}
 
       {/* ── COMPETITIONS TAB ── */}
-      {activeTab === "competitions" && <>
-
-      {/* ── Actions Header & Filter ── */}
-      <Card className="p-5 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 flex-1 max-w-xl">
-            <div className="relative flex-1 min-w-[220px]">
-              <Icon name="search" className="w-4 h-4 text-ink-mute absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-              <Input
-                placeholder={t("admin.competition.searchCompPlaceholder")}
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                className="pl-9 text-sm"
-              />
+      {activeTab === "competitions" && (
+        <div className="space-y-4">
+          {/* Actions Header & Filter */}
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-2.5 flex-wrap flex-1">
+              <div className="relative w-64">
+                <Icon name="search" className="w-4 h-4 text-ink-faint absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder={t("admin.competition.searchCompPlaceholder")}
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  className="w-full h-10 pl-9 pr-3 text-sm bg-paper border border-line rounded-xl text-ink placeholder:text-ink-faint focus:outline-none focus:border-ocean-500 transition-colors"
+                />
+              </div>
+              <select
+                value={levelFilter}
+                onChange={e => setLevelFilter(e.target.value)}
+                className="h-10 text-sm border border-line rounded-xl px-3 bg-paper text-ink-soft outline-none focus:border-ocean-500 transition-colors"
+              >
+                <option value="all">{t("admin.competition.allLevels")}</option>
+                <option value="internal">{t("admin.competition.levelInternal")}</option>
+                <option value="local">{t("admin.competition.levelLocal")}</option>
+                <option value="regional">{t("admin.competition.levelRegional")}</option>
+                <option value="national">{t("admin.competition.levelNational")}</option>
+                <option value="international">{t("admin.competition.levelInternational")}</option>
+              </select>
             </div>
-            <Select value={levelFilter} onChange={e => setLevelFilter(e.target.value)} className="!w-44 shrink-0">
-              <option value="all">{t("admin.competition.allLevels")}</option>
-              <option value="internal">{t("admin.competition.levelInternal")}</option>
-              <option value="local">{t("admin.competition.levelLocal")}</option>
-              <option value="regional">{t("admin.competition.levelRegional")}</option>
-              <option value="national">{t("admin.competition.levelNational")}</option>
-              <option value="international">{t("admin.competition.levelInternational")}</option>
-            </Select>
+            <Btn variant="primary" icon="plus" onClick={openCreateComp} className="!h-10 !rounded-xl">
+              {t("admin.competition.addCompBtn")}
+            </Btn>
           </div>
-          <Btn variant="primary" icon="plus" onClick={openCreateComp}>
-            {t("admin.competition.addCompBtn")}
-          </Btn>
+
+          {/* Competitions Table */}
+          <div className="bg-paper border border-line rounded-2xl overflow-hidden shadow-xs">
+            {loading ? (
+              <div className="py-12 text-center text-ink-mute text-sm">{t("admin.competition.loadingCompData")}</div>
+            ) : filteredComps.length === 0 ? (
+              <div className="py-12 text-center text-ink-mute text-sm">
+                {t("admin.competition.noCompYet")}
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="h-9 bg-paper-deep border-b border-line text-left text-[10px] uppercase font-bold text-ink-faint tracking-wider">
+                    <tr>
+                      <th className="py-2 px-5 min-w-[240px]">{t("admin.competition.colCompName")}</th>
+                      <th className="py-2 px-5 min-w-[160px] whitespace-nowrap">{t("admin.competition.colDateTime")}</th>
+                      <th className="py-2 px-5 min-w-[180px]">Penyelenggara</th>
+                      <th className="py-2 px-5 text-center w-28 whitespace-nowrap">Level</th>
+                      <th className="py-2 px-5 text-center w-20 whitespace-nowrap">Peserta</th>
+                      <th className="py-2 px-5 text-center w-24 whitespace-nowrap">Medali</th>
+                      <th className="py-2 px-5 text-right w-40 whitespace-nowrap">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-line">
+                    {filteredComps.map(comp => (
+                      <tr key={comp.id} className="hover:bg-paper-tint/60 transition-colors">
+                        <td className="py-3 px-5 min-w-[240px]">
+                          <div className="font-bold text-ink leading-snug">{comp.name}</div>
+                          {comp.description && <div className="text-xs text-ink-mute mt-0.5 line-clamp-1 max-w-md">{comp.description}</div>}
+                        </td>
+                        <td className="py-3 px-5 min-w-[160px]">
+                          <div className="font-medium text-ink whitespace-nowrap flex items-center gap-1.5 text-xs">
+                            <Icon name="calendar" className="w-3.5 h-3.5 text-ink-faint shrink-0" />
+                            <span>{fmtDate(comp.start_date)}</span>
+                            {comp.end_date && comp.end_date !== comp.start_date && (
+                              <span className="text-ink-mute font-normal"> – {fmtDate(comp.end_date)}</span>
+                            )}
+                          </div>
+                          {(comp.location || comp.city) && (
+                            <div className="text-[11px] text-ink-mute mt-0.5 flex items-center gap-1 line-clamp-1 max-w-[220px]">
+                              <Icon name="mapPin" className="w-3 h-3 text-ink-faint shrink-0" />
+                              <span className="truncate">{comp.location || comp.city}</span>
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-3 px-5 min-w-[180px] text-ink-soft text-xs leading-relaxed">
+                          <span className="line-clamp-2">{comp.organizer || "—"}</span>
+                        </td>
+                        <td className="py-3 px-5 text-center whitespace-nowrap">
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-ocean-50 text-ocean-700 border border-ocean-200/80">
+                            {comp.level}
+                          </span>
+                        </td>
+                        <td className="py-3 px-5 text-center font-bold text-ink whitespace-nowrap font-mono">
+                          {comp.participations_count ?? 0}
+                        </td>
+                        <td className="py-3 px-5 text-center whitespace-nowrap">
+                          <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold ${comp.medals_count ? "bg-amber-50 text-amber-900 border border-amber-300/80" : "text-ink-mute bg-paper-tint border border-line"}`}>
+                            🏆 {comp.medals_count ?? 0}
+                          </span>
+                        </td>
+                        <td className="py-3 px-5 text-right whitespace-nowrap">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedComp(comp);
+                                loadParticipations(comp.id);
+                              }}
+                              className="px-2.5 py-1.5 rounded-lg border border-line bg-paper hover:bg-paper-deep text-ink text-xs font-semibold inline-flex items-center gap-1 transition-colors"
+                            >
+                              <Icon name="eye" className="w-3.5 h-3.5 text-ink-mute" />
+                              <span>Peserta</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => openEditComp(comp)}
+                              title={t("admin.competition.editTitle")}
+                              className="w-8 h-8 rounded-lg border border-line bg-paper hover:bg-paper-deep text-ink-mute hover:text-ink inline-flex items-center justify-center transition-colors"
+                            >
+                              <Icon name="edit" className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteComp(comp)}
+                              title="Delete"
+                              className="w-8 h-8 rounded-lg border border-line bg-paper hover:bg-danger-50 text-ink-mute hover:text-danger-600 inline-flex items-center justify-center transition-colors"
+                            >
+                              <Icon name="trash" className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
-
-        {/* ── Competitions Table ── */}
-        {loading ? (
-          <div className="py-12 text-center text-ink-mute">{t("admin.competition.loadingCompData")}</div>
-        ) : filteredComps.length === 0 ? (
-          <div className="py-12 text-center text-ink-mute">
-            {t("admin.competition.noCompYet")}
-          </div>
-        ) : (
-          <div className="overflow-x-auto border border-line rounded-2xl">
-            <table className="w-full text-sm min-w-[980px]">
-              <thead>
-                <tr className="border-b border-line bg-paper-tint text-left text-[11px] font-bold uppercase tracking-wider text-ink-faint">
-                  <th className="py-3 px-4 min-w-[280px]">{t("admin.competition.colCompName")}</th>
-                  <th className="py-3 px-4 min-w-[190px] whitespace-nowrap">{t("admin.competition.colDateTime")}</th>
-                  <th className="py-3 px-4 min-w-[200px]">Penyelenggara</th>
-                  <th className="py-3 px-4 text-center w-28 whitespace-nowrap">Level</th>
-                  <th className="py-3 px-4 text-center w-20 whitespace-nowrap">Peserta</th>
-                  <th className="py-3 px-4 text-center w-24 whitespace-nowrap">Medali</th>
-                  <th className="py-3 px-4 text-right w-44 whitespace-nowrap">Aksi</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-line bg-white">
-                {filteredComps.map(comp => (
-                  <tr key={comp.id} className="hover:bg-paper-tint/60 transition-colors">
-                    <td className="py-3.5 px-4 min-w-[280px]">
-                      <div className="font-bold text-ink-strong leading-snug line-clamp-2">{comp.name}</div>
-                      {comp.description && <div className="text-xs text-ink-mute mt-0.5 line-clamp-1 max-w-md">{comp.description}</div>}
-                    </td>
-                    <td className="py-3.5 px-4 min-w-[190px]">
-                      <div className="font-semibold text-ink whitespace-nowrap flex items-center gap-1.5">
-                        <Icon name="calendar" className="w-3.5 h-3.5 text-ink-faint shrink-0" />
-                        <span>{fmtDate(comp.start_date)}</span>
-                        {comp.end_date && comp.end_date !== comp.start_date && (
-                          <span className="text-ink-mute font-normal"> – {fmtDate(comp.end_date)}</span>
-                        )}
-                      </div>
-                      {(comp.location || comp.city) && (
-                        <div className="text-xs text-ink-mute mt-0.5 flex items-center gap-1 line-clamp-1 max-w-[220px]">
-                          <Icon name="mapPin" className="w-3 h-3 text-ink-faint shrink-0" />
-                          <span className="truncate">{comp.location || comp.city}</span>
-                        </div>
-                      )}
-                    </td>
-                    <td className="py-3.5 px-4 min-w-[200px] text-ink-soft text-xs leading-relaxed">
-                      <span className="line-clamp-2">{comp.organizer || "—"}</span>
-                    </td>
-                    <td className="py-3.5 px-4 text-center whitespace-nowrap">
-                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-ocean-50 text-ocean-700 border border-ocean-200/80">
-                        {comp.level}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-4 text-center font-bold text-ink-strong whitespace-nowrap font-mono">
-                      {comp.participations_count ?? 0}
-                    </td>
-                    <td className="py-3.5 px-4 text-center whitespace-nowrap">
-                      <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold ${comp.medals_count ? "bg-amber-50 text-amber-900 border border-amber-300/80" : "text-ink-mute bg-paper-tint border border-line"}`}>
-                        🏆 {comp.medals_count ?? 0}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <Btn
-                          variant="soft"
-                          size="sm"
-                          icon="eye"
-                          onClick={() => {
-                            setSelectedComp(comp);
-                            loadParticipations(comp.id);
-                          }}
-                        >
-                          Detail Peserta
-                        </Btn>
-                        <button
-                          type="button"
-                          onClick={() => openEditComp(comp)}
-                          title={t("admin.competition.editTitle")}
-                          className="w-7 h-7 rounded-lg hover:bg-paper-deep text-ink-mute hover:text-ocean-600 flex items-center justify-center transition-colors"
-                        >
-                          <Icon name="edit" className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteComp(comp)}
-                          title="Delete"
-                          className="w-7 h-7 rounded-lg hover:bg-danger-50 text-ink-mute hover:text-danger-500 flex items-center justify-center transition-colors"
-                        >
-                          <Icon name="trash" className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
-
-      </> /* end competitions tab */}
+      )}
 
       {/* ── Modal: Create / Edit Competition ── */}
       {openCompForm && (
@@ -1312,7 +1354,7 @@ export default function AdminCompetition({ branchId }: { branchId: string }) {
                     <tbody className="divide-y divide-line bg-white">
                       {participations.map(p => {
                         const awardInfo = AWARD_LABELS[p.award] || AWARD_LABELS.participant;
-                        const memberName = (p.member?.profile as any)?.full_name ?? "Member";
+                        const memberName = (p.member?.profile as any)?.full_name ?? "Student";
                         const avatarUrl = (p.member?.profile as any)?.avatar_url;
 
                         return (

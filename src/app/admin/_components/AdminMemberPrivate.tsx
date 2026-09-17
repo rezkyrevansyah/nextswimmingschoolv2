@@ -6,7 +6,6 @@ import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
 import { useLocale } from "@/components/providers/LocaleProvider";
 import { Field, Input, Select, Textarea, Switch, SectionLabel } from "@/components/ui/FormFields";
-import { Card } from "@/components/ui/Card";
 import Status from "@/components/ui/Status";
 import Avatar from "@/components/ui/Avatar";
 import Icon from "@/components/ui/Icon";
@@ -507,128 +506,187 @@ export default function AdminMemberPrivate({ branchId, branches, onBranchesChang
 
   return (
     <div className="space-y-4">
+      {/* Top Toolbar matching pen.dev o9hxIV */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div>
-          <h2 className="font-display font-bold text-2xl">{t("admin.memberPrivate.pageTitle")}</h2>
-          <p className="text-ink-mute text-sm mt-0.5">{t("admin.memberPrivate.pageSub")}</p>
-        </div>
-        <Btn variant="primary" icon="plus" onClick={openCreate}>{t("admin.memberPrivate.addStudentBtn")}</Btn>
-      </div>
-
-      <Card className="!p-0 overflow-hidden">
-        <div className="p-4 border-b border-line space-y-3">
-          <div className="flex items-center gap-2 flex-wrap">
-            <Input value={search} onChange={e => setSearch(e.target.value)} placeholder={t("admin.memberPrivate.searchPlaceholder")} className="!w-64" />
-            <button
-              type="button"
-              onClick={() => setShowFilters(v => !v)}
-              className={`relative inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border transition ${showFilters ? "bg-ocean-600 text-white border-ocean-600" : "bg-white border-line text-ink-soft hover:border-ocean-400"}`}
-            >
-              <Icon name="settings" className="w-3.5 h-3.5" />
-              {t("admin.memberPrivate.filterBtn")}
-              {activeFilterCount > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-danger-500 text-white text-[10px] font-bold flex items-center justify-center">{activeFilterCount}</span>
-              )}
-            </button>
+        <div className="flex items-center gap-2.5 flex-wrap flex-1">
+          <div className="relative w-64">
+            <Icon name="search" className="w-4 h-4 text-ink-faint absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder={t("admin.memberPrivate.searchPlaceholder")}
+              className="w-full h-10 pl-9 pr-3 text-sm bg-paper border border-line rounded-xl text-ink placeholder:text-ink-faint focus:outline-none focus:border-ocean-500 transition-colors"
+            />
           </div>
 
-          {showFilters && (
-            <div className="bg-paper-tint border border-line rounded-xl p-4 grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {branches && (
-                <div>
-                  <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-1.5">{t("admin.memberPrivate.filterByBranch")}</div>
-                  <select value={filterBranchId} onChange={e => setFilterBranchId(e.target.value)} className="w-full text-sm border border-line rounded-lg px-2.5 py-1.5 bg-white outline-none">
-                    <option value="">{t("admin.memberPrivate.allBranchesOpt")}</option>
-                    {branches.map(b => <option key={b.id} value={b.id} translate="no">{b.name}</option>)}
-                  </select>
-                </div>
-              )}
-              <div>
-                <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-1.5">{t("admin.memberPrivate.filterByCoach")}</div>
-                <select value={filterCoachId} onChange={e => setFilterCoachId(e.target.value)} className="w-full text-sm border border-line rounded-lg px-2.5 py-1.5 bg-white outline-none">
-                  <option value="">{t("admin.memberPrivate.allCoachesOpt")}</option>
-                  {coaches.map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
-                </select>
-              </div>
-              <div>
-                <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-1.5">{t("admin.memberPrivate.filterByLocation")}</div>
-                <select value={filterLocationType} onChange={e => setFilterLocationType(e.target.value)} className="w-full text-sm border border-line rounded-lg px-2.5 py-1.5 bg-white outline-none">
-                  <option value="">{t("admin.memberPrivate.allLocationsOpt")}</option>
-                  <option value="branch">{t("admin.memberPrivate.branchLocation")}</option>
-                  <option value="external">{t("admin.memberPrivate.externalLocation")}</option>
-                </select>
-              </div>
-              {activeFilterCount > 0 && (
-                <div className="sm:col-span-2 lg:col-span-3 flex justify-end pt-1">
-                  <button type="button" onClick={resetFilters} className="text-xs font-semibold text-danger-600 hover:underline">{t("admin.members.resetAllFiltersBtn")}</button>
-                </div>
-              )}
-            </div>
+          {branches && (
+            <select
+              value={filterBranchId}
+              onChange={e => setFilterBranchId(e.target.value)}
+              className="h-10 text-sm border border-line rounded-xl px-3 bg-paper text-ink-soft outline-none focus:border-ocean-500 transition-colors"
+            >
+              <option value="">{t("admin.memberPrivate.allBranchesOpt")}</option>
+              {branches.map(b => <option key={b.id} value={b.id} translate="no">{b.name}</option>)}
+            </select>
           )}
 
+          <select
+            value={filterCoachId}
+            onChange={e => setFilterCoachId(e.target.value)}
+            className="h-10 text-sm border border-line rounded-xl px-3 bg-paper text-ink-soft outline-none focus:border-ocean-500 transition-colors"
+          >
+            <option value="">{t("admin.memberPrivate.allCoachesOpt")}</option>
+            {coaches.map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
+          </select>
+
+          <button
+            type="button"
+            onClick={() => setShowFilters(v => !v)}
+            className={`relative inline-flex items-center gap-1.5 text-xs font-semibold px-3 h-10 rounded-xl border transition-colors ${showFilters ? "bg-ocean-600 text-white border-ocean-600" : "bg-paper border-line text-ink-soft hover:bg-paper-tint hover:border-line-strong"}`}
+          >
+            <Icon name="settings" className="w-4 h-4" />
+            {t("admin.memberPrivate.filterBtn")}
+            {activeFilterCount > 0 && (
+              <span className="w-4 h-4 rounded-full bg-danger-500 text-white text-[10px] font-bold flex items-center justify-center">{activeFilterCount}</span>
+            )}
+          </button>
+        </div>
+
+        <Btn variant="primary" icon="plus" onClick={openCreate} className="!h-10 !rounded-xl">
+          {t("admin.memberPrivate.addStudentBtn")}
+        </Btn>
+      </div>
+
+      {showFilters && (
+        <div className="bg-paper border border-line rounded-2xl p-4 grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div>
+            <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-1.5">{t("admin.memberPrivate.filterByLocation")}</div>
+            <select
+              value={filterLocationType}
+              onChange={e => setFilterLocationType(e.target.value)}
+              className="w-full h-9 text-sm border border-line rounded-xl px-3 bg-paper outline-none focus:border-ocean-500"
+            >
+              <option value="">{t("admin.memberPrivate.allLocationsOpt")}</option>
+              <option value="branch">{t("admin.memberPrivate.branchLocation")}</option>
+              <option value="external">{t("admin.memberPrivate.externalLocation")}</option>
+            </select>
+          </div>
           {activeFilterCount > 0 && (
-            <div className="flex items-center gap-2 flex-wrap">
-              {filterBranchId && (
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-ocean-50 text-ocean-700 text-xs font-semibold ring-1 ring-ocean-200">
-                  {branches?.find(b => b.id === filterBranchId)?.name ?? "—"}
-                  <button type="button" onClick={() => setFilterBranchId("")}><Icon name="x" className="w-3 h-3" /></button>
-                </span>
-              )}
-              {filterCoachId && (
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-ocean-50 text-ocean-700 text-xs font-semibold ring-1 ring-ocean-200">
-                  {coaches.find(c => c.id === filterCoachId)?.full_name ?? "—"}
-                  <button type="button" onClick={() => setFilterCoachId("")}><Icon name="x" className="w-3 h-3" /></button>
-                </span>
-              )}
-              {filterLocationType && (
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-ocean-50 text-ocean-700 text-xs font-semibold ring-1 ring-ocean-200">
-                  {filterLocationType === "branch" ? t("admin.memberPrivate.branchLocation") : t("admin.memberPrivate.externalLocation")}
-                  <button type="button" onClick={() => setFilterLocationType("")}><Icon name="x" className="w-3 h-3" /></button>
-                </span>
-              )}
-              <button type="button" onClick={resetFilters} className="text-xs text-ink-mute hover:text-danger-600 transition ml-1">{t("admin.members.clearAllBtn")}</button>
+            <div className="sm:col-span-2 lg:col-span-2 flex items-end justify-end pb-1">
+              <button type="button" onClick={resetFilters} className="text-xs font-semibold text-danger-600 hover:underline">
+                {t("admin.members.resetAllFiltersBtn")}
+              </button>
             </div>
           )}
         </div>
+      )}
+
+      {activeFilterCount > 0 && (
+        <div className="flex items-center gap-2 flex-wrap text-xs">
+          {filterBranchId && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-ocean-50 text-ocean-700 font-semibold ring-1 ring-ocean-200">
+              {branches?.find(b => b.id === filterBranchId)?.name ?? "—"}
+              <button type="button" onClick={() => setFilterBranchId("")}><Icon name="x" className="w-3 h-3" /></button>
+            </span>
+          )}
+          {filterCoachId && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-ocean-50 text-ocean-700 font-semibold ring-1 ring-ocean-200">
+              {coaches.find(c => c.id === filterCoachId)?.full_name ?? "—"}
+              <button type="button" onClick={() => setFilterCoachId("")}><Icon name="x" className="w-3 h-3" /></button>
+            </span>
+          )}
+          {filterLocationType && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-ocean-50 text-ocean-700 font-semibold ring-1 ring-ocean-200">
+              {filterLocationType === "branch" ? t("admin.memberPrivate.branchLocation") : t("admin.memberPrivate.externalLocation")}
+              <button type="button" onClick={() => setFilterLocationType("")}><Icon name="x" className="w-3 h-3" /></button>
+            </span>
+          )}
+          <button type="button" onClick={resetFilters} className="text-ink-mute hover:text-danger-600 transition ml-1">
+            {t("admin.members.clearAllBtn")}
+          </button>
+        </div>
+      )}
+
+      {/* Card matching pen.dev e97zeW */}
+      <div className="bg-paper border border-line rounded-2xl overflow-hidden">
+        <div className="px-5 py-4 border-b border-line">
+          <h3 className="font-display font-bold text-base text-ink">{t("admin.memberPrivate.pageTitle")}</h3>
+          <p className="text-xs text-ink-mute mt-0.5">{t("admin.memberPrivate.pageSub")}</p>
+        </div>
+
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-paper-tint text-left text-ink-mute text-xs uppercase tracking-wider">
+            <thead className="h-9 bg-paper-deep border-b border-line text-left text-[10px] uppercase font-bold text-ink-faint tracking-wider">
               <tr>
-                <th className="px-4 py-3 font-bold">{t("admin.memberPrivate.colStudent")}</th>
-                {branches && <th className="px-4 py-3 font-bold">{t("admin.memberPrivate.colBranch")}</th>}
-                <th className="px-4 py-3 font-bold">{t("admin.memberPrivate.colSchedule")}</th>
-                <th className="px-4 py-3 font-bold">{t("admin.memberPrivate.colLocation")}</th>
-                <th className="px-4 py-3 font-bold">{t("admin.memberPrivate.colCoach")}</th>
-                <th className="px-4 py-3 font-bold">{t("admin.memberPrivate.colSessions")}</th>
-                <th className="px-4 py-3 font-bold text-right">{t("admin.memberPrivate.colAction")}</th>
+                <th className="px-5 py-2">{t("admin.memberPrivate.colStudent")}</th>
+                {branches && <th className="px-5 py-2">{t("admin.memberPrivate.colBranch")}</th>}
+                <th className="px-5 py-2">{t("admin.memberPrivate.colCoach")}</th>
+                <th className="px-5 py-2">{t("admin.memberPrivate.colSchedule")}</th>
+                <th className="px-5 py-2">{t("admin.memberPrivate.colSessions")}</th>
+                <th className="px-5 py-2 text-right">{t("admin.memberPrivate.colAction")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-line">
               {filtered.map(row => (
-                <tr key={row.id} className="hover:bg-paper-tint/60">
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2.5">
+                <tr key={row.id} className="hover:bg-paper-tint/60 transition-colors">
+                  <td className="px-5 py-3">
+                    <div className="flex items-center gap-3">
                       <Avatar name={row.profile?.full_name ?? "?"} size={32} />
                       <div>
-                        <div className="font-semibold text-ink">{row.profile?.full_name}</div>
-                        <div className="text-xs text-ink-mute">{row.profile?.email}</div>
+                        <div className="font-semibold text-ink text-sm">{row.profile?.full_name}</div>
+                        <div className="text-[11px] font-mono text-ink-mute">{row.member_no || row.profile?.email || "—"}</div>
                       </div>
                     </div>
                   </td>
-                  {branches && <td className="px-4 py-3 text-ink-soft">{row.branch?.name ?? "—"}</td>}
-                  <td className="px-4 py-3 text-ink-soft">{scheduleSummary(row)}</td>
-                  <td className="px-4 py-3 text-ink-soft">{locationSummary(row)}</td>
-                  <td className="px-4 py-3 text-ink-soft">{coachName(row)}</td>
-                  <td className="px-4 py-3">
-                    <span className="font-mono font-bold text-ocean-700">{row.remaining_sessions ?? 0}</span>
-                    <span className="text-ink-faint"> / {row.total_sessions ?? 0}</span>
+                  {branches && (
+                    <td className="px-5 py-3 text-ink-soft text-sm">
+                      {row.branch?.name ?? "—"}
+                    </td>
+                  )}
+                  <td className="px-5 py-3 text-ink-soft text-sm">
+                    {coachName(row)}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-5 py-3 text-ink-soft text-xs font-mono">
+                    <div>{scheduleSummary(row)}</div>
+                    {locationSummary(row) && <div className="text-[11px] text-ink-mute font-sans mt-0.5">{locationSummary(row)}</div>}
+                  </td>
+                  <td className="px-5 py-3">
+                    <span className="font-mono font-bold text-ink text-sm">{row.remaining_sessions ?? 0}</span>
+                    <span className="font-mono text-ink-faint text-xs"> / {row.total_sessions ?? 0}</span>
+                  </td>
+                  <td className="px-5 py-3 text-right">
                     <div className="flex items-center justify-end gap-1.5">
-                      <Btn variant="ghost" size="sm" icon="qr" onClick={() => setDetailTarget(row)}>{t("admin.memberPrivate.detailBtn")}</Btn>
-                      <Btn variant="ghost" size="sm" icon="plus" onClick={() => openAddSesi(row)}>{t("admin.memberPrivate.addSessionsBtn")}</Btn>
-                      <Btn variant="ghost" size="sm" icon="edit" onClick={() => openEdit(row)}>{t("common.actions.edit")}</Btn>
-                      <button onClick={() => deleteStudent(row)} className="w-8 h-8 rounded-lg hover:bg-danger-50 text-ink-mute hover:text-danger-600 flex items-center justify-center">
+                      <button
+                        type="button"
+                        onClick={() => setDetailTarget(row)}
+                        title={t("admin.memberPrivate.detailBtn")}
+                        className="w-8 h-8 rounded-lg border border-line bg-paper hover:bg-paper-deep text-ink-mute hover:text-ink flex items-center justify-center transition-colors"
+                      >
+                        <Icon name="qr" className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openAddSesi(row)}
+                        title={t("admin.memberPrivate.addSessionsBtn")}
+                        className="w-8 h-8 rounded-lg border border-line bg-paper hover:bg-ocean-50 text-ocean-600 flex items-center justify-center transition-colors"
+                      >
+                        <Icon name="plus" className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openEdit(row)}
+                        title={t("common.actions.edit")}
+                        className="w-8 h-8 rounded-lg border border-line bg-paper hover:bg-paper-deep text-ink-mute hover:text-ink flex items-center justify-center transition-colors"
+                      >
+                        <Icon name="edit" className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => deleteStudent(row)}
+                        title={t("common.actions.delete")}
+                        className="w-8 h-8 rounded-lg border border-line bg-paper hover:bg-danger-50 text-ink-mute hover:text-danger-600 flex items-center justify-center transition-colors"
+                      >
                         <Icon name="trash" className="w-4 h-4" />
                       </button>
                     </div>
@@ -636,12 +694,16 @@ export default function AdminMemberPrivate({ branchId, branches, onBranchesChang
                 </tr>
               ))}
               {!loading && filtered.length === 0 && (
-                <tr><td colSpan={branches ? 7 : 6} className="px-4 py-10 text-center text-ink-mute">{t("admin.memberPrivate.empty")}</td></tr>
+                <tr>
+                  <td colSpan={branches ? 6 : 5} className="px-5 py-12 text-center text-ink-mute text-sm">
+                    {t("admin.memberPrivate.empty")}
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>
         </div>
-      </Card>
+      </div>
 
       {/* Create / Edit modal */}
       <Modal
@@ -861,7 +923,7 @@ export default function AdminMemberPrivate({ branchId, branches, onBranchesChang
             <div className="flex items-center justify-between w-full gap-2 flex-wrap">
               <div className="text-xs text-ink-mute flex items-center gap-1.5">
                 <Icon name="info" className="w-3.5 h-3.5 text-ocean-600" />
-                <span>{detailTarget.branch?.name ?? branchName ?? "Private Member"}</span>
+                <span>{detailTarget.branch?.name ?? branchName ?? "Private Student"}</span>
               </div>
               <div className="flex items-center gap-2">
                 <Btn variant="ghost" size="sm" onClick={() => setDetailTarget(null)}>
@@ -963,7 +1025,7 @@ export default function AdminMemberPrivate({ branchId, branches, onBranchesChang
                       value={detailTarget.qr_code ?? detailTarget.id}
                       size={152}
                       downloadable
-                      downloadName={`QR_${(profile?.full_name ?? "member").replace(/\s+/g, "_")}`}
+                      downloadName={`QR_${(profile?.full_name ?? "student").replace(/\s+/g, "_")}`}
                       hideCaption
                     />
                     <div className="mt-3 flex items-center justify-center gap-1.5 text-xs text-ink-mute font-medium bg-paper-tint px-3 py-1 rounded-full w-full">

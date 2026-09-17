@@ -246,7 +246,7 @@ export default function CoachLoans({ branches, userId, userName }: { branches: B
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <h2 className="font-display font-bold text-2xl">{t("owner.coachLoans.pageTitle")}</h2>
+          <h2 className="font-display font-bold text-2xl text-ink">{t("owner.coachLoans.pageTitle")}</h2>
           <p className="text-ink-mute text-sm mt-0.5">{t("owner.coachLoans.pageSub")}</p>
         </div>
         <Btn variant="primary" icon="plus" onClick={() => { setForm({ coach_id: "", branch_id: branches[0]?.id ?? "", principal_amount: "", tenor_months: "", reason: "", notes: "" }); setShowCreate(true); }}>
@@ -254,39 +254,66 @@ export default function CoachLoans({ branches, userId, userName }: { branches: B
         </Btn>
       </div>
 
-      <div className="grid sm:grid-cols-3 gap-4">
-        <Stat label={t("owner.coachLoans.statActiveLoans")} value={activeLoans.length} icon="wallet" tone="warn" sub={activeLoans.length > 0 ? t("owner.coachLoans.statActiveLoansSubRunning") : t("owner.coachLoans.statActiveLoansSubNone")} />
-        <Stat label={t("owner.coachLoans.statOutstandingBalance")} value={fmtIDR(totalOutstanding)} icon="chart" tone="ocean" sub={t("owner.coachLoans.statOutstandingBalanceSub")} />
-        <Stat label={t("owner.coachLoans.statTotalLoans")} value={loans.length} icon="clipboard" tone="ok" sub={t("owner.coachLoans.statTotalLoansSub")} />
+      {/* Notice Banner */}
+      <div className="flex items-start gap-2.5 p-3.5 rounded-xl bg-ocean-50 border border-ocean-200/60 text-ocean-800 text-xs">
+        <Icon name="info" className="w-4 h-4 text-ocean-600 shrink-0 mt-0.5" />
+        <div className="flex-1 leading-relaxed">
+          Pinjaman aktif otomatis menjadi opsi potongan saat payslip/invoice masih berstatus draft. Setelah payslip diterbitkan (published), rincian cicilan tercatat resmi di slip gaji.
+        </div>
       </div>
 
-      <div className="flex gap-2 flex-wrap">
+      {/* Stat Cards */}
+      <div className="grid sm:grid-cols-3 gap-4">
+        <div className="bg-paper border border-line rounded-2xl p-4 space-y-1 shadow-xs">
+          <div className="text-[10px] font-bold text-ink-faint uppercase tracking-wider">{t("owner.coachLoans.statActiveLoans")}</div>
+          <div className="text-2xl font-bold font-mono text-warn-600">{activeLoans.length}</div>
+          <div className="text-xs text-ink-mute">{activeLoans.length > 0 ? t("owner.coachLoans.statActiveLoansSubRunning") : t("owner.coachLoans.statActiveLoansSubNone")}</div>
+        </div>
+        <div className="bg-paper border border-line rounded-2xl p-4 space-y-1 shadow-xs">
+          <div className="text-[10px] font-bold text-ink-faint uppercase tracking-wider">{t("owner.coachLoans.statOutstandingBalance")}</div>
+          <div className="text-2xl font-bold font-mono text-ocean-700">{fmtIDR(totalOutstanding)}</div>
+          <div className="text-xs text-ink-mute">{t("owner.coachLoans.statOutstandingBalanceSub")}</div>
+        </div>
+        <div className="bg-paper border border-line rounded-2xl p-4 space-y-1 shadow-xs">
+          <div className="text-[10px] font-bold text-ink-faint uppercase tracking-wider">{t("owner.coachLoans.statTotalLoans")}</div>
+          <div className="text-2xl font-bold font-mono text-ok-700">{loans.length}</div>
+          <div className="text-xs text-ink-mute">{t("owner.coachLoans.statTotalLoansSub")}</div>
+        </div>
+      </div>
+
+      {/* Filters Toolbar */}
+      <div className="flex gap-2 flex-wrap items-center">
         {branches.length > 1 && (
-          <select value={branchFilter} onChange={e => setBranchFilter(e.target.value)} className="text-sm rounded-xl border border-line bg-white pl-3.5 pr-8 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
+          <select value={branchFilter} onChange={e => setBranchFilter(e.target.value)} className="h-10 text-sm rounded-xl border border-line bg-paper px-3 text-ink focus:outline-none focus:border-ocean-500 transition">
             <option value="all">{t("owner.coachLoans.filterAllBranches")}</option>
             {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
         )}
-        <select value={roleFilter} onChange={e => setRoleFilter(e.target.value as any)} className="text-sm rounded-xl border border-line bg-white pl-3.5 pr-8 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
+        <select value={roleFilter} onChange={e => setRoleFilter(e.target.value as any)} className="h-10 text-sm rounded-xl border border-line bg-paper px-3 text-ink focus:outline-none focus:border-ocean-500 transition">
           <option value="all">{t("owner.coachLoans.allBorrowerCategories")}</option>
           <option value="coach">{t("owner.coachLoans.filterCoachOnly")}</option>
           <option value="staff">{t("owner.coachLoans.filterStaffOnly")}</option>
         </select>
-        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="text-sm rounded-xl border border-line bg-white pl-3.5 pr-8 py-2 focus:outline-none focus:ring-1 focus:ring-ocean-400">
+        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="h-10 text-sm rounded-xl border border-line bg-paper px-3 text-ink focus:outline-none focus:border-ocean-500 transition">
           <option value="all">{t("owner.coachLoans.filterAllStatus")}</option>
           <option value="active">{statusLabel("active")}</option>
           <option value="paid_off">{statusLabel("paid_off")}</option>
           <option value="written_off">{statusLabel("written_off")}</option>
           <option value="cancelled">{statusLabel("cancelled")}</option>
         </select>
-        <span className="text-xs text-ink-mute self-center ml-auto">{t("owner.coachLoans.loanCount", { count: filtered.length })}</span>
+        <span className="text-xs font-semibold text-ink-mute self-center ml-auto">{t("owner.coachLoans.loanCount", { count: filtered.length })}</span>
       </div>
 
-      <Card padded={false}>
+      {/* Loans Table Card */}
+      <div className="bg-paper border border-line rounded-2xl overflow-hidden shadow-xs">
+        <div className="h-9 bg-paper-deep border-b border-line px-5 flex items-center justify-between text-[10px] uppercase font-bold text-ink-faint tracking-wider">
+          <span>PEMINJAM & RINCIAN</span>
+          <span>NOMINAL & SISA</span>
+        </div>
         {loading ? (
-          <div className="p-10 text-center text-ink-mute">{t("owner.coachLoans.loading")}</div>
+          <div className="p-10 text-center text-ink-mute text-sm">{t("owner.coachLoans.loading")}</div>
         ) : filtered.length === 0 ? (
-          <div className="p-10 text-center text-ink-mute">{t("owner.coachLoans.empty")}</div>
+          <div className="p-10 text-center text-ink-mute text-sm">{t("owner.coachLoans.empty")}</div>
         ) : (
           <div className="divide-y divide-line">
             {filtered.map(loan => {
@@ -296,7 +323,7 @@ export default function CoachLoans({ branches, userId, userName }: { branches: B
               const paidCount = (loan.coach_loan_payments ?? []).filter(p => p.kind === "installment").length;
 
               return (
-                <div key={loan.id} className="flex items-center gap-3 px-5 py-3.5 hover:bg-paper-tint cursor-pointer" onClick={() => openDetail(loan)}>
+                <div key={loan.id} className="flex items-center gap-3 px-5 py-4 hover:bg-paper-tint/60 transition-colors cursor-pointer" onClick={() => openDetail(loan)}>
                   <Avatar name={loan.coach?.full_name ?? "?"} size={36} />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -340,7 +367,7 @@ export default function CoachLoans({ branches, userId, userName }: { branches: B
             })}
           </div>
         )}
-      </Card>
+      </div>
 
       {/* Modal: Tambah Pinjaman */}
       <Modal open={showCreate} onClose={() => setShowCreate(false)} title={t("owner.coachLoans.addModalTitle")} size="md"

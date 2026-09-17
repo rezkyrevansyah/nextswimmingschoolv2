@@ -4,6 +4,7 @@ import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useLocale } from "@/components/providers/LocaleProvider";
 import Btn from "@/components/ui/Btn";
+import Icon from "@/components/ui/Icon";
 import { Field, Select, Textarea } from "@/components/ui/FormFields";
 import { Card } from "@/components/ui/Card";
 import Status from "@/components/ui/Status";
@@ -203,57 +204,87 @@ export default function OwnerStaffPresensi({ branches }: { branches: Branch[] })
   const paginatedAtt = attendances.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
 
   return (
-    <div className="space-y-5">
-      <div><h2 className="font-display font-bold text-2xl">{t("owner.staffPresensi.pageTitle")}</h2><p className="text-ink-mute text-sm mt-0.5">{t("owner.staffPresensi.pageSub")}</p></div>
-      <Card padded={false}>
-        <div className="px-5 py-3 border-b border-line flex items-center justify-between gap-3 flex-wrap">
-          <div className="flex gap-1.5 bg-paper-tint rounded-xl p-1">
-            {([["leave", t("owner.staffPresensi.tabLeave")], ["attendance", t("owner.staffPresensi.tabAttendance")]] as const).map(([id, l]) => (
-              <button key={id} onClick={() => setTab(id)} className={`px-4 py-1.5 text-sm font-bold rounded-lg ${tab === id ? "bg-white text-ocean-700 shadow-sm" : "text-ink-mute hover:text-ink-soft"}`}>{l}</button>
-            ))}
-          </div>
-          <div className="flex items-center gap-2">
-            {tab === "attendance" && <MonthYearPicker value={selectedMonth} onChange={setSelectedMonth} />}
-            <Select value={filterBranch} onChange={e => setFilterBranch(e.target.value)} className="!w-auto">
-              <option value="all">{t("owner.staffPresensi.allBranchesOpt")}</option>
-              {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-            </Select>
-          </div>
+    <div className="space-y-4">
+      {/* Notice banner matching pen.dev eoQKX */}
+      <div className="flex items-start gap-2.5 p-3.5 rounded-xl bg-ocean-50 text-ocean-700 text-xs">
+        <Icon name="info" className="w-4 h-4 shrink-0 text-ocean-600 mt-0.5" />
+        <p className="leading-relaxed">
+          No GPS for staff. Distance is never measured here. The selfie is compressed and stored, so a row without a photo means the upload failed, not that the photo was skipped.
+        </p>
+      </div>
+
+      {/* Toolbar & Filter matching pen.dev vYywC */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2">
+          {([["leave", t("owner.staffPresensi.tabLeave")], ["attendance", t("owner.staffPresensi.tabAttendance")]] as const).map(([id, l]) => (
+            <button
+              key={id}
+              onClick={() => setTab(id)}
+              className={`h-10 px-5 text-sm font-semibold rounded-xl transition-all ${
+                tab === id ? "bg-ocean-600 text-white shadow-xs" : "bg-paper border border-line text-ink-soft hover:bg-paper-tint hover:text-ink"
+              }`}
+            >
+              {l}
+            </button>
+          ))}
         </div>
 
+        <div className="flex items-center gap-2.5 flex-wrap">
+          {tab === "attendance" && <MonthYearPicker value={selectedMonth} onChange={setSelectedMonth} />}
+          <select
+            value={filterBranch}
+            onChange={e => setFilterBranch(e.target.value)}
+            className="h-10 text-sm border border-line rounded-xl px-3 bg-paper text-ink-soft outline-none focus:border-ocean-500 transition-colors"
+          >
+            <option value="all">{t("owner.staffPresensi.allBranchesOpt")}</option>
+            {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {/* Card Table matching pen.dev NDWu3 / AziAl */}
+      <div className="bg-paper border border-line rounded-2xl overflow-hidden shadow-xs">
         {tab === "leave" ? (
-          loadingLeaves ? <div className="p-10 text-center text-ink-mute">{t("owner.staffPresensi.loadingData")}</div> : (
+          loadingLeaves ? (
+            <div className="p-12 text-center text-ink-mute text-sm">{t("owner.staffPresensi.loadingData")}</div>
+          ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead><tr className="text-[11px] uppercase tracking-widest text-ink-faint font-bold border-b border-line">
-                  <th className="text-left py-3 px-5 font-bold">{t("owner.staffPresensi.colName")}</th>
-                  <th className="text-left py-3 font-bold">{t("owner.staffPresensi.colType")}</th>
-                  <th className="text-left py-3 font-bold hidden sm:table-cell">{t("owner.staffPresensi.colStart")}</th>
-                  <th className="text-left py-3 font-bold hidden sm:table-cell">{t("owner.staffPresensi.colEnd")}</th>
-                  <th className="text-left py-3 font-bold">{t("owner.staffPresensi.colStatus")}</th>
-                  <th className="px-5" />
-                </tr></thead>
+                <thead className="h-9 bg-paper-deep border-b border-line text-left text-[10px] uppercase font-bold text-ink-faint tracking-wider">
+                  <tr>
+                    <th className="py-2 px-5">{t("owner.staffPresensi.colName")}</th>
+                    <th className="py-2 px-5">{t("owner.staffPresensi.colType")}</th>
+                    <th className="py-2 px-5 hidden sm:table-cell">{t("owner.staffPresensi.colStart")}</th>
+                    <th className="py-2 px-5 hidden sm:table-cell">{t("owner.staffPresensi.colEnd")}</th>
+                    <th className="py-2 px-5">{t("owner.staffPresensi.colStatus")}</th>
+                    <th className="py-2 px-5 text-right" />
+                  </tr>
+                </thead>
                 <tbody className="divide-y divide-line">
                   {paginatedLeaves.map(l => (
-                    <tr key={l.id} className="hover:bg-paper-tint">
-                      <td className="py-3.5 px-5">
+                    <tr key={l.id} className="hover:bg-paper-tint/60 transition-colors">
+                      <td className="py-3 px-5">
                         <div className="flex items-center gap-3">
-                          <Avatar name={l.staff?.full_name ?? "?"} size={34} />
+                          <Avatar name={l.staff?.full_name ?? "?"} size={32} />
                           <div className="min-w-0">
-                            <div className="font-semibold text-ink truncate">{l.staff?.full_name ?? "—"}</div>
-                            {l.reason && <div className="text-xs text-ink-faint truncate max-w-[180px]">{l.reason}</div>}
+                            <div className="font-semibold text-sm text-ink truncate">{l.staff?.full_name ?? "—"}</div>
+                            {l.reason && <div className="text-xs text-ink-mute truncate max-w-[200px]">{l.reason}</div>}
                           </div>
                         </div>
                       </td>
-                      <td className="text-sm">{typeLabel(l.type)}</td>
-                      <td className="text-ink-soft hidden sm:table-cell">{fmtDate(l.date_from)}</td>
-                      <td className="text-ink-soft hidden sm:table-cell">{fmtDate(l.date_to)}</td>
-                      <td><Status kind={l.status}>{statusLabel(l.status)}</Status></td>
-                      <td className="px-5">
+                      <td className="py-3 px-5 text-sm text-ink-soft">{typeLabel(l.type)}</td>
+                      <td className="py-3 px-5 text-ink-soft text-xs font-mono hidden sm:table-cell">{fmtDate(l.date_from)}</td>
+                      <td className="py-3 px-5 text-ink-soft text-xs font-mono hidden sm:table-cell">{fmtDate(l.date_to)}</td>
+                      <td className="py-3 px-5"><Status kind={l.status}>{statusLabel(l.status)}</Status></td>
+                      <td className="py-3 px-5 text-right">
                         {l.status === "pending" ? (
-                          <div className="flex gap-1 justify-end">
-                            <Btn variant="ghost" size="sm" className="text-danger-500" onClick={() => decide(l, "rejected")}>{t("common.actions.reject")}</Btn>
-                            <Btn variant="soft" size="sm" icon="check" onClick={() => decide(l, "approved")}>{t("common.actions.approve")}</Btn>
+                          <div className="flex items-center justify-end gap-1.5">
+                            <Btn variant="ghost" size="sm" className="text-danger-600 hover:bg-danger-50" onClick={() => decide(l, "rejected")}>
+                              {t("common.actions.reject")}
+                            </Btn>
+                            <Btn variant="soft" size="sm" icon="check" onClick={() => decide(l, "approved")}>
+                              {t("common.actions.approve")}
+                            </Btn>
                           </div>
                         ) : l.reject_reason ? (
                           <div className="text-xs text-danger-600 text-right max-w-[200px]">{l.reject_reason}</div>
@@ -261,39 +292,55 @@ export default function OwnerStaffPresensi({ branches }: { branches: Branch[] })
                       </td>
                     </tr>
                   ))}
-                  {leaves.length === 0 && <tr><td colSpan={6} className="py-10 text-center text-ink-mute">{t("owner.staffPresensi.emptyLeaveRequests")}</td></tr>}
+                  {leaves.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="py-12 text-center text-ink-mute text-sm">
+                        {t("owner.staffPresensi.emptyLeaveRequests")}
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
           )
         ) : (
-          loadingAtt ? <div className="p-10 text-center text-ink-mute">{t("owner.staffPresensi.loadingData")}</div> : (
+          loadingAtt ? (
+            <div className="p-12 text-center text-ink-mute text-sm">{t("owner.staffPresensi.loadingData")}</div>
+          ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead><tr className="text-[11px] uppercase tracking-widest text-ink-faint font-bold border-b border-line">
-                  <th className="text-left py-3 px-5 font-bold">{t("owner.staffPresensi.colDate")}</th>
-                  <th className="text-left py-3 font-bold">{t("owner.staffPresensi.colName")}</th>
-                  <th className="text-left py-3 font-bold hidden sm:table-cell">{t("owner.staffPresensi.colClockIn")}</th>
-                  <th className="text-left py-3 font-bold hidden sm:table-cell">{t("owner.staffPresensi.colClockOut")}</th>
-                  <th className="text-left py-3 font-bold">{t("owner.staffPresensi.colStatus")}</th>
-                  <th className="text-left py-3 font-bold">{t("owner.staffPresensi.colSelfie")}</th>
-                </tr></thead>
+                <thead className="h-9 bg-paper-deep border-b border-line text-left text-[10px] uppercase font-bold text-ink-faint tracking-wider">
+                  <tr>
+                    <th className="py-2 px-5">{t("owner.staffPresensi.colDate")}</th>
+                    <th className="py-2 px-5">{t("owner.staffPresensi.colName")}</th>
+                    <th className="py-2 px-5 hidden sm:table-cell">{t("owner.staffPresensi.colClockIn")}</th>
+                    <th className="py-2 px-5 hidden sm:table-cell">{t("owner.staffPresensi.colClockOut")}</th>
+                    <th className="py-2 px-5">{t("owner.staffPresensi.colStatus")}</th>
+                    <th className="py-2 px-5 text-center">{t("owner.staffPresensi.colSelfie")}</th>
+                  </tr>
+                </thead>
                 <tbody className="divide-y divide-line">
                   {paginatedAtt.map(a => {
                     const kind = staffStatusKind(a.status);
                     const label = kind === "present" ? t("owner.staffPresensi.typePresent") : kind === "excused" ? t("owner.staffPresensi.typeLeave") : kind === "sick" ? t("owner.staffPresensi.typeSick") : t("owner.staffPresensi.typeAbsent");
                     return (
-                      <tr key={a.id} className="hover:bg-paper-tint">
-                        <td className="py-3.5 px-5 text-ink-soft">{fmtDate(a.attendance_date)}</td>
-                        <td className="font-semibold">{a.staff?.full_name ?? "—"}</td>
-                        <td className="font-mono hidden sm:table-cell">{a.clock_in_time ? a.clock_in_time.slice(11, 16) : "—"}</td>
-                        <td className="font-mono hidden sm:table-cell">{a.clock_out_time ? a.clock_out_time.slice(11, 16) : "—"}</td>
-                        <td><Status kind={kind === "present" ? "active" : kind}>{label}</Status></td>
-                        <td><SelfieThumb selfieKey={a.selfie_url} onOpen={() => setLightboxKey(a.selfie_url)} /></td>
+                      <tr key={a.id} className="hover:bg-paper-tint/60 transition-colors">
+                        <td className="py-3 px-5 text-ink-soft text-xs font-mono">{fmtDate(a.attendance_date)}</td>
+                        <td className="py-3 px-5 font-semibold text-ink text-sm">{a.staff?.full_name ?? "—"}</td>
+                        <td className="py-3 px-5 font-mono text-xs text-ink-soft hidden sm:table-cell">{a.clock_in_time ? a.clock_in_time.slice(11, 16) : "—"}</td>
+                        <td className="py-3 px-5 font-mono text-xs text-ink-soft hidden sm:table-cell">{a.clock_out_time ? a.clock_out_time.slice(11, 16) : "—"}</td>
+                        <td className="py-3 px-5"><Status kind={kind === "present" ? "active" : kind}>{label}</Status></td>
+                        <td className="py-3 px-5 text-center"><SelfieThumb selfieKey={a.selfie_url} onOpen={() => setLightboxKey(a.selfie_url)} /></td>
                       </tr>
                     );
                   })}
-                  {attendances.length === 0 && <tr><td colSpan={6} className="py-10 text-center text-ink-mute">{t("owner.staffPresensi.emptyAttendance")}</td></tr>}
+                  {attendances.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="py-12 text-center text-ink-mute text-sm">
+                        {t("owner.staffPresensi.emptyAttendance")}
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -301,13 +348,13 @@ export default function OwnerStaffPresensi({ branches }: { branches: Branch[] })
         )}
 
         {!(tab === "leave" ? loadingLeaves : loadingAtt) && totalPages > 1 && (
-          <div className="px-5 py-3.5 border-t border-line flex items-center justify-between flex-wrap gap-3">
-            <span className="text-xs text-ink-mute tabular-nums">
+          <div className="px-5 py-3 border-t border-line flex items-center justify-between flex-wrap gap-3 bg-paper-tint/30 text-xs text-ink-mute">
+            <span className="tabular-nums">
               {t("owner.staffPresensi.itemsPageLabel", { count: tab === "leave" ? leaves.length : attendances.length, page: safePage + 1, total: totalPages })}
             </span>
             <div className="flex items-center gap-1">
-              <button type="button" disabled={safePage === 0} onClick={() => setPage(0)} className="px-2 py-1.5 rounded-lg border border-line text-xs text-ink-mute disabled:opacity-40 disabled:cursor-not-allowed hover:bg-paper-tint transition">«</button>
-              <button type="button" disabled={safePage === 0} onClick={() => setPage(p => p - 1)} className="px-2.5 py-1.5 rounded-lg border border-line text-xs text-ink-mute disabled:opacity-40 disabled:cursor-not-allowed hover:bg-paper-tint transition">‹</button>
+              <button type="button" disabled={safePage === 0} onClick={() => setPage(0)} className="px-2.5 py-1 rounded-lg border border-line bg-paper text-ink-soft disabled:opacity-40 disabled:cursor-not-allowed hover:bg-paper-tint transition">«</button>
+              <button type="button" disabled={safePage === 0} onClick={() => setPage(p => p - 1)} className="px-2.5 py-1 rounded-lg border border-line bg-paper text-ink-soft disabled:opacity-40 disabled:cursor-not-allowed hover:bg-paper-tint transition">‹</button>
               {Array.from({ length: totalPages }, (_, i) => i)
                 .filter(i => i === 0 || i === totalPages - 1 || Math.abs(i - safePage) <= 1)
                 .reduce<(number | "...")[]>((acc, i, idx, arr) => {
@@ -320,17 +367,17 @@ export default function OwnerStaffPresensi({ branches }: { branches: Branch[] })
                     <span key={`e${idx}`} className="px-2 text-xs text-ink-faint">…</span>
                   ) : (
                     <button key={item} type="button" onClick={() => setPage(item as number)}
-                      className={`min-w-[32px] py-1.5 rounded-lg border text-xs transition ${safePage === item ? "bg-ocean-600 border-ocean-600 text-white font-bold" : "border-line text-ink-soft hover:bg-paper-tint"}`}>
+                      className={`min-w-[32px] py-1 rounded-lg border text-xs transition ${safePage === item ? "bg-ocean-600 border-ocean-600 text-white font-bold" : "border-line bg-paper text-ink-soft hover:bg-paper-tint"}`}>
                       {(item as number) + 1}
                     </button>
                   )
                 )}
-              <button type="button" disabled={safePage === totalPages - 1} onClick={() => setPage(p => p + 1)} className="px-2.5 py-1.5 rounded-lg border border-line text-xs text-ink-mute disabled:opacity-40 disabled:cursor-not-allowed hover:bg-paper-tint transition">›</button>
-              <button type="button" disabled={safePage === totalPages - 1} onClick={() => setPage(totalPages - 1)} className="px-2 py-1.5 rounded-lg border border-line text-xs text-ink-mute disabled:opacity-40 disabled:cursor-not-allowed hover:bg-paper-tint transition">»</button>
+              <button type="button" disabled={safePage === totalPages - 1} onClick={() => setPage(p => p + 1)} className="px-2.5 py-1 rounded-lg border border-line bg-paper text-ink-soft disabled:opacity-40 disabled:cursor-not-allowed hover:bg-paper-tint transition">›</button>
+              <button type="button" disabled={safePage === totalPages - 1} onClick={() => setPage(totalPages - 1)} className="px-2.5 py-1 rounded-lg border border-line bg-paper text-ink-soft disabled:opacity-40 disabled:cursor-not-allowed hover:bg-paper-tint transition">»</button>
             </div>
           </div>
         )}
-      </Card>
+      </div>
 
       <Modal open={!!rejectTarget} onClose={() => setRejectTarget(null)} title={t("owner.staffPresensi.rejectLeaveModalTitle")} size="sm"
         footer={<><Btn variant="ghost" onClick={() => setRejectTarget(null)}>{t("common.actions.cancel")}</Btn><Btn variant="danger" onClick={confirmReject} disabled={rejecting}>{rejecting ? t("owner.staffPresensi.rejectingBtn") : t("owner.staffPresensi.rejectLeaveBtn")}</Btn></>}>

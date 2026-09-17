@@ -166,6 +166,7 @@ export default function OwnerClassesMaster({ branches }: { branches: { id: strin
   // Filters
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "archived">("active");
   const [branchFilter, setBranchFilter] = useState<string>("");
+  const [coachFilter, setCoachFilter] = useState<string>("");
   const [search, setSearch] = useState<string>("");
 
   // Create / Edit modal
@@ -231,8 +232,12 @@ export default function OwnerClassesMaster({ branches }: { branches: { id: strin
       });
   }, [load, supabase]);
 
-  // Filtered classes by search
+  // Filtered classes by search and coach
   const filteredClasses = classes.filter((c) => {
+    if (coachFilter) {
+      const hasCoach = (c.class_coaches ?? []).some((cc) => cc.coach_id === coachFilter);
+      if (!hasCoach) return false;
+    }
     if (!search.trim()) return true;
     const s = search.trim().toLowerCase();
     const nameMatch = (c.name ?? "").toLowerCase().includes(s);
@@ -667,72 +672,79 @@ export default function OwnerClassesMaster({ branches }: { branches: { id: strin
   );
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="font-display font-bold text-2xl text-ink">{t("owner.classes.pageTitle")}</h2>
-          <p className="text-ink-mute text-sm mt-0.5">{t("owner.classes.pageSub")}</p>
-        </div>
-        <Btn variant="primary" icon="plus" onClick={openCreate}>
-          {t("owner.classes.addClassBtn")}
-        </Btn>
+    <div className="space-y-4">
+      {/* Notice Banner */}
+      <div className="bg-ocean-50 rounded-xl p-3 sm:px-4 flex items-center gap-3 text-xs text-ocean-800 border border-ocean-200/60">
+        <Icon name="info" className="w-4 h-4 text-ocean-600 shrink-0" />
+        <span className="flex-1">
+          Session packages are not on this screen. They belong to Admin Class. Private lessons are not here either, they live in Private Students with their own package.
+        </span>
       </div>
 
       {/* Filter Toolbar */}
-      <Card className="p-4">
-        <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
-          <div className="flex-1 flex flex-col sm:flex-row gap-2.5">
-            {/* Search */}
-            <div className="relative flex-1">
-              <Icon name="search" className="w-4 h-4 text-ink-mute absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder={t("owner.classes.searchPlaceholder")}
-                className="w-full pl-9 pr-3 py-2 text-sm bg-paper-tint border border-line rounded-xl text-ink placeholder:text-ink-mute focus:outline-none focus:border-ocean-500 transition-colors"
-              />
-            </div>
-
-            {/* Branch Filter */}
-            <select
-              value={branchFilter}
-              onChange={(e) => setBranchFilter(e.target.value)}
-              className="appearance-none py-2 pl-3.5 pr-9 text-sm bg-paper-tint border border-line rounded-xl text-ink font-medium focus:outline-none focus:border-ocean-500 cursor-pointer transition-colors"
-              style={{
-                backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23577496' stroke-width='2' stroke-linecap='round'><path d='M6 9l6 6 6-6'/></svg>")`,
-                backgroundPosition: "right 12px center",
-                backgroundSize: "14px",
-                backgroundRepeat: "no-repeat",
-              }}
-            >
-              <option value="">{t("owner.classes.allBranches")}</option>
-              {branches.map((b) => (
-                <option key={b.id} value={b.id} translate="no">
-                  {b.name}
-                </option>
-              ))}
-            </select>
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap flex-1 min-w-[280px]">
+          {/* Search */}
+          <div className="relative">
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search class"
+              className="h-10 pl-9 pr-3 w-56 rounded-xl border border-line bg-paper text-sm text-ink placeholder:text-ink-faint focus:outline-hidden focus:border-ocean-500 focus:ring-1 focus:ring-ocean-500"
+            />
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint pointer-events-none">
+              <Icon name="search" className="w-4 h-4" />
+            </span>
           </div>
 
+          {/* Center / Branch Filter */}
+          <select
+            value={branchFilter}
+            onChange={(e) => setBranchFilter(e.target.value)}
+            aria-label="Filter center"
+            className="h-10 px-3 rounded-xl border border-line bg-paper text-sm text-ink-soft focus:outline-hidden focus:border-ocean-500"
+          >
+            <option value="">All centers</option>
+            {branches.map((b) => (
+              <option key={b.id} value={b.id} translate="no" className="notranslate">
+                {b.name}
+              </option>
+            ))}
+          </select>
+
+          {/* Coach Filter */}
+          <select
+            value={coachFilter}
+            onChange={(e) => setCoachFilter(e.target.value)}
+            aria-label="Filter coach"
+            className="h-10 px-3 rounded-xl border border-line bg-paper text-sm text-ink-soft focus:outline-hidden focus:border-ocean-500"
+          >
+            <option value="">All coaches</option>
+            {allCoaches.map((c) => (
+              <option key={c.id} value={c.id} translate="no" className="notranslate">
+                {c.full_name}
+              </option>
+            ))}
+          </select>
+
           {/* Status Tabs */}
-          <div className="flex items-center gap-1 bg-paper-tint p-1 rounded-xl border border-line self-start sm:self-auto">
+          <div className="h-10 px-1 bg-paper border border-line rounded-xl flex items-center gap-1">
             {(["active", "archived", "all"] as const).map((st) => {
               const label =
                 st === "active"
-                  ? t("owner.classes.filterStatusActive")
+                  ? "Active"
                   : st === "archived"
-                  ? t("owner.classes.filterStatusArchived")
-                  : t("owner.classes.filterStatusAll");
+                  ? "Archived"
+                  : "All";
               return (
                 <button
                   key={st}
                   type="button"
                   onClick={() => setStatusFilter(st)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  className={`h-8 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                     statusFilter === st
-                      ? "bg-white text-ocean-700 shadow-sm border border-line/60"
+                      ? "bg-ocean-50 text-ocean-700 font-bold"
                       : "text-ink-mute hover:text-ink"
                   }`}
                 >
@@ -742,174 +754,138 @@ export default function OwnerClassesMaster({ branches }: { branches: { id: strin
             })}
           </div>
         </div>
-      </Card>
 
-      {/* Classes Grid grouped by branch */}
-      {loading ? (
-        <Card>
+        <div>
+          <button
+            type="button"
+            onClick={openCreate}
+            className="h-10 px-4 rounded-xl bg-ocean-600 hover:bg-ocean-700 text-white text-sm font-semibold flex items-center gap-2 shadow-xs transition-colors cursor-pointer"
+          >
+            <Icon name="plus" className="w-4 h-4" />
+            <span>New class</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Classes Table */}
+      <div className="bg-paper rounded-2xl border border-line overflow-hidden shadow-xs">
+        {loading ? (
           <div className="py-12 text-center text-ink-mute text-sm">{t("owner.classes.loading")}</div>
-        </Card>
-      ) : groupedBranches.length === 0 ? (
-        <Card>
+        ) : filteredClasses.length === 0 ? (
           <div className="py-12 text-center text-ink-mute text-sm">{t("owner.classes.empty")}</div>
-        </Card>
-      ) : (
-        groupedBranches.map(({ branch, classes: bClasses }) => (
-          <div key={branch.id} className="space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="w-2.5 h-2.5 rounded-full bg-ocean-500" />
-                <h3 className="font-display font-bold text-lg text-ink"><NoTranslate>{branch.name}</NoTranslate></h3>
-                <span className="text-xs text-ink-mute font-semibold">
-                  ({t("owner.classes.classCount", { count: bClasses.length })})
-                </span>
-              </div>
-            </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="h-9 bg-paper-deep border-b border-line text-[10px] uppercase font-bold text-ink-faint tracking-wider">
+                  <th className="text-left py-2 px-5 font-bold">CLASS</th>
+                  <th className="text-left py-2 px-3 font-bold w-[120px]">CENTER</th>
+                  <th className="text-left py-2 px-3 font-bold w-[150px]">SCHEDULE</th>
+                  <th className="text-left py-2 px-3 font-bold w-[140px]">COACH</th>
+                  <th className="text-left py-2 px-3 font-bold w-[90px]">CAPACITY</th>
+                  <th className="text-left py-2 px-3 font-bold w-[110px]">MONTHLY</th>
+                  <th className="text-right py-2 pr-5 font-bold w-[100px]">ACTIONS</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {filteredClasses.map((c) => {
+                  const coachList = c.class_coaches ?? [];
+                  const headCoach = coachList.find((cc) => cc.role === "head") ?? coachList[0];
+                  const otherCoachesCount = coachList.length > 1 ? coachList.length - 1 : 0;
+                  const isArchived = c.status === "archived";
 
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {bClasses.map((c) => {
-                const coachList = c.class_coaches ?? [];
-                const headCoach = coachList.find((cc) => cc.role === "head") ?? coachList[0];
-                const pct = (c.enrolled || 0) / (c.capacity || 1);
-                const isArchived = c.status === "archived";
+                  const daysStr = (c.schedule_days ?? [])
+                    .map((d) => dayLabels[d] ?? d)
+                    .slice(0, 2)
+                    .join(", ") + ((c.schedule_days ?? []).length > 2 ? ` +${(c.schedule_days ?? []).length - 2}` : "");
+                  const timeStr = c.time_start
+                    ? `${c.time_start.slice(0, 5)} - ${c.time_end ? c.time_end.slice(0, 5) : ""}`
+                    : "—";
 
-                return (
-                  <Card
-                    key={c.id}
-                    padded={false}
-                    className={`overflow-hidden flex flex-col justify-between transition-all hover:shadow-md ${
-                      isArchived ? "opacity-75 bg-paper-tint" : ""
-                    }`}
-                  >
-                    <div>
-                      {/* Class Cover Image */}
-                      <div className="relative aspect-video w-full overflow-hidden bg-paper-deep border-b border-line">
-                        {c.photo_url ? (
-                          <img
-                            src={c.photo_url}
-                            alt={c.name}
-                            className="w-full h-full object-cover"
-                            loading="lazy"
-                          />
+                  return (
+                    <tr
+                      key={c.id}
+                      onClick={() => openDetail(c)}
+                      className={`h-14 hover:bg-paper-tint/60 cursor-pointer transition-colors ${
+                        isArchived ? "opacity-75 bg-paper-tint/30" : ""
+                      }`}
+                    >
+                      <td className="py-2 px-5">
+                        <div className="min-w-0">
+                          <div className="font-semibold text-sm text-ink truncate leading-tight">
+                            <NoTranslate>{c.name}</NoTranslate>
+                          </div>
+                          <div className="text-xs text-ink-mute truncate mt-0.5">
+                            {isArchived ? "Archived" : c.class_type === "private" ? "Private" : "Regular"}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-2 px-3 text-[13px] text-ink-soft">
+                        <NoTranslate>{c.branch?.name ?? "—"}</NoTranslate>
+                      </td>
+                      <td className="py-2 px-3">
+                        <div className="text-xs text-ink-soft leading-tight">
+                          <div>{daysStr || "—"}</div>
+                          <div className="font-mono text-[11px] text-ink-mute mt-0.5">{timeStr}</div>
+                        </div>
+                      </td>
+                      <td className="py-2 px-3">
+                        {headCoach?.profile ? (
+                          <div className="min-w-0">
+                            <div className="text-xs font-medium text-ink truncate leading-tight">
+                              <NoTranslate>{headCoach.profile.full_name}</NoTranslate>
+                            </div>
+                            <div className="text-[11px] text-ink-mute mt-0.5">
+                              {headCoach.role === "head" ? "Head coach" : "Coach"}
+                              {otherCoachesCount > 0 && ` (+${otherCoachesCount})`}
+                            </div>
+                          </div>
                         ) : (
-                          <Placeholder label={<NoTranslate>{c.name}</NoTranslate>} ratio="16/9" className="rounded-none border-0" />
+                          <span className="text-xs text-ink-mute">—</span>
                         )}
-                        <div className="absolute top-2.5 right-2.5 flex gap-1.5">
-                          {isArchived ? (
-                            <Status kind="archived">{t("owner.classes.filterStatusArchived")}</Status>
-                          ) : c.class_type === "private" ? (
-                            <span className="px-2 py-0.5 rounded-full bg-wave-600/90 backdrop-blur-sm text-white text-[10px] font-bold uppercase tracking-wider">
-                              Private
-                            </span>
-                          ) : (
-                            <Status kind="active">{t("owner.classes.filterStatusActive")}</Status>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Info Body */}
-                      <div className="p-4 space-y-2.5">
-                        <div>
-                          <h4 className="font-display font-bold text-base text-ink line-clamp-1"><NoTranslate>{c.name}</NoTranslate></h4>
-                          <div className="text-xs text-ink-mute mt-0.5">
-                            {(c.schedule_days ?? []).length > 0 ? (
-                              <span>
-                                {(c.schedule_days ?? []).map((d) => dayLabels[d] ?? d).join(", ")}
-                                {c.time_start && (
-                                  <span className="ml-1 font-mono">
-                                    {c.time_start.slice(0, 5)}
-                                    {c.time_end ? `–${c.time_end.slice(0, 5)}` : ""}
-                                  </span>
-                                )}
-                              </span>
-                            ) : (
-                              <span>—</span>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Coach info */}
-                        <div className="flex items-center gap-2 text-xs">
-                          {headCoach?.profile ? (
-                            <>
-                              <Avatar name={headCoach.profile.full_name} size={22} />
-                              <span className="font-semibold text-ink-soft truncate"><NoTranslate>{headCoach.profile.full_name}</NoTranslate></span>
-                              {headCoach.role === "head" && (
-                                <span className="px-1.5 py-0.5 rounded-full bg-ocean-50 text-ocean-700 text-[9px] font-bold uppercase tracking-wider">
-                                  Head
-                                </span>
-                              )}
-                            </>
-                          ) : (
-                            <span className="text-ink-faint">{t("owner.classes.noCoachYet")}</span>
-                          )}
-                        </div>
-
-                        {/* Capacity & Price bar */}
-                        <div className="pt-2 border-t border-line/60 flex items-center justify-between text-xs">
-                          <div className="font-bold text-ocean-700">
-                            {c.price_monthly ? fmtIDR(c.price_monthly) : c.price_per_session ? `${fmtIDR(c.price_per_session)}/sesi` : "—"}
-                          </div>
-                          <div className="font-mono text-ink-mute">
-                            <span className={pct >= 1 ? "text-danger-600 font-bold" : pct > 0.7 ? "text-warn-600 font-bold" : "text-ok-600 font-bold"}>
-                              {c.enrolled}
-                            </span>
-                            /{c.capacity}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Actions Footer */}
-                    <div className="p-3 bg-paper-tint/50 border-t border-line flex items-center justify-between gap-1.5">
-                      <Btn variant="ghost" size="sm" icon="eye" onClick={() => openDetail(c)}>
-                        {t("owner.classes.detailBtn")}
-                      </Btn>
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => openEdit(c)}
-                          title={t("owner.classes.editBtn")}
-                          className="w-7 h-7 rounded-lg hover:bg-paper-deep text-ink-mute hover:text-ocean-600 flex items-center justify-center transition-colors"
-                        >
-                          <Icon name="edit" className="w-3.5 h-3.5" />
-                        </button>
-                        {isArchived ? (
+                      </td>
+                      <td className="py-2 px-3 font-mono text-xs text-ink-soft">
+                        {c.enrolled || 0}/{c.capacity || "—"}
+                      </td>
+                      <td className="py-2 px-3 font-mono text-xs font-semibold text-ink">
+                        {c.price_monthly ? fmtIDR(c.price_monthly) : c.price_per_session ? `${fmtIDR(c.price_per_session)}/sesi` : "—"}
+                      </td>
+                      <td className="py-2 pr-5 text-right" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-1">
                           <button
                             type="button"
-                            onClick={() => restoreClass(c)}
-                            title={t("owner.classes.restoreBtn")}
-                            className="w-7 h-7 rounded-lg hover:bg-ok-50 text-ink-mute hover:text-ok-600 flex items-center justify-center transition-colors"
+                            onClick={() => openEdit(c)}
+                            className="w-7 h-7 rounded-lg border border-line bg-paper hover:bg-paper-deep text-ink-mute hover:text-ink flex items-center justify-center transition-colors cursor-pointer"
+                            title={t("owner.classes.editBtn")}
                           >
-                            <Icon name="check" className="w-3.5 h-3.5" />
+                            <Icon name="edit" className="w-3.5 h-3.5" />
                           </button>
-                        ) : (
                           <button
                             type="button"
-                            onClick={() => archiveClass(c)}
-                            title={t("owner.classes.archiveBtn")}
-                            className="w-7 h-7 rounded-lg hover:bg-warn-50 text-ink-mute hover:text-warn-600 flex items-center justify-center transition-colors"
+                            onClick={() => (isArchived ? restoreClass(c) : archiveClass(c))}
+                            className="w-7 h-7 rounded-lg border border-line bg-paper hover:bg-paper-deep text-ink-mute hover:text-ink flex items-center justify-center transition-colors cursor-pointer"
+                            title={isArchived ? t("owner.classes.restoreBtn") : t("owner.classes.archiveBtn")}
                           >
-                            <Icon name="archive" className="w-3.5 h-3.5" />
+                            <Icon name={isArchived ? "check" : "archive"} className="w-3.5 h-3.5" />
                           </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => deleteClass(c)}
-                          title={t("owner.classes.deleteBtn")}
-                          className="w-7 h-7 rounded-lg hover:bg-danger-50 text-ink-mute hover:text-danger-500 flex items-center justify-center transition-colors"
-                        >
-                          <Icon name="trash" className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  </Card>
-                );
-              })}
-            </div>
+                          <button
+                            type="button"
+                            onClick={() => deleteClass(c)}
+                            className="w-7 h-7 rounded-lg border border-line bg-paper hover:bg-rose-50 text-ink-mute hover:text-rose-600 flex items-center justify-center transition-colors cursor-pointer"
+                            title={t("owner.classes.deleteBtn")}
+                          >
+                            <Icon name="trash" className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
-        ))
-      )}
+        )}
+      </div>
 
       {/* Create / Edit Class Modal */}
       <Modal

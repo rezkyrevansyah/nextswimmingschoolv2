@@ -77,7 +77,11 @@ export default function OwnerSchools({}: { branches: Branch[] }) {
       .from("schools")
       .select("id, name, logo_url, branch_id, show_coach_sig, show_head_sig, show_school_sig, coach_sig_title, head_sig_title, branch:branches(name)")
       .order("name");
-    if (data) setSchools(data as unknown as School[]);
+    if (data) {
+      const list = data as unknown as School[];
+      setSchools(list);
+      setSelectedSchool(prev => prev ? list.find(s => s.id === prev.id) || list[0] : list[0] || null);
+    }
     setLoading(false);
   }, [supabase]);
 
@@ -212,185 +216,210 @@ export default function OwnerSchools({}: { branches: Branch[] }) {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="font-display font-bold text-2xl">{t("owner.schools.title")}</h2>
-        <p className="text-ink-mute text-sm mt-0.5">{t("owner.schools.sub")}</p>
-      </div>
-
-      <div className="grid lg:grid-cols-3 gap-6">
+      <div className="flex flex-col lg:flex-row items-start gap-6">
         {/* Left Column: School List */}
-        <Card className="space-y-4 lg:col-span-1">
-          <SectionTitle>{t("owner.schools.schoolsListTitle")}</SectionTitle>
+        <div className="w-full lg:w-80 shrink-0 bg-paper rounded-2xl border border-line p-5 space-y-4 shadow-xs">
+          <div>
+            <h3 className="font-display font-bold text-lg text-ink">Partner schools</h3>
+            <p className="text-xs text-ink-mute mt-1">Logo and signatures only. Accounts are made elsewhere.</p>
+          </div>
+
           {loading ? (
             <div className="text-center py-10 text-ink-mute text-sm">{t("common.actions.saving")}</div>
           ) : schools.length === 0 ? (
             <div className="text-center py-10 text-ink-mute text-sm">{t("owner.schools.noSchools")}</div>
           ) : (
-            <div className="space-y-2.5">
-              {schools.map(school => (
-                <div key={school.id} 
-                  className={`p-3 rounded-xl border flex items-center gap-3.5 cursor-pointer transition-all ${selectedSchool?.id === school.id ? "border-ocean-500 bg-ocean-50/80 shadow-sm" : "border-line bg-white hover:border-ocean-300"}`}
-                  onClick={() => setSelectedSchool(school)}
-                >
-                  <div className="w-12 h-12 rounded-lg bg-white border border-line flex items-center justify-center overflow-hidden shrink-0 shadow-xs">
-                    {school.logo_url ? (
-                      <Image src={school.logo_url} alt="Logo" width={48} height={48} className="w-full h-full object-contain p-1" />
-                    ) : (
-                      <Icon name="book" className="w-5 h-5 text-ink-faint" />
-                    )}
+            <div className="space-y-1.5">
+              {schools.map(school => {
+                const isSelected = selectedSchool?.id === school.id;
+                return (
+                  <div
+                    key={school.id}
+                    className={`h-14 px-3 rounded-xl flex items-center gap-3 cursor-pointer transition-all ${
+                      isSelected
+                        ? "bg-ocean-50 text-ocean-700 border border-ocean-200/60 shadow-xs"
+                        : "bg-paper hover:bg-paper-tint text-ink border border-transparent hover:border-line"
+                    }`}
+                    onClick={() => setSelectedSchool(school)}
+                  >
+                    <div className="w-9 h-9 rounded-lg bg-white border border-line flex items-center justify-center overflow-hidden shrink-0 shadow-2xs">
+                      {school.logo_url ? (
+                        <Image src={school.logo_url} alt="Logo" width={36} height={36} className="w-full h-full object-contain p-1" />
+                      ) : (
+                        <Icon name="book" className="w-4 h-4 text-ink-faint" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className={`font-semibold text-sm truncate ${isSelected ? "text-ocean-800" : "text-ink"}`}>
+                        <NoTranslate>{school.name}</NoTranslate>
+                      </div>
+                      <div className="text-xs text-ink-mute truncate">
+                        <NoTranslate>{school.branch?.name ?? "—"}</NoTranslate>
+                      </div>
+                    </div>
+                    <Icon
+                      name="chevron-right"
+                      className={`w-4 h-4 shrink-0 ${isSelected ? "text-ocean-600" : "text-ink-faint"}`}
+                    />
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-sm text-ink truncate"><NoTranslate>{school.name}</NoTranslate></div>
-                    <div className="text-xs text-ink-mute truncate"><NoTranslate>{school.branch?.name}</NoTranslate></div>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
-        </Card>
+        </div>
 
         {/* Right Column: School Config & Signatures */}
         {selectedSchool ? (
-          <div className="space-y-6 lg:col-span-2">
-            {/* 1. School Logo */}
-            <Card className="space-y-4">
-              <SectionTitle sub={t("owner.schools.sub")}>
+          <div className="flex-1 w-full bg-paper rounded-2xl border border-line p-6 space-y-6 shadow-xs">
+            {/* Header */}
+            <div className="border-b border-line pb-4">
+              <h2 className="font-display font-bold text-xl text-ink">
                 <NoTranslate>{selectedSchool.name}</NoTranslate>
-              </SectionTitle>
-              <div className="flex flex-col sm:flex-row items-center gap-6 p-5 border border-line rounded-2xl bg-paper-tint">
-                <div 
-                  className="w-24 h-24 rounded-2xl bg-white border border-line flex items-center justify-center overflow-hidden cursor-pointer hover:border-ocean-400 transition-all shadow-sm shrink-0"
-                  onClick={() => logoInputRef.current?.click()}
-                  title={t("owner.schools.changeLogoBtn")}
-                >
-                  {selectedSchool.logo_url ? (
-                    <Image src={selectedSchool.logo_url} alt="Logo" width={96} height={96} className="w-full h-full object-contain p-2" />
-                  ) : (
-                    <div className="flex flex-col items-center gap-1 text-ink-faint">
-                      <Icon name="image" className="w-7 h-7" />
-                      <span className="text-[10px] font-bold">NO LOGO</span>
+              </h2>
+              <p className="text-xs text-ink-mute mt-1">
+                <NoTranslate>{selectedSchool.branch?.name ?? "Center"}</NoTranslate>. Logo and signatures print on student report card PDFs.
+              </p>
+            </div>
+
+            {/* 1. School Logo */}
+            <div className="space-y-3">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-ink-faint">
+                SCHOOL LOGO
+              </div>
+              {selectedSchool.logo_url ? (
+                <div className="p-4 border border-line rounded-xl bg-paper-deep flex flex-col sm:flex-row items-center gap-5">
+                  <div className="w-20 h-20 rounded-xl bg-white border border-line flex items-center justify-center overflow-hidden p-2 shadow-xs shrink-0">
+                    <Image src={selectedSchool.logo_url} alt="Logo" width={80} height={80} className="w-full h-full object-contain" />
+                  </div>
+                  <div className="space-y-2 text-center sm:text-left flex-1">
+                    <div className="text-xs text-ink-soft">
+                      {t("owner.schools.logoUpdated")}
                     </div>
-                  )}
+                    <button
+                      type="button"
+                      disabled={uploading}
+                      onClick={() => logoInputRef.current?.click()}
+                      className="h-9 px-4 rounded-xl border border-line bg-paper hover:bg-paper-tint text-ink-soft text-xs font-semibold inline-flex items-center gap-2 transition-colors cursor-pointer"
+                    >
+                      <Icon name="upload" className="w-3.5 h-3.5" />
+                      <span>{uploading ? t("common.actions.saving") : t("owner.schools.uploadLogoBtn")}</span>
+                    </button>
+                    <input
+                      ref={logoInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => handleLogo(e, selectedSchool)}
+                    />
+                  </div>
                 </div>
-                <div className="space-y-2 text-center sm:text-left">
-                  <Btn 
-                    variant="outline" 
-                    size="sm" 
-                    icon="upload" 
-                    disabled={uploading} 
+              ) : (
+                <div className="space-y-2.5">
+                  <div className="h-[120px] rounded-xl border border-line bg-paper-deep flex flex-col items-center justify-center gap-1.5 text-center p-4">
+                    <Icon name="image" className="w-6 h-6 text-ink-faint" />
+                    <div className="text-sm font-semibold text-ink-soft">No logo yet</div>
+                    <div className="text-xs text-ink-mute max-w-sm">
+                      It prints at the top of every report card for this school.
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={uploading}
                     onClick={() => logoInputRef.current?.click()}
+                    className="h-10 px-4 rounded-xl border border-line bg-paper hover:bg-paper-tint text-ink-soft text-sm font-semibold inline-flex items-center gap-2 transition-colors cursor-pointer"
                   >
-                    {uploading ? t("common.actions.saving") : t("owner.schools.uploadLogoBtn")}
-                  </Btn>
-                  <input 
+                    <Icon name="upload" className="w-4 h-4" />
+                    <span>{uploading ? t("common.actions.saving") : "Upload logo"}</span>
+                  </button>
+                  <input
                     ref={logoInputRef}
-                    type="file" 
-                    accept="image/*" 
-                    className="hidden" 
-                    onChange={(e) => handleLogo(e, selectedSchool)} 
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => handleLogo(e, selectedSchool)}
                   />
-                  <p className="text-xs text-ink-mute">Disarankan format PNG dengan latar belakang transparan (resolusi minimal 300x300px).</p>
                 </div>
-              </div>
-            </Card>
+              )}
+            </div>
 
-            {/* 2. Rapor Signature Display Settings */}
-            <Card className="space-y-5">
+            {/* 2. School Signatures */}
+            <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <SectionTitle sub={t("owner.schools.sigConfigSub")}>
-                  {t("owner.schools.sigConfigTitle")}
-                </SectionTitle>
-                <Btn variant="primary" size="sm" onClick={saveConfig} disabled={configSaving}>
-                  {configSaving ? t("owner.schools.savingConfigBtn") : t("owner.schools.saveConfigBtn")}
-                </Btn>
+                <div className="text-[10px] font-bold uppercase tracking-wider text-ink-faint">
+                  SCHOOL SIGNATURES
+                </div>
+                {signatures.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSigForm({ id: "", name: "", title: "Principal", is_active: true });
+                      setSigFile(null);
+                      setShowSigModal(true);
+                    }}
+                    className="h-8 px-3 rounded-lg border border-line bg-paper hover:bg-paper-tint text-ink-soft text-xs font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <Icon name="plus" className="w-3.5 h-3.5" />
+                    <span>{t("owner.schools.addSigBtn")}</span>
+                  </button>
+                )}
               </div>
 
-              <div className="space-y-4 pt-1">
-                {/* Toggle 1: Coach */}
-                <div className="p-4 rounded-xl border border-line bg-paper-tint/60 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    <Switch checked={configForm.show_coach_sig} onChange={c => setConfigForm(f => ({ ...f, show_coach_sig: c }))} />
-                    <div>
-                      <div className="font-semibold text-sm text-ink">{t("owner.schools.showCoachSig")}</div>
-                      <div className="text-xs text-ink-mute">{t("owner.schools.coachSigSub")}</div>
-                    </div>
-                  </div>
-                  {configForm.show_coach_sig && (
-                    <div className="w-full sm:w-56">
-                      <Input 
-                        value={configForm.coach_sig_title} 
-                        onChange={e => setConfigForm(f => ({ ...f, coach_sig_title: e.target.value }))}
-                        placeholder={t("owner.schools.coachSigTitleField")}
-                      />
-                    </div>
-                  )}
-                </div>
-
-                {/* Toggle 2: Head of NEXT */}
-                <div className="p-4 rounded-xl border border-line bg-paper-tint/60 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    <Switch checked={configForm.show_head_sig} onChange={c => setConfigForm(f => ({ ...f, show_head_sig: c }))} />
-                    <div>
-                      <div className="font-semibold text-sm text-ink">{t("owner.schools.showHeadSig")}</div>
-                      <div className="text-xs text-ink-mute">{t("owner.schools.headSigSub")}</div>
-                    </div>
-                  </div>
-                  {configForm.show_head_sig && (
-                    <div className="w-full sm:w-56">
-                      <Input 
-                        value={configForm.head_sig_title} 
-                        onChange={e => setConfigForm(f => ({ ...f, head_sig_title: e.target.value }))}
-                        placeholder={t("owner.schools.headSigTitleField")}
-                      />
-                    </div>
-                  )}
-                </div>
-
-                {/* Toggle 3: School Signature */}
-                <div className="p-4 rounded-xl border border-line bg-paper-tint/60 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    <Switch checked={configForm.show_school_sig} onChange={c => setConfigForm(f => ({ ...f, show_school_sig: c }))} />
-                    <div>
-                      <div className="font-semibold text-sm text-ink">{t("owner.schools.showSchoolSig")}</div>
-                      <div className="text-xs text-ink-mute">{t("owner.schools.schoolSigSub")}</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </Card>
-
-            {/* 3. School Digital Signatures (CRUD) */}
-            <Card className="space-y-4">
-              <div className="flex items-center justify-between">
-                <SectionTitle sub={t("owner.schools.digitalSignaturesSub")}>
-                  {t("owner.schools.digitalSignaturesTitle")} (<NoTranslate>{selectedSchool.name}</NoTranslate>)
-                </SectionTitle>
-                <Btn variant="outline" size="sm" icon="plus" onClick={() => {
-                  setSigForm({ id: "", name: "", title: "Principal", is_active: true });
-                  setSigFile(null);
-                  setShowSigModal(true);
-                }}>{t("owner.schools.addSigBtn")}</Btn>
-              </div>
-              
               {sigLoading ? (
                 <div className="text-center py-6 text-ink-mute text-sm">{t("common.actions.saving")}</div>
               ) : signatures.length === 0 ? (
-                <div className="text-center py-8 text-ink-mute text-sm border-2 border-dashed border-line rounded-xl">
-                  {t("owner.schools.noSignaturesYet")}
+                <div className="space-y-2.5">
+                  <div className="h-[120px] rounded-xl border border-line bg-paper-deep flex flex-col items-center justify-center gap-1.5 text-center p-4">
+                    <Icon name="edit" className="w-6 h-6 text-ink-faint" />
+                    <div className="text-sm font-semibold text-ink-soft">No signature yet</div>
+                    <div className="text-xs text-ink-mute max-w-sm">
+                      Add the name, the title and the signature image of whoever signs for this school.
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSigForm({ id: "", name: "", title: "Principal", is_active: true });
+                      setSigFile(null);
+                      setShowSigModal(true);
+                    }}
+                    className="h-10 px-4 rounded-xl border border-line bg-paper hover:bg-paper-tint text-ink-soft text-sm font-semibold inline-flex items-center gap-2 transition-colors cursor-pointer"
+                  >
+                    <Icon name="plus" className="w-4 h-4" />
+                    <span>Add signature</span>
+                  </button>
                 </div>
               ) : (
                 <div className="grid sm:grid-cols-2 gap-3.5">
                   {signatures.map(sig => (
-                    <div key={sig.id} className={`p-4 border rounded-2xl flex flex-col justify-between gap-3 transition-all ${sig.is_active ? "border-ok-300 bg-ok-50/30 shadow-xs" : "border-line bg-paper-tint"}`}>
+                    <div
+                      key={sig.id}
+                      className={`p-4 border rounded-xl flex flex-col justify-between gap-3 transition-all ${
+                        sig.is_active ? "border-ok-200 bg-ok-50/20 shadow-2xs" : "border-line bg-paper-deep"
+                      }`}
+                    >
                       <div className="flex items-start justify-between gap-3">
-                        <div className="w-24 h-16 bg-white border border-line rounded-xl flex items-center justify-center p-1.5 shrink-0 shadow-2xs">
+                        <div className="w-24 h-14 bg-white border border-line rounded-lg flex items-center justify-center p-1 shrink-0 shadow-2xs">
                           {sig.image_url && sig.image_url !== "pending" ? (
                             <img src={sig.image_url} alt="Sig" className="max-w-full max-h-full object-contain mix-blend-multiply" />
                           ) : <span className="text-xs text-ink-mute">Pending</span>}
                         </div>
                         <div className="flex items-center gap-1">
-                          <button onClick={() => { setSigForm({ id: sig.id, name: sig.name, title: sig.title, is_active: sig.is_active }); setSigFile(null); setShowSigModal(true); }} className="text-ink-mute hover:text-ocean-600 p-1.5 rounded-lg hover:bg-white transition" title={t("common.actions.edit")}><Icon name="edit" className="w-4 h-4" /></button>
-                          <button onClick={() => deleteSignature(sig)} className="text-ink-mute hover:text-danger-500 p-1.5 rounded-lg hover:bg-white transition" title={t("common.actions.delete")}><Icon name="trash" className="w-4 h-4" /></button>
+                          <button
+                            type="button"
+                            onClick={() => { setSigForm({ id: sig.id, name: sig.name, title: sig.title, is_active: sig.is_active }); setSigFile(null); setShowSigModal(true); }}
+                            className="w-7 h-7 rounded-md border border-line bg-paper hover:bg-paper-tint text-ink-mute hover:text-ink flex items-center justify-center transition-colors cursor-pointer"
+                            title={t("common.actions.edit")}
+                          >
+                            <Icon name="edit" className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => deleteSignature(sig)}
+                            className="w-7 h-7 rounded-md border border-line bg-paper hover:bg-rose-50 text-ink-mute hover:text-rose-600 flex items-center justify-center transition-colors cursor-pointer"
+                            title={t("common.actions.delete")}
+                          >
+                            <Icon name="trash" className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       </div>
 
@@ -411,10 +440,73 @@ export default function OwnerSchools({}: { branches: Branch[] }) {
                   ))}
                 </div>
               )}
-            </Card>
+            </div>
+
+            {/* 3. Signature Slots on the PDF */}
+            <div className="space-y-3 pt-2">
+              <div className="flex items-center justify-between">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-ink-faint">
+                  SIGNATURE SLOTS ON THE PDF
+                </div>
+                <button
+                  type="button"
+                  onClick={saveConfig}
+                  disabled={configSaving}
+                  className="h-8 px-3 rounded-lg bg-ocean-600 hover:bg-ocean-700 text-white text-xs font-semibold transition-colors cursor-pointer shadow-2xs"
+                >
+                  {configSaving ? t("owner.schools.savingConfigBtn") : t("owner.schools.saveConfigBtn")}
+                </button>
+              </div>
+
+              <div className="space-y-2.5">
+                {/* Slot 1: Coach */}
+                <div className="p-3.5 rounded-xl border border-line bg-paper-tint flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-semibold text-ink">Coach</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="text"
+                      value={configForm.coach_sig_title}
+                      onChange={e => setConfigForm(f => ({ ...f, coach_sig_title: e.target.value }))}
+                      placeholder={t("owner.schools.coachSigTitleField")}
+                      className="h-9 px-3 w-48 sm:w-56 rounded-lg border border-line bg-paper text-sm text-ink focus:outline-hidden focus:border-ocean-500"
+                    />
+                    <Switch checked={configForm.show_coach_sig} onChange={c => setConfigForm(f => ({ ...f, show_coach_sig: c }))} />
+                  </div>
+                </div>
+
+                {/* Slot 2: Head of NEXT */}
+                <div className="p-3.5 rounded-xl border border-line bg-paper-tint flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-semibold text-ink">Head of NEXT</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="text"
+                      value={configForm.head_sig_title}
+                      onChange={e => setConfigForm(f => ({ ...f, head_sig_title: e.target.value }))}
+                      placeholder={t("owner.schools.headSigTitleField")}
+                      className="h-9 px-3 w-48 sm:w-56 rounded-lg border border-line bg-paper text-sm text-ink focus:outline-hidden focus:border-ocean-500"
+                    />
+                    <Switch checked={configForm.show_head_sig} onChange={c => setConfigForm(f => ({ ...f, show_head_sig: c }))} />
+                  </div>
+                </div>
+
+                {/* Slot 3: School representative */}
+                <div className="p-3.5 rounded-xl border border-line bg-paper-tint flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-semibold text-ink">School representative</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Switch checked={configForm.show_school_sig} onChange={c => setConfigForm(f => ({ ...f, show_school_sig: c }))} />
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         ) : (
-          <div className="lg:col-span-2 flex flex-col items-center justify-center text-ink-mute text-sm p-12 border-2 border-dashed border-line rounded-2xl min-h-[300px]">
+          <div className="flex-1 bg-paper rounded-2xl border border-line p-12 flex flex-col items-center justify-center text-ink-mute text-sm min-h-[360px]">
             <Icon name="book" className="w-10 h-10 text-ink-faint mb-2" />
             <span>{t("owner.schools.selectSchoolPrompt")}</span>
           </div>

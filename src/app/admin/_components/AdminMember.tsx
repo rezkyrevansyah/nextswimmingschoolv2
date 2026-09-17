@@ -622,7 +622,7 @@ export default function AdminMember({ branchId }: { branchId: string }) {
     ws["!cols"] = headers.map((_, i) => ({ wch: [20, 28, 14, 20, 16, 14, 16, 28, 24, 12, 12, 18, 12, 12, 16, 18, 20, 24, 18][i] }));
     ws["!freeze"] = { xSplit: 0, ySplit: 1 };
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Member Import");
+    XLSX.utils.book_append_sheet(wb, ws, "Student Import");
     XLSX.writeFile(wb, "template-import-member.xlsx");
   };
 
@@ -712,7 +712,7 @@ export default function AdminMember({ branchId }: { branchId: string }) {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `QR-Member-${new Date().toISOString().slice(0, 10)}.zip`;
+      a.download = `QR-Student-${new Date().toISOString().slice(0, 10)}.zip`;
       a.click();
       URL.revokeObjectURL(url);
       setQrSelectMode(false);
@@ -733,7 +733,7 @@ export default function AdminMember({ branchId }: { branchId: string }) {
       .eq("id", suspendMemberTarget.id);
     setSuspendingMember(false);
     if (error) return toast.error(t("admin.members.suspendMemberFailed"), error.message);
-    toast.success(t("admin.members.memberSuspendedToast", { name: suspendMemberTarget.profile?.full_name ?? "Member" }));
+    toast.success(t("admin.members.memberSuspendedToast", { name: suspendMemberTarget.profile?.full_name ?? "Student" }));
     logActivity(supabase, { userId: user?.id ?? "unknown", userRole: "admin", userName: user?.user_metadata?.full_name ?? "Admin", branchId, entityType: "members", entityId: suspendMemberTarget.id, entityLabel: suspendMemberTarget.profile?.full_name ?? undefined, action: "suspend", label: t("admin.members.activityMemberSuspended", { name: suspendMemberTarget.profile?.full_name ?? suspendMemberTarget.id, date: suspendMemberForm.until }), meta: { reason: suspendMemberForm.reason, until: suspendMemberForm.until } });
     setSuspendMemberTarget(null);
     setDetail(null);
@@ -1431,7 +1431,7 @@ export default function AdminMember({ branchId }: { branchId: string }) {
                       <div className="py-8 text-center text-ink-mute text-sm">Memuat riwayat perlombaan...</div>
                     ) : memberComps.length === 0 ? (
                       <div className="py-8 text-center text-ink-mute text-sm border border-dashed border-line rounded-xl">
-                        Belum ada riwayat perlombaan tercatat untuk member ini.
+                        Belum ada riwayat perlombaan tercatat untuk student ini.
                       </div>
                     ) : (
                       <div className="space-y-2.5 max-h-[380px] overflow-y-auto pr-1">

@@ -129,7 +129,13 @@ export function GoogleTranslate() {
   );
 }
 
-export function GoogleLanguageSwitcher({ className }: { className?: string }) {
+export function GoogleLanguageSwitcher({
+  className,
+  variant = "default",
+}: {
+  className?: string;
+  variant?: "default" | "pill";
+}) {
   const [currentLang, setCurrentLang] = useState<"en" | "id">("en");
 
   useEffect(() => {
@@ -165,6 +171,43 @@ export function GoogleLanguageSwitcher({ className }: { className?: string }) {
       window.location.reload();
     }
   };
+
+  if (variant === "pill") {
+    return (
+      <div
+        translate="no"
+        className={`notranslate flex items-center p-[3px] bg-paper-deep rounded-full gap-0.5 text-xs select-none shrink-0 ${className ?? ""}`}
+        aria-label="Choose Language / Pilih Bahasa"
+      >
+        <button
+          type="button"
+          translate="no"
+          onClick={() => changeLanguage("en")}
+          className={`notranslate px-3 py-1 rounded-full transition-all text-xs cursor-pointer ${
+            currentLang === "en"
+              ? "bg-white text-ink shadow-xs font-bold"
+              : "text-ink-mute hover:text-ink font-semibold"
+          }`}
+          title="English"
+        >
+          EN
+        </button>
+        <button
+          type="button"
+          translate="no"
+          onClick={() => changeLanguage("id")}
+          className={`notranslate px-3 py-1 rounded-full transition-all text-xs cursor-pointer ${
+            currentLang === "id"
+              ? "bg-white text-ink shadow-xs font-bold"
+              : "text-ink-mute hover:text-ink font-semibold"
+          }`}
+          title="Bahasa Indonesia"
+        >
+          ID
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div

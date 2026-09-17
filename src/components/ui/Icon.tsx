@@ -9,7 +9,10 @@ type IconName =
   | "clipboard" | "sparkle" | "shield" | "target" | "sun" | "moon" | "info"
   | "warning" | "filter" | "sort" | "close" | "refresh" | "copy" | "sendWA"
   | "print" | "lock" | "archive" | "chevron-left" | "chevron-right" | "link" | "unlink" | "mail"
-  | "instagram" | "tiktok" | "youtube";
+  | "instagram" | "tiktok" | "youtube"
+  | "dashboard" | "apartment" | "database" | "manage_accounts" | "workspace_premium"
+  | "pool" | "person" | "sell" | "trophy" | "event_busy" | "fact_check" | "receipt_long"
+  | "storage" | "history" | "web" | "building" | "card";
 
 interface IconProps {
   name: IconName | string;
@@ -79,6 +82,23 @@ const PATHS: Record<string, React.ReactNode> = {
   instagram:     <><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.2" cy="6.8" r="1" fill="currentColor" stroke="none"/></>,
   tiktok:        <><path d="M14 4v10.5a3.5 3.5 0 11-3.5-3.5"/><path d="M14 4a5 5 0 005 5"/></>,
   youtube:       <><rect x="3" y="6" width="18" height="12" rx="3"/><path d="M11 10l4 2-4 2z" fill="currentColor" stroke="none"/></>,
+  dashboard:     <><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></>,
+  apartment:     <><path d="M3 21h18M5 21V5a2 2 0 012-2h10a2 2 0 012 2v16M9 7h2M9 11h2M9 15h2M13 7h2M13 11h2M13 15h2"/></>,
+  building:      <><path d="M3 21h18M5 21V5a2 2 0 012-2h10a2 2 0 012 2v16M9 7h2M9 11h2M9 15h2M13 7h2M13 11h2M13 15h2"/></>,
+  database:      <><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></>,
+  manage_accounts: <><circle cx="9" cy="8" r="4"/><path d="M3 20c0-3.3 2.7-6 6-6 1.4 0 2.7.5 3.7 1.3"/><circle cx="18" cy="18" r="2.5"/><path d="M18 13.5v1M18 21.5v1M13.5 18h1M21.5 18h1"/></>,
+  workspace_premium: <><circle cx="12" cy="8" r="5"/><path d="M8 12.5L5 21l7-3 7 3-3-8.5"/></>,
+  pool:          <><path d="M2 14c2 0 2 1.5 4 1.5s2-1.5 4-1.5 2 1.5 4 1.5 2-1.5 4-1.5 2 1.5 4 1.5"/><path d="M2 19c2 0 2 1.5 4 1.5s2-1.5 4-1.5 2 1.5 4 1.5 2-1.5 4-1.5 2 1.5 4 1.5"/><path d="M8 9a2.5 2.5 0 100-5 2.5 2.5 0 000 5z"/><path d="M11.5 6.5l3.5 2.5-3 3.5 3 2.5"/></>,
+  person:        <><circle cx="12" cy="7" r="4"/><path d="M5 21v-2a7 7 0 0114 0v2"/></>,
+  sell:          <><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><circle cx="7" cy="7" r="1.5" fill="currentColor"/></>,
+  trophy:        <><path d="M6 9H3a2 2 0 01-2-2V5a2 2 0 012-2h3M18 9h3a2 2 0 002-2V5a2 2 0 00-2-2h-3"/><path d="M6 3h12v7a6 6 0 01-12 0V3z"/><path d="M9 21h6M12 17v4"/></>,
+  event_busy:    <><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M9.5 13.5l5 5M14.5 13.5l-5 5"/></>,
+  fact_check:    <><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h4M14 15l2 2 4-4"/></>,
+  receipt_long:  <><path d="M4 2v20l3-1.5 3 1.5 3-1.5 3 1.5 3-1.5 3 1.5V2l-3 1.5L16 2l-3 1.5L10 2 7 3.5 4 2z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="16" y2="11"/><line x1="8" y1="15" x2="12" y2="15"/></>,
+  storage:       <><rect x="3" y="4" width="18" height="4" rx="1"/><rect x="3" y="10" width="18" height="4" rx="1"/><rect x="3" y="16" width="18" height="4" rx="1"/><circle cx="6" cy="6" r=".8" fill="currentColor"/><circle cx="6" cy="12" r=".8" fill="currentColor"/><circle cx="6" cy="18" r=".8" fill="currentColor"/></>,
+  history:       <><path d="M3 12a9 9 0 109-9 9.75 9.75 0 00-6.74 2.74L3 8"/><path d="M3 3v5h5M12 7v5l4 2"/></>,
+  web:           <><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><circle cx="6" cy="6.5" r=".75" fill="currentColor"/><circle cx="9" cy="6.5" r=".75" fill="currentColor"/></>,
+  card:          <><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></>,
 };
 
 export default function Icon({ name, className = "w-5 h-5", strokeWidth = 1.75, fill = "none" }: IconProps) {

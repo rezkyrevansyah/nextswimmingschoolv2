@@ -28,7 +28,7 @@ export const landing: typeof LandingEn = {
   testimonials: {
     label: "Testimoni",
     headline: "Kata keluarga renang kami.",
-    subtitle: "Cerita nyata dari orang tua dan member yang merasakan progresnya langsung.",
+    subtitle: "Cerita nyata dari orang tua dan student yang merasakan progresnya langsung.",
     ctaText: "Siap lihat progres yang sama untuk anak Anda?",
     ctaButton: "Daftar Sekarang",
   },

@@ -81,7 +81,7 @@ export const clampPercent = (value: number, max: number): number => {
 /** Mask a reviewer's name to protect anonymity: "Andi Saputra" -> "A***" */
 export function maskMemberName(fullName?: string | null): string {
   const trimmed = (fullName ?? "").trim();
-  if (!trimmed) return "Member***";
+  if (!trimmed) return "Student***";
   return `${trimmed.charAt(0).toUpperCase()}***`;
 }
 

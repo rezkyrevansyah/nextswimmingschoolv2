@@ -11,6 +11,7 @@ import Icon from "@/components/ui/Icon";
 import { Field, Input } from "@/components/ui/FormFields";
 import { useUpload } from "@/hooks/useUpload";
 import { NoTranslate } from "@/components/ui/NoTranslate";
+import { cn } from "@/lib/utils";
 
 interface Category {
   id: string;
@@ -210,43 +211,194 @@ export default function OwnerMasterData() {
   const filteredCategories = categories.filter((c) => c.kind === activeCatTab);
 
   return (
-    <div className="space-y-8 max-w-5xl">
-      <div>
-        <h2 className="font-display font-bold text-2xl text-ink">{t("owner.masterData.title")}</h2>
-        <p className="text-ink-mute text-sm mt-0.5">
-          {t("owner.masterData.sub")}
-        </p>
-      </div>
+    <div className="space-y-6">
+      {/* 2-Column Responsive Layout matching pen.dev owner/master */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* Left Column: Transaction Categories (fill_container) */}
+        <div className="lg:col-span-7 xl:col-span-8">
+          <div className="bg-white rounded-2xl border border-line shadow-card overflow-hidden">
+            {/* Card Header */}
+            <div className="p-5 border-b border-line">
+              <h3 className="font-display font-bold text-lg text-ink leading-tight">
+                Transaction categories
+              </h3>
+              <p className="text-xs text-ink-mute mt-1">
+                One global list. Owner Financial and Manager Center Financial both read from it.
+              </p>
+            </div>
 
-      <div className="grid lg:grid-cols-12 gap-6">
-        {/* Card 1: Head of NEXT Signature & Profile */}
-        <div className="lg:col-span-6 space-y-6">
-          <Card className="p-6 space-y-5">
-            <SectionTitle sub={t("owner.masterData.headSectionSub")}>
-              {t("owner.masterData.headSectionTitle")}
-            </SectionTitle>
+            <div className="p-5 space-y-4">
+              {/* Category Kind Tabs (Pills) */}
+              <div className="flex items-center gap-1.5 p-1 bg-paper-deep rounded-full border border-line w-fit">
+                <button
+                  type="button"
+                  onClick={() => { setActiveCatTab("income"); setEditCatId(null); }}
+                  className={cn(
+                    "px-4 h-[34px] rounded-full text-xs font-semibold transition cursor-pointer flex items-center gap-1.5",
+                    activeCatTab === "income"
+                      ? "bg-ocean-600 text-white shadow-xs"
+                      : "text-ink-soft hover:bg-white/60"
+                  )}
+                >
+                  <span>{t("owner.masterData.tabIncome")}</span>
+                  <span className={cn("text-[11px] font-mono", activeCatTab === "income" ? "text-white/80" : "text-ink-mute")}>
+                    {categories.filter(c => c.kind === "income").length}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setActiveCatTab("expense"); setEditCatId(null); }}
+                  className={cn(
+                    "px-4 h-[34px] rounded-full text-xs font-semibold transition cursor-pointer flex items-center gap-1.5",
+                    activeCatTab === "expense"
+                      ? "bg-ocean-600 text-white shadow-xs"
+                      : "text-ink-soft hover:bg-white/60"
+                  )}
+                >
+                  <span>{t("owner.masterData.tabExpense")}</span>
+                  <span className={cn("text-[11px] font-mono", activeCatTab === "expense" ? "text-white/80" : "text-ink-mute")}>
+                    {categories.filter(c => c.kind === "expense").length}
+                  </span>
+                </button>
+              </div>
+
+              {/* Add New Category Input */}
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={newCatName}
+                  onChange={(e) => setNewCatName(e.target.value)}
+                  placeholder={t("owner.masterData.addCategoryPlaceholder")}
+                  onKeyDown={(e) => { if (e.key === "Enter") handleAddCategory(); }}
+                  className="flex-1 h-11 px-3.5 rounded-xl border border-line bg-paper text-sm text-ink outline-none focus:border-ocean-500 transition placeholder:text-ink-faint"
+                />
+                <button
+                  type="button"
+                  disabled={!newCatName.trim() || addingCat}
+                  onClick={handleAddCategory}
+                  className="h-11 px-4 rounded-xl bg-ocean-600 hover:bg-ocean-700 disabled:opacity-50 text-white text-sm font-semibold flex items-center gap-1.5 transition shadow-xs cursor-pointer shrink-0"
+                >
+                  <Icon name="plus" className="w-4 h-4" />
+                  <span>{addingCat ? t("common.actions.saving") : t("common.actions.add")}</span>
+                </button>
+              </div>
+
+              {/* Category List */}
+              <div className="space-y-2 max-h-[440px] overflow-y-auto pr-0.5">
+                {catLoading ? (
+                  <div className="py-12 text-center text-ink-mute text-sm animate-pulse">Loading categories...</div>
+                ) : filteredCategories.length === 0 ? (
+                  <div className="py-12 text-center text-ink-mute text-sm">
+                    {t("owner.masterData.noCategories")}
+                  </div>
+                ) : (
+                  filteredCategories.map((c) => (
+                    <div
+                      key={c.id}
+                      className="h-12 px-3.5 rounded-xl bg-paper-tint border border-line flex items-center gap-2.5 transition hover:bg-white hover:shadow-xs group"
+                    >
+                      <Icon name="menu" className="w-4 h-4 text-ink-faint shrink-0" />
+                      {editCatId === c.id ? (
+                        <>
+                          <input
+                            value={editCatName}
+                            onChange={(e) => setEditCatName(e.target.value)}
+                            className="flex-1 h-8 px-2.5 rounded-lg border border-ocean-500 bg-white text-sm text-ink outline-none"
+                            onKeyDown={(e) => { if (e.key === "Enter") handleSaveEditCat(); }}
+                            autoFocus
+                          />
+                          <button
+                            onClick={handleSaveEditCat}
+                            disabled={savingEdit}
+                            className="w-7 h-7 rounded-lg border border-line bg-white flex items-center justify-center hover:bg-paper-deep shrink-0 text-ok-600 cursor-pointer"
+                            title={t("common.actions.save")}
+                          >
+                            <Icon name="check" className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => setEditCatId(null)}
+                            className="w-7 h-7 rounded-lg border border-line bg-white flex items-center justify-center hover:bg-paper-deep shrink-0 text-ink-mute cursor-pointer"
+                            title={t("common.actions.cancel")}
+                          >
+                            <Icon name="x" className="w-4 h-4" />
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <span className="flex-1 text-sm font-medium text-ink truncate">
+                            <NoTranslate>{c.name}</NoTranslate>
+                          </span>
+                          <button
+                            onClick={() => { setEditCatId(c.id); setEditCatName(c.name); }}
+                            className="w-7 h-7 rounded-lg text-ink-mute hover:text-ink hover:bg-white flex items-center justify-center transition cursor-pointer"
+                            title={t("common.actions.edit")}
+                          >
+                            <Icon name="edit" className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteCategory(c)}
+                            className="w-7 h-7 rounded-lg text-danger-500 hover:bg-danger-50 flex items-center justify-center transition cursor-pointer"
+                            title={t("common.actions.delete")}
+                          >
+                            <Icon name="trash" className="w-3.5 h-3.5" />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Right Column: Head of NEXT (fixed 400px equivalent on desktop) */}
+        <div className="lg:col-span-5 xl:col-span-4">
+          <div className="bg-white rounded-2xl border border-line shadow-card overflow-hidden">
+            {/* Card Header */}
+            <div className="p-5 border-b border-line">
+              <h3 className="font-display font-bold text-lg text-ink leading-tight">
+                Head of NEXT
+              </h3>
+              <p className="text-xs text-ink-mute mt-1">
+                Name, title and signature used on report card PDFs.
+              </p>
+            </div>
 
             {loadingOwner ? (
-              <div className="py-10 text-center text-ink-mute text-sm animate-pulse">{t("common.actions.saving")}</div>
+              <div className="p-10 text-center text-ink-mute text-sm animate-pulse">Loading settings...</div>
             ) : (
-              <div className="space-y-4">
-                <Field label={t("owner.masterData.fieldHeadName")} hint="Official signer name on report cards">
-                  <Input
+              <div className="p-5 space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-ink-soft mb-1.5">
+                    {t("owner.masterData.fieldHeadName")}
+                  </label>
+                  <input
+                    type="text"
                     value={headName}
                     onChange={(e) => setHeadName(e.target.value)}
                     placeholder="E.g. Syahril Sidik"
+                    className="w-full h-11 px-3.5 rounded-xl border border-line bg-paper text-sm text-ink outline-none focus:border-ocean-500 transition"
                   />
-                </Field>
+                </div>
 
-                <Field label={t("owner.masterData.fieldHeadTitle")} hint="Official title below name">
-                  <Input
+                <div>
+                  <label className="block text-xs font-semibold text-ink-soft mb-1.5">
+                    {t("owner.masterData.fieldHeadTitle")}
+                  </label>
+                  <input
+                    type="text"
                     value={headTitle}
                     onChange={(e) => setHeadTitle(e.target.value)}
                     placeholder="E.g. HEAD OF NEXT SWIMMING"
+                    className="w-full h-11 px-3.5 rounded-xl border border-line bg-paper text-sm text-ink outline-none focus:border-ocean-500 transition"
                   />
-                </Field>
+                </div>
 
-                <Field label={t("owner.masterData.headSigSection")} hint={t("owner.masterData.headSigHint")}>
+                <div>
+                  <label className="block text-xs font-semibold text-ink-soft mb-1.5">
+                    {t("owner.masterData.headSigSection")}
+                  </label>
                   <input
                     type="file"
                     ref={fileInputRef}
@@ -257,7 +409,7 @@ export default function OwnerMasterData() {
 
                   {signatureUrl ? (
                     <div className="border border-line rounded-xl p-4 bg-paper-tint flex flex-col items-center justify-center space-y-3">
-                      <div className="relative w-44 h-24 bg-white rounded-lg border border-line flex items-center justify-center p-2 shadow-sm">
+                      <div className="relative w-44 h-24 bg-white rounded-lg border border-line flex items-center justify-center p-2 shadow-xs">
                         <Image
                           src={signatureUrl}
                           alt="Head of NEXT Signature"
@@ -267,24 +419,23 @@ export default function OwnerMasterData() {
                         />
                       </div>
                       <div className="flex gap-2">
-                        <Btn
-                          variant="ghost"
-                          size="sm"
-                          icon="edit"
+                        <button
+                          type="button"
                           disabled={uploading}
                           onClick={() => fileInputRef.current?.click()}
+                          className="px-3 h-8 rounded-lg border border-line bg-white hover:bg-paper-deep text-xs font-semibold text-ink transition cursor-pointer flex items-center gap-1.5"
                         >
-                          {uploading ? t("common.actions.saving") : t("owner.masterData.changeHeadSig")}
-                        </Btn>
-                        <Btn
-                          variant="ghost"
-                          size="sm"
-                          icon="trash"
-                          className="text-danger-500 hover:text-danger-600 hover:bg-danger-50"
+                          <Icon name="edit" className="w-3.5 h-3.5 text-ink-mute" />
+                          <span>{uploading ? t("common.actions.saving") : t("owner.masterData.changeHeadSig")}</span>
+                        </button>
+                        <button
+                          type="button"
                           onClick={handleRemoveSignature}
+                          className="px-3 h-8 rounded-lg text-danger-500 hover:bg-danger-50 text-xs font-semibold transition cursor-pointer flex items-center gap-1.5"
                         >
-                          {t("common.actions.delete")}
-                        </Btn>
+                          <Icon name="trash" className="w-3.5 h-3.5" />
+                          <span>{t("common.actions.delete")}</span>
+                        </button>
                       </div>
                     </div>
                   ) : (
@@ -301,141 +452,22 @@ export default function OwnerMasterData() {
                       <p className="text-xs text-ink-mute mt-1">{t("owner.masterData.headSigRecommend")}</p>
                     </div>
                   )}
-                </Field>
+                </div>
 
                 <div className="pt-2">
-                  <Btn
-                    variant="primary"
-                    className="w-full"
-                    icon="check"
+                  <button
+                    type="button"
                     disabled={savingOwner}
                     onClick={handleSaveHeadInfo}
+                    className="w-full h-11 rounded-xl bg-ocean-600 hover:bg-ocean-700 disabled:opacity-50 text-white text-sm font-semibold flex items-center justify-center gap-2 transition shadow-xs cursor-pointer"
                   >
-                    {savingOwner ? t("owner.masterData.savingHeadBtn") : t("owner.masterData.saveHeadBtn")}
-                  </Btn>
+                    <Icon name="check" className="w-4 h-4 text-white" />
+                    <span>{savingOwner ? t("owner.masterData.savingHeadBtn") : t("owner.masterData.saveHeadBtn")}</span>
+                  </button>
                 </div>
               </div>
             )}
-          </Card>
-        </div>
-
-        {/* Card 2: Master Kategori Transaksi */}
-        <div className="lg:col-span-6 space-y-6">
-          <Card className="p-6 space-y-5">
-            <SectionTitle sub={t("owner.masterData.categoriesSub")}>
-              {t("owner.masterData.categoriesTitle")}
-            </SectionTitle>
-
-            {/* Toggle Tabs */}
-            <div className="flex rounded-xl bg-paper-deep p-1 gap-1">
-              <button
-                type="button"
-                onClick={() => { setActiveCatTab("income"); setEditCatId(null); }}
-                className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all ${
-                  activeCatTab === "income"
-                    ? "bg-white text-ocean-700 shadow-sm"
-                    : "text-ink-mute hover:text-ink"
-                }`}
-              >
-                {t("owner.masterData.tabIncome")}
-              </button>
-              <button
-                type="button"
-                onClick={() => { setActiveCatTab("expense"); setEditCatId(null); }}
-                className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all ${
-                  activeCatTab === "expense"
-                    ? "bg-white text-ocean-700 shadow-sm"
-                    : "text-ink-mute hover:text-ink"
-                }`}
-              >
-                {t("owner.masterData.tabExpense")}
-              </button>
-            </div>
-
-            {/* Add Input */}
-            <div className="flex gap-2">
-              <Input
-                value={newCatName}
-                onChange={(e) => setNewCatName(e.target.value)}
-                placeholder={t("owner.masterData.addCategoryPlaceholder")}
-                onKeyDown={(e) => { if (e.key === "Enter") handleAddCategory(); }}
-              />
-              <Btn
-                variant="primary"
-                size="sm"
-                icon="plus"
-                disabled={!newCatName.trim() || addingCat}
-                onClick={handleAddCategory}
-              >
-                {t("common.actions.add")}
-              </Btn>
-            </div>
-
-            {/* Category List */}
-            <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1">
-              {catLoading ? (
-                <div className="py-8 text-center text-ink-mute text-sm animate-pulse">{t("common.actions.saving")}</div>
-              ) : filteredCategories.length === 0 ? (
-                <div className="py-8 text-center text-ink-mute text-sm">
-                  {t("owner.masterData.noCategories")}
-                </div>
-              ) : (
-                filteredCategories.map((c) => (
-                  <div
-                    key={c.id}
-                    className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-paper-tint border border-line/60 hover:border-line transition-all"
-                  >
-                    {editCatId === c.id ? (
-                      <>
-                        <Input
-                          value={editCatName}
-                          onChange={(e) => setEditCatName(e.target.value)}
-                          className="flex-1 text-sm"
-                          onKeyDown={(e) => { if (e.key === "Enter") handleSaveEditCat(); }}
-                          autoFocus
-                        />
-                        <button
-                          onClick={handleSaveEditCat}
-                          disabled={savingEdit}
-                          className="w-8 h-8 rounded-lg border border-line bg-white flex items-center justify-center hover:bg-paper-deep shrink-0 text-ok-600"
-                          title={t("common.actions.save")}
-                        >
-                          <Icon name="check" className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => setEditCatId(null)}
-                          className="w-8 h-8 rounded-lg border border-line bg-white flex items-center justify-center hover:bg-paper-deep shrink-0 text-ink-mute"
-                          title={t("common.actions.cancel")}
-                        >
-                          <Icon name="x" className="w-4 h-4" />
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <span className="flex-1 text-sm font-semibold text-ink truncate">
-                          <NoTranslate>{c.name}</NoTranslate>
-                        </span>
-                        <button
-                          onClick={() => { setEditCatId(c.id); setEditCatName(c.name); }}
-                          className="w-8 h-8 rounded-lg border border-line bg-white flex items-center justify-center hover:bg-paper-deep shrink-0 text-ink-mute hover:text-ink"
-                          title={t("common.actions.edit")}
-                        >
-                          <Icon name="edit" className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteCategory(c)}
-                          className="w-8 h-8 rounded-lg border border-danger-200 bg-danger-50 flex items-center justify-center hover:bg-danger-100 shrink-0 text-danger-500"
-                          title={t("common.actions.delete")}
-                        >
-                          <Icon name="trash" className="w-3.5 h-3.5" />
-                        </button>
-                      </>
-                    )}
-                  </div>
-                ))
-              )}
-            </div>
-          </Card>
+          </div>
         </div>
       </div>
     </div>

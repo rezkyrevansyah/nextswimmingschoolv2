@@ -52,7 +52,7 @@ function getRoleBadgeColors(role: string): { bg: string; text: string; label: st
     case "coach":
       return { bg: "#0D9488", text: "#FFFFFF", label: "COACH" };
     case "member":
-      return { bg: "#16A34A", text: "#FFFFFF", label: "MEMBER" };
+      return { bg: "#16A34A", text: "#FFFFFF", label: "STUDENT" };
     case "staff":
       return { bg: "#4F46E5", text: "#FFFFFF", label: "STAFF" };
     case "school":
@@ -115,7 +115,7 @@ export async function generateBrandedQRCardCanvas(
   ctx.fillText("NEXT SWIMMING SCHOOL", width / 2, 70);
 
   // Header Subtitle / Branch
-  const branchName = account.branch?.name || account.branch_name || "Official Member Pass";
+  const branchName = account.branch?.name || account.branch_name || "Official Student Pass";
   ctx.fillStyle = "#93C5FD";
   ctx.font = "bold 15px sans-serif";
   ctx.fillText(branchName.toUpperCase(), width / 2, 105);
