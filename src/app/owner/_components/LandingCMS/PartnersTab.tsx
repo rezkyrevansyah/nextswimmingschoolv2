@@ -3,7 +3,6 @@ import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import Modal from "@/components/ui/Modal";
 import Btn from "@/components/ui/Btn";
@@ -16,7 +15,6 @@ import { revalidate } from "./_utils";
 import type { PartnerItem } from "./_types";
 
 export default function PartnersTab() {
-  const { t } = useLocale();
   const toast = useToast();
   const confirm = useConfirm();
   const supabase = createClient();
@@ -55,36 +53,36 @@ export default function PartnersTab() {
           .insert({ name: form.name, sort_order: form.sort_order, website_url: websiteUrl, logo_url: logoFile ? null : (form.logo_url.trim() || null) })
           .select("id")
           .single();
-        if (error || !inserted) throw new Error(error?.message ?? t("owner.landingCms.saveFailedGeneric"));
+        if (error || !inserted) throw new Error(error?.message ?? "Failed to save");
         if (logoFile) await upload.landingImage(logoFile, "partner", inserted.id);
       }
     } catch (e) {
-      toast.error(t("owner.landingCms.partners.saveFailed"), (e as Error).message);
+      toast.error("Failed to save", (e as Error).message);
       setSaving(false);
       return;
     }
     await revalidate();
-    toast.success(t("owner.landingCms.partners.saved"));
+    toast.success("Partner saved");
     setSaving(false);
     setShowModal(false);
     load();
   };
 
   const del = async (p: PartnerItem) => {
-    const yes = await confirm({ title: t("owner.landingCms.partners.deleteConfirmTitle"), body: p.name || t("owner.landingCms.partners.deleteConfirmBody"), danger: true });
+    const yes = await confirm({ title: "Delete this partner?", body: p.name || "This partner will be removed from the landing page.", danger: true });
     if (!yes) return;
     const { error } = await supabase.from("landing_partners").delete().eq("id", p.id);
-    if (error) return toast.error(t("owner.landingCms.partners.deleteFailed"), error.message);
+    if (error) return toast.error("Failed to delete", error.message);
     await revalidate();
-    toast.success(t("owner.landingCms.partners.deleted"));
+    toast.success("Partner deleted");
     load();
   };
 
   return (
     <Card>
       <div className="flex items-center justify-between">
-        <SectionTitle sub={t("owner.landingCms.partners.sectionSub")}>{t("owner.landingCms.partners.sectionTitle")}</SectionTitle>
-        <Btn variant="soft" size="sm" icon="plus" onClick={openAdd}>{t("owner.landingCms.add")}</Btn>
+        <SectionTitle sub={"Partner/school logos shown on the landing page"}>{"Partner"}</SectionTitle>
+        <Btn variant="soft" size="sm" icon="plus" onClick={openAdd}>{"Add"}</Btn>
       </div>
       <div className="mt-4 grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {items.map((p) => (
@@ -94,7 +92,7 @@ export default function PartnersTab() {
             </div>
             <div className="p-3 flex items-start gap-2">
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-bold text-ink truncate">{p.name ? <NoTranslate>{p.name}</NoTranslate> : t("owner.landingCms.noName")}</div>
+                <div className="text-sm font-bold text-ink truncate">{p.name ? <NoTranslate>{p.name}</NoTranslate> : "Unnamed"}</div>
                 {p.website_url && <div className="text-xs text-ocean-600 truncate"><NoTranslate>{p.website_url}</NoTranslate></div>}
               </div>
               <button onClick={() => openEdit(p)} className="w-7 h-7 rounded-lg border border-line bg-white flex items-center justify-center hover:bg-paper-deep"><Icon name="edit" className="w-3.5 h-3.5 text-ink-mute" /></button>
@@ -102,16 +100,16 @@ export default function PartnersTab() {
             </div>
           </div>
         ))}
-        {items.length === 0 && <div className="py-8 text-center text-ink-mute text-sm sm:col-span-2 lg:col-span-3">{t("owner.landingCms.partners.empty")}</div>}
+        {items.length === 0 && <div className="py-8 text-center text-ink-mute text-sm sm:col-span-2 lg:col-span-3">{"No partners yet."}</div>}
       </div>
 
-      <Modal open={showModal} onClose={() => setShowModal(false)} title={editItem ? t("owner.landingCms.partners.editModalTitle") : t("owner.landingCms.partners.addModalTitle")} size="sm"
-        footer={<><Btn variant="ghost" onClick={() => setShowModal(false)}>{t("common.actions.cancel")}</Btn><Btn variant="primary" onClick={save} disabled={saving || uploading || !form.name.trim()}>{saving || uploading ? t("common.actions.saving") : t("common.actions.save")}</Btn></>}>
+      <Modal open={showModal} onClose={() => setShowModal(false)} title={editItem ? "Edit Partner" : "Add Partner"} size="sm"
+        footer={<><Btn variant="ghost" onClick={() => setShowModal(false)}>{"Cancel"}</Btn><Btn variant="primary" onClick={save} disabled={saving || uploading || !form.name.trim()}>{saving || uploading ? "Saving…" : "Save"}</Btn></>}>
         <div className="space-y-3">
-          <ImageField label={t("owner.landingCms.partners.fieldLogo")} url={form.logo_url} onUrlChange={(url) => setForm({ ...form, logo_url: url })} onFileChange={setLogoFile} square />
-          <Field label={t("owner.landingCms.partners.fieldName")}><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={t("owner.landingCms.partners.fieldNamePlaceholder")} /></Field>
-          <Field label={t("owner.landingCms.partners.fieldWebsite")}><Input type="url" value={form.website_url} onChange={(e) => setForm({ ...form, website_url: e.target.value })} placeholder="https://..." /></Field>
-          <Field label={t("owner.landingCms.partners.fieldOrder")}><Input type="number" value={String(form.sort_order)} onChange={(e) => setForm({ ...form, sort_order: Number(e.target.value) })} /></Field>
+          <ImageField label={"Logo"} url={form.logo_url} onUrlChange={(url) => setForm({ ...form, logo_url: url })} onFileChange={setLogoFile} square />
+          <Field label={"Partner/school name"}><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={"Ceria Bangsa Elementary School"} /></Field>
+          <Field label={"Website (optional)"}><Input type="url" value={form.website_url} onChange={(e) => setForm({ ...form, website_url: e.target.value })} placeholder="https://..." /></Field>
+          <Field label={"Order"}><Input type="number" value={String(form.sort_order)} onChange={(e) => setForm({ ...form, sort_order: Number(e.target.value) })} /></Field>
         </div>
       </Modal>
     </Card>

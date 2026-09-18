@@ -8,7 +8,6 @@ export type AdminCoachHook =
   ReturnType<typeof useCoachCreate> &
   ReturnType<typeof useCoachDetailActions> &
   ReturnType<typeof useCoachLinkAssign> & {
-    t: (key: string, vars?: Record<string, string | number>) => string;
     monthsLong: string[];
     genderLabel: (g: string | null | undefined) => string | null;
     branchId: string;

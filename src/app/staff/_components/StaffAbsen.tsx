@@ -1,20 +1,19 @@
 "use client";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import MonthYearPicker from "@/components/ui/MonthYearPicker";
-import { useLocale } from "@/components/providers/LocaleProvider";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 import { fmtDate } from "@/lib/utils";
 import { fmtClockTime } from "../_utils";
 import type { useStaffData } from "./useStaffData";
 
 export default function StaffAbsen({ hook }: { hook: ReturnType<typeof useStaffData> }) {
-  const { t } = useLocale();
   const { selectedMonth, setSelectedMonth, filteredAttendances, staffStatusBadge } = hook;
 
   return (
     <Card className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <SectionTitle sub={t("staff.attendance.sub")}>
-          {t("staff.attendance.title")}
+        <SectionTitle sub={"Daily attendance recap recorded in the system."}>
+          {"Staff Attendance History"}
         </SectionTitle>
         <div className="w-48">
           <MonthYearPicker value={selectedMonth} onChange={setSelectedMonth} />
@@ -26,11 +25,11 @@ export default function StaffAbsen({ hook }: { hook: ReturnType<typeof useStaffD
         <table className="w-full text-sm">
           <thead>
             <tr className="text-[11px] uppercase tracking-widest text-ink-faint font-bold border-b border-line">
-              <th className="text-left py-3 px-4">{t("staff.attendance.colDate")}</th>
-              <th className="text-left py-3 px-4">{t("staff.attendance.colClockIn")}</th>
-              <th className="text-left py-3 px-4">{t("staff.attendance.colClockOut")}</th>
-              <th className="text-left py-3 px-4">{t("staff.attendance.colStatus")}</th>
-              <th className="text-left py-3 px-4">{t("staff.attendance.colNotes")}</th>
+              <th className="text-left py-3 px-4">{"Date"}</th>
+              <th className="text-left py-3 px-4">{"Clock In"}</th>
+              <th className="text-left py-3 px-4">{"Clock Out"}</th>
+              <th className="text-left py-3 px-4">{"Status"}</th>
+              <th className="text-left py-3 px-4">{"Notes"}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
@@ -44,13 +43,13 @@ export default function StaffAbsen({ hook }: { hook: ReturnType<typeof useStaffD
                     {staffStatusBadge(att.status).label}
                   </span>
                 </td>
-                <td className="py-3 px-4 text-xs text-ink-mute">{att.note ?? "—"}</td>
+                <td className="py-3 px-4 text-xs text-ink-mute"><NoTranslate>{att.note ?? "—"}</NoTranslate></td>
               </tr>
             ))}
             {filteredAttendances.length === 0 && (
               <tr>
                 <td colSpan={5} className="py-10 text-center text-ink-mute">
-                  {t("staff.attendance.empty", { month: selectedMonth })}
+                  {`No attendance records found for ${selectedMonth}.`}
                 </td>
               </tr>
             )}
@@ -72,12 +71,12 @@ export default function StaffAbsen({ hook }: { hook: ReturnType<typeof useStaffD
               <div>Masuk: <span className="font-bold text-ink">{fmtClockTime(att.clock_in_time)}</span></div>
               <div>Pulang: <span className="font-bold text-ink">{fmtClockTime(att.clock_out_time)}</span></div>
             </div>
-            {att.note && <p className="text-xs text-ink-mute italic">{att.note}</p>}
+            {att.note && <p className="text-xs text-ink-mute italic"><NoTranslate>{att.note}</NoTranslate></p>}
           </div>
         ))}
         {filteredAttendances.length === 0 && (
           <div className="py-8 text-center text-xs text-ink-mute">
-            {t("staff.attendance.empty", { month: selectedMonth })}
+            {`No attendance records found for ${selectedMonth}.`}
           </div>
         )}
       </div>

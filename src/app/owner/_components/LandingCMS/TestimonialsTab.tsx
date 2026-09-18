@@ -3,7 +3,6 @@ import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import Modal from "@/components/ui/Modal";
 import Btn from "@/components/ui/Btn";
@@ -17,7 +16,6 @@ import { revalidate } from "./_utils";
 import type { TestimonialItem } from "./_types";
 
 export default function TestimonialsTab() {
-  const { t } = useLocale();
   const toast = useToast();
   const confirm = useConfirm();
   const supabase = createClient();
@@ -56,36 +54,36 @@ export default function TestimonialsTab() {
           .insert({ name: form.name, role, body_text: form.body_text, rating: form.rating, sort_order: form.sort_order, avatar_url: avatarFile ? null : (form.avatar_url.trim() || null) })
           .select("id")
           .single();
-        if (error || !inserted) throw new Error(error?.message ?? t("owner.landingCms.saveFailedGeneric"));
+        if (error || !inserted) throw new Error(error?.message ?? "Failed to save");
         if (avatarFile) await upload.landingImage(avatarFile, "testimonial-v2", inserted.id);
       }
     } catch (e) {
-      toast.error(t("owner.landingCms.testimonials.saveFailed"), (e as Error).message);
+      toast.error("Failed to save", (e as Error).message);
       setSaving(false);
       return;
     }
     await revalidate();
-    toast.success(t("owner.landingCms.testimonials.saved"));
+    toast.success("Testimonial saved");
     setSaving(false);
     setShowModal(false);
     load();
   };
 
   const del = async (item: TestimonialItem) => {
-    const yes = await confirm({ title: t("owner.landingCms.testimonials.deleteConfirmTitle"), body: item.name || t("owner.landingCms.testimonials.deleteConfirmBody"), danger: true });
+    const yes = await confirm({ title: "Delete this testimonial?", body: item.name || "This testimonial will be removed from the landing page.", danger: true });
     if (!yes) return;
     const { error } = await supabase.from("landing_testimonials_v2").delete().eq("id", item.id);
-    if (error) return toast.error(t("owner.landingCms.testimonials.deleteFailed"), error.message);
+    if (error) return toast.error("Failed to delete", error.message);
     await revalidate();
-    toast.success(t("owner.landingCms.testimonials.deleted"));
+    toast.success("Testimonial deleted");
     load();
   };
 
   return (
     <Card>
       <div className="flex items-center justify-between">
-        <SectionTitle sub={t("owner.landingCms.testimonials.sectionSub")}>{t("owner.landingCms.testimonials.sectionTitle")}</SectionTitle>
-        <Btn variant="soft" size="sm" icon="plus" onClick={openAdd}>{t("owner.landingCms.add")}</Btn>
+        <SectionTitle sub={"Student/parent testimonials shown on the landing page"}>{"Testimonials"}</SectionTitle>
+        <Btn variant="soft" size="sm" icon="plus" onClick={openAdd}>{"Add"}</Btn>
       </div>
       <div className="mt-4 grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {items.map((item) => (
@@ -95,7 +93,7 @@ export default function TestimonialsTab() {
                 {item.avatar_url ? <img src={item.avatar_url} alt={item.name} className="w-full h-full object-cover" /> : <NoTranslate>{item.name.charAt(0).toUpperCase() || "?"}</NoTranslate>}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-bold text-ink truncate">{item.name ? <NoTranslate>{item.name}</NoTranslate> : t("owner.landingCms.noName")}</div>
+                <div className="text-sm font-bold text-ink truncate">{item.name ? <NoTranslate>{item.name}</NoTranslate> : "Unnamed"}</div>
                 {item.role && <div className="text-xs text-ink-mute truncate"><NoTranslate>{item.role}</NoTranslate></div>}
                 <StarDisplay stars={item.rating} size="sm" />
               </div>
@@ -105,16 +103,16 @@ export default function TestimonialsTab() {
             <div className="text-xs text-ink-mute line-clamp-2 mt-2"><NoTranslate>{item.body_text}</NoTranslate></div>
           </div>
         ))}
-        {items.length === 0 && <div className="py-8 text-center text-ink-mute text-sm sm:col-span-2 lg:col-span-3">{t("owner.landingCms.testimonials.empty")}</div>}
+        {items.length === 0 && <div className="py-8 text-center text-ink-mute text-sm sm:col-span-2 lg:col-span-3">{"No testimonials yet."}</div>}
       </div>
 
-      <Modal open={showModal} onClose={() => setShowModal(false)} title={editItem ? t("owner.landingCms.testimonials.editModalTitle") : t("owner.landingCms.testimonials.addModalTitle")} size="sm"
-        footer={<><Btn variant="ghost" onClick={() => setShowModal(false)}>{t("common.actions.cancel")}</Btn><Btn variant="primary" onClick={save} disabled={saving || uploading || !form.name.trim() || !form.body_text.trim()}>{saving || uploading ? t("common.actions.saving") : t("common.actions.save")}</Btn></>}>
+      <Modal open={showModal} onClose={() => setShowModal(false)} title={editItem ? "Edit Testimonial" : "Add Testimonial"} size="sm"
+        footer={<><Btn variant="ghost" onClick={() => setShowModal(false)}>{"Cancel"}</Btn><Btn variant="primary" onClick={save} disabled={saving || uploading || !form.name.trim() || !form.body_text.trim()}>{saving || uploading ? "Saving…" : "Save"}</Btn></>}>
         <div className="space-y-3">
-          <ImageField label={t("owner.landingCms.testimonials.fieldPhoto")} url={form.avatar_url} onUrlChange={(url) => setForm({ ...form, avatar_url: url })} onFileChange={setAvatarFile} square />
-          <Field label={t("owner.landingCms.testimonials.fieldName")}><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={t("owner.landingCms.testimonials.fieldNamePlaceholder")} /></Field>
-          <Field label={t("owner.landingCms.testimonials.fieldRole")}><Input value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} placeholder={t("owner.landingCms.testimonials.fieldRolePlaceholder")} /></Field>
-          <Field label={t("owner.landingCms.testimonials.fieldRating")}>
+          <ImageField label={"Photo (optional)"} url={form.avatar_url} onUrlChange={(url) => setForm({ ...form, avatar_url: url })} onFileChange={setAvatarFile} square />
+          <Field label={"Name"}><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={"Mrs. Sarah"} /></Field>
+          <Field label={"Role (optional)"}><Input value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} placeholder={"Mother of Kayla, 7 years old"} /></Field>
+          <Field label={"Rating"}>
             <div className="flex items-center gap-1">
               {[1, 2, 3, 4, 5].map((n) => (
                 <button key={n} type="button" onClick={() => setForm({ ...form, rating: n })} className="p-0.5">
@@ -123,8 +121,8 @@ export default function TestimonialsTab() {
               ))}
             </div>
           </Field>
-          <Field label={t("owner.landingCms.testimonials.fieldBody")}><Textarea rows={4} value={form.body_text} onChange={(e) => setForm({ ...form, body_text: e.target.value })} placeholder={t("owner.landingCms.testimonials.fieldBodyPlaceholder")} /></Field>
-          <Field label={t("owner.landingCms.testimonials.fieldOrder")}><Input type="number" value={String(form.sort_order)} onChange={(e) => setForm({ ...form, sort_order: Number(e.target.value) })} /></Field>
+          <Field label={"Testimonial text"}><Textarea rows={4} value={form.body_text} onChange={(e) => setForm({ ...form, body_text: e.target.value })} placeholder={"My child became more confident in the water after 2 months of lessons here."} /></Field>
+          <Field label={"Order"}><Input type="number" value={String(form.sort_order)} onChange={(e) => setForm({ ...form, sort_order: Number(e.target.value) })} /></Field>
         </div>
       </Modal>
     </Card>

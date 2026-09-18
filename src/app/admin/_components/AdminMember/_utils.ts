@@ -48,6 +48,6 @@ export function normalizeImportTime(raw: unknown): string | undefined {
   return `${String(hh).padStart(2, "0")}:${m[2]}`;
 }
 
-export function genderLabel(t: (key: string) => string, g: string | null | undefined): string | null {
-  return g === "male" ? t("admin.approvement.genderMale") : g === "female" ? t("admin.approvement.genderFemale") : null;
+export function genderLabel(g: string | null | undefined): string | null {
+  return g === "male" ? "Male" : g === "female" ? "Female" : null;
 }

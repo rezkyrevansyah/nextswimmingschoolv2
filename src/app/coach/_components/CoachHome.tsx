@@ -4,11 +4,11 @@ import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import Status from "@/components/ui/Status";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import { fmtDateLong, mailtoLink } from "@/lib/utils";
 import { isCoachPresentLike } from "@/lib/attendance";
 import { createClient } from "@/utils/supabase/client";
 import { isInClockInWindow } from "../_utils";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 import type { ClassRow, ProfileData } from "../_types";
 
 export default function CoachHome({ setOverlay, setActive, coachId, branchId, profile, classes, holidayClassIds, clockedInIds, setClockedInIds, ownSpreadsheets }: {
@@ -23,7 +23,6 @@ export default function CoachHome({ setOverlay, setActive, coachId, branchId, pr
   ownSpreadsheets: Map<string, string>;
 }) {
   const supabase = createClient();
-  const { t } = useLocale();
   const [monthStats, setMonthStats] = useState({ present: 0, leave: 0, sub: 0 });
   const [subClasses, setSubClasses] = useState<{ classId: string; className: string; originalCoach: string }[]>([]);
   // School contact email (for the "Hubungi via Email" button)
@@ -173,17 +172,17 @@ export default function CoachHome({ setOverlay, setActive, coachId, branchId, pr
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/20 backdrop-blur-sm text-[10px] font-black tracking-wider uppercase text-amber-100 border border-white/30">
                     <span className="w-2 h-2 rounded-full bg-white animate-ping" />
-                    {t("coach.home.invoiceBannerBadge")}
+                    {"INVOICE PERIOD OPEN"}
                   </span>
                   {(() => {
                     const diffDays = Math.ceil((new Date(activeInvoicePeriod.date_to).getTime() - new Date().setHours(0, 0, 0, 0)) / (1000 * 60 * 60 * 24));
                     return diffDays <= 0 ? (
                       <span className="text-xs font-bold text-red-100 bg-red-600/70 px-2 py-0.5 rounded-full animate-pulse">
-                        {t("coach.home.invoiceBannerTodayDeadline")}
+                        {"(Deadline is TODAY!)"}
                       </span>
                     ) : (
                       <span className="text-xs font-semibold text-amber-100">
-                        {t("coach.home.invoiceBannerDaysLeft", { days: diffDays })}
+                        {`(${diffDays} days remaining)`}
                       </span>
                     );
                   })()}
@@ -192,7 +191,7 @@ export default function CoachHome({ setOverlay, setActive, coachId, branchId, pr
                   {activeInvoicePeriod.label}
                 </h3>
                 <p className="text-white/90 text-xs sm:text-sm max-w-xl leading-relaxed">
-                  {t("coach.home.invoiceBannerSub", { date: fmtDateLong(activeInvoicePeriod.date_to) })}
+                  {`Submission deadline: ${fmtDateLong(activeInvoicePeriod.date_to)}. Please review your attendance sessions and submit your invoice before the cutoff date.`}
                 </p>
               </div>
 
@@ -203,7 +202,7 @@ export default function CoachHome({ setOverlay, setActive, coachId, branchId, pr
                   className="w-full sm:w-auto px-5 py-3 rounded-xl bg-white text-orange-700 font-display font-extrabold text-sm shadow-card hover:bg-amber-50 active:scale-95 transition-all flex items-center justify-center gap-2 group cursor-pointer"
                 >
                   <Icon name="invoice" className="w-4 h-4 text-orange-600 group-hover:rotate-12 transition-transform" />
-                  <span>{t("coach.home.invoiceBannerCta")}</span>
+                  <span>{"Create & Submit Invoice →"}</span>
                 </button>
               </div>
             </div>
@@ -216,16 +215,16 @@ export default function CoachHome({ setOverlay, setActive, coachId, branchId, pr
               </span>
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-ocean-700">{t("coach.home.invoiceBannerSubmittedBadge")}</span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-ocean-700">{"INVOICE SUBMITTED"}</span>
                   <Status kind={existingInvoiceForPeriod.status === "paid" ? "paid" : existingInvoiceForPeriod.status === "approved" ? "approved" : "pending"}>
                     {existingInvoiceForPeriod.status}
                   </Status>
                 </div>
                 <div className="font-bold text-ink text-sm mt-0.5">
-                  {t("coach.home.invoiceBannerSubmittedTitle", { period: activeInvoicePeriod.label })}
+                  {`Invoice for ${activeInvoicePeriod.label} Submitted`}
                 </div>
                 <div className="text-xs text-ink-mute mt-0.5">
-                  {t("coach.home.invoiceBannerSubmittedSub", { status: existingInvoiceForPeriod.status })}
+                  {`Your invoice has been submitted and is currently ${existingInvoiceForPeriod.status}.`}
                 </div>
               </div>
             </div>
@@ -234,7 +233,7 @@ export default function CoachHome({ setOverlay, setActive, coachId, branchId, pr
               onClick={() => setActive("invoice")}
               className="text-xs font-bold text-ocean-700 hover:text-ocean-800 underline underline-offset-2 cursor-pointer"
             >
-              {t("coach.home.invoiceBannerViewPast")} →
+              {"View Invoice"} →
             </button>
           </div>
         )
@@ -247,9 +246,9 @@ export default function CoachHome({ setOverlay, setActive, coachId, branchId, pr
               <Icon name="bell" className="w-5 h-5" />
             </span>
             <div className="flex-1 min-w-0">
-              <Status kind="active" className="!text-[10px] mb-1">{t("coach.home.announcementBadge")}</Status>
-              <div className="font-display font-bold text-ink">{latestAnnouncement.title}</div>
-              <p className="text-sm text-ink-soft mt-1.5 leading-relaxed">{latestAnnouncement.body}</p>
+              <Status kind="active" className="!text-[10px] mb-1">{"ANNOUNCEMENT"}</Status>
+              <div className="font-display font-bold text-ink"><NoTranslate>{latestAnnouncement.title}</NoTranslate></div>
+              <p className="text-sm text-ink-soft mt-1.5 leading-relaxed"><NoTranslate>{latestAnnouncement.body}</NoTranslate></p>
             </div>
           </div>
         </Card>
@@ -260,18 +259,18 @@ export default function CoachHome({ setOverlay, setActive, coachId, branchId, pr
             <Icon name="alert" className="w-5 h-5" />
           </span>
           <div className="flex-1 min-w-0">
-            <div className="font-bold text-warn-800 text-sm">{t("coach.home.spreadsheetUnfilledTitle")}</div>
+            <div className="font-bold text-warn-800 text-sm">{"Monthly program not filled in yet"}</div>
             <p className="text-warn-700 text-xs mt-0.5 leading-relaxed">
               {unfilledClasses.length === 1
-                ? <>{t("coach.home.spreadsheetUnfilledSinglePrefix")} <span className="font-semibold">{unfilledClasses[0].name}</span> {t("coach.home.spreadsheetUnfilledSingleSuffix")}</>
-                : <>{t("coach.home.spreadsheetUnfilledMultiPrefix", { count: unfilledClasses.length })} <span className="font-semibold">{unfilledClasses.map(c => c.name).join(", ")}</span>.</>
+                ? <>{"Class"} <span className="font-semibold"><NoTranslate>{unfilledClasses[0].name}</NoTranslate></span> {"doesn't have a monthly program yet."}</>
+                : <>{`${unfilledClasses.length} classes don't have a monthly program yet:`} <span className="font-semibold"><NoTranslate>{unfilledClasses.map(c => c.name).join(", ")}</NoTranslate></span>.</>
               }
             </p>
             <button
               className="mt-2 text-xs font-semibold text-warn-700 underline underline-offset-2 hover:text-warn-900"
               onClick={() => setActive("kelas")}
             >
-              {t("coach.home.openClassMenuBtn")}
+              {"Open the Class menu to fill it in →"}
             </button>
           </div>
         </div>
@@ -279,11 +278,11 @@ export default function CoachHome({ setOverlay, setActive, coachId, branchId, pr
       <div className="bg-ocean-700 text-white rounded-2xl border border-ocean-700 shadow-card p-5 relative overflow-hidden">
         <div className="caustics absolute inset-0 opacity-30" />
         <div className="relative">
-          <div className="text-wave-200 text-[11px] uppercase tracking-widest font-bold">{t("coach.home.greeting")}</div>
-          <h2 className="font-display font-bold text-2xl mt-0.5">{t("coach.home.helloName", { name: profile?.full_name ?? t("coach.home.defaultCoachName") })}</h2>
-          <p className="text-white/80 text-sm mt-1.5">{t("coach.home.classesTodayCount", { count: todayClasses.length + subClasses.length })}</p>
+          <div className="text-wave-200 text-[11px] uppercase tracking-widest font-bold">{"Good day"}</div>
+          <h2 className="font-display font-bold text-2xl mt-0.5">{(<>{"Hello, "}<NoTranslate>{profile?.full_name ?? "Coach"}</NoTranslate></>)}</h2>
+          <p className="text-white/80 text-sm mt-1.5">{`You have ${todayClasses.length + subClasses.length} classes today.`}</p>
           <div className="mt-4 grid grid-cols-3 gap-2 min-w-0">
-            {[[t("coach.home.statPresentThisMonth"), monthStats.present.toString()], [t("coach.home.statLeave"), monthStats.leave.toString()], [t("coach.home.statSubstitute"), monthStats.sub.toString()]].map(([l, v]) => (
+            {[["Present this month", monthStats.present.toString()], ["Leave", monthStats.leave.toString()], ["Substitute", monthStats.sub.toString()]].map(([l, v]) => (
               <div key={l} className="bg-white/10 backdrop-blur ring-1 ring-white/15 rounded-xl p-3">
                 <div className="text-[10px] uppercase tracking-widest font-bold text-wave-200">{l}</div>
                 <div className="font-display font-bold text-2xl mt-0.5">{v}</div>
@@ -294,9 +293,9 @@ export default function CoachHome({ setOverlay, setActive, coachId, branchId, pr
       </div>
 
       <div>
-        <SectionTitle sub={fmtDateLong(new Date())}>{t("coach.home.classesTodayTitle")}</SectionTitle>
+        <SectionTitle sub={fmtDateLong(new Date())}>{"Today's Classes"}</SectionTitle>
         {todayClasses.length === 0 && subClasses.length === 0 ? (
-          <Card><p className="text-ink-mute text-sm">{t("coach.home.noClassesToday")}</p></Card>
+          <Card><p className="text-ink-mute text-sm">{"No classes today."}</p></Card>
         ) : (
           <div className="space-y-3">
             {todayClasses.map((c) => {
@@ -312,20 +311,20 @@ export default function CoachHome({ setOverlay, setActive, coachId, branchId, pr
                     </span>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <div className="font-display font-bold text-ink">{c.name}</div>
-                        {isHoliday && <Status kind="holiday">{t("coach.home.holidayBadge")}</Status>}
-                        {isOnLeave && <Status kind="inactive">{t("coach.home.onLeaveTodayBadge")}</Status>}
-                        {isClockedIn && <Status kind="approved">{t("coach.home.alreadyClockedInBadge")}</Status>}
+                        <div className="font-display font-bold text-ink"><NoTranslate>{c.name}</NoTranslate></div>
+                        {isHoliday && <Status kind="holiday">{"Holiday"}</Status>}
+                        {isOnLeave && <Status kind="inactive">{"On Leave Today"}</Status>}
+                        {isClockedIn && <Status kind="approved">{"Already Clocked In"}</Status>}
                       </div>
                       <div className="text-xs text-ink-mute mt-0.5 font-mono">{c.time_start?.slice(0,5)}{c.time_end ? `–${c.time_end.slice(0,5)}` : ""} · {c.enrolled}/{c.capacity} member</div>
                       {!isHoliday && !isOnLeave && !isClockedIn && (
                         <div className="mt-3 flex flex-wrap gap-2">
                           {inWindow ? (
-                            <Btn variant="primary" size="sm" icon="camera" onClick={() => setOverlay(`clockin:${c.id}`)}>{t("coach.home.clockInBtn")}</Btn>
+                            <Btn variant="primary" size="sm" icon="camera" onClick={() => setOverlay(`clockin:${c.id}`)}>{"Clock-In"}</Btn>
                           ) : (
                             <div className="text-xs text-ink-mute font-semibold flex items-center gap-1">
                               <Icon name="clock" className="w-3.5 h-3.5" />
-                              {t("coach.home.outsideWindowHint")}
+                              {"Outside window — contact admin for manual entry"}
                             </div>
                           )}
                         </div>
@@ -347,19 +346,19 @@ export default function CoachHome({ setOverlay, setActive, coachId, branchId, pr
                     </span>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <div className="font-display font-bold text-ink">{s.className}</div>
-                        <Status kind="substitute">{t("coach.home.substituteBadge")}</Status>
-                        {isClockedIn && <Status kind="approved">{t("coach.home.alreadyClockedInBadge")}</Status>}
+                        <div className="font-display font-bold text-ink"><NoTranslate>{s.className}</NoTranslate></div>
+                        <Status kind="substitute">{"Substitute"}</Status>
+                        {isClockedIn && <Status kind="approved">{"Already Clocked In"}</Status>}
                       </div>
-                      <div className="text-xs text-ink-mute mt-0.5">{t("coach.home.substitutingForLabel", { name: s.originalCoach })}</div>
+                      <div className="text-xs text-ink-mute mt-0.5">{(<>{"Substituting for: "}<NoTranslate>{s.originalCoach}</NoTranslate></>)}</div>
                       {!isClockedIn && (
                         <div className="mt-3 flex flex-wrap gap-2">
                           {inWindow ? (
-                            <Btn variant="primary" size="sm" icon="camera" onClick={() => setOverlay(`clockin:${s.classId}`)}>{t("coach.home.clockInBtn")}</Btn>
+                            <Btn variant="primary" size="sm" icon="camera" onClick={() => setOverlay(`clockin:${s.classId}`)}>{"Clock-In"}</Btn>
                           ) : (
                             <div className="text-xs text-ink-mute font-semibold flex items-center gap-1">
                               <Icon name="clock" className="w-3.5 h-3.5" />
-                              {t("coach.home.outsideWindowHint")}
+                              {"Outside window — contact admin for manual entry"}
                             </div>
                           )}
                         </div>
@@ -374,17 +373,17 @@ export default function CoachHome({ setOverlay, setActive, coachId, branchId, pr
       </div>
 
       <Card>
-        <SectionTitle>{t("coach.home.quickActionsTitle")}</SectionTitle>
+        <SectionTitle>{"Quick actions"}</SectionTitle>
         <div className="grid grid-cols-2 gap-2.5">
           <button onClick={() => setOverlay("leave")} className="p-4 rounded-xl bg-paper-tint hover:bg-ocean-50 border border-line text-left">
             <span className="w-9 h-9 rounded-lg bg-white text-ocean-600 flex items-center justify-center mb-2"><Icon name="clipboard" className="w-4 h-4" /></span>
-            <div className="font-bold text-sm text-ink">{t("coach.home.requestLeaveTitle")}</div>
-            <div className="text-xs text-ink-mute mt-0.5">{t("coach.home.requestLeaveSub")}</div>
+            <div className="font-bold text-sm text-ink">{"Request Leave"}</div>
+            <div className="text-xs text-ink-mute mt-0.5">{"Leave · sick · substitute"}</div>
           </button>
           <button onClick={() => setOverlay("leave-history")} className="p-4 rounded-xl bg-paper-tint hover:bg-ocean-50 border border-line text-left">
             <span className="w-9 h-9 rounded-lg bg-white text-wave-600 flex items-center justify-center mb-2"><Icon name="calendar" className="w-4 h-4" /></span>
-            <div className="font-bold text-sm text-ink">{t("coach.home.leaveHistoryTitle")}</div>
-            <div className="text-xs text-ink-mute mt-0.5">{t("coach.home.leaveHistorySub")}</div>
+            <div className="font-bold text-sm text-ink">{"Leave History"}</div>
+            <div className="text-xs text-ink-mute mt-0.5">{"Leave request status"}</div>
           </button>
         </div>
       </Card>
@@ -392,8 +391,12 @@ export default function CoachHome({ setOverlay, setActive, coachId, branchId, pr
       <Card>
         <a
           href={mailtoLink(
-            t("coach.home.contactSubject"),
-            t("coach.home.contactBody", { name: profile?.full_name ?? t("coach.home.defaultCoachName") }),
+            "Question from Coach - Next Swimming School",
+            `Hello Admin/Owner Next Swimming School,
+
+I, ${profile?.full_name ?? "Coach"}, would like to ask...
+
+`,
             contactEmail
           )}
           className="w-full flex items-center gap-3 py-1 group"
@@ -401,7 +404,7 @@ export default function CoachHome({ setOverlay, setActive, coachId, branchId, pr
           <span className="w-9 h-9 rounded-xl bg-ocean-50 text-ocean-600 flex items-center justify-center group-hover:bg-ocean-100 transition-colors">
             <Icon name="mail" className="w-4 h-4" />
           </span>
-          <span className="font-semibold text-ink group-hover:text-ocean-700">{t("coach.home.contactViaEmail")}</span>
+          <span className="font-semibold text-ink group-hover:text-ocean-700">{"Contact Management"}</span>
         </a>
       </Card>
     </div>

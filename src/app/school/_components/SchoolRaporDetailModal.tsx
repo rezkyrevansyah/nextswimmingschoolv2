@@ -3,27 +3,26 @@ import Btn from "@/components/ui/Btn";
 import { Card } from "@/components/ui/Card";
 import Avatar from "@/components/ui/Avatar";
 import Modal from "@/components/ui/Modal";
-import { useLocale } from "@/components/providers/LocaleProvider";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 import { printSingleRaporPopup } from "@/lib/printRapor";
 import type { SchoolRaporHook } from "./schoolRaporHook";
 
 export default function SchoolRaporDetailModal({ hook }: { hook: SchoolRaporHook }) {
-  const { t } = useLocale();
   const { open, setOpen, downloadingId, handlePrintOne, toPrintStudent } = hook;
 
   return (
     <Modal
       open={!!open}
       onClose={() => setOpen(null)}
-      title={t("school.rapor.studentDetailModalTitle", { name: open?.full_name ?? "" })}
+      title={(<>{"Report Card Detail — "}<NoTranslate>{open?.full_name ?? ""}</NoTranslate></>)}
       size="lg"
       footer={
         <div className="flex gap-2">
-          <Btn variant="outline" size="sm" icon="printer" onClick={() => open && printSingleRaporPopup(toPrintStudent(open))}>{t("school.rapor.printBtn")}</Btn>
+          <Btn variant="outline" size="sm" icon="printer" onClick={() => open && printSingleRaporPopup(toPrintStudent(open))}>{"Print"}</Btn>
           <Btn variant="soft" size="sm" icon="download" disabled={downloadingId === open?.id} onClick={() => open && void handlePrintOne(open)}>
-            {downloadingId === open?.id ? "…" : t("school.rapor.downloadPdfBtn")}
+            {downloadingId === open?.id ? "…" : "PDF"}
           </Btn>
-          <Btn variant="primary" onClick={() => setOpen(null)}>{t("common.actions.close")}</Btn>
+          <Btn variant="primary" onClick={() => setOpen(null)}>{"Close"}</Btn>
         </div>
       }
     >
@@ -33,8 +32,8 @@ export default function SchoolRaporDetailModal({ hook }: { hook: SchoolRaporHook
             <div className="flex items-center gap-3">
               <Avatar name={open.full_name} size={42} />
               <div>
-                <div className="font-semibold text-ink">{open.full_name}</div>
-                <div className="text-xs text-ink-mute">{open.class_name} · {open.coach_name} · {open.period_label}</div>
+                <div className="font-semibold text-ink"><NoTranslate>{open.full_name}</NoTranslate></div>
+                <div className="text-xs text-ink-mute"><NoTranslate>{open.class_name} · {open.coach_name}</NoTranslate> · {open.period_label}</div>
               </div>
             </div>
           </Card>
@@ -49,7 +48,7 @@ export default function SchoolRaporDetailModal({ hook }: { hook: SchoolRaporHook
                   return (
                     <div key={c.id}>
                       <div className="flex justify-between text-sm">
-                        <span className="font-semibold text-ink">{c.label}</span>
+                        <span className="font-semibold text-ink"><NoTranslate>{c.label}</NoTranslate></span>
                         {numVal != null && max && <span className="font-mono font-bold text-ocean-700">{numVal}/{max}</span>}
                       </div>
                       {numVal != null && max && (
@@ -57,7 +56,7 @@ export default function SchoolRaporDetailModal({ hook }: { hook: SchoolRaporHook
                           <div className={`h-full ${numVal / max > 0.7 ? "bg-ok-500" : numVal / max > 0.4 ? "bg-wave-500" : "bg-warn-500"}`} style={{ width: `${(numVal / max) * 100}%` }} />
                         </div>
                       )}
-                      {strVal && <p className="text-sm text-ink-soft bg-paper-tint px-3 py-1.5 rounded-lg mt-1">{strVal}</p>}
+                      {strVal && <p className="text-sm text-ink-soft bg-paper-tint px-3 py-1.5 rounded-lg mt-1"><NoTranslate>{strVal}</NoTranslate></p>}
                     </div>
                   );
                 })
@@ -68,7 +67,7 @@ export default function SchoolRaporDetailModal({ hook }: { hook: SchoolRaporHook
                   return (
                     <div key={key}>
                       <div className="flex justify-between text-sm">
-                        <span className="font-semibold text-ink capitalize">{key.replace(/_/g, " ")}</span>
+                        <span className="font-semibold text-ink capitalize"><NoTranslate>{key.replace(/_/g, " ")}</NoTranslate></span>
                         {numVal != null && <span className="font-mono font-bold text-ocean-700">{numVal}/{max}</span>}
                       </div>
                       {numVal != null && (
@@ -76,15 +75,15 @@ export default function SchoolRaporDetailModal({ hook }: { hook: SchoolRaporHook
                           <div className={`h-full ${numVal / max > 0.7 ? "bg-ok-500" : numVal / max > 0.4 ? "bg-wave-500" : "bg-warn-500"}`} style={{ width: `${(numVal / max) * 100}%` }} />
                         </div>
                       )}
-                      {strVal && <p className="text-sm text-ink-soft bg-paper-tint px-3 py-1.5 rounded-lg mt-1">{strVal}</p>}
+                      {strVal && <p className="text-sm text-ink-soft bg-paper-tint px-3 py-1.5 rounded-lg mt-1"><NoTranslate>{strVal}</NoTranslate></p>}
                     </div>
                   );
                 })
             }
             {open.notes && (
               <div>
-                <div className="font-semibold text-ink text-sm mb-1">{t("school.rapor.notesSection")}</div>
-                <p className="text-sm text-ink-soft bg-paper-tint p-3 rounded-xl leading-relaxed">{open.notes}</p>
+                <div className="font-semibold text-ink text-sm mb-1">{"Coach Notes & Comments"}</div>
+                <p className="text-sm text-ink-soft bg-paper-tint p-3 rounded-xl leading-relaxed"><NoTranslate>{open.notes}</NoTranslate></p>
               </div>
             )}
           </div>

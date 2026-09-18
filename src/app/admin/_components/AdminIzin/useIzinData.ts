@@ -2,7 +2,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import type { CoachProfile, ClassRow } from "../../_types";
 import type { Database } from "@/types/database";
 import { fmtDate } from "@/lib/utils";
@@ -14,9 +13,8 @@ const PAGE_SIZE = 15;
 export function useIzinData(branchId: string) {
   const supabase = createClient();
   const toast = useToast();
-  const { t } = useLocale();
-  const typeLabel = (ty: string) => ({ sakit: t("admin.izin.typeSick"), izin: t("admin.izin.typePermission"), cuti: t("admin.izin.typeLeaveOff") }[ty] ?? ty);
-  const statusLabel = (s: string) => ({ pending: t("admin.izin.statusPending"), approved: t("admin.izin.statusApproved"), rejected: t("admin.izin.statusRejected") }[s] ?? s);
+  const typeLabel = (ty: string) => ({ sakit: "Sick", izin: "Permission", cuti: "Leave" }[ty] ?? ty);
+  const statusLabel = (s: string) => ({ pending: "Pending", approved: "Approved", rejected: "Rejected" }[s] ?? s);
   const [tab, setTab] = useState("coach");
   const [leaves, setLeaves] = useState<LeaveRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -142,7 +140,7 @@ export function useIzinData(branchId: string) {
     const table = tab === "coach" ? "coach_leaves" : "member_leaves";
     const adminId = (await supabase.auth.getUser()).data.user?.id ?? null;
     const { error } = await supabase.from(table as "coach_leaves").update({ status, reviewed_at: new Date().toISOString(), reviewed_by: adminId }).eq("id", id);
-    if (error) return toast.error(t("admin.izin.updateStatusFailed"), error.message);
+    if (error) return toast.error("Failed to update status", error.message);
     // Auto-create member attendance records when member leave approved
     if (status === "approved" && tab === "member") {
       await autoCreateMemberAttendances(id);
@@ -151,35 +149,35 @@ export function useIzinData(branchId: string) {
       if (leave && notifUserId) {
         await supabase.from("notifications").insert({
           user_id: notifUserId,
-          title: t("admin.izin.leaveApprovedNotifTitle"),
-          body: t("admin.izin.leaveApprovedNotifBody", { from: fmtDate(leave.date_from), to: fmtDate(leave.date_to) }),
+          title: "Leave approved",
+          body: `Your leave (${fmtDate(leave.date_from)} – ${fmtDate(leave.date_to)}) has been approved.`,
           icon: "check",
           kind: "success",
         });
       }
     }
-    toast.success(status === "approved" ? t("admin.izin.leaveApprovedToast") : t("admin.izin.leaveRejectedToast"));
+    toast.success(status === "approved" ? "Leave approved" : "Leave rejected");
     load();
   };
 
   const confirmReject = async () => {
     if (!rejectTarget) return;
-    if (!rejectReason.trim()) return toast.error(t("admin.izin.reasonRequired2"));
+    if (!rejectReason.trim()) return toast.error("Rejection reason is required");
     setRejecting(true);
     const adminId = (await supabase.auth.getUser()).data.user?.id ?? null;
     const upd: Database["public"]["Tables"]["coach_leaves"]["Update"] = { status: "rejected" as Database["public"]["Enums"]["leave_status"], reviewed_at: new Date().toISOString(), reject_reason: rejectReason.trim(), reviewed_by: adminId };
     const table = tab === "coach" ? "coach_leaves" : "member_leaves";
     const { error } = await supabase.from(table as "coach_leaves").update(upd).eq("id", rejectTarget.id);
     setRejecting(false);
-    if (error) return toast.error(t("admin.izin.rejectLeaveFailed"), error.message);
+    if (error) return toast.error("Failed to reject leave", error.message);
     // Notify coach/member when leave is rejected
     if (tab === "coach" && rejectTarget.coach_id) {
       await supabase.from("notifications").insert({
         user_id: rejectTarget.coach_id,
-        title: t("admin.izin.leaveRejectedNotifTitle"),
+        title: "Leave rejected",
         body: rejectReason.trim()
-          ? t("admin.izin.leaveRejectedNotifBodyWithReason", { from: fmtDate(rejectTarget.date_from), to: fmtDate(rejectTarget.date_to), reason: rejectReason.trim() })
-          : t("admin.izin.leaveRejectedNotifBodyNoReason", { from: fmtDate(rejectTarget.date_from), to: fmtDate(rejectTarget.date_to) }),
+          ? `Your leave (${fmtDate(rejectTarget.date_from)} – ${fmtDate(rejectTarget.date_to)}) has been rejected: "${rejectReason.trim()}"`
+          : `Your leave (${fmtDate(rejectTarget.date_from)} – ${fmtDate(rejectTarget.date_to)}) has been rejected.`,
         icon: "x",
         kind: "warn",
       });
@@ -188,27 +186,27 @@ export function useIzinData(branchId: string) {
     if (tab === "member" && rejectNotifUserId) {
       await supabase.from("notifications").insert({
         user_id: rejectNotifUserId,
-        title: t("admin.izin.leaveRejectedNotifTitle"),
+        title: "Leave rejected",
         body: rejectReason.trim()
-          ? t("admin.izin.leaveRejectedNotifBodyWithReason", { from: fmtDate(rejectTarget.date_from), to: fmtDate(rejectTarget.date_to), reason: rejectReason.trim() })
-          : t("admin.izin.leaveRejectedNotifBodyNoReason", { from: fmtDate(rejectTarget.date_from), to: fmtDate(rejectTarget.date_to) }),
+          ? `Your leave (${fmtDate(rejectTarget.date_from)} – ${fmtDate(rejectTarget.date_to)}) has been rejected: "${rejectReason.trim()}"`
+          : `Your leave (${fmtDate(rejectTarget.date_from)} – ${fmtDate(rejectTarget.date_to)}) has been rejected.`,
         icon: "x",
         kind: "warn",
       });
     }
-    toast.success(t("admin.izin.leaveRejectedToast"));
+    toast.success("Leave rejected");
     setRejectTarget(null);
     load();
   };
 
   const createLeave = async () => {
-    if (!createForm.target_id || !createForm.date_from || !createForm.date_to) return toast.error(t("admin.izin.targetDatesRequired"));
+    if (!createForm.target_id || !createForm.date_from || !createForm.date_to) return toast.error("Target, start date, and end date are required");
     setCreating(true);
     if (tab === "coach") {
       const primarySubId = Object.values(createForm.class_substitutes).find(s => !!s) ?? null;
       const ins: Database["public"]["Tables"]["coach_leaves"]["Insert"] = { coach_id: createForm.target_id, type: createForm.type as Database["public"]["Enums"]["leave_type"], date_from: createForm.date_from, date_to: createForm.date_to, reason: createForm.reason || null, status: "approved" as Database["public"]["Enums"]["leave_status"], created_by_admin: true, reviewed_at: new Date().toISOString(), substitute_id: primarySubId || null };
       const { data, error } = await supabase.from("coach_leaves").insert(ins).select("id").single();
-      if (error || !data) { setCreating(false); return toast.error(t("admin.izin.createLeaveFailed"), error?.message); }
+      if (error || !data) { setCreating(false); return toast.error("Failed to create leave", error?.message); }
       if (createForm.class_ids.length > 0) {
         await supabase.from("coach_leave_classes").insert(
           createForm.class_ids.map(cid => ({
@@ -248,7 +246,7 @@ export function useIzinData(branchId: string) {
       }
     } else {
       const { data, error } = await supabase.from("member_leaves").insert({ member_id: createForm.target_id, type: createForm.type as Database["public"]["Enums"]["leave_type"], date_from: createForm.date_from, date_to: createForm.date_to, reason: createForm.reason || null, status: "approved" as Database["public"]["Enums"]["leave_status"], created_by_admin: true, reviewed_at: new Date().toISOString() }).select("id").single();
-      if (error || !data) { setCreating(false); return toast.error(t("admin.izin.createLeaveFailed"), error?.message); }
+      if (error || !data) { setCreating(false); return toast.error("Failed to create leave", error?.message); }
       if (createForm.class_ids.length > 0) {
         await supabase.from("member_leave_classes").insert(createForm.class_ids.map(cid => ({ leave_id: data.id, class_id: cid })));
         // Auto-create attendance records
@@ -257,15 +255,15 @@ export function useIzinData(branchId: string) {
       // Notify member that admin created an approved leave for them
       await supabase.from("notifications").insert({
         user_id: createForm.target_id,
-        title: t("admin.izin.leaveRecordedByAdminNotifTitle"),
-        body: t("admin.izin.leaveRecordedByAdminNotifBody", { from: fmtDate(createForm.date_from), to: fmtDate(createForm.date_to) }),
+        title: "Leave recorded by admin",
+        body: `Admin has recorded your leave (${fmtDate(createForm.date_from)} – ${fmtDate(createForm.date_to)}) and it has been approved.`,
         icon: "check",
         kind: "info",
       });
     }
     setCreating(false);
     setOpenCreate(false);
-    toast.success(t("admin.izin.leaveCreatedToast"));
+    toast.success("Leave created successfully");
     load();
   };
 
@@ -284,7 +282,7 @@ export function useIzinData(branchId: string) {
       substitute_id: primarySubId || null,
     };
     const { error } = await supabase.from("coach_leaves").update(upd).eq("id", approveTarget.id);
-    if (error) { setApproving(false); return toast.error(t("admin.izin.approveLeaveFailed"), error.message); }
+    if (error) { setApproving(false); return toast.error("Failed to approve leave", error.message); }
 
     // Upsert per-class substitute_id
     const perClassRows = Object.entries(classSubstitutes).map(([class_id, substitute_id]) => ({
@@ -344,8 +342,8 @@ export function useIzinData(branchId: string) {
       const dateRange = detail.date_from === detail.date_to ? detail.date_from : `${detail.date_from} – ${detail.date_to}`;
       await supabase.from("notifications").insert({
         user_id: detail.coach_id,
-        title: t("admin.izin.leaveApprovedNotifTitle"),
-        body: classNames ? t("admin.izin.leaveApprovedForClassBody", { classes: classNames, dateRange }) : t("admin.izin.leaveApprovedNoClassBody", { dateRange }),
+        title: "Leave approved",
+        body: classNames ? `Your leave for ${classNames} (${dateRange}) has been approved.` : `Your leave (${dateRange}) has been approved.`,
         icon: "check",
         kind: "success",
       });
@@ -364,8 +362,8 @@ export function useIzinData(branchId: string) {
         const dateRange = detail.date_from === detail.date_to ? detail.date_from : `${detail.date_from} – ${detail.date_to}`;
         await supabase.from("notifications").insert({
           user_id: subId,
-          title: t("admin.izin.substituteAssignedNotifTitle"),
-          body: t("admin.izin.substituteAssignedNotifBody", { classes: classNames.join(", "), dateRange }),
+          title: "You've been assigned as substitute coach",
+          body: `You are substituting for classes ${classNames.join(", ")} on ${dateRange}.`,
           icon: "refresh",
           kind: "info",
         });
@@ -373,7 +371,7 @@ export function useIzinData(branchId: string) {
     }
 
     setApproving(false);
-    toast.success(t("admin.izin.leaveApprovedToast") + (primarySubId ? t("admin.izin.andSessionsTransferredSuffix") : ""));
+    toast.success("Leave approved" + (primarySubId ? " & sessions transferred to substitute" : ""));
     setApproveTarget(null);
     load();
   };
@@ -383,7 +381,7 @@ export function useIzinData(branchId: string) {
   const paginatedLeaves = leaves.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
 
   return {
-    t, typeLabel, statusLabel,
+    typeLabel, statusLabel,
     tab, setTab, leaves, loading,
     approveTarget, setApproveTarget, classSubstitutes, setClassSubstitutes, approving, allCoaches,
     rejectTarget, setRejectTarget, rejectReason, setRejectReason, rejecting,

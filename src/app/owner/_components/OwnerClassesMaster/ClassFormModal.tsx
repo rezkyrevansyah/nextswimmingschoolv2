@@ -11,7 +11,7 @@ import type { OwnerClassesMasterHook } from "./_hook";
 
 export default function ClassFormModal({ hook }: { hook: OwnerClassesMasterHook }) {
   const {
-    t, tNode, branches, allCoaches, dayLabels,
+    branches, allCoaches, dayLabels,
     openForm, setOpenForm, editTarget, form, setForm, saving, saveClass,
     fileInputRef, photoPreview, handlePhotoChange, handleRemovePhoto,
     isPrivate, toggleDay, updateSlotTime,
@@ -22,27 +22,27 @@ export default function ClassFormModal({ hook }: { hook: OwnerClassesMasterHook 
     <Modal
       open={openForm}
       onClose={() => setOpenForm(false)}
-      title={editTarget ? tNode("owner.classes.editModalTitleFull", { name: editTarget.name }) : t("owner.classes.addModalTitle")}
+      title={editTarget ? (<>{"Edit Class — "}<NoTranslate>{editTarget.name}</NoTranslate></>) : "Add New Class"}
       size="lg"
       footer={
         <>
           <Btn variant="ghost" onClick={() => setOpenForm(false)}>
-            {t("common.actions.cancel")}
+            {"Cancel"}
           </Btn>
           <Btn variant="primary" onClick={saveClass} disabled={saving}>
-            {saving ? t("owner.classes.savingBtn") : t("owner.classes.saveClassBtn")}
+            {saving ? "Saving…" : "Save Class"}
           </Btn>
         </>
       }
     >
       <div className="space-y-4">
         {/* Branch / Center Selector */}
-        <Field label={t("owner.classes.fieldBranch")} required>
+        <Field label={"Center / Branch"} required>
           <Select
             value={form.branch_id}
             onChange={(e) => setForm((f) => ({ ...f, branch_id: e.target.value }))}
           >
-            <option value="">{t("owner.classes.fieldBranchPlaceholder")}</option>
+            <option value="">{"Select Center…"}</option>
             {branches.map((b) => (
               <option key={b.id} value={b.id} translate="no">
                 {b.name}
@@ -52,7 +52,7 @@ export default function ClassFormModal({ hook }: { hook: OwnerClassesMasterHook 
         </Field>
 
         {/* Optional Cover Photo */}
-        <Field label={t("owner.classes.fieldPhoto")} hint={t("owner.classes.photoHint")}>
+        <Field label={"Class Background / Cover Photo (Optional)"} hint={"Format JPG, PNG, WebP, or SVG · Max 5MB"}>
           <input
             ref={fileInputRef}
             type="file"
@@ -75,7 +75,7 @@ export default function ClassFormModal({ hook }: { hook: OwnerClassesMasterHook 
                   icon="edit"
                   onClick={() => fileInputRef.current?.click()}
                 >
-                  {t("owner.classes.changePhotoBtn")}
+                  {"Change Photo"}
                 </Btn>
                 <Btn
                   type="button"
@@ -84,7 +84,7 @@ export default function ClassFormModal({ hook }: { hook: OwnerClassesMasterHook 
                   icon="trash"
                   onClick={handleRemovePhoto}
                 >
-                  {t("owner.classes.removePhotoBtn")}
+                  {"Remove"}
                 </Btn>
               </div>
             </div>
@@ -97,9 +97,9 @@ export default function ClassFormModal({ hook }: { hook: OwnerClassesMasterHook 
                 <Icon name="upload" className="w-5 h-5" />
               </div>
               <p className="text-xs font-bold text-ink group-hover:text-ocean-700 transition-colors">
-                {t("owner.classes.uploadPhotoBtn")}
+                {"Choose Class Photo"}
               </p>
-              <p className="text-[11px] text-ink-mute mt-0.5">{t("owner.classes.photoHint")}</p>
+              <p className="text-[11px] text-ink-mute mt-0.5">{"Format JPG, PNG, WebP, or SVG · Max 5MB"}</p>
             </div>
           )}
         </Field>
@@ -112,7 +112,7 @@ export default function ClassFormModal({ hook }: { hook: OwnerClassesMasterHook 
         {/* Private class location settings */}
         {isPrivate && (
           <div className="space-y-3 bg-paper-tint/60 border border-line rounded-xl p-3.5">
-            <Field label={t("owner.classes.fieldPrivateLocation")}>
+            <Field label={"Private Location Type"}>
               <div className="flex gap-2">
                 <button
                   type="button"
@@ -121,7 +121,7 @@ export default function ClassFormModal({ hook }: { hook: OwnerClassesMasterHook 
                     form.location_type === "branch" ? "border-ocean-500 bg-ocean-50 text-ocean-700" : "border-line bg-white text-ink-soft hover:bg-paper-tint"
                   }`}
                 >
-                  {t("owner.classes.locationBranch")}
+                  {"📍 Official Branch"}
                 </button>
                 <button
                   type="button"
@@ -130,21 +130,21 @@ export default function ClassFormModal({ hook }: { hook: OwnerClassesMasterHook 
                     form.location_type === "external" ? "border-wave-500 bg-wave-50 text-wave-700" : "border-line bg-white text-ink-soft hover:bg-paper-tint"
                   }`}
                 >
-                  {t("owner.classes.locationExternal")}
+                  {"🏡 External Location / Pool"}
                 </button>
               </div>
             </Field>
 
             {form.location_type === "external" && (
               <div className="space-y-3 pt-1">
-                <Field label={t("owner.classes.fieldExtName")} required>
+                <Field label={"External Location Name"} required>
                   <Input
                     value={form.external_location_name}
                     onChange={(e) => setForm((f) => ({ ...f, external_location_name: e.target.value }))}
                     placeholder="e.g. Oakwood Apartment Pool"
                   />
                 </Field>
-                <Field label={t("owner.classes.fieldExtAddress")}>
+                <Field label={"External Location Address"}>
                   <Textarea
                     value={form.external_location_address}
                     onChange={(e) => setForm((f) => ({ ...f, external_location_address: e.target.value }))}
@@ -152,7 +152,7 @@ export default function ClassFormModal({ hook }: { hook: OwnerClassesMasterHook 
                     rows={2}
                   />
                 </Field>
-                <Field label={t("owner.classes.fieldMapsUrl")}>
+                <Field label={"Google Maps Link"}>
                   <Input
                     value={form.google_maps_url}
                     onChange={(e) => setForm((f) => ({ ...f, google_maps_url: e.target.value }))}
@@ -166,7 +166,7 @@ export default function ClassFormModal({ hook }: { hook: OwnerClassesMasterHook 
 
         {/* Name, Capacity, Price */}
         <div className="grid sm:grid-cols-2 gap-4">
-          <Field label={t("owner.classes.fieldClassName")} required className="sm:col-span-2">
+          <Field label={"Class Name"} required className="sm:col-span-2">
             <Input
               value={form.name}
               onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
@@ -175,7 +175,7 @@ export default function ClassFormModal({ hook }: { hook: OwnerClassesMasterHook 
           </Field>
           {!isPrivate ? (
             <>
-              <Field label={t("owner.classes.fieldCapacity")} required>
+              <Field label={"Capacity"} required>
                 <Input
                   type="number"
                   value={form.capacity}
@@ -185,7 +185,7 @@ export default function ClassFormModal({ hook }: { hook: OwnerClassesMasterHook 
                 />
               </Field>
               <Field
-                label={t("owner.classes.fieldMonthlyPrice")}
+                label={"Monthly Price"}
                 required
                 hint={form.price_monthly ? fmtIDR(Number(form.price_monthly)) : undefined}
               >
@@ -201,7 +201,7 @@ export default function ClassFormModal({ hook }: { hook: OwnerClassesMasterHook 
             </>
           ) : (
             <Field
-              label={t("owner.classes.fieldSessionPrice")}
+              label={"Price per Session"}
               hint={form.price_per_session ? fmtIDR(Number(form.price_per_session)) : undefined}
             >
               <Input
@@ -219,7 +219,7 @@ export default function ClassFormModal({ hook }: { hook: OwnerClassesMasterHook 
         {/* Schedule Days & Times */}
         <div>
           <span className="text-[13px] font-semibold text-ink-soft mb-1.5 block">
-            {t("owner.classes.fieldScheduleDays")}
+            {"Schedule Days"}
             {!isPrivate && <span className="text-danger-500 ml-0.5">*</span>}
           </span>
           <div className="flex flex-wrap gap-2 mt-1">
@@ -242,7 +242,7 @@ export default function ClassFormModal({ hook }: { hook: OwnerClassesMasterHook 
           {form.schedule_days.length > 0 && (
             <div className="mt-3 rounded-xl border border-line overflow-hidden">
               <div className="flex items-center justify-between px-3 py-2 bg-paper-tint border-b border-line">
-                <span className="text-xs font-semibold text-ink-mute">{t("owner.classes.timeSettingsLabel")}</span>
+                <span className="text-xs font-semibold text-ink-mute">{"Time Settings"}</span>
                 <div className="flex rounded-lg border border-line overflow-hidden text-xs font-bold">
                   <button
                     type="button"
@@ -263,7 +263,7 @@ export default function ClassFormModal({ hook }: { hook: OwnerClassesMasterHook 
                       form.same_time_all ? "bg-ocean-700 text-white" : "text-ink-soft hover:bg-paper-deep"
                     }`}
                   >
-                    {t("owner.classes.sameAllDaysBtn")}
+                    {"Same for all days"}
                   </button>
                   <button
                     type="button"
@@ -281,14 +281,14 @@ export default function ClassFormModal({ hook }: { hook: OwnerClassesMasterHook 
                       !form.same_time_all ? "bg-ocean-700 text-white" : "text-ink-soft hover:bg-paper-deep"
                     }`}
                   >
-                    {t("owner.classes.diffPerDayBtn")}
+                    {"Different per day"}
                   </button>
                 </div>
               </div>
 
               {form.same_time_all ? (
                 <div className="px-3 py-3 flex gap-3 items-end flex-wrap">
-                  <Field label={t("owner.classes.fieldStartTime")} className="flex-1 min-w-[120px]">
+                  <Field label={"Start Time"} className="flex-1 min-w-[120px]">
                     <TimePicker
                       value={form.time_start}
                       onChange={(v) =>
@@ -300,7 +300,7 @@ export default function ClassFormModal({ hook }: { hook: OwnerClassesMasterHook 
                       }
                     />
                   </Field>
-                  <Field label={t("owner.classes.fieldEndTime")} className="flex-1 min-w-[120px]">
+                  <Field label={"End Time"} className="flex-1 min-w-[120px]">
                     <TimePicker
                       value={form.time_end}
                       onChange={(v) =>
@@ -351,9 +351,9 @@ export default function ClassFormModal({ hook }: { hook: OwnerClassesMasterHook 
         {/* Initial Coach Assignment for new classes */}
         {!editTarget && allCoaches.length > 0 && (
           <div className="border-t border-line pt-3 space-y-3">
-            <Field label={t("owner.classes.fieldHeadCoach")}>
+            <Field label={"Head Coach (Optional)"}>
               <Select value={newHeadCoachId} onChange={(e) => setNewHeadCoachId(e.target.value)}>
-                <option value="">-- {t("owner.classes.fieldHeadCoach")} --</option>
+                <option value="">-- {"Head Coach (Optional)"} --</option>
                 {allCoaches.map((c) => (
                   <option key={c.id} value={c.id} translate="no">
                     {c.full_name}
@@ -361,7 +361,7 @@ export default function ClassFormModal({ hook }: { hook: OwnerClassesMasterHook 
                 ))}
               </Select>
             </Field>
-            <Field label={t("owner.classes.fieldAssistantCoaches")}>
+            <Field label={"Assistant Coaches (Optional)"}>
               <div className="space-y-1.5 max-h-32 overflow-y-auto border border-line rounded-xl p-2.5 bg-paper-tint">
                 {allCoaches
                   .filter((c) => c.id !== newHeadCoachId)
@@ -392,20 +392,20 @@ export default function ClassFormModal({ hook }: { hook: OwnerClassesMasterHook 
         )}
 
         {/* Goals & Description */}
-        <Field label={t("owner.classes.fieldGoals")} hint={t("owner.classes.fieldGoalsHint")}>
+        <Field label={"Class Goals"} hint={"Optional — shown on coach & student portal"}>
           <Textarea
             rows={2}
             value={form.goals}
             onChange={(e) => setForm((f) => ({ ...f, goals: e.target.value }))}
-            placeholder={t("owner.classes.fieldGoalsPlaceholder")}
+            placeholder={"E.g. Water familiarization, building confidence in water."}
           />
         </Field>
-        <Field label={t("owner.classes.fieldDescription")}>
+        <Field label={"Class Description"}>
           <Textarea
             rows={2}
             value={form.description}
             onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-            placeholder={t("owner.classes.fieldDescriptionPlaceholder")}
+            placeholder={"E.g. Designed for beginners learning swimming fundamentals."}
           />
         </Field>
       </div>

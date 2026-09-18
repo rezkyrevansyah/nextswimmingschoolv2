@@ -4,7 +4,7 @@ import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import Status from "@/components/ui/Status";
-import { useLocale } from "@/components/providers/LocaleProvider";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 import { fmtIDR, waLink } from "@/lib/utils";
 import { isMemberPresentLike } from "@/lib/attendance";
 import { createClient } from "@/utils/supabase/client";
@@ -18,7 +18,6 @@ export default function MemberHome({
   memberName: string;
   branchId: string;
 }) {
-  const { t, tArray } = useLocale();
   const supabase = createClient();
   const [monthAttend, setMonthAttend] = useState({ present: 0, total: 0 });
   const [activeClasses, setActiveClasses] = useState(0);
@@ -172,23 +171,23 @@ export default function MemberHome({
       <div className="bg-ocean-700 text-white rounded-2xl border border-ocean-700 shadow-card p-5 relative overflow-hidden">
         <div className="caustics absolute inset-0 opacity-30" />
         <div className="relative">
-          <div className="text-wave-200 text-[11px] uppercase tracking-widest font-bold">{t("member.home.welcome")}</div>
-          <h2 className="font-display font-bold text-2xl mt-0.5">{t("member.home.greeting", { name: memberName || "…" })}</h2>
-          <p className="text-white/80 text-sm mt-1">{t("member.home.encouragement")}</p>
+          <div className="text-wave-200 text-[11px] uppercase tracking-widest font-bold">{"WELCOME"}</div>
+          <h2 className="font-display font-bold text-2xl mt-0.5">{(<>{"Hi, "}<NoTranslate>{memberName || "…"}</NoTranslate>{" 👋"}</>)}</h2>
+          <p className="text-white/80 text-sm mt-1">{"Stay motivated for today's practice!"}</p>
           <div className="mt-4 grid grid-cols-2 gap-2">
             <div className="bg-white/10 backdrop-blur ring-1 ring-white/15 rounded-xl p-3">
-              <div className="text-[10px] uppercase tracking-widest font-bold text-wave-200">{t("member.home.presentThisMonth")}</div>
+              <div className="text-[10px] uppercase tracking-widest font-bold text-wave-200">{"Present this month"}</div>
               <div className="font-display font-bold text-2xl mt-0.5">{monthAttend.present}</div>
             </div>
             <div className="bg-white/10 backdrop-blur ring-1 ring-white/15 rounded-xl p-3">
               {memberInfo?.type === "private" ? (
                 <>
-                  <div className="text-[10px] uppercase tracking-widest font-bold text-wave-200">{t("member.home.remainingSessions")}</div>
+                  <div className="text-[10px] uppercase tracking-widest font-bold text-wave-200">{"Sessions left"}</div>
                   <div className="font-display font-bold text-2xl mt-0.5">{memberInfo.remaining_sessions ?? "—"}</div>
                 </>
               ) : (
                 <>
-                  <div className="text-[10px] uppercase tracking-widest font-bold text-wave-200">{t("member.home.activeClasses")}</div>
+                  <div className="text-[10px] uppercase tracking-widest font-bold text-wave-200">{"Active classes"}</div>
                   <div className="font-display font-bold text-2xl mt-0.5">{activeClasses}</div>
                 </>
               )}
@@ -202,14 +201,14 @@ export default function MemberHome({
           <div className="flex items-start gap-3">
             <span className="w-11 h-11 rounded-xl bg-white text-warn-600 flex items-center justify-center shrink-0"><Icon name="wallet" className="w-5 h-5" /></span>
             <div className="flex-1 min-w-0">
-              <div className="font-display font-bold text-ink">{t("member.home.billTitle", { period: pendingBill.period })}</div>
-              <p className="text-sm text-ink-soft mt-0.5">{fmtIDR(pendingBill.amount)} · {pendingBill.class_name}</p>
+              <div className="font-display font-bold text-ink">{`Bill ${pendingBill.period}`}</div>
+              <p className="text-sm text-ink-soft mt-0.5">{fmtIDR(pendingBill.amount)} · <NoTranslate>{pendingBill.class_name}</NoTranslate></p>
             </div>
           </div>
           <div className="mt-3 grid grid-cols-2 gap-2">
-            <Btn variant="outline" size="sm" onClick={() => setActive("bills")}>{t("member.home.viewBill")}</Btn>
-            <a href={waLink(t("member.home.waConfirmBill", { period: pendingBill.period, name: memberName }))} target="_blank" rel="noreferrer">
-              <Btn variant="wa" size="sm" icon="whatsapp" className="w-full">{t("member.home.contactAdmin")}</Btn>
+            <Btn variant="outline" size="sm" onClick={() => setActive("bills")}>{"View Bill"}</Btn>
+            <a href={waLink(`Hello Admin, I would like to confirm payment for ${pendingBill.period} for ${memberName}. Here is the transfer proof:`)} target="_blank" rel="noreferrer">
+              <Btn variant="wa" size="sm" icon="whatsapp" className="w-full">{"Contact Admin"}</Btn>
             </a>
           </div>
         </Card>
@@ -220,16 +219,16 @@ export default function MemberHome({
           <div className="flex items-start gap-3">
             <span className="w-11 h-11 rounded-xl bg-white text-wave-600 flex items-center justify-center shrink-0 animate-pulse"><Icon name="sparkle" className="w-5 h-5" /></span>
             <div className="flex-1 min-w-0">
-              <div className="font-display font-bold text-ink">{t("member.home.packageRunningLow")}</div>
+              <div className="font-display font-bold text-ink">{"Session package running low"}</div>
               <p className="text-sm text-ink-soft mt-0.5">
                 {privateReminder.remaining === 0
-                  ? t("member.home.packageEmpty")
-                  : t("member.home.packageLow", { remaining: privateReminder.remaining })}
+                  ? "Your session package has run out. Contact admin to renew."
+                  : `${privateReminder.remaining} sessions left in your package. Renew soon so training isn't interrupted.`}
               </p>
             </div>
           </div>
-          <a href={waLink(t("member.home.waRenewPrivate", { name: memberName, remaining: privateReminder.remaining }))} target="_blank" rel="noreferrer" className="mt-3 inline-flex w-full">
-            <Btn variant="wa" size="sm" icon="whatsapp" className="w-full">{t("member.home.renewPackage")}</Btn>
+          <a href={waLink(`Hello Admin, I would like to renew the private session package for ${memberName}. Current remaining sessions: ${privateReminder.remaining}.`)} target="_blank" rel="noreferrer" className="mt-3 inline-flex w-full">
+            <Btn variant="wa" size="sm" icon="whatsapp" className="w-full">{"Contact Admin — Renew Package"}</Btn>
           </a>
         </Card>
       )}
@@ -239,9 +238,9 @@ export default function MemberHome({
           <div className="flex items-start gap-3">
             <span className="w-11 h-11 rounded-xl bg-ocean-50 text-ocean-700 flex items-center justify-center shrink-0"><Icon name="bell" className="w-5 h-5" /></span>
             <div className="flex-1 min-w-0">
-              <Status kind="active" className="!text-[10px] mb-1">{t("member.home.announcement")}</Status>
-              <div className="font-display font-bold text-ink">{latestAnnouncement.title}</div>
-              <p className="text-sm text-ink-soft mt-1.5 leading-relaxed">{latestAnnouncement.body}</p>
+              <Status kind="active" className="!text-[10px] mb-1">{"ANNOUNCEMENT"}</Status>
+              <div className="font-display font-bold text-ink"><NoTranslate>{latestAnnouncement.title}</NoTranslate></div>
+              <p className="text-sm text-ink-soft mt-1.5 leading-relaxed"><NoTranslate>{latestAnnouncement.body}</NoTranslate></p>
             </div>
           </div>
         </Card>
@@ -249,13 +248,13 @@ export default function MemberHome({
 
       {upcomingSessions.length > 0 && (
         <div>
-          <SectionTitle sub={t("member.home.upcomingSub")}>{t("member.home.upcomingTitle")}</SectionTitle>
+          <SectionTitle sub={"Upcoming sessions"}>{"Next Schedule"}</SectionTitle>
           <div className="space-y-2.5">
             {upcomingSessions.map((s, i) => {
               const d = new Date(s.date + "T00:00:00");
-              const dayShort = tArray("common.days.short")[d.getDay()];
+              const dayShort = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.getDay()];
               const dateNum = d.getDate();
-              const monthNames = tArray("common.months.short");
+              const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
               const monthShort = monthNames[d.getMonth()];
               const onLeave = isSessionOnLeave(s.date, s.class_id);
               return (
@@ -268,10 +267,10 @@ export default function MemberHome({
                     </div>
                     <div className="flex-1 min-w-0 pl-3 border-l border-line">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <div className="font-semibold text-ink text-sm truncate">{s.class_name}</div>
-                        {onLeave && <span className="text-[10px] font-bold uppercase tracking-wide text-warn-600 bg-warn-50 px-1.5 py-0.5 rounded shrink-0">{t("member.home.onLeaveBadge")}</span>}
+                        <div className="font-semibold text-ink text-sm truncate"><NoTranslate>{s.class_name}</NoTranslate></div>
+                        {onLeave && <span className="text-[10px] font-bold uppercase tracking-wide text-warn-600 bg-warn-50 px-1.5 py-0.5 rounded shrink-0">{"Leave"}</span>}
                       </div>
-                      <div className="text-xs text-ink-mute font-mono mt-0.5">{s.time} · {s.coach}</div>
+                      <div className="text-xs text-ink-mute font-mono mt-0.5">{s.time} · <NoTranslate>{s.coach}</NoTranslate></div>
                     </div>
                   </div>
                 </Card>

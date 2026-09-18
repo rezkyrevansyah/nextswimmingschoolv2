@@ -6,15 +6,15 @@ import type { OwnerClassesMasterHook } from "./_hook";
 
 export default function ClassesTable({ hook }: { hook: OwnerClassesMasterHook }) {
   const {
-    t, dayLabels, loading, filteredClasses, openDetail, openEdit, archiveClass, restoreClass, deleteClass,
+    dayLabels, loading, filteredClasses, openDetail, openEdit, archiveClass, restoreClass, deleteClass,
   } = hook;
 
   return (
     <div className="bg-paper rounded-2xl border border-line overflow-hidden shadow-xs">
       {loading ? (
-        <div className="py-12 text-center text-ink-mute text-sm">{t("owner.classes.loading")}</div>
+        <div className="py-12 text-center text-ink-mute text-sm">{"Loading classes data…"}</div>
       ) : filteredClasses.length === 0 ? (
-        <div className="py-12 text-center text-ink-mute text-sm">{t("owner.classes.empty")}</div>
+        <div className="py-12 text-center text-ink-mute text-sm">{"No classes found."}</div>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -98,7 +98,7 @@ export default function ClassesTable({ hook }: { hook: OwnerClassesMasterHook })
                           type="button"
                           onClick={() => openEdit(c)}
                           className="w-7 h-7 rounded-lg border border-line bg-paper hover:bg-paper-deep text-ink-mute hover:text-ink flex items-center justify-center transition-colors cursor-pointer"
-                          title={t("owner.classes.editBtn")}
+                          title={"Edit"}
                         >
                           <Icon name="edit" className="w-3.5 h-3.5" />
                         </button>
@@ -106,7 +106,7 @@ export default function ClassesTable({ hook }: { hook: OwnerClassesMasterHook })
                           type="button"
                           onClick={() => (isArchived ? restoreClass(c) : archiveClass(c))}
                           className="w-7 h-7 rounded-lg border border-line bg-paper hover:bg-paper-deep text-ink-mute hover:text-ink flex items-center justify-center transition-colors cursor-pointer"
-                          title={isArchived ? t("owner.classes.restoreBtn") : t("owner.classes.archiveBtn")}
+                          title={isArchived ? "Restore" : "Archive"}
                         >
                           <Icon name={isArchived ? "check" : "archive"} className="w-3.5 h-3.5" />
                         </button>
@@ -114,7 +114,7 @@ export default function ClassesTable({ hook }: { hook: OwnerClassesMasterHook })
                           type="button"
                           onClick={() => deleteClass(c)}
                           className="w-7 h-7 rounded-lg border border-line bg-paper hover:bg-rose-50 text-ink-mute hover:text-rose-600 flex items-center justify-center transition-colors cursor-pointer"
-                          title={t("owner.classes.deleteBtn")}
+                          title={"Delete"}
                         >
                           <Icon name="trash" className="w-3.5 h-3.5" />
                         </button>

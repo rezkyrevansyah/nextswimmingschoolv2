@@ -2,7 +2,6 @@
 import { useState } from "react";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import { parseUserApiError } from "../../_utils";
 import type { ClassRow } from "../../_types";
 
@@ -16,7 +15,6 @@ export function useMemberCreateData({
 }) {
   const toast = useToast();
   const confirm = useConfirm();
-  const { t } = useLocale();
   const [openCreate, setOpenCreate] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ full_name: "", birth_date: "", gender: "", type: "reguler", phone: "", phone_owner: "self", parent_name: "", parent_phone: "", address: "", health_notes: "", class_id: "", school_id: "", school_grade: "", email: "", password: "", jumlah_sesi: "" });
@@ -25,13 +23,13 @@ export function useMemberCreateData({
   const [showCreatePwd, setShowCreatePwd] = useState(false);
 
   const createMember = async () => {
-    if (!form.full_name || !form.email || !form.password) return toast.error(t("admin.coaches.nameEmailPasswordRequired"));
-    if (form.type === "private" && !form.jumlah_sesi) return toast.error(t("admin.members.sessionsRequiredPrivate"));
+    if (!form.full_name || !form.email || !form.password) return toast.error("Name, email, and password are required");
+    if (form.type === "private" && !form.jumlah_sesi) return toast.error("Number of sessions is required for private students");
     // Capacity check
     if (form.class_id) {
       const cls = classes.find(c => c.id === form.class_id);
       if (cls && cls.enrolled >= cls.capacity) {
-        const ok = await confirm({ body: t("admin.members.classFullConfirmBody", { name: cls.name, enrolled: cls.enrolled, capacity: cls.capacity }) });
+        const ok = await confirm({ body: `Class "${cls.name}" is already full (${cls.enrolled}/${cls.capacity} students). Continue anyway?` });
         if (!ok) return;
       }
     }
@@ -52,7 +50,7 @@ export function useMemberCreateData({
       }),
     });
     const json = await res.json() as { user_id?: string; error?: string; code?: string; class_assignment_error?: string };
-    if (!res.ok) { const [errT, errS, errD] = parseUserApiError(json, t); toast.error(errT, errS, errD); setSaving(false); return; }
+    if (!res.ok) { const [errT, errS, errD] = parseUserApiError(json); toast.error(errT, errS, errD); setSaving(false); return; }
 
     // Upload avatar if selected
     if (createAvatarFile && json.user_id) {
@@ -65,9 +63,9 @@ export function useMemberCreateData({
     }
 
     if (json.class_assignment_error) {
-      toast.error(t("admin.members.memberCreatedToast"), json.class_assignment_error);
+      toast.error("Student created", json.class_assignment_error);
     } else {
-      toast.success(t("admin.members.memberCreatedToast"), t("admin.members.accountActiveImmediatelySub"));
+      toast.success("Student created", "Account is active immediately");
     }
     setSaving(false);
     setOpenCreate(false);
@@ -79,7 +77,6 @@ export function useMemberCreateData({
   };
 
   return {
-    t,
     openCreate, setOpenCreate, saving, form, setForm,
     createAvatarFile, setCreateAvatarFile, createAvatarPreview, setCreateAvatarPreview,
     showCreatePwd, setShowCreatePwd,

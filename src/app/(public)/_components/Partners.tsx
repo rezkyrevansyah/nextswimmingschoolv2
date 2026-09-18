@@ -1,7 +1,6 @@
 "use client";
 
 import LogoLoop from "@/components/LogoLoop";
-import { useLocale } from "@/components/providers/LocaleProvider";
 
 interface PartnerRow {
   id: string;
@@ -11,7 +10,6 @@ interface PartnerRow {
 }
 
 export default function Partners({ partners }: { partners: PartnerRow[] }) {
-  const { t } = useLocale();
   const valid = partners.filter((p) => p.logo_url || p.name);
 
   if (valid.length === 0) return null;
@@ -34,7 +32,7 @@ export default function Partners({ partners }: { partners: PartnerRow[] }) {
     <section className="py-16 sm:py-20 bg-paper-tint border-y border-line">
       <div className="mx-auto max-w-5xl px-6 text-center">
         <p className="text-xs font-semibold tracking-wide uppercase text-ink-mute">
-          {t("landing.partners.label")}
+          {"Trusted by Our Partners"}
         </p>
       </div>
       <div className="mt-8 relative h-16 overflow-hidden">
@@ -45,7 +43,7 @@ export default function Partners({ partners }: { partners: PartnerRow[] }) {
           logoHeight={40}
           gap={64}
           fadeOut
-          ariaLabel={t("landing.partners.ariaLabel")}
+          ariaLabel={"Partner logos"}
         />
       </div>
     </section>

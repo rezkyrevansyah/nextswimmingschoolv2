@@ -1,6 +1,5 @@
 "use client";
 import Image from "next/image";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import Icon from "@/components/ui/Icon";
 import { Switch } from "@/components/ui/FormFields";
 import { NoTranslate } from "@/components/ui/NoTranslate";
@@ -9,7 +8,6 @@ import type { useOwnerSchoolsData } from "./useOwnerSchoolsData";
 type OwnerSchoolsDataHook = ReturnType<typeof useOwnerSchoolsData>;
 
 export default function SchoolConfigPanel({ hook }: { hook: OwnerSchoolsDataHook }) {
-  const { t } = useLocale();
   const {
     uploading, logoInputRef, selectedSchool, signatures, sigLoading,
     setSigForm, setSigFile, setShowSigModal,
@@ -21,7 +19,7 @@ export default function SchoolConfigPanel({ hook }: { hook: OwnerSchoolsDataHook
     return (
       <div className="flex-1 bg-paper rounded-2xl border border-line p-12 flex flex-col items-center justify-center text-ink-mute text-sm min-h-[360px]">
         <Icon name="book" className="w-10 h-10 text-ink-faint mb-2" />
-        <span>{t("owner.schools.selectSchoolPrompt")}</span>
+        <span>{"Select a school from the list to configure signatures."}</span>
       </div>
     );
   }
@@ -50,7 +48,7 @@ export default function SchoolConfigPanel({ hook }: { hook: OwnerSchoolsDataHook
             </div>
             <div className="space-y-2 text-center sm:text-left flex-1">
               <div className="text-xs text-ink-soft">
-                {t("owner.schools.logoUpdated")}
+                {"School logo updated"}
               </div>
               <button
                 type="button"
@@ -59,7 +57,7 @@ export default function SchoolConfigPanel({ hook }: { hook: OwnerSchoolsDataHook
                 className="h-9 px-4 rounded-xl border border-line bg-paper hover:bg-paper-tint text-ink-soft text-xs font-semibold inline-flex items-center gap-2 transition-colors cursor-pointer"
               >
                 <Icon name="upload" className="w-3.5 h-3.5" />
-                <span>{uploading ? t("common.actions.saving") : t("owner.schools.uploadLogoBtn")}</span>
+                <span>{uploading ? "Saving…" : "Upload Logo"}</span>
               </button>
               <input
                 ref={logoInputRef}
@@ -86,7 +84,7 @@ export default function SchoolConfigPanel({ hook }: { hook: OwnerSchoolsDataHook
               className="h-10 px-4 rounded-xl border border-line bg-paper hover:bg-paper-tint text-ink-soft text-sm font-semibold inline-flex items-center gap-2 transition-colors cursor-pointer"
             >
               <Icon name="upload" className="w-4 h-4" />
-              <span>{uploading ? t("common.actions.saving") : "Upload logo"}</span>
+              <span>{uploading ? "Saving…" : "Upload logo"}</span>
             </button>
             <input
               ref={logoInputRef}
@@ -116,13 +114,13 @@ export default function SchoolConfigPanel({ hook }: { hook: OwnerSchoolsDataHook
               className="h-8 px-3 rounded-lg border border-line bg-paper hover:bg-paper-tint text-ink-soft text-xs font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer"
             >
               <Icon name="plus" className="w-3.5 h-3.5" />
-              <span>{t("owner.schools.addSigBtn")}</span>
+              <span>{"Add Signature"}</span>
             </button>
           )}
         </div>
 
         {sigLoading ? (
-          <div className="text-center py-6 text-ink-mute text-sm">{t("common.actions.saving")}</div>
+          <div className="text-center py-6 text-ink-mute text-sm">{"Saving…"}</div>
         ) : signatures.length === 0 ? (
           <div className="space-y-2.5">
             <div className="h-[120px] rounded-xl border border-line bg-paper-deep flex flex-col items-center justify-center gap-1.5 text-center p-4">
@@ -165,7 +163,7 @@ export default function SchoolConfigPanel({ hook }: { hook: OwnerSchoolsDataHook
                       type="button"
                       onClick={() => { setSigForm({ id: sig.id, name: sig.name, title: sig.title, is_active: sig.is_active }); setSigFile(null); setShowSigModal(true); }}
                       className="w-7 h-7 rounded-md border border-line bg-paper hover:bg-paper-tint text-ink-mute hover:text-ink flex items-center justify-center transition-colors cursor-pointer"
-                      title={t("common.actions.edit")}
+                      title={"Edit"}
                     >
                       <Icon name="edit" className="w-3.5 h-3.5" />
                     </button>
@@ -173,7 +171,7 @@ export default function SchoolConfigPanel({ hook }: { hook: OwnerSchoolsDataHook
                       type="button"
                       onClick={() => deleteSignature(sig)}
                       className="w-7 h-7 rounded-md border border-line bg-paper hover:bg-rose-50 text-ink-mute hover:text-rose-600 flex items-center justify-center transition-colors cursor-pointer"
-                      title={t("common.actions.delete")}
+                      title={"Delete"}
                     >
                       <Icon name="trash" className="w-3.5 h-3.5" />
                     </button>
@@ -189,7 +187,7 @@ export default function SchoolConfigPanel({ hook }: { hook: OwnerSchoolsDataHook
                   <div className="flex items-center gap-2">
                     <Switch checked={sig.is_active} onChange={() => toggleSigActive(sig)} />
                     <span className={`text-xs font-bold ${sig.is_active ? "text-ok-700" : "text-ink-mute"}`}>
-                      {sig.is_active ? t("owner.schools.activeSigBadge") : t("owner.schools.inactiveSigBadge")}
+                      {sig.is_active ? "Active" : "Inactive"}
                     </span>
                   </div>
                 </div>
@@ -211,7 +209,7 @@ export default function SchoolConfigPanel({ hook }: { hook: OwnerSchoolsDataHook
             disabled={configSaving}
             className="h-8 px-3 rounded-lg bg-ocean-600 hover:bg-ocean-700 text-white text-xs font-semibold transition-colors cursor-pointer shadow-2xs"
           >
-            {configSaving ? t("owner.schools.savingConfigBtn") : t("owner.schools.saveConfigBtn")}
+            {configSaving ? "Saving…" : "Save Display Configuration"}
           </button>
         </div>
 
@@ -226,7 +224,7 @@ export default function SchoolConfigPanel({ hook }: { hook: OwnerSchoolsDataHook
                 type="text"
                 value={configForm.coach_sig_title}
                 onChange={e => setConfigForm(f => ({ ...f, coach_sig_title: e.target.value }))}
-                placeholder={t("owner.schools.coachSigTitleField")}
+                placeholder={"Coach Signature Title"}
                 className="h-9 px-3 w-48 sm:w-56 rounded-lg border border-line bg-paper text-sm text-ink focus:outline-hidden focus:border-ocean-500"
               />
               <Switch checked={configForm.show_coach_sig} onChange={c => setConfigForm(f => ({ ...f, show_coach_sig: c }))} />
@@ -243,7 +241,7 @@ export default function SchoolConfigPanel({ hook }: { hook: OwnerSchoolsDataHook
                 type="text"
                 value={configForm.head_sig_title}
                 onChange={e => setConfigForm(f => ({ ...f, head_sig_title: e.target.value }))}
-                placeholder={t("owner.schools.headSigTitleField")}
+                placeholder={"Head of NEXT Signature Title"}
                 className="h-9 px-3 w-48 sm:w-56 rounded-lg border border-line bg-paper text-sm text-ink focus:outline-hidden focus:border-ocean-500"
               />
               <Switch checked={configForm.show_head_sig} onChange={c => setConfigForm(f => ({ ...f, show_head_sig: c }))} />

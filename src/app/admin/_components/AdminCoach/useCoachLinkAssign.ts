@@ -3,14 +3,11 @@ import { useState, useMemo } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import type { CoachFull } from "./_types";
 
 export function useCoachLinkAssign(branchId: string, load: () => void, detail: CoachFull | null, setDetail: (updater: (prev: CoachFull | null) => CoachFull | null) => void) {
   const toast = useToast();
   const confirm = useConfirm();
-  const { t } = useLocale();
-
   // link existing coach
   const [openLink, setOpenLink] = useState(false);
   const [linkSearch, setLinkSearch] = useState("");
@@ -106,11 +103,11 @@ export function useCoachLinkAssign(branchId: string, load: () => void, detail: C
     }
 
     const parts = [
-      succeeded > 0 ? t("admin.coaches.linkBulkSuccessPart", { count: succeeded }) : null,
-      alreadyLinked > 0 ? t("admin.coaches.linkBulkAlreadyPart", { count: alreadyLinked }) : null,
-      failed > 0 ? t("admin.coaches.linkBulkFailedPart", { count: failed }) : null,
+      succeeded > 0 ? `${succeeded} linked` : null,
+      alreadyLinked > 0 ? `${alreadyLinked} already linked` : null,
+      failed > 0 ? `${failed} failed` : null,
     ].filter(Boolean).join(", ");
-    if (failed > 0 && succeeded === 0) toast.error(t("admin.coaches.linkCoachFailed"), parts);
+    if (failed > 0 && succeeded === 0) toast.error("Failed to link coach", parts);
     else toast.success(parts);
 
     setOpenLink(false);
@@ -125,10 +122,10 @@ export function useCoachLinkAssign(branchId: string, load: () => void, detail: C
   const unlinkCoachFromBranch = async (c: CoachFull, classCount: number) => {
     const ok = await confirm({
       body: classCount > 0
-        ? t("admin.coaches.unlinkConfirmBodyWithClasses", { name: c.full_name, count: classCount })
-        : t("admin.coaches.unlinkConfirmBody", { name: c.full_name }),
+        ? `Remove ${c.full_name} from this center? This will also remove them from ${classCount} classes at this center.`
+        : `Remove ${c.full_name} from this center?`,
       danger: true,
-      confirmLabel: t("admin.coaches.unlinkBtn"),
+      confirmLabel: "Unlink",
     });
     if (!ok) return;
     const res = await fetch(`/api/admin/coaches/${c.id}/branches`, {
@@ -136,7 +133,7 @@ export function useCoachLinkAssign(branchId: string, load: () => void, detail: C
       body: JSON.stringify({ branch_id: branchId }),
     });
     const j = await res.json() as { error?: string; removedClassAssignments?: number };
-    if (!res.ok) return toast.error(t("admin.coaches.unlinkFailed"), j.error);
+    if (!res.ok) return toast.error("Failed to unlink coach", j.error);
     setDetail(prev => prev ? {
       ...prev,
       coach_branches: prev.coach_branches?.filter(cb => cb.branch_id !== branchId),
@@ -144,8 +141,8 @@ export function useCoachLinkAssign(branchId: string, load: () => void, detail: C
     } : prev);
     const removed = j.removedClassAssignments ?? 0;
     toast.success(removed > 0
-      ? t("admin.coaches.unlinkSuccessWithClassesToast", { name: c.full_name, count: removed })
-      : t("admin.coaches.unlinkSuccessToast", { name: c.full_name }));
+      ? `${c.full_name} removed from this center (${removed} class assignments also removed)`
+      : `${c.full_name} removed from this center`);
     load();
   };
 
@@ -181,7 +178,7 @@ export function useCoachLinkAssign(branchId: string, load: () => void, detail: C
       await supabase.from("class_coaches").delete().eq("coach_id", detail.id).in("class_id", toRemove);
     }
     setAssignSaving(false);
-    toast.success(t("admin.coaches.classesUpdatedToast"));
+    toast.success("Classes updated successfully");
     setOpenAssign(false);
     // Update detail state immediately so panel reflects new assignment
     setDetail(prev => prev ? {

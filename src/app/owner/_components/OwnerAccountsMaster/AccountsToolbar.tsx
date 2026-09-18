@@ -7,7 +7,7 @@ type AccountsMasterDataHook = ReturnType<typeof useAccountsMasterData>;
 
 export default function AccountsToolbar({ hook }: { hook: AccountsMasterDataHook }) {
   const {
-    t, branches, search, setSearch, roleFilter, setRoleFilter, branchFilter, setBranchFilter,
+    branches, search, setSearch, roleFilter, setRoleFilter, branchFilter, setBranchFilter,
     showArchived, setShowArchived,
     setQuickRole, setQuickBranch, setShowQuickDownloadModal,
     qrSelectMode, setQrSelectMode, setSelectedQRIds, openCreate,
@@ -25,7 +25,7 @@ export default function AccountsToolbar({ hook }: { hook: AccountsMasterDataHook
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder={t("owner.accounts.searchPlaceholder")}
+              placeholder={"Search by name or email…"}
               className="h-10 pl-9 pr-3 w-56 rounded-xl border border-line bg-paper text-sm text-ink placeholder:text-ink-faint focus:outline-hidden focus:border-ocean-500 focus:ring-1 focus:ring-ocean-500"
             />
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint pointer-events-none">
@@ -39,14 +39,14 @@ export default function AccountsToolbar({ hook }: { hook: AccountsMasterDataHook
             aria-label="Filter role"
             className="h-10 px-3 rounded-xl border border-line bg-paper text-sm text-ink-soft focus:outline-hidden focus:border-ocean-500"
           >
-            <option value="all">{t("owner.accounts.roleFilterAll")}</option>
-            <option value="owner">{t("owner.accounts.roleOwner")}</option>
-            <option value="admin">{t("owner.accounts.roleAdmin")}</option>
-            <option value="manager_center">{t("owner.accounts.roleManagerCenter")}</option>
-            <option value="coach">{t("owner.accounts.roleCoach")}</option>
-            <option value="member">{t("owner.accounts.roleMember")}</option>
-            <option value="school">{t("owner.accounts.roleSchool")}</option>
-            <option value="staff">{t("owner.accounts.roleStaff")}</option>
+            <option value="all">{"All roles"}</option>
+            <option value="owner">{"Owner"}</option>
+            <option value="admin">{"Branch Admin"}</option>
+            <option value="manager_center">{"Manager Center"}</option>
+            <option value="coach">{"Coach"}</option>
+            <option value="member">{"Student"}</option>
+            <option value="school">{"School Partner"}</option>
+            <option value="staff">{"Branch Staff"}</option>
           </select>
 
           <select
@@ -55,7 +55,7 @@ export default function AccountsToolbar({ hook }: { hook: AccountsMasterDataHook
             aria-label="Filter center"
             className="h-10 px-3 rounded-xl border border-line bg-paper text-sm text-ink-soft focus:outline-hidden focus:border-ocean-500"
           >
-            <option value="">{t("owner.accounts.branchFilterAll")}</option>
+            <option value="">{"All centers"}</option>
             {branches.map((b) => (
               <option key={b.id} value={b.id} translate="no" className="notranslate">
                 {b.name}
@@ -70,7 +70,7 @@ export default function AccountsToolbar({ hook }: { hook: AccountsMasterDataHook
               onChange={(e) => setShowArchived(e.target.checked)}
               className="w-4 h-4 rounded accent-ocean-600 cursor-pointer"
             />
-            {t("owner.accounts.showArchivedToggle")}
+            {"Show inactive accounts"}
           </label>
         </div>
 
@@ -86,7 +86,7 @@ export default function AccountsToolbar({ hook }: { hook: AccountsMasterDataHook
             className="h-10 px-3.5 rounded-xl border border-line bg-paper hover:bg-paper-tint text-ink-soft text-sm font-semibold flex items-center gap-2 transition-colors cursor-pointer"
           >
             <Icon name="qr" className="w-4 h-4 text-ink-mute" />
-            <span className="hidden sm:inline">{t("owner.accounts.quickDownloadQr")}</span>
+            <span className="hidden sm:inline">{"Quick Download QR"}</span>
           </button>
 
           {/* Toggle Checkbox Select Mode */}
@@ -112,7 +112,7 @@ export default function AccountsToolbar({ hook }: { hook: AccountsMasterDataHook
             className="h-10 px-4 rounded-xl bg-ocean-600 hover:bg-ocean-700 text-white text-sm font-semibold flex items-center gap-2 shadow-xs transition-colors cursor-pointer"
           >
             <Icon name="plus" className="w-4 h-4" />
-            <span>{t("owner.accounts.addAccountBtn")}</span>
+            <span>{"Add Account"}</span>
           </button>
         </div>
       </div>
@@ -127,11 +127,11 @@ export default function AccountsToolbar({ hook }: { hook: AccountsMasterDataHook
             <div>
               <div className="font-bold text-sm">
                 {selectedQRIds.size > 0
-                  ? t("owner.accounts.accountsSelectedCount", { count: selectedQRIds.size })
-                  : t("owner.accounts.selectAccountsToDownloadHint")}
+                  ? `${selectedQRIds.size} Accounts Selected`
+                  : "Select accounts in the table to download their QR Code"}
               </div>
               <div className="text-xs text-ocean-300">
-                {t("owner.accounts.accountsMatchFilter", { count: filtered.length })}
+                {`${filtered.length} accounts match current filter`}
               </div>
             </div>
           </div>
@@ -153,7 +153,7 @@ export default function AccountsToolbar({ hook }: { hook: AccountsMasterDataHook
               className="h-8 px-3 rounded-lg bg-ocean-500 hover:bg-ocean-600 disabled:opacity-50 text-white text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
             >
               <Icon name="download" className="w-3.5 h-3.5" />
-              <span>{generatingQR ? t("common.actions.saving") : `Download ZIP (${selectedQRIds.size})`}</span>
+              <span>{generatingQR ? "Saving…" : `Download ZIP (${selectedQRIds.size})`}</span>
             </button>
             <button
               type="button"

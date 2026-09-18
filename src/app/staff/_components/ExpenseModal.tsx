@@ -2,11 +2,9 @@
 import Btn from "@/components/ui/Btn";
 import { Field, Input, Select } from "@/components/ui/FormFields";
 import Modal from "@/components/ui/Modal";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import type { useStaffData } from "./useStaffData";
 
 export default function ExpenseModal({ hook }: { hook: ReturnType<typeof useStaffData> }) {
-  const { t } = useLocale();
   const {
     showExpenseModal, setShowExpenseModal, expenseForm, setExpenseForm,
     expenseCategories, setExpenseProofFile, handleSaveExpense, savingExpense, uploading,
@@ -16,27 +14,27 @@ export default function ExpenseModal({ hook }: { hook: ReturnType<typeof useStaf
     <Modal
       open={showExpenseModal}
       onClose={() => setShowExpenseModal(false)}
-      title={t("staff.expenses.modalTitle")}
+      title={"Submit Reimbursement / Expense Claim"}
       size="sm"
       footer={
         <>
-          <Btn variant="ghost" onClick={() => setShowExpenseModal(false)}>{t("staff.expenses.cancelBtn")}</Btn>
+          <Btn variant="ghost" onClick={() => setShowExpenseModal(false)}>{"Cancel"}</Btn>
           <Btn variant="primary" onClick={handleSaveExpense} disabled={savingExpense || uploading}>
-            {savingExpense || uploading ? t("staff.expenses.savingBtn") : t("staff.expenses.submitBtn")}
+            {savingExpense || uploading ? "Submitting…" : "Submit Claim"}
           </Btn>
         </>
       }
     >
       <div className="space-y-3">
-        <Field label={t("staff.expenses.fieldDescription")} required>
+        <Field label={"Expense Description"} required>
           <Input
             value={expenseForm.description}
             onChange={e => setExpenseForm(f => ({ ...f, description: e.target.value }))}
-            placeholder={t("staff.expenses.fieldDescriptionPlaceholder")}
+            placeholder={"Example: Purchased pool cleaning supplies"}
           />
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label={t("staff.expenses.fieldAmount")} required>
+          <Field label={"Amount (IDR)"} required>
             <Input
               type="number"
               value={expenseForm.amount}
@@ -45,7 +43,7 @@ export default function ExpenseModal({ hook }: { hook: ReturnType<typeof useStaf
               className="font-mono"
             />
           </Field>
-          <Field label={t("staff.expenses.fieldDate")}>
+          <Field label={"Receipt Date"}>
             <Input
               type="date"
               value={expenseForm.occurred_at}
@@ -53,16 +51,16 @@ export default function ExpenseModal({ hook }: { hook: ReturnType<typeof useStaf
             />
           </Field>
         </div>
-        <Field label={t("staff.expenses.fieldCategory")}>
+        <Field label={"Category"}>
           <Select value={expenseForm.category} onChange={e => setExpenseForm(f => ({ ...f, category: e.target.value }))}>
             {expenseCategories.map(cat => (
-              <option key={cat} value={cat}>
+              <option key={cat} value={cat} translate="no">
                 {cat}
               </option>
             ))}
           </Select>
         </Field>
-        <Field label={t("staff.expenses.fieldProof")} hint={t("staff.expenses.fieldProofHint")}>
+        <Field label={"Receipt Photo / Payment Proof"} hint={"Upload receipt/invoice photo"}>
           <input
             type="file"
             accept="image/*"

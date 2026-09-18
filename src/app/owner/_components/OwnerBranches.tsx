@@ -12,7 +12,6 @@ import { logActivity } from "@/lib/activityLog";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import type { Branch } from "../_types";
 
 const MapPicker = dynamic(() => import("@/components/ui/MapPicker"), {
@@ -21,7 +20,6 @@ const MapPicker = dynamic(() => import("@/components/ui/MapPicker"), {
 });
 
 export default function OwnerBranches({ branches, onRefresh, userId, userName }: { branches: Branch[]; onRefresh: () => void; userId: string; userName: string }) {
-  const { t, tNode } = useLocale();
   const toast = useToast();
   const confirm = useConfirm();
   const router = useRouter();
@@ -64,7 +62,7 @@ export default function OwnerBranches({ branches, onRefresh, userId, userName }:
   };
 
   const save = async () => {
-    if (!name || !city) return toast.error(t("owner.branches.nameCityRequired"));
+    if (!name || !city) return toast.error("Name and city are required");
     setSaving(true);
     const cleanWa = waPhone.trim() ? [waPhone.trim()] : [];
     const bankFields = {
@@ -78,14 +76,14 @@ export default function OwnerBranches({ branches, onRefresh, userId, userName }:
     };
     if (editItem) {
       const { error } = await supabase.from("branches").update({ name, city, address, wa_numbers: cleanWa, show_payments_to_admin: showPaymentsToAdmin, ...bankFields, ...geoFields }).eq("id", editItem.id);
-      if (error) { toast.error(t("owner.branches.saveFailed"), error.message); setSaving(false); return; }
-      toast.success(t("owner.branches.updated"));
-      logActivity(supabase, { userId, userRole: "owner", userName, entityType: "branches", entityId: editItem.id, entityLabel: name, action: "update", label: t("owner.branches.activityUpdated", { name }) });
+      if (error) { toast.error("Failed to save", error.message); setSaving(false); return; }
+      toast.success("Center updated");
+      logActivity(supabase, { userId, userRole: "owner", userName, entityType: "branches", entityId: editItem.id, entityLabel: name, action: "update", label: `Center ${name} updated` });
     } else {
       const { data: inserted, error } = await supabase.from("branches").insert({ name, city, address, wa_numbers: cleanWa, status: "active", show_payments_to_admin: showPaymentsToAdmin, ...bankFields, ...geoFields }).select("id").single();
-      if (error) { toast.error(t("owner.branches.createFailed"), error.message); setSaving(false); return; }
-      toast.success(t("owner.branches.created"));
-      logActivity(supabase, { userId, userRole: "owner", userName, entityType: "branches", entityId: inserted?.id ?? "new", entityLabel: name, action: "create", label: t("owner.branches.activityCreated", { name, city }) });
+      if (error) { toast.error("Failed to create center", error.message); setSaving(false); return; }
+      toast.success("New center created");
+      logActivity(supabase, { userId, userRole: "owner", userName, entityType: "branches", entityId: inserted?.id ?? "new", entityLabel: name, action: "create", label: `Center ${name} (${city}) created` });
     }
     setSaving(false);
     setShowAdd(false);
@@ -93,33 +91,33 @@ export default function OwnerBranches({ branches, onRefresh, userId, userName }:
   };
 
   const archive = async (b: Branch) => {
-    const yes = await confirm({ title: tNode("owner.branches.archiveConfirmTitle", { name: b.name }), body: t("owner.branches.archiveConfirmBody") });
+    const yes = await confirm({ title: (<>{"Archive center \""}<NoTranslate>{b.name}</NoTranslate>{"\"?"}</>), body: "Data won't be deleted, only hidden from the active panel." });
     if (!yes) return;
     const { error } = await supabase.from("branches").update({ status: "archived" }).eq("id", b.id);
-    if (error) return toast.error(t("owner.branches.archiveFailed"), error.message);
-    toast.success(t("owner.branches.archived"));
-    logActivity(supabase, { userId, userRole: "owner", userName, entityType: "branches", entityId: b.id, entityLabel: b.name, action: "archive", label: t("owner.branches.activityArchived", { name: b.name }) });
+    if (error) return toast.error("Failed to archive", error.message);
+    toast.success("Center archived");
+    logActivity(supabase, { userId, userRole: "owner", userName, entityType: "branches", entityId: b.id, entityLabel: b.name, action: "archive", label: `Center ${b.name} archived` });
     onRefresh();
   };
 
   const unarchive = async (b: Branch) => {
     const yes = await confirm({
-      title: tNode("owner.branches.unarchiveConfirmTitle", { name: b.name }),
-      body: t("owner.branches.unarchiveConfirmBody"),
-      confirmLabel: t("owner.branches.unarchiveBtn"),
+      title: (<>{"Reactivate center \""}<NoTranslate>{b.name}</NoTranslate>{"\"?"}</>),
+      body: "This center will be unarchived and visible in active operations.",
+      confirmLabel: "Unarchive",
     });
     if (!yes) return;
     const { error } = await supabase.from("branches").update({ status: "active" }).eq("id", b.id);
-    if (error) return toast.error(t("owner.branches.unarchiveFailed"), error.message);
-    toast.success(t("owner.branches.unarchived"));
-    logActivity(supabase, { userId, userRole: "owner", userName, entityType: "branches", entityId: b.id, entityLabel: b.name, action: "restore", label: t("owner.branches.activityUnarchived", { name: b.name }) });
+    if (error) return toast.error("Failed to reactivate center", error.message);
+    toast.success("Center reactivated");
+    logActivity(supabase, { userId, userRole: "owner", userName, entityType: "branches", entityId: b.id, entityLabel: b.name, action: "restore", label: `Center ${b.name} reactivated` });
     onRefresh();
   };
 
   const deleteBranch = async (b: Branch) => {
     const yes = await confirm({
-      title: tNode("owner.branches.deleteConfirmTitle", { name: b.name }),
-      body: t("owner.branches.deleteConfirmBody"),
+      title: (<>{"Permanently delete center \""}<NoTranslate>{b.name}</NoTranslate>{"\"?"}</>),
+      body: "⚠️ WARNING: All data for this center will be permanently deleted — including classes, students, coaches, attendance, invoices, reports, and all related login accounts. This action cannot be undone.",
       danger: true,
     });
     if (!yes) return;
@@ -127,8 +125,8 @@ export default function OwnerBranches({ branches, onRefresh, userId, userName }:
     const res = await fetch(`/api/owner/branches/${b.id}`, { method: "DELETE" });
     const json = await res.json() as { error?: string; deleted_auth_users?: number };
 
-    if (!res.ok) return toast.error(t("owner.branches.deleteFailed"), json.error ?? "Unknown error");
-    toast.success(tNode("owner.branches.deleted", { name: b.name, count: json.deleted_auth_users ?? 0 }));
+    if (!res.ok) return toast.error("Failed to delete center", json.error ?? "Unknown error");
+    toast.success((<>{"Center \""}<NoTranslate>{b.name}</NoTranslate>{"\" deleted — "}<NoTranslate>{json.deleted_auth_users ?? 0}</NoTranslate>{" login accounts were also deleted"}</>));
     onRefresh();
   };
 
@@ -179,7 +177,7 @@ export default function OwnerBranches({ branches, onRefresh, userId, userName }:
                 : "text-ink-soft hover:bg-white/60 font-medium"
             )}
           >
-            <span>{t("owner.branches.tabAll")}</span>
+            <span>{"All Centers"}</span>
             <span className={cn("text-[11px] font-mono", filterTab === "all" ? "text-white/80" : "text-ink-mute")}>
               {branches.length}
             </span>
@@ -194,7 +192,7 @@ export default function OwnerBranches({ branches, onRefresh, userId, userName }:
                 : "text-ink-soft hover:bg-white/60 font-medium"
             )}
           >
-            <span>{t("owner.branches.tabActive")}</span>
+            <span>{"Active"}</span>
             <span className={cn("text-[11px] font-mono", filterTab === "active" ? "text-white/80" : "text-ink-mute")}>
               {activeCount}
             </span>
@@ -209,7 +207,7 @@ export default function OwnerBranches({ branches, onRefresh, userId, userName }:
                 : "text-ink-soft hover:bg-white/60 font-medium"
             )}
           >
-            <span>{t("owner.branches.tabArchived")}</span>
+            <span>{"Archived"}</span>
             <span className={cn("text-[11px] font-mono", filterTab === "archived" ? "text-white/80" : "text-ink-mute")}>
               {archivedCount}
             </span>
@@ -369,20 +367,20 @@ export default function OwnerBranches({ branches, onRefresh, userId, userName }:
         </div>
       </div>
 
-      <Modal open={showAdd} onClose={() => setShowAdd(false)} title={editItem ? t("owner.branches.editModalTitle") : t("owner.branches.addModalTitle")} size="md"
+      <Modal open={showAdd} onClose={() => setShowAdd(false)} title={editItem ? "Edit Center" : "Add Center"} size="md"
         footer={
           <>
-            <Btn variant="ghost" onClick={() => setShowAdd(false)}>{t("common.actions.cancel")}</Btn>
-            <Btn variant="primary" onClick={save} disabled={saving}>{saving ? t("common.actions.saving") : t("common.actions.save")}</Btn>
+            <Btn variant="ghost" onClick={() => setShowAdd(false)}>{"Cancel"}</Btn>
+            <Btn variant="primary" onClick={save} disabled={saving}>{saving ? "Saving…" : "Save"}</Btn>
           </>
         }
       >
         <div className="space-y-4">
           <div className="grid sm:grid-cols-2 gap-4">
-            <Field label={t("owner.branches.fieldName")} required><Input value={name} onChange={e => setName(e.target.value)} placeholder={t("owner.branches.fieldNamePlaceholder")} /></Field>
-            <Field label={t("owner.branches.fieldCity")} required><Input value={city} onChange={e => setCity(e.target.value)} placeholder={t("owner.branches.fieldCityPlaceholder")} /></Field>
+            <Field label={"Center name"} required><Input value={name} onChange={e => setName(e.target.value)} placeholder={"South Jakarta Center"} /></Field>
+            <Field label={"City"} required><Input value={city} onChange={e => setCity(e.target.value)} placeholder={"Jakarta"} /></Field>
           </div>
-          <Field label={t("owner.branches.fieldAddress")}><Input value={address} onChange={e => setAddress(e.target.value)} placeholder={t("owner.branches.fieldAddressPlaceholder")} /></Field>
+          <Field label={"Address"}><Input value={address} onChange={e => setAddress(e.target.value)} placeholder={"Jl. Sudirman No. 1"} /></Field>
 
           {/* Google Maps Location Picker */}
           <Field label="Center Location & Map Coordinates" hint="Search for a location name or drag the pin on the map to set coordinates">
@@ -401,18 +399,18 @@ export default function OwnerBranches({ branches, onRefresh, userId, userName }:
             </div>
           </Field>
 
-          <Field label={t("owner.branches.fieldWaPhone")} hint={t("owner.branches.fieldWaPhoneHint")}>
-            <Input type="tel" value={waPhone} onChange={e => setWaPhone(e.target.value)} placeholder={t("owner.branches.fieldWaPhonePlaceholder")} className="font-mono" />
+          <Field label={"Admin WhatsApp Number"} hint={"Used on the contact-admin button. Format: 081234567890."}>
+            <Input type="tel" value={waPhone} onChange={e => setWaPhone(e.target.value)} placeholder={"081234567890"} className="font-mono" />
           </Field>
-          <Field label={t("owner.branches.fieldBankInfo")} hint={t("owner.branches.fieldBankInfoHint")}>
+          <Field label={"Bank Information"} hint={"Shown to students on the billing page when there is an active invoice."}>
             <div className="space-y-2">
-              <Input value={bankName} onChange={e => setBankName(e.target.value)} placeholder={t("owner.branches.fieldBankName")} />
-              <Input value={bankAccount} onChange={e => setBankAccount(e.target.value)} placeholder={t("owner.branches.fieldBankAccount")} className="font-mono" />
-              <Input value={bankHolder} onChange={e => setBankHolder(e.target.value)} placeholder={t("owner.branches.fieldBankHolder")} />
+              <Input value={bankName} onChange={e => setBankName(e.target.value)} placeholder={"Bank Name (e.g. BCA)"} />
+              <Input value={bankAccount} onChange={e => setBankAccount(e.target.value)} placeholder={"Account Number"} className="font-mono" />
+              <Input value={bankHolder} onChange={e => setBankHolder(e.target.value)} placeholder={"Account Holder Name"} />
             </div>
           </Field>
-          <Field label={t("owner.branches.fieldShowPaymentsToAdmin")} hint={t("owner.branches.fieldShowPaymentsToAdminHint")}>
-            <Switch checked={showPaymentsToAdmin} onChange={setShowPaymentsToAdmin} label={showPaymentsToAdmin ? t("owner.branches.showPaymentsOn") : t("owner.branches.showPaymentsOff")} />
+          <Field label={"Show Payments menu to Admin"} hint={"When off, this center's Admin no longer sees the Payments menu. Manager Center always sees it regardless of this setting."}>
+            <Switch checked={showPaymentsToAdmin} onChange={setShowPaymentsToAdmin} label={showPaymentsToAdmin ? "Visible to Admin" : "Hidden from Admin"} />
           </Field>
         </div>
       </Modal>

@@ -3,24 +3,40 @@ import { NoTranslate } from "@/components/ui/NoTranslate";
 import { coachDbToUi, memberDbToUi } from "@/lib/attendance";
 import type { OwnerClassesMasterHook } from "./_hook";
 
+const ATT_STATUS_LABELS: Record<string, string> = {
+  present: "Present",
+  late: "Late",
+  absent: "Absent",
+  sick: "Sick",
+  izin: "Leave",
+  leave: "Leave",
+  holiday: "Holiday",
+  substitute: "Substitute",
+  hadir: "Present",
+  telat: "Late",
+  tidak_hadir: "Absent",
+  sakit: "Sick",
+  alpha: "Absent",
+};
+
 export function ClassCoachAttendanceTab({ hook }: { hook: OwnerClassesMasterHook }) {
-  const { t, detailLoading, detailCoachAtt } = hook;
+  const { detailLoading, detailCoachAtt } = hook;
 
   return (
     <div>
       {detailLoading ? (
-        <div className="text-center py-8 text-ink-mute text-sm">{t("owner.classes.coachLoading")}</div>
+        <div className="text-center py-8 text-ink-mute text-sm">{"Loading…"}</div>
       ) : detailCoachAtt.length === 0 ? (
-        <div className="text-center py-8 text-ink-mute text-sm">{t("owner.classes.attCoachEmpty")}</div>
+        <div className="text-center py-8 text-ink-mute text-sm">{"No coach attendance data yet."}</div>
       ) : (
         <div className="overflow-x-auto border rounded-xl">
           <table className="w-full text-xs">
             <thead>
               <tr className="bg-paper-tint border-b border-line text-[10px] uppercase tracking-widest text-ink-faint">
-                <th className="text-left py-2.5 px-3 font-bold">{t("owner.classes.colDate")}</th>
-                <th className="text-left py-2.5 px-3 font-bold">{t("owner.classes.colCoach")}</th>
-                <th className="text-left py-2.5 px-3 font-bold">{t("owner.classes.colStatus")}</th>
-                <th className="text-left py-2.5 px-3 font-bold">{t("owner.classes.colNote")}</th>
+                <th className="text-left py-2.5 px-3 font-bold">{"Date"}</th>
+                <th className="text-left py-2.5 px-3 font-bold">{"Coach"}</th>
+                <th className="text-left py-2.5 px-3 font-bold">{"Status"}</th>
+                <th className="text-left py-2.5 px-3 font-bold">{"Note / Distance"}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-line bg-white">
@@ -40,7 +56,7 @@ export function ClassCoachAttendanceTab({ hook }: { hook: OwnerClassesMasterHook
                           : "bg-warn-50 text-warn-700"
                       }`}
                     >
-                      {t(`owner.classes.attStatus.${coachDbToUi(a.status)}`) || a.status}
+                      {ATT_STATUS_LABELS[coachDbToUi(a.status)] ?? a.status}
                     </span>
                   </td>
                   <td className="py-2 px-3 text-ink-mute">
@@ -65,23 +81,23 @@ export function ClassCoachAttendanceTab({ hook }: { hook: OwnerClassesMasterHook
 }
 
 export function ClassMemberAttendanceTab({ hook }: { hook: OwnerClassesMasterHook }) {
-  const { t, detailLoading, detailMemberAtt } = hook;
+  const { detailLoading, detailMemberAtt } = hook;
 
   return (
     <div>
       {detailLoading ? (
-        <div className="text-center py-8 text-ink-mute text-sm">{t("owner.classes.coachLoading")}</div>
+        <div className="text-center py-8 text-ink-mute text-sm">{"Loading…"}</div>
       ) : detailMemberAtt.length === 0 ? (
-        <div className="text-center py-8 text-ink-mute text-sm">{t("owner.classes.attMemberEmpty")}</div>
+        <div className="text-center py-8 text-ink-mute text-sm">{"No student attendance data yet."}</div>
       ) : (
         <div className="overflow-x-auto border rounded-xl">
           <table className="w-full text-xs">
             <thead>
               <tr className="bg-paper-tint border-b border-line text-[10px] uppercase tracking-widest text-ink-faint">
-                <th className="text-left py-2.5 px-3 font-bold">{t("owner.classes.colDate")}</th>
-                <th className="text-left py-2.5 px-3 font-bold">{t("owner.classes.colMember")}</th>
-                <th className="text-left py-2.5 px-3 font-bold">{t("owner.classes.colStatus")}</th>
-                <th className="text-left py-2.5 px-3 font-bold">{t("owner.classes.colMethod")}</th>
+                <th className="text-left py-2.5 px-3 font-bold">{"Date"}</th>
+                <th className="text-left py-2.5 px-3 font-bold">{"Student"}</th>
+                <th className="text-left py-2.5 px-3 font-bold">{"Status"}</th>
+                <th className="text-left py-2.5 px-3 font-bold">{"Method"}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-line bg-white">
@@ -101,7 +117,7 @@ export function ClassMemberAttendanceTab({ hook }: { hook: OwnerClassesMasterHoo
                           : "bg-warn-50 text-warn-700"
                       }`}
                     >
-                      {t(`owner.classes.attStatus.${memberDbToUi(a.status)}`) || a.status}
+                      {ATT_STATUS_LABELS[memberDbToUi(a.status)] ?? a.status}
                     </span>
                   </td>
                   <td className="py-2 px-3 text-ink-mute uppercase font-mono text-[10px]">

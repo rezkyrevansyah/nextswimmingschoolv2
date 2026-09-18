@@ -3,7 +3,6 @@
 import SmartImage from "@/components/ui/SmartImage";
 import StarDisplay from "@/components/ui/StarDisplay";
 import Btn from "@/components/ui/Btn";
-import { useLocale } from "@/components/providers/LocaleProvider";
 
 interface TestimonialItem {
   id: string;
@@ -15,8 +14,6 @@ interface TestimonialItem {
 }
 
 export default function Testimonials({ testimonials }: { testimonials: TestimonialItem[] }) {
-  const { t } = useLocale();
-
   if (testimonials.length === 0) return null;
 
   return (
@@ -24,12 +21,12 @@ export default function Testimonials({ testimonials }: { testimonials: Testimoni
       <div className="mx-auto max-w-6xl px-6">
         <div className="text-center max-w-2xl mx-auto">
           <p className="text-xs font-semibold tracking-wide uppercase text-wave-600">
-            {t("landing.testimonials.label")}
+            {"Testimonials"}
           </p>
           <h2 className="mt-2 font-display font-extrabold text-3xl sm:text-4xl text-ink">
-            {t("landing.testimonials.headline")}
+            {"What our swimming families say."}
           </h2>
-          <p className="mt-3 text-ink-mute">{t("landing.testimonials.subtitle")}</p>
+          <p className="mt-3 text-ink-mute">{"Real stories from parents and students who've seen the progress firsthand."}</p>
         </div>
 
         <div className="mt-12 grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -55,8 +52,8 @@ export default function Testimonials({ testimonials }: { testimonials: Testimoni
         </div>
 
         <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4 text-center sm:text-left">
-          <p className="text-sm text-ink-mute">{t("landing.testimonials.ctaText")}</p>
-          <Btn variant="primary" size="md" href="/register">{t("landing.testimonials.ctaButton")}</Btn>
+          <p className="text-sm text-ink-mute">{"Ready to see the same progress for your child?"}</p>
+          <Btn variant="primary" size="md" href="/register">{"Register Now"}</Btn>
         </div>
       </div>
     </section>

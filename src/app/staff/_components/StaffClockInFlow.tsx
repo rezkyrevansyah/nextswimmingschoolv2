@@ -2,7 +2,6 @@
 import { useState } from "react";
 import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
-import { useLocale } from "@/components/providers/LocaleProvider";
 
 export default function StaffClockInFlow({
   onCancel,
@@ -13,7 +12,6 @@ export default function StaffClockInFlow({
   onConfirm: (photo: File) => void;
   loading: boolean;
 }) {
-  const { t } = useLocale();
   const [photoFile, setPhotoFile] = useState<File | null>(null);
 
   const handleCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -29,8 +27,8 @@ export default function StaffClockInFlow({
           <Icon name="arrow-left" className="w-5 h-5" />
         </button>
         <div>
-          <div className="font-display font-bold text-ink leading-tight">{t("staff.actions.clockInSelfieTitle")}</div>
-          <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mt-0.5">{t("staff.actions.clockInSelfieSub")}</div>
+          <div className="font-display font-bold text-ink leading-tight">{"Attendance Selfie"}</div>
+          <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mt-0.5">{"Take a photo of your face at the center"}</div>
         </div>
       </div>
 
@@ -41,11 +39,11 @@ export default function StaffClockInFlow({
               <div className="w-16 h-16 rounded-2xl bg-wave-50 text-wave-600 flex items-center justify-center mb-4">
                 <Icon name="camera" className="w-8 h-8" />
               </div>
-              <div className="font-display font-bold text-lg text-ink mb-2">{t("staff.actions.selfiePromptTitle")}</div>
-              <p className="text-sm text-ink-mute mb-6">{t("staff.actions.selfiePromptBody")}</p>
+              <div className="font-display font-bold text-lg text-ink mb-2">{"Photo Required"}</div>
+              <p className="text-sm text-ink-mute mb-6">{"Tap the button below to take a selfie before you clock in."}</p>
 
               <label className="inline-flex items-center justify-center gap-2 h-12 px-6 rounded-xl bg-wave-600 hover:bg-wave-700 text-white font-semibold cursor-pointer transition-colors shadow-lg shadow-wave-500/20">
-                <Icon name="camera" className="w-5 h-5" /> {t("staff.actions.openCameraBtn")}
+                <Icon name="camera" className="w-5 h-5" /> {"Open Front Camera"}
                 <input type="file" accept="image/*" capture="user" className="hidden" onChange={handleCapture} />
               </label>
             </div>
@@ -55,11 +53,11 @@ export default function StaffClockInFlow({
               <img src={URL.createObjectURL(photoFile)} alt="selfie preview" className="w-full aspect-[3/4] object-cover rounded-3xl shadow-lg" />
               <div className="grid grid-cols-2 gap-3">
                 <label className="inline-flex items-center justify-center gap-2 h-11 px-4 rounded-xl bg-white border border-line hover:bg-paper-tint text-ink font-semibold cursor-pointer transition-colors">
-                  <Icon name="refresh" className="w-4 h-4" /> {t("staff.actions.retakeBtn")}
+                  <Icon name="refresh" className="w-4 h-4" /> {"Retake"}
                   <input type="file" accept="image/*" capture="user" className="hidden" onChange={handleCapture} />
                 </label>
                 <Btn variant="primary" className="h-11 shadow-lg shadow-ocean-500/20" disabled={loading || !photoFile} onClick={() => photoFile && onConfirm(photoFile)}>
-                  {loading ? t("staff.home.clockInProcessing") : t("staff.actions.confirmBtn")}
+                  {loading ? "Processing…" : "Confirm Attendance"}
                 </Btn>
               </div>
             </div>

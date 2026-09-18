@@ -1,7 +1,6 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
 import { useToast } from "@/components/providers/ToastProvider";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import { createClient } from "@/utils/supabase/client";
 import {
   isMemberPresentLike,
@@ -14,8 +13,7 @@ import type { AttendanceRow, ClassRow, MemberAttRow } from "../../_types";
 export function useCoachAbsensi({ coachId, classes }: { coachId: string; classes: ClassRow[] }) {
   const supabase = createClient();
   const toast = useToast();
-  const { t, locale } = useLocale();
-  const localeTag = locale === "id" ? "id-ID" : "en-US";
+  const localeTag = "en-US";
   const [history, setHistory] = useState<AttendanceRow[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
   const [historyPage, setHistoryPage] = useState(0);
@@ -192,15 +190,15 @@ export function useCoachAbsensi({ coachId, classes }: { coachId: string; classes
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const saveManualAtt = async () => {
-    if (!manualClassId || !manualDate) return toast.error(t("coach.absen.classAndDateRequired"));
-    if (memberAtt.length === 0) return toast.error(t("coach.absen.noMembersInClass"));
+    if (!manualClassId || !manualDate) return toast.error("Class and date are required");
+    if (memberAtt.length === 0) return toast.error("No students in this class");
     setSaving(true);
     const rows = memberAtt.map(m => ({ class_id: manualClassId, member_id: m.member_id, session_date: manualDate, status: (attStatus[m.member_id] ?? uiToMemberDb("present")) as MemberDbStatus, method: "manual" as const }));
     const { error } = await supabase.from("member_attendances").upsert(rows, { onConflict: MEMBER_ATTENDANCE_CONFLICT });
     setSaving(false);
-    if (error) return toast.error(t("coach.absen.saveFailed"), error.message);
+    if (error) return toast.error("Failed to save", error.message);
     const hadirCount = rows.filter(r => isMemberPresentLike(r.status)).length;
-    toast.success(t("coach.absen.memberAttendanceSaved"), t("coach.absen.presentCountOfTotal", { present: hadirCount, total: rows.length }));
+    toast.success("Student attendance saved", `${hadirCount} present out of ${rows.length} students`);
     const savedClassId = manualClassId;
     const savedDate = manualDate;
     const savedClassName = classes.find(c => c.id === manualClassId)?.name ?? "—";
@@ -215,12 +213,12 @@ export function useCoachAbsensi({ coachId, classes }: { coachId: string; classes
   };
 
   const savePrivateSession = async () => {
-    if (!privateClassId || !privateDate) return toast.error(t("coach.absen.classAndDateRequired"));
+    if (!privateClassId || !privateDate) return toast.error("Class and date are required");
     setSavingPrivate(true);
     // Get member_id for this private class (capacity=1, so 1 member)
     const { data: mcData } = await supabase.from("member_classes").select("member_id").eq("class_id", privateClassId).limit(1);
     const memberId = mcData?.[0]?.member_id;
-    if (!memberId) { setSavingPrivate(false); return toast.error(t("coach.absen.noMembersInClass")); }
+    if (!memberId) { setSavingPrivate(false); return toast.error("No students in this class"); }
     // Attendance insert + remaining_sessions decrement + bill sync all happen
     // in one atomic DB transaction (record_private_session_attendance) — if
     // any part fails, nothing is committed, so a retry is always safe and
@@ -233,7 +231,7 @@ export function useCoachAbsensi({ coachId, classes }: { coachId: string; classes
       .single();
     if (recordErr) {
       setSavingPrivate(false);
-      return toast.error(t("coach.absen.recordSessionFailed"), t("coach.absen.recordAttendanceFailedRetry"));
+      return toast.error("Failed to record session", "Failed to record attendance — nothing was saved, sessions left is unaffected. Please try again.");
     }
     const { out_remaining_sessions, out_bill_id, out_bill_sessions_used, out_bill_sessions_total, out_already_recorded } = result as {
       out_remaining_sessions: number | null; out_bill_id: string | null;
@@ -241,26 +239,26 @@ export function useCoachAbsensi({ coachId, classes }: { coachId: string; classes
     };
     if (out_already_recorded) {
       setSavingPrivate(false);
-      return toast.error(t("coach.absen.sessionAlreadyRecorded"));
+      return toast.error("This session on this date is already recorded");
     }
     // Send reminder when only 1 session left on the active package bill
     if (out_bill_id && out_bill_sessions_total != null && out_bill_sessions_used != null && (out_bill_sessions_total - out_bill_sessions_used) <= 1) {
       await supabase.from("notifications").insert({
         user_id: memberId,
-        title: t("coach.absen.sessionsAlmostUpTitle"),
-        body: t("coach.absen.sessionsAlmostUpBody", { remaining: out_bill_sessions_total - out_bill_sessions_used }),
+        title: "Sessions almost up",
+        body: `You have ${out_bill_sessions_total - out_bill_sessions_used} session(s) left in your package. Contact admin to renew your package.`,
         icon: "warning",
         kind: "warn",
       });
     }
     setSavingPrivate(false);
-    toast.success(t("coach.absen.privateSessionRecorded"), t("coach.absen.remainingSessions", { count: out_remaining_sessions ?? 0 }));
+    toast.success("Private session recorded", `Remaining sessions: ${out_remaining_sessions ?? 0}`);
     setOpenPrivate(false);
     setPrivateClassId(""); setPrivateDate(new Date().toISOString().split("T")[0]); setPrivateNote("");
   };
 
   return {
-    t, localeTag,
+    localeTag,
     history, historyLoading, historyPage, setHistoryPage, historyHasMore,
     filterMonth, setFilterMonth, filterClassId, setFilterClassId,
     loading, openManual, setOpenManual, showQR, setShowQR,

@@ -8,7 +8,6 @@ import { NoTranslate } from "@/components/ui/NoTranslate";
 import { fmtIDR } from "@/lib/utils";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import type { Branch } from "../_types";
 
 interface CoachRate {
@@ -34,7 +33,6 @@ interface TarifCoachRow {
 }
 
 export default function OwnerTarif({ branches }: { branches: Branch[] }) {
-  const { t } = useLocale();
   const toast = useToast();
   const supabase = createClient();
 
@@ -153,7 +151,7 @@ export default function OwnerTarif({ branches }: { branches: Branch[] }) {
 
   const saveGeneral = async (classId: string) => {
     const val = Number(generalRates[classId]);
-    if (!val || val <= 0) return toast.error(t("owner.ratesTarif.invalidRate"));
+    if (!val || val <= 0) return toast.error("Enter a valid rate amount");
     const key = `gen:${classId}`;
     setSaving(key);
     const { data: existing } = await supabase.from("coach_rates").select("id").eq("class_id", classId).is("coach_id", null).maybeSingle();
@@ -162,8 +160,8 @@ export default function OwnerTarif({ branches }: { branches: Branch[] }) {
       : supabase.from("coach_rates").insert({ class_id: classId, coach_id: null, rate: val, rate_per_session: val });
     const { error } = await op;
     setSaving(null);
-    if (error) return toast.error(t("owner.ratesTarif.saveFailed"), error.message);
-    toast.success(t("owner.ratesTarif.generalRateSaved"));
+    if (error) return toast.error("Failed to save", error.message);
+    toast.success("General rate saved");
     loadCoaches();
   };
 
@@ -175,12 +173,12 @@ export default function OwnerTarif({ branches }: { branches: Branch[] }) {
       await supabase.from("coach_rates").delete().eq("class_id", classId).eq("coach_id", coachId);
       setSaving(null);
       setCoachRates(prev => { const n = { ...prev }; delete n[`${classId}:${coachId}`]; return n; });
-      toast.success(t("owner.ratesTarif.specificRateDeleted"));
+      toast.success("Specific rate removed — will use general rate");
       loadCoaches();
       return;
     }
     const val = Number(rawVal);
-    if (!val || val <= 0) return toast.error(t("owner.ratesTarif.invalidRate"));
+    if (!val || val <= 0) return toast.error("Enter a valid rate amount");
     setSaving(key);
     const { data: existing } = await supabase.from("coach_rates").select("id").eq("class_id", classId).eq("coach_id", coachId).maybeSingle();
     const op = existing
@@ -188,14 +186,14 @@ export default function OwnerTarif({ branches }: { branches: Branch[] }) {
       : supabase.from("coach_rates").insert({ class_id: classId, coach_id: coachId, rate: val, rate_per_session: val });
     const { error } = await op;
     setSaving(null);
-    if (error) return toast.error(t("owner.ratesTarif.saveFailed"), error.message);
-    toast.success(t("owner.ratesTarif.specificRateSaved"));
+    if (error) return toast.error("Failed to save", error.message);
+    toast.success("Specific rate saved");
     loadCoaches();
   };
 
   const saveExtraRate = async (coachId: string) => {
     const val = Number(extraRateInput);
-    if (!val || val <= 0) return toast.error(t("owner.ratesTarif.invalidExtraRate"));
+    if (!val || val <= 0) return toast.error("Enter a valid extra rate amount");
     setSaving("extra");
     const { data: existing } = await supabase.from("coach_extra_rates").select("id").eq("coach_id", coachId).maybeSingle();
     const op = existing
@@ -203,8 +201,8 @@ export default function OwnerTarif({ branches }: { branches: Branch[] }) {
       : supabase.from("coach_extra_rates").insert({ coach_id: coachId, rate_per_session: val });
     const { error } = await op;
     setSaving(null);
-    if (error) return toast.error(t("owner.ratesTarif.saveFailed"), error.message);
-    toast.success(t("owner.ratesTarif.extraRateSaved"));
+    if (error) return toast.error("Failed to save", error.message);
+    toast.success("Extra rate saved");
     loadCoaches();
   };
 
@@ -226,7 +224,7 @@ export default function OwnerTarif({ branches }: { branches: Branch[] }) {
             <input
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder={t("owner.ratesTarif.searchPlaceholder")}
+              placeholder={"Search coach name…"}
               className="w-full h-10 pl-9 pr-3 text-sm rounded-xl border border-line bg-paper text-ink placeholder:text-ink-faint focus:outline-none focus:border-ocean-500 transition-colors"
             />
           </div>
@@ -237,7 +235,7 @@ export default function OwnerTarif({ branches }: { branches: Branch[] }) {
               onChange={e => setFilterBranch(e.target.value)}
               className="h-10 text-sm border border-line rounded-xl px-3 bg-paper text-ink-soft outline-none focus:border-ocean-500 transition-colors"
             >
-              <option value="all">{t("owner.ratesTarif.allBranches")}</option>
+              <option value="all">{"All Centers"}</option>
               {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>
           )}
@@ -277,9 +275,9 @@ export default function OwnerTarif({ branches }: { branches: Branch[] }) {
         </div>
 
         {loading ? (
-          <div className="p-12 text-center text-ink-mute text-sm">{t("owner.ratesTarif.loading")}</div>
+          <div className="p-12 text-center text-ink-mute text-sm">{"Loading data…"}</div>
         ) : filteredCoaches.length === 0 ? (
-          <div className="p-12 text-center text-ink-mute text-sm">{t("owner.ratesTarif.empty")}</div>
+          <div className="p-12 text-center text-ink-mute text-sm">{"No coaches match the filter."}</div>
         ) : (
           <div className="divide-y divide-line">
             {filteredCoaches.map(c => {
@@ -296,7 +294,7 @@ export default function OwnerTarif({ branches }: { branches: Branch[] }) {
                       <div className="font-semibold text-sm text-ink"><NoTranslate>{c.full_name}</NoTranslate></div>
                       <div className="text-xs text-ink-mute mt-0.5 flex items-center gap-1.5 flex-wrap">
                         {c.branchIds.length === 0 ? (
-                          <span className="text-ink-faint">{t("owner.ratesTarif.noClassYet")}</span>
+                          <span className="text-ink-faint">{"No class yet"}</span>
                         ) : (
                           c.branchIds.map(bid => (
                             <span key={bid} className="px-2 py-0.5 rounded-full bg-paper-deep text-ink-soft text-[10px] font-semibold border border-line/60">
@@ -304,12 +302,12 @@ export default function OwnerTarif({ branches }: { branches: Branch[] }) {
                             </span>
                           ))
                         )}
-                        <span className="text-ink-faint font-mono text-[11px]">{t("owner.ratesTarif.classCount", { count: c.classCount })}</span>
+                        <span className="text-ink-faint font-mono text-[11px]">{`· ${c.classCount} classes`}</span>
                       </div>
                     </div>
                     <div className="hidden sm:block w-36 text-right pr-4 shrink-0">
                       <div className="font-mono text-sm font-semibold text-ink">
-                        {c.extraRate != null ? fmtIDR(c.extraRate) : <span className="text-ink-faint text-xs font-normal">{t("owner.ratesTarif.extraRateEmpty")}</span>}
+                        {c.extraRate != null ? fmtIDR(c.extraRate) : <span className="text-ink-faint text-xs font-normal">{"Not set"}</span>}
                       </div>
                     </div>
                     <div className="w-32 flex justify-center shrink-0">
@@ -318,7 +316,7 @@ export default function OwnerTarif({ branches }: { branches: Branch[] }) {
                           incomplete ? "bg-warn-50 text-warn-700 ring-1 ring-warn-500/20" : "bg-ok-50 text-ok-700 ring-1 ring-ok-500/20"
                         }`}>
                           <span className={`w-1.5 h-1.5 rounded-full ${incomplete ? "bg-warn-500" : "bg-ok-500"}`} />
-                          {incomplete ? t("owner.ratesTarif.statusIncompleteBadge") : t("owner.ratesTarif.statusCompleteBadge")}
+                          {incomplete ? "Incomplete" : "Complete"}
                         </span>
                       )}
                     </div>
@@ -332,11 +330,11 @@ export default function OwnerTarif({ branches }: { branches: Branch[] }) {
                   {isExpanded && (
                     <div className="px-5 py-4 bg-paper-tint/60 border-t border-line space-y-4">
                       {loadingExpanded ? (
-                        <div className="py-8 text-center text-ink-mute text-sm">{t("owner.ratesTarif.expandLoading")}</div>
+                        <div className="py-8 text-center text-ink-mute text-sm">{"Loading…"}</div>
                       ) : (
                         <>
                           {expandedClasses.length === 0 ? (
-                            <p className="text-xs text-ink-faint italic py-2">{t("owner.ratesTarif.noClassAssigned")}</p>
+                            <p className="text-xs text-ink-faint italic py-2">{"This coach hasn't been assigned to any class yet."}</p>
                           ) : (
                             <div className="space-y-3">
                               {expandedClasses.map(cls => {
@@ -354,36 +352,36 @@ export default function OwnerTarif({ branches }: { branches: Branch[] }) {
                                     <div className="grid sm:grid-cols-2 gap-3">
                                       <div className="flex items-end gap-2">
                                         <div className="flex-1">
-                                          <Field label={t("owner.ratesTarif.fieldGeneralRate")} hint={t("owner.ratesTarif.fieldGeneralRateHint")}>
+                                          <Field label={"General Rate"} hint={"Applies to all coaches in this class"}>
                                             <Input
                                               type="text"
                                               inputMode="numeric"
                                               value={generalRates[cls.id] ? Number(generalRates[cls.id]).toLocaleString("id-ID") : ""}
                                               onChange={e => setGeneralRates(r => ({ ...r, [cls.id]: e.target.value.replace(/\D/g, "") }))}
                                               className="font-mono text-sm"
-                                              placeholder={t("owner.ratesTarif.fieldGeneralRatePlaceholder")}
+                                              placeholder={"150.000"}
                                             />
                                           </Field>
                                         </div>
                                         <Btn variant="soft" size="sm" onClick={() => saveGeneral(cls.id)} disabled={saving === genKey}>
-                                          {saving === genKey ? "…" : t("common.actions.save")}
+                                          {saving === genKey ? "…" : "Save"}
                                         </Btn>
                                       </div>
                                       <div className="flex items-end gap-2">
                                         <div className="flex-1">
-                                          <Field label={t("owner.ratesTarif.fieldSpecificRate")} hint={t("owner.ratesTarif.fieldSpecificRateHint")}>
+                                          <Field label={"Specific Rate"} hint={"Override for this coach only"}>
                                             <Input
                                               type="text"
                                               inputMode="numeric"
                                               value={coachRates[`${cls.id}:${c.id}`] ? Number(coachRates[`${cls.id}:${c.id}`]).toLocaleString("id-ID") : ""}
                                               onChange={e => setCoachRates(r => ({ ...r, [`${cls.id}:${c.id}`]: e.target.value.replace(/\D/g, "") }))}
                                               className="font-mono text-sm"
-                                              placeholder={generalRates[cls.id] ? t("owner.ratesTarif.fieldSpecificRateUseGeneral", { amount: Number(generalRates[cls.id]).toLocaleString("id-ID") }) : t("owner.ratesTarif.fieldSpecificRateNoGeneral")}
+                                              placeholder={generalRates[cls.id] ? `Use general (${Number(generalRates[cls.id]).toLocaleString("id-ID")})` : "No general rate yet"}
                                             />
                                           </Field>
                                         </div>
                                         <Btn variant="soft" size="sm" onClick={() => saveCoachRate(cls.id, c.id)} disabled={saving === specKey}>
-                                          {saving === specKey ? "…" : coachRates[`${cls.id}:${c.id}`] ? t("common.actions.save") : t("owner.ratesTarif.deleteBtn")}
+                                          {saving === specKey ? "…" : coachRates[`${cls.id}:${c.id}`] ? "Save" : "Delete"}
                                         </Btn>
                                       </div>
                                     </div>
@@ -395,8 +393,8 @@ export default function OwnerTarif({ branches }: { branches: Branch[] }) {
 
                           <div className="bg-paper border border-line rounded-xl p-4 space-y-3 shadow-xs">
                             <div>
-                              <div className="text-sm font-bold text-ink">{t("owner.ratesTarif.extraRateSectionTitle")}</div>
-                              <p className="text-xs text-ink-mute mt-0.5">{t("owner.ratesTarif.extraRateSectionHint")}</p>
+                              <div className="text-sm font-bold text-ink">{"Extra Rate"}</div>
+                              <p className="text-xs text-ink-mute mt-0.5">{"Additional rate per extra session outside regular classes, applies globally for this coach."}</p>
                             </div>
                             <div className="flex items-end gap-2">
                               <div className="flex-1 max-w-56">
@@ -406,11 +404,11 @@ export default function OwnerTarif({ branches }: { branches: Branch[] }) {
                                   value={extraRateInput ? Number(extraRateInput).toLocaleString("id-ID") : ""}
                                   onChange={e => setExtraRateInput(e.target.value.replace(/\D/g, ""))}
                                   className="font-mono text-sm"
-                                  placeholder={t("owner.ratesTarif.extraRatePlaceholder")}
+                                  placeholder={"100.000"}
                                 />
                               </div>
                               <Btn variant="soft" size="sm" onClick={() => saveExtraRate(c.id)} disabled={saving === "extra"}>
-                                {saving === "extra" ? "…" : t("common.actions.save")}
+                                {saving === "extra" ? "…" : "Save"}
                               </Btn>
                             </div>
                           </div>

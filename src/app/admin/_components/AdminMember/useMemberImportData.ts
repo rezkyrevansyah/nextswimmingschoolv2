@@ -2,7 +2,6 @@
 import { useState } from "react";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import type { ClassRow, School } from "../../_types";
 import type { ImportRow, ImportRowStatus, ValidatedRow } from "./_types";
 import { parseImportDate, normalizeGender, normalizeMemberType, normalizeDayName, normalizeImportTime } from "./_utils";
@@ -18,8 +17,6 @@ export function useMemberImportData({
 }) {
   const toast = useToast();
   const confirm = useConfirm();
-  const { t } = useLocale();
-
   const [openImport, setOpenImport] = useState(false);
   const [importStep, setImportStep] = useState<"upload" | "preview" | "result">("upload");
   const [importRows, setImportRows] = useState<ValidatedRow[]>([]);
@@ -47,14 +44,14 @@ export function useMemberImportData({
       const nama_sekolah_raw = r.nama_sekolah ? String(r.nama_sekolah).trim() : "";
       const kelas_sekolah_raw = r.kelas_sekolah ? String(r.kelas_sekolah).trim() : "";
 
-      if (!full_name) errors.push(t("admin.members.fullNameRequired2"));
-      if (!email) errors.push(t("admin.members.emailRequiredImport"));
-      else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.push(t("admin.members.invalidEmailFormat"));
-      if (!password) errors.push(t("admin.members.passwordRequiredImport"));
-      else if (password.length < 6) errors.push(t("admin.schoolPanel.passwordMinLength"));
-      if (memberTypeRaw && !normalizeMemberType(memberTypeRaw)) errors.push(t("admin.members.invalidMemberType", { value: String(memberTypeRaw) }));
-      if (r.tanggal_lahir && !birth_date) errors.push(t("admin.members.invalidBirthDateFormat", { value: String(r.tanggal_lahir) }));
-      if (r.jenis_kelamin && !gender) errors.push(t("admin.members.invalidGenderFormat", { value: String(r.jenis_kelamin) }));
+      if (!full_name) errors.push("Full name is required");
+      if (!email) errors.push("Email is required");
+      else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.push("Invalid email format");
+      if (!password) errors.push("Password is required");
+      else if (password.length < 6) errors.push("Password must be at least 6 characters");
+      if (memberTypeRaw && !normalizeMemberType(memberTypeRaw)) errors.push(`Invalid student type: "${String(memberTypeRaw)}". Use: reguler, private, or afiliasi_sekolah`);
+      if (r.tanggal_lahir && !birth_date) errors.push(`Invalid date of birth format: "${String(r.tanggal_lahir)}". Use DD/MM/YYYY`);
+      if (r.jenis_kelamin && !gender) errors.push(`Invalid gender: "${String(r.jenis_kelamin)}". Use L or P`);
 
       let class_id: string | null | undefined = undefined;
       if (member_type !== "private" && nama_kelas_raw) {
@@ -62,7 +59,7 @@ export function useMemberImportData({
         if (found) {
           class_id = found.id;
         } else {
-          warnings.push(t("admin.members.classNotFoundWarning", { name: nama_kelas_raw }));
+          warnings.push(`Class "${nama_kelas_raw}" not found. Student will be created without a class.`);
           class_id = null;
         }
       }
@@ -70,13 +67,13 @@ export function useMemberImportData({
       let school_id: string | null | undefined = undefined;
       if (member_type === "school_affiliate") {
         if (!nama_sekolah_raw) {
-          errors.push(t("admin.members.schoolNameRequiredImport"));
+          errors.push("School name is required for school-affiliate type");
         } else {
           const found = schools.find(s => s.name.trim().toLowerCase() === nama_sekolah_raw.toLowerCase());
           if (found) {
             school_id = found.id;
           } else {
-            errors.push(t("admin.members.schoolNotFoundError", { name: nama_sekolah_raw }));
+            errors.push(`School "${nama_sekolah_raw}" not found in the system. Make sure the school name matches exactly.`);
             school_id = null;
           }
         }
@@ -93,39 +90,39 @@ export function useMemberImportData({
       if (member_type === "private") {
         const sesiRaw = r.jumlah_sesi;
         total_sessions = sesiRaw != null && String(sesiRaw).trim() !== "" ? Math.round(Number(sesiRaw)) : null;
-        if (total_sessions === null || isNaN(total_sessions)) errors.push(t("admin.members.sessionCountRequiredForPrivate"));
+        if (total_sessions === null || isNaN(total_sessions)) errors.push("Number of sessions (numeric) is required for private type");
 
         const hargaRaw = r.harga_paket;
         package_price = hargaRaw != null && String(hargaRaw).trim() !== "" ? Math.round(Number(hargaRaw)) : null;
 
         const jadwalRaw = String(r.jadwal_hari ?? "").trim();
         if (!jadwalRaw) {
-          errors.push(t("admin.members.scheduleDaysRequiredForPrivate"));
+          errors.push("Schedule days (jadwal_hari) are required for private students");
         } else {
           const tokens = jadwalRaw.split(",").map(d => d.trim()).filter(Boolean);
           const normalized = tokens.map(normalizeDayName);
           const invalidToken = tokens.find((_, idx) => !normalized[idx]);
-          if (invalidToken) errors.push(t("admin.members.invalidScheduleDay", { value: invalidToken }));
+          if (invalidToken) errors.push(`Invalid schedule day: "${invalidToken}". Use: Senin, Selasa, Rabu, Kamis, Jumat, Sabtu, or Minggu`);
           else schedule_days = normalized as string[];
         }
 
         time_start = normalizeImportTime(r.jam_mulai);
-        if (!time_start) errors.push(t("admin.members.invalidStartTimeForPrivate", { value: String(r.jam_mulai ?? "") }));
+        if (!time_start) errors.push(`Invalid start time: "${String(r.jam_mulai ?? "")}". Use HH:MM, e.g. 07:00`);
         time_end = normalizeImportTime(r.jam_selesai);
-        if (!time_end) errors.push(t("admin.members.invalidEndTimeForPrivate", { value: String(r.jam_selesai ?? "") }));
+        if (!time_end) errors.push(`Invalid end time: "${String(r.jam_selesai ?? "")}". Use HH:MM, e.g. 08:00`);
 
         const headPhone = r.coach_utama_hp ? String(r.coach_utama_hp).trim() : "";
         if (headPhone) {
           const found = findCoachByPhone(headPhone);
           if (found) head_coach_id = found.id;
-          else { warnings.push(t("admin.members.coachNotFoundWarning", { value: headPhone })); head_coach_id = null; }
+          else { warnings.push(`Coach with phone "${headPhone}" not found — the student will be created without that coach assigned`); head_coach_id = null; }
         }
         const assistantPhones = String(r.coach_asisten_hp ?? "").split(",").map(p => p.trim()).filter(Boolean);
         assistant_coach_ids = [];
         for (const p of assistantPhones) {
           const found = findCoachByPhone(p);
           if (found) assistant_coach_ids.push(found.id);
-          else warnings.push(t("admin.members.coachNotFoundWarning", { value: p }));
+          else warnings.push(`Coach with phone "${p}" not found — the student will be created without that coach assigned`);
         }
       }
 
@@ -148,14 +145,14 @@ export function useMemberImportData({
       const wb = XLSX.read(buf, { type: "array", cellDates: false, raw: true });
       const ws = wb.Sheets[wb.SheetNames[0]];
       const raw = XLSX.utils.sheet_to_json<ImportRow>(ws, { defval: "", raw: true });
-      if (raw.length === 0) { toast.error(t("admin.members.fileEmptyTitle"), t("admin.members.fileEmptyBody")); return; }
-      if (raw.length > 200) { toast.error(t("admin.members.tooManyRowsTitle"), t("admin.members.tooManyRowsBody")); return; }
+      if (raw.length === 0) { toast.error("File is empty", "No data rows found."); return; }
+      if (raw.length > 200) { toast.error("Too many rows", "Maximum 200 students per import."); return; }
       const validated = validateImportRows(raw, classes, schoolsList);
       setImportRows(validated);
       setImportPage(0);
       setImportStep("preview");
     } catch {
-      toast.error(t("admin.members.readFileFailedTitle"), t("admin.members.readFileFailedBody"));
+      toast.error("Failed to read file", "Make sure the file is .xlsx, .xls, or .csv format.");
     }
   };
 
@@ -165,14 +162,14 @@ export function useMemberImportData({
     const exampleRegular = ["Budi Santoso", "budi@gmail.com", "aqua2024", "reguler", "15/06/2010", "L", "08123456789", "Jl. Merdeka No. 1", "", "", "", "", "", "", "", "", "Kelas A Pagi", "", ""];
     const examplePrivate = ["Siti Aminah", "siti@gmail.com", "aqua2024", "private", "10/03/2015", "P", "08129876543", "Jl. Melati No. 5", "", "8", "1500000", "Senin,Rabu", "07:00", "08:00", "08111222333", "", "", "", ""];
     const notes = [
-      t("admin.coaches.fieldFullName2"), t("admin.members.emailUniqueNote"), t("admin.members.min6CharsNote"),
-      "reguler / private / afiliasi_sekolah", t("admin.members.dateFormatsNote"), t("admin.members.lOrPNote"),
-      t("admin.izin.optionalHint2"), t("admin.izin.optionalHint2"), t("admin.izin.optionalHint2"),
-      t("admin.members.requiredIfPrivateNote"), t("admin.members.optionalPrivateBillNote"),
-      t("admin.members.scheduleDaysNote"), t("admin.members.startTimeNote"), t("admin.members.endTimeNote"),
-      t("admin.members.headCoachPhoneNote"), t("admin.members.assistantCoachPhoneNote"),
-      t("admin.members.mustMatchClassNameExactly"), t("admin.members.mandatoryIfSchoolAffiliateNote"),
-      t("admin.members.schoolGradeOptionalNote"),
+      "Full name", "Unique email", "Min. 6 characters",
+      "reguler / private / afiliasi_sekolah", "DD/MM/YYYY or YYYY-MM-DD", "L or P",
+      "Optional", "Optional", "Optional",
+      "Required if type=private", "Optional — package price, creates a bill for private students",
+      "Required if type=private — comma-separated, e.g. Senin,Rabu", "Required if type=private — HH:MM, e.g. 07:00", "Required if type=private — HH:MM, e.g. 08:00",
+      "Optional — head coach's phone number", "Optional — assistant coach phone number(s), comma-separated",
+      "Must match the class name exactly", "MANDATORY if type=afiliasi_sekolah",
+      "Optional — the child's grade/class at their day school, e.g. \"Kelas 5 SD\"",
     ];
     const ws = XLSX.utils.aoa_to_sheet([headers, exampleRegular, examplePrivate, notes]);
     ws["!cols"] = headers.map((_, i) => ({ wch: [20, 28, 14, 20, 16, 14, 16, 28, 24, 12, 12, 18, 12, 12, 16, 18, 20, 24, 18][i] }));
@@ -185,7 +182,7 @@ export function useMemberImportData({
   const runImport = async () => {
     const toImport = importRows.filter(r => r._status !== "error");
     if (toImport.length === 0) return;
-    const ok = await confirm({ title: t("admin.members.importConfirmTitle"), body: t("admin.members.importConfirmBody", { count: toImport.length }) });
+    const ok = await confirm({ title: "Confirm Import", body: `This will import ${toImport.length} students. This process cannot be undone. Continue?` });
     if (!ok) return;
 
     const CHUNK = 10;
@@ -222,7 +219,7 @@ export function useMemberImportData({
         });
         const json = await res.json() as { success: number; failed: { row: number; email: string; error: string }[]; classWarnings?: { row: number; email: string; warning: string }[] };
         if (!res.ok) {
-          toast.error(t("admin.members.importStoppedTitle"), (json as { error?: string }).error ?? t("admin.members.genericErrorOccurred"));
+          toast.error("Import stopped", (json as { error?: string }).error ?? "An error occurred.");
           break;
         }
         totalSuccess += json.success;
@@ -231,7 +228,7 @@ export function useMemberImportData({
         setImportProgress({ done: Math.min(i + CHUNK, toImport.length), total: toImport.length });
       }
     } catch {
-      toast.error(t("admin.members.importFailedTitle"), t("admin.members.networkErrorOccurred"));
+      toast.error("Import failed", "A network error occurred.");
     }
 
     setImportResult({ success: totalSuccess, failed: allFailed, classWarnings: allClassWarnings });
@@ -242,7 +239,6 @@ export function useMemberImportData({
   };
 
   return {
-    t,
     openImport, setOpenImport, importStep, setImportStep, importRows, setImportRows,
     importPage, setImportPage, importing, importProgress, importResult, setImportResult,
     handleExcelFile, downloadTemplate, runImport,

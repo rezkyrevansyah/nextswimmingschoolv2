@@ -1,14 +1,12 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/utils/supabase/client";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import type { Branch } from "../../_types";
 import type { ActivityLogRow } from "./_types";
 
 const PAGE_SIZE = 25;
 
 export function useActivityLogData(branches: Branch[]) {
-  const { t } = useLocale();
   const supabase = createClient();
   const [logs, setLogs] = useState<ActivityLogRow[]>([]);
   const [total, setTotal] = useState(0);
@@ -85,22 +83,22 @@ export function useActivityLogData(branches: Branch[]) {
   const fmtShortDate = (iso: string) => new Date(iso).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
 
   const branchName = (log: ActivityLogRow) =>
-    log.branch_name ?? branches.find(b => b.id === log.branch_id)?.name ?? t("owner.activityLog.crossBranch");
+    log.branch_name ?? branches.find(b => b.id === log.branch_id)?.name ?? "Cross-center";
 
   const entityLabel: Record<string, string> = {
-    branches: t("owner.activityLog.entityLabel.branches"), members: t("owner.activityLog.entityLabel.members"), member_classes: t("owner.activityLog.entityLabel.member_classes"),
-    classes: t("owner.activityLog.entityLabel.classes"), class_packages: t("owner.activityLog.entityLabel.class_packages"), bills: t("owner.activityLog.entityLabel.bills"),
-    coach_attendances: t("owner.activityLog.entityLabel.coach_attendances"), coach_invoices: t("owner.activityLog.entityLabel.coach_invoices"),
-    coach_leaves: t("owner.activityLog.entityLabel.coach_leaves"), certifications: t("owner.activityLog.entityLabel.certifications"),
-    announcements: t("owner.activityLog.entityLabel.announcements"), payslips: t("owner.activityLog.entityLabel.payslips"),
-    registrations: t("owner.activityLog.entityLabel.registrations"), rapor_periods: t("owner.activityLog.entityLabel.rapor_periods"),
-    schools: t("owner.activityLog.entityLabel.schools"), coach_rates: t("owner.activityLog.entityLabel.coach_rates"), profiles: t("owner.activityLog.entityLabel.profiles"),
+    branches: "Center", members: "Student", member_classes: "Student Class",
+    classes: "Class", class_packages: "Package", bills: "Bill",
+    coach_attendances: "Coach Attendance", coach_invoices: "Coach Invoice",
+    coach_leaves: "Coach Leave", certifications: "Certification",
+    announcements: "Announcement", payslips: "Payslip",
+    registrations: "Registration", rapor_periods: "Report",
+    schools: "School", coach_rates: "Coach Rate", profiles: "Profile",
   };
 
   const actionLabel: Record<string, string> = {
-    create: t("owner.activityLog.actionLabel.create"), update: t("owner.activityLog.actionLabel.update"), delete: t("owner.activityLog.actionLabel.delete"),
-    approve: t("owner.activityLog.actionLabel.approve"), reject: t("owner.activityLog.actionLabel.reject"), publish: t("owner.activityLog.actionLabel.publish"),
-    archive: t("owner.activityLog.actionLabel.archive"), restore: t("owner.activityLog.actionLabel.restore"), suspend: t("owner.activityLog.actionLabel.suspend"), unsuspend: t("owner.activityLog.actionLabel.unsuspend"),
+    create: "Create", update: "Update", delete: "Delete",
+    approve: "Approve", reject: "Reject", publish: "Publish",
+    archive: "Archive", restore: "Restore", suspend: "Suspend", unsuspend: "Activate",
   };
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));

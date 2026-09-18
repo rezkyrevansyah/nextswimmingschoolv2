@@ -5,9 +5,9 @@ import Btn from "@/components/ui/Btn";
 import { Field, Input } from "@/components/ui/FormFields";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import Status from "@/components/ui/Status";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import { fmtIDR, fmtDate, fmtDateLong } from "@/lib/utils";
 import { createClient } from "@/utils/supabase/client";
 import type { DraftExtraItem, DraftReimburseItem, InvoiceSession, PastInvoice, ProfileData } from "../../_types";
@@ -17,8 +17,7 @@ export default function CoachInvoice({ coachId, branchId, profile }: { coachId: 
   const supabase = createClient();
   const toast = useToast();
   const confirm = useConfirm();
-  const { t, locale } = useLocale();
-  const localeTag = locale === "id" ? "id-ID" : "en-US";
+  const localeTag = "en-US";
   const [sessions, setSessions] = useState<InvoiceSession[]>([]);
   const [pastInvoices, setPastInvoices] = useState<PastInvoice[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -133,7 +132,7 @@ export default function CoachInvoice({ coachId, branchId, profile }: { coachId: 
   const addExtraItem = () => {
     if (extraRatePerSession == null) return;
     const count = Number(extraSessionCount);
-    if (!count || count <= 0) return toast.error(t("coach.invoice.validSessionCountRequired"));
+    if (!count || count <= 0) return toast.error("Enter a valid session count");
     setExtraItems(prev => [...prev, { id: crypto.randomUUID(), sessionCount: count, rate: extraRatePerSession }]);
     setExtraSessionCount("");
   };
@@ -146,9 +145,9 @@ export default function CoachInvoice({ coachId, branchId, profile }: { coachId: 
   const removeReimburseItem = (id: string) => setReimburseItems(prev => prev.filter(r => r.id !== id));
 
   const generate = async () => {
-    if (selected.size === 0 && extraItems.length === 0 && reimburseItems.length === 0) return toast.error(t("coach.invoice.selectAtLeastOneOrAddExtra"));
+    if (selected.size === 0 && extraItems.length === 0 && reimburseItems.length === 0) return toast.error("Select at least 1 session or add an extra/reimburse item");
     const noRate = sessions.filter(s => selected.has(s.id) && !s.rate_set);
-    if (noRate.length > 0) return toast.error(t("coach.invoice.rateNotSetTitle"), t("coach.invoice.rateNotSetBody", { classes: noRate.map(s => s.class?.name ?? s.class_id).join(", ") }));
+    if (noRate.length > 0) return toast.error("Rate not set", `Classes without a rate: ${noRate.map(s => s.class?.name ?? s.class_id).join(", ")}`);
     setGenerating(true);
     const [y, m] = monthFilter.split("-");
     const fallbackLabel = new Date(parseInt(y), parseInt(m) - 1, 1).toLocaleDateString(localeTag, { month: "long", year: "numeric" });
@@ -166,7 +165,7 @@ export default function CoachInvoice({ coachId, branchId, profile }: { coachId: 
       status: "pending",
     }).select("id").single();
 
-    if (invError || !inv) { toast.error(t("coach.invoice.generateInvoiceFailed"), invError?.message); setGenerating(false); return; }
+    if (invError || !inv) { toast.error("Failed to create invoice", invError?.message); setGenerating(false); return; }
 
     // Claim attendance sessions atomically — only rows still unclaimed
     // (invoice_id IS NULL) get this invoice_id. This prevents two concurrent
@@ -186,7 +185,7 @@ export default function CoachInvoice({ coachId, branchId, profile }: { coachId: 
       claimedSessions = selectedSessions.filter(s => claimedIds.has(s.id));
       const lostCount = selectedSessions.length - claimedSessions.length;
       if (lostCount > 0) {
-        toast.error(t("coach.invoice.sessionsAlreadyClaimedTitle"), t("coach.invoice.sessionsAlreadyClaimedBody", { count: lostCount }));
+        toast.error("Some sessions were already invoiced", `${lostCount} session(s) were already claimed by another invoice and were excluded from this one.`);
       }
     }
     if (claimedSessions.length > 0) {
@@ -220,8 +219,8 @@ export default function CoachInvoice({ coachId, branchId, profile }: { coachId: 
     if (ownerProfiles && ownerProfiles.length > 0) {
       await supabase.from("notifications").insert(ownerProfiles.map((op: { id: string }) => ({
         user_id: op.id,
-        title: t("coach.invoice.ownerNewInvoiceTitle"),
-        body: t("coach.invoice.ownerNewInvoiceBody", { name: profile?.full_name ?? t("coach.home.defaultCoachName"), num, period: periodLabel, amount: fmtIDR(finalTotal) }),
+        title: "New invoice from coach",
+        body: `${profile?.full_name ?? "Coach"} sent invoice ${num} — ${periodLabel} (${fmtIDR(finalTotal)})`,
         icon: "invoice",
         kind: "info",
       })));
@@ -230,19 +229,19 @@ export default function CoachInvoice({ coachId, branchId, profile }: { coachId: 
     setGenerating(false);
     setExtraItems([]);
     setReimburseItems([]);
-    toast.success(t("coach.invoice.invoiceCreatedTitle"), t("coach.invoice.invoiceCreatedBody"));
+    toast.success("Invoice created", "Invoice sent to owner panel");
     load();
   };
 
   const cancelInvoice = async (invoiceId: string) => {
-    const ok = await confirm({ title: t("coach.invoice.cancelInvoiceConfirmTitle"), body: t("coach.invoice.cancelInvoiceConfirmBody"), confirmLabel: t("coach.invoice.cancelInvoiceConfirmLabel"), danger: true });
+    const ok = await confirm({ title: "Cancel Invoice?", body: "The selected sessions will become available to invoice again. This action cannot be undone.", confirmLabel: "Yes, cancel", danger: true });
     if (!ok) return;
     setCancelling(invoiceId);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { error } = await (supabase as any).rpc("cancel_coach_invoice", { p_invoice_id: invoiceId, p_coach_id: coachId });
     setCancelling(null);
-    if (error) return toast.error(t("coach.invoice.cancelInvoiceFailed"), error.message);
-    toast.success(t("coach.invoice.invoiceCancelledTitle"), t("coach.invoice.invoiceCancelledBody"));
+    if (error) return toast.error("Failed to cancel invoice", error.message);
+    toast.success("Invoice cancelled", "Sessions are available to invoice again");
     load();
   };
 
@@ -254,8 +253,8 @@ export default function CoachInvoice({ coachId, branchId, profile }: { coachId: 
           <div className="w-12 h-12 rounded-2xl bg-paper-deep text-ink-mute flex items-center justify-center mx-auto">
             <Icon name="invoice" className="w-6 h-6 opacity-60" />
           </div>
-          <h3 className="font-display font-bold text-lg text-ink">{t("coach.invoice.noActivePeriodTitle")}</h3>
-          <p className="text-ink-mute text-sm max-w-md mx-auto">{t("coach.invoice.noActivePeriodBody")}</p>
+          <h3 className="font-display font-bold text-lg text-ink">{"Invoice Submission Closed"}</h3>
+          <p className="text-ink-mute text-sm max-w-md mx-auto">{"There is currently no active invoice submission period open. You can still view your past invoices."}</p>
         </div>
       ) : activePeriod ? (
         <div className="bg-ocean-700 text-white rounded-2xl border border-ocean-700 shadow-card p-5 relative overflow-hidden">
@@ -263,23 +262,23 @@ export default function CoachInvoice({ coachId, branchId, profile }: { coachId: 
           <div className="relative">
             <div className="flex items-center gap-2 text-wave-200 text-[11px] uppercase tracking-widest font-bold">
               <span className="w-2 h-2 rounded-full bg-ok-400 animate-pulse" />
-              {t("coach.invoice.activePeriodLabel")}
+              {"Active Period"}
             </div>
-            <h2 className="font-display font-bold text-2xl mt-0.5">{activePeriod.label}</h2>
+            <h2 className="font-display font-bold text-2xl mt-0.5"><NoTranslate>{activePeriod.label}</NoTranslate></h2>
             <div className="flex items-center gap-1.5 text-white/80 text-sm mt-2">
               <Icon name="clock" className="w-3.5 h-3.5 shrink-0" />
-              {t("coach.invoice.deadlineNotice", { date: fmtDateLong(activePeriod.date_to) })}
+              {`Submission Deadline: ${fmtDateLong(activePeriod.date_to)}`}
             </div>
-            <p className="text-white/60 text-xs mt-1">{t("coach.invoice.selectSessionsHint")}</p>
+            <p className="text-white/60 text-xs mt-1">{"Select the sessions you want to include in the invoice."}</p>
           </div>
         </div>
       ) : (
         <div className="bg-ocean-700 text-white rounded-2xl border border-ocean-700 shadow-card p-5 relative overflow-hidden">
           <div className="caustics absolute inset-0 opacity-30" />
           <div className="relative">
-            <div className="text-wave-200 text-[11px] uppercase tracking-widest font-bold">{t("coach.invoice.generateInvoiceHeader")}</div>
+            <div className="text-wave-200 text-[11px] uppercase tracking-widest font-bold">{"Generate invoice"}</div>
             <h2 className="font-display font-bold text-2xl mt-0.5">{new Date(monthFilter + "-01").toLocaleDateString(localeTag, { month: "long", year: "numeric" })}</h2>
-            <p className="text-white/80 text-sm mt-1">{t("coach.invoice.selectSessionsHint")}</p>
+            <p className="text-white/80 text-sm mt-1">{"Select the sessions you want to include in the invoice."}</p>
           </div>
         </div>
       )}
@@ -289,28 +288,28 @@ export default function CoachInvoice({ coachId, branchId, profile }: { coachId: 
           <div className="flex items-center justify-between gap-3 flex-wrap bg-white border border-line rounded-2xl px-4 py-2.5">
             <Input type="month" value={monthFilter} onChange={e => setMonthFilter(e.target.value)} className="!w-36 sm:!w-44 font-mono" />
             <div className="flex items-center gap-2">
-              <Btn variant="outline" size="sm" icon="plus" onClick={() => setShowReimburseModal(true)}>{t("coach.invoice.expensesBtn")}</Btn>
-              <Btn variant="ghost" size="sm" onClick={() => setSelected(new Set(sessions.map(s => s.id)))}>{t("coach.invoice.selectAllBtn")}</Btn>
+              <Btn variant="outline" size="sm" icon="plus" onClick={() => setShowReimburseModal(true)}>{"Expenses"}</Btn>
+              <Btn variant="ghost" size="sm" onClick={() => setSelected(new Set(sessions.map(s => s.id)))}>{"Select all"}</Btn>
             </div>
           </div>
-      {loading ? <div className="text-center text-ink-mute p-6">{t("coach.invoice.loadingSessions")}</div> : (
+      {loading ? <div className="text-center text-ink-mute p-6">{"Loading sessions…"}</div> : (
         <>
           <Card padded={false}>
             <div className="px-5 py-4 border-b border-line">
-              <SectionTitle sub={t("coach.invoice.sessionsCountLabel", { count: sessions.length })}>{t("coach.invoice.classSessionsTitle")}</SectionTitle>
+              <SectionTitle sub={`${sessions.length} sessions found`}>{"Class Sessions"}</SectionTitle>
             </div>
-            {sessions.length === 0 ? <div className="p-6 text-center text-ink-mute">{t("coach.invoice.noUninvoicedSessions")}</div> : (
+            {sessions.length === 0 ? <div className="p-6 text-center text-ink-mute">{"No uninvoiced sessions this month."}</div> : (
               <div className="divide-y divide-line">
                 {sessions.map((s) => (
                   <label key={s.id} className={`flex items-center gap-3 px-5 py-3 hover:bg-paper-tint cursor-pointer ${selected.has(s.id) ? "bg-ocean-50/40" : ""} ${!s.rate_set ? "opacity-60" : ""}`}>
                     <input type="checkbox" checked={selected.has(s.id)} onChange={() => toggle(s.id)} className="w-4 h-4 rounded border-line-strong text-ocean-600" />
                     <div className="flex-1 min-w-0">
-                      <div className="font-semibold text-ink text-sm">{s.class?.name}</div>
+                      <div className="font-semibold text-ink text-sm"><NoTranslate>{s.class?.name}</NoTranslate></div>
                       <div className="text-xs text-ink-mute">{fmtDate(s.session_date)}</div>
                     </div>
                     {s.rate_set
                       ? <div className="font-mono font-bold text-sm shrink-0">{fmtIDR(s.rate_per_session)}</div>
-                      : <div className="text-xs font-semibold text-warn-600 flex items-center gap-1 shrink-0"><Icon name="warning" className="w-3.5 h-3.5" /><span className="hidden sm:inline">{t("coach.invoice.rateNotSetLong")}</span><span className="sm:hidden">{t("coach.invoice.rateNotSetShort")}</span></div>
+                      : <div className="text-xs font-semibold text-warn-600 flex items-center gap-1 shrink-0"><Icon name="warning" className="w-3.5 h-3.5" /><span className="hidden sm:inline">{"Rate not set"}</span><span className="sm:hidden">{"No rate"}</span></div>
                     }
                   </label>
                 ))}
@@ -321,26 +320,26 @@ export default function CoachInvoice({ coachId, branchId, profile }: { coachId: 
           {/* Sesi Extra */}
           <Card className="space-y-3">
             <div>
-              <div className="font-display font-bold text-ink">{t("coach.invoice.extraSessionsTitle")}</div>
-              <p className="text-xs text-ink-mute mt-0.5">{t("coach.invoice.extraSessionsHint")}</p>
+              <div className="font-display font-bold text-ink">{"Extra Sessions"}</div>
+              <p className="text-xs text-ink-mute mt-0.5">{"Extra sessions outside regular class, calculated from the extra rate set by the owner."}</p>
             </div>
             {extraRatePerSession == null ? (
-              <div className="text-xs text-warn-700 bg-warn-50 border border-warn-100 rounded-xl p-3">{t("coach.invoice.extraRateNotSet")}</div>
+              <div className="text-xs text-warn-700 bg-warn-50 border border-warn-100 rounded-xl p-3">{"The owner hasn't set an extra rate for you yet — contact the owner to set one up first."}</div>
             ) : (
               <>
                 <div className="flex items-end gap-2">
                   <div className="w-28 shrink-0">
-                    <Field label={t("coach.invoice.fieldExtraSessionCount")} hint={t("coach.invoice.extraRateHint", { rate: fmtIDR(extraRatePerSession) })}>
+                    <Field label={"Extra session count"} hint={`Extra rate: ${fmtIDR(extraRatePerSession)}/session`}>
                       <Input type="number" inputMode="numeric" min={1} value={extraSessionCount} onChange={e => setExtraSessionCount(e.target.value)} placeholder="1" />
                     </Field>
                   </div>
-                  <Btn variant="soft" onClick={addExtraItem} disabled={!extraSessionCount}>{t("coach.invoice.addBtn")}</Btn>
+                  <Btn variant="soft" onClick={addExtraItem} disabled={!extraSessionCount}>{"Add"}</Btn>
                 </div>
                 {extraItems.length > 0 && (
                   <div className="divide-y divide-line border-t border-line pt-2">
                     {extraItems.map(e => (
                       <div key={e.id} className="flex items-center justify-between py-2 text-sm">
-                        <span className="text-ink-soft">{t("coach.invoice.extraSessionLine", { count: e.sessionCount, rate: fmtIDR(e.rate) })}</span>
+                        <span className="text-ink-soft">{`${e.sessionCount} extra session(s) × ${fmtIDR(e.rate)}`}</span>
                         <div className="flex items-center gap-2">
                           <span className="font-mono font-bold">{fmtIDR(e.sessionCount * e.rate)}</span>
                           <button onClick={() => removeExtraItem(e.id)} className="text-ink-faint hover:text-danger-600"><Icon name="x" className="w-3.5 h-3.5" /></button>
@@ -356,13 +355,13 @@ export default function CoachInvoice({ coachId, branchId, profile }: { coachId: 
           {/* Expenses / Reimburse draft */}
           {reimburseItems.length > 0 && (
             <Card className="space-y-2">
-              <div className="font-display font-bold text-ink">{t("coach.invoice.expensesReimburseTitle")}</div>
+              <div className="font-display font-bold text-ink">{"Expenses / Reimburse"}</div>
               <div className="divide-y divide-line">
                 {reimburseItems.map(r => (
                   <div key={r.id} className="flex items-center justify-between py-2 text-sm gap-2">
                     <div className="flex-1 min-w-0">
-                      <div className="text-ink-soft truncate">{r.description}</div>
-                      <a href={r.proofUrl} target="_blank" rel="noreferrer" className="text-xs text-ocean-600 hover:underline inline-flex items-center gap-1"><Icon name="link" className="w-3 h-3" />{t("coach.invoice.viewProofLink")}</a>
+                      <div className="text-ink-soft truncate"><NoTranslate>{r.description}</NoTranslate></div>
+                      <a href={r.proofUrl} target="_blank" rel="noreferrer" className="text-xs text-ocean-600 hover:underline inline-flex items-center gap-1"><Icon name="link" className="w-3 h-3" />{"View proof"}</a>
                     </div>
                     <span className="font-mono font-bold shrink-0">{fmtIDR(r.amount)}</span>
                     <button onClick={() => removeReimburseItem(r.id)} className="text-ink-faint hover:text-danger-600 shrink-0"><Icon name="x" className="w-3.5 h-3.5" /></button>
@@ -374,11 +373,11 @@ export default function CoachInvoice({ coachId, branchId, profile }: { coachId: 
 
           <Card className="bg-paper-tint">
             <div className="flex items-baseline justify-between">
-              <div className="text-[11px] uppercase tracking-widest font-bold text-ink-faint">{t("coach.invoice.totalLabel", { count: selected.size, extra: extraItems.length > 0 ? t("coach.invoice.totalWithExtra", { count: extraItems.length }) : "", reimburse: reimburseItems.length > 0 ? t("coach.invoice.totalWithReimburse", { count: reimburseItems.length }) : "" })}</div>
+              <div className="text-[11px] uppercase tracking-widest font-bold text-ink-faint">{`Total (${selected.size} sessions${extraItems.length > 0 ? ` + ${extraItems.length} extra` : ""}${reimburseItems.length > 0 ? ` + ${reimburseItems.length} reimburse` : ""})`}</div>
               <div className="font-display font-extrabold text-2xl text-ocean-700">{fmtIDR(total)}</div>
             </div>
             <Btn variant="primary" size="lg" className="w-full mt-4" icon="invoice" onClick={generate} disabled={generating || (selected.size === 0 && extraItems.length === 0 && reimburseItems.length === 0)}>
-              {generating ? t("coach.invoice.generatingBtn") : t("coach.invoice.generateInvoiceBtn")}
+              {generating ? "Creating invoice…" : "Generate Invoice"}
             </Btn>
           </Card>
         </>
@@ -387,40 +386,40 @@ export default function CoachInvoice({ coachId, branchId, profile }: { coachId: 
       )}
       {pastInvoices.length > 0 && (
         <Card padded={false}>
-          <div className="p-5 border-b border-line"><SectionTitle sub={t("coach.invoice.historySub")}>{t("coach.invoice.historyTitle")}</SectionTitle></div>
+          <div className="p-5 border-b border-line"><SectionTitle sub={"Invoices created so far"}>{"Invoice History"}</SectionTitle></div>
           <div className="divide-y divide-line">
             {pastInvoices.map((iv) => (
               <div key={iv.id} className="px-5 py-3 flex items-center gap-3 hover:bg-paper-tint">
                 <span className="w-10 h-10 rounded-xl bg-ocean-50 text-ocean-700 flex items-center justify-center"><Icon name="invoice" className="w-5 h-5" /></span>
                 <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-ink text-sm font-mono">{iv.invoice_number}</div>
-                  <div className="text-xs text-ink-mute">{iv.period_label}</div>
+                  <div className="font-semibold text-ink text-sm font-mono"><NoTranslate>{iv.invoice_number}</NoTranslate></div>
+                  <div className="text-xs text-ink-mute"><NoTranslate>{iv.period_label}</NoTranslate></div>
                   {iv.status === "rejected" && iv.rejection_reason && (
                     <div className="text-xs text-danger-500 mt-0.5 flex items-center gap-1">
                       <Icon name="warning" className="w-3 h-3" />
-                      {iv.rejection_reason}
+                      <NoTranslate>{iv.rejection_reason}</NoTranslate>
                     </div>
                   )}
                 </div>
                 <div className="font-mono font-bold text-sm">{fmtIDR(iv.total_amount)}</div>
                 <Status kind={iv.status === "paid" ? "paid" : iv.status === "approved" ? "approved" : iv.status === "rejected" ? "rejected" : "pending"}>
-                  {iv.status === "paid" ? t("coach.invoice.statusPaid") : iv.status === "approved" ? t("coach.invoice.statusApproved") : iv.status === "rejected" ? t("coach.invoice.statusRejected") : t("coach.invoice.statusPending")}
+                  {iv.status === "paid" ? "Paid" : iv.status === "approved" ? "Approved" : iv.status === "rejected" ? "Rejected" : "Pending"}
                 </Status>
-                <button title={t("coach.invoice.printTitleAttr")} onClick={() => {
+                <button title={"Print / Download PDF"} onClick={() => {
                   const w = window.open("", "_blank", "width=700,height=900");
                   if (!w) return;
                   // Group items by class (or unique per extra/reimburse row), sum session counts
                   const itemMap: Record<string, { name: string; sessions: number; rate: number }> = {};
                   (iv.coach_invoice_items ?? []).forEach(item => {
                     const key = item.item_type === "class" ? (item.class_id ?? item.id) : item.id;
-                    const label = item.item_type === "extra" ? t("coach.invoice.extraSessionsTitle")
-                      : item.item_type === "reimburse" ? t("coach.invoice.printReimburseLabel", { desc: item.description ?? "" })
+                    const label = item.item_type === "extra" ? "Extra Sessions"
+                      : item.item_type === "reimburse" ? `Reimburse — ${item.description ?? ""}`
                       : (item.class?.name ?? item.class_id ?? "—");
                     if (!itemMap[key]) itemMap[key] = { name: label, sessions: 0, rate: item.rate };
                     itemMap[key].sessions += item.session_count;
                   });
                   const itemRows = Object.values(itemMap).map(item =>
-                    `<div class="row"><span>${item.name}</span><span>${item.sessions} ${t("coach.invoice.printSessionsUnit")} × Rp ${item.rate.toLocaleString(localeTag)} = <b>Rp ${(item.sessions * item.rate).toLocaleString(localeTag)}</b></span></div>`
+                    `<div class="row"><span>${item.name}</span><span>${item.sessions} ${"sessions"} × Rp ${item.rate.toLocaleString(localeTag)} = <b>Rp ${(item.sessions * item.rate).toLocaleString(localeTag)}</b></span></div>`
                   ).join("");
                   w.document.write(`<!DOCTYPE html><html><head><title>${iv.invoice_number}</title>
                     <style>body{font-family:sans-serif;padding:32px;color:#0f172a;max-width:640px;margin:auto}
@@ -433,18 +432,18 @@ export default function CoachInvoice({ coachId, branchId, profile }: { coachId: 
                     .badge{display:inline-block;padding:2px 10px;border-radius:4px;font-size:11px;font-weight:700;background:${iv.status === "paid" ? "#dcfce7" : "#fef9c3"};color:${iv.status === "paid" ? "#166534" : "#854d0e"}}
                     footer{margin-top:40px;border-top:1px solid #e2e8f0;padding-top:12px;font-size:11px;color:#94a3b8;text-align:center}
                     </style></head><body>
-                    <h1>${t("coach.invoice.printDocTitle")}</h1>
-                    <div class="sub">${iv.invoice_number} &nbsp;·&nbsp; <span class="badge">${iv.status === "paid" ? t("coach.invoice.statusPaid") : t("coach.invoice.statusPending")}</span></div>
-                    <div class="section">${t("coach.invoice.printInfoSection")}</div>
+                    <h1>${"Coach Invoice"}</h1>
+                    <div class="sub">${iv.invoice_number} &nbsp;·&nbsp; <span class="badge">${iv.status === "paid" ? "Paid" : "Pending"}</span></div>
+                    <div class="section">${"Information"}</div>
                     <div class="meta">
-                      <b>${t("coach.invoice.printPeriodLabel")}</b> ${iv.period_label}<br/>
-                      <b>${t("coach.invoice.printCoachLabel")}</b> ${profile?.full_name ?? "—"}<br/>
-                      <b>${t("coach.invoice.printBankLabel")}</b> ${iv.bank_info ?? (profile?.bank_name ? `${profile.bank_name} - ${profile.bank_account} a/n ${profile.bank_holder}` : "—")}
+                      <b>${"Period:"}</b> ${iv.period_label}<br/>
+                      <b>${"Coach:"}</b> ${profile?.full_name ?? "—"}<br/>
+                      <b>${"Bank Account:"}</b> ${iv.bank_info ?? (profile?.bank_name ? `${profile.bank_name} - ${profile.bank_account} a/n ${profile.bank_holder}` : "—")}
                     </div>
-                    <div class="section">${t("coach.invoice.printClassDetailsSection")}</div>
-                    ${itemRows || `<div class="row"><span style="color:#94a3b8">${t("coach.invoice.printNoDetails")}</span></div>`}
-                    <div class="total"><span>${t("coach.invoice.printTotalLabel")}</span><span>Rp ${iv.total_amount.toLocaleString(localeTag)}</span></div>
-                    <footer>Next Swimming School &nbsp;·&nbsp; ${t("coach.invoice.printFooterPrinted", { date: new Date().toLocaleDateString(localeTag, { dateStyle: "long" }) })}</footer>
+                    <div class="section">${"Class Details"}</div>
+                    ${itemRows || `<div class="row"><span style="color:#94a3b8">${"No details"}</span></div>`}
+                    <div class="total"><span>${"Total"}</span><span>Rp ${iv.total_amount.toLocaleString(localeTag)}</span></div>
+                    <footer>Next Swimming School &nbsp;·&nbsp; ${`Printed ${new Date().toLocaleDateString(localeTag, { dateStyle: "long" })}`}</footer>
                     </body></html>`);
                   w.document.close();
                   w.focus();
@@ -454,7 +453,7 @@ export default function CoachInvoice({ coachId, branchId, profile }: { coachId: 
                 </button>
                 {(iv.status === "pending" || iv.status === "rejected") && (
                   <button
-                    title={t("coach.invoice.cancelTitleAttr")}
+                    title={"Cancel invoice"}
                     onClick={() => cancelInvoice(iv.id)}
                     disabled={cancelling === iv.id}
                     className="w-8 h-8 rounded-lg border border-danger-200 hover:bg-danger-50 flex items-center justify-center text-danger-400 hover:text-danger-600 transition-colors disabled:opacity-40"

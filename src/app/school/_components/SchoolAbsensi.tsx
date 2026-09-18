@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import Btn from "@/components/ui/Btn";
 import Status from "@/components/ui/Status";
 import { Card, SectionTitle } from "@/components/ui/Card";
-import { useLocale } from "@/components/providers/LocaleProvider";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 import { isMemberPresentLike, memberDbToUi, memberStatusKind } from "@/lib/attendance";
 import { createClient } from "@/utils/supabase/client";
 
@@ -27,7 +27,6 @@ export default function SchoolAbsensi({ schoolId, schoolName, members }: {
   members: { id: string; name: string; school_grade: string | null; class_name: string }[];
 }) {
   const supabase = createClient();
-  const { t } = useLocale();
   const today = new Date().toISOString().split("T")[0];
   const defaultFrom = today.slice(0, 7) + "-01"; // first day of current month
 
@@ -134,11 +133,11 @@ export default function SchoolAbsensi({ schoolId, schoolName, members }: {
 
   const getStatusLabel = (status: string) => {
     switch (memberDbToUi(status)) {
-      case "present": return t("school.absensi.statusHadir");
-      case "izin": return t("school.absensi.statusIzin");
-      case "sick": return t("school.absensi.statusSakit");
-      case "absent": return t("school.absensi.statusTidakHadir");
-      case "late": return t("school.absensi.statusTelat");
+      case "present": return "Present";
+      case "izin": return "Leave";
+      case "sick": return "Sick";
+      case "absent": return "Absent";
+      case "late": return "Late";
       default: return status;
     }
   };
@@ -146,9 +145,9 @@ export default function SchoolAbsensi({ schoolId, schoolName, members }: {
   const getMethodLabel = (method: string | null) => {
     if (!method) return "—";
     switch (method) {
-      case "qr": return t("school.absensi.methodQr");
-      case "selfie": return t("school.absensi.methodSelfie");
-      case "manual": return t("school.absensi.methodManual");
+      case "qr": return "QR Scan";
+      case "selfie": return "Selfie";
+      case "manual": return "Manual";
       default: return method;
     }
   };
@@ -180,15 +179,15 @@ export default function SchoolAbsensi({ schoolId, schoolName, members }: {
       }
 
       const header = [
-        t("school.absensi.colStudent"),
-        t("school.absensi.colSchoolGrade"),
-        t("school.absensi.colClass"),
+        "Student",
+        "School Grade",
+        "Class",
         ...dates,
-        t("school.absensi.statusHadir"),
-        t("school.absensi.statusTelat"),
-        t("school.absensi.statusTidakHadir"),
-        t("school.absensi.statusSakit"),
-        t("school.absensi.statusIzin"),
+        "Present",
+        "Late",
+        "Absent",
+        "Sick",
+        "Leave",
       ];
 
       const dataRows = targetMembers.map(m => {
@@ -231,19 +230,19 @@ export default function SchoolAbsensi({ schoolId, schoolName, members }: {
       {/* Stat cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="bg-white rounded-2xl border border-line shadow-card p-4">
-          <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-1">{t("school.absensi.statTotalSessions")}</div>
+          <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-1">{"Practice Dates"}</div>
           <div className="font-display font-bold text-2xl text-ink">{statsDates}</div>
         </div>
         <div className="bg-white rounded-2xl border border-line shadow-card p-4">
-          <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-1">{t("school.absensi.statPresent")}</div>
+          <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-1">{"Present (Total)"}</div>
           <div className="font-display font-bold text-2xl text-ok-600">{statsHadir}</div>
         </div>
         <div className="bg-white rounded-2xl border border-line shadow-card p-4">
-          <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-1">{t("school.absensi.statExcusedSick")}</div>
+          <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-1">{"Leave / Sick"}</div>
           <div className="font-display font-bold text-2xl text-warn-600">{statsIzinSakit}</div>
         </div>
         <div className="bg-white rounded-2xl border border-line shadow-card p-4">
-          <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-1">{t("school.absensi.statAbsent")}</div>
+          <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-1">{"Absent"}</div>
           <div className="font-display font-bold text-2xl text-danger-600">{statsTidakHadir}</div>
         </div>
       </div>
@@ -252,8 +251,8 @@ export default function SchoolAbsensi({ schoolId, schoolName, members }: {
       <Card padded={false}>
         <div className="p-4 sm:p-5 border-b border-line space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <SectionTitle sub={t("school.absensi.sub", { school: schoolName })}>
-              {t("school.absensi.title")}
+            <SectionTitle sub={`Monitoring and attendance history for ${schoolName} students.`}>
+              {"Student Attendance Recap"}
             </SectionTitle>
             <Btn
               variant="outline"
@@ -262,13 +261,13 @@ export default function SchoolAbsensi({ schoolId, schoolName, members }: {
               disabled={members.length === 0 || downloading}
               onClick={downloadExcel}
             >
-              {downloading ? t("school.absensi.exportingExcel") : t("school.absensi.exportExcelBtn")}
+              {downloading ? "Exporting…" : "Export Excel (.xlsx)"}
             </Btn>
           </div>
 
           {/* Quick preset buttons */}
           <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-xs font-semibold text-ink-mute mr-1">{t("common.actions.filter")}:</span>
+            <span className="text-xs font-semibold text-ink-mute mr-1">{"Filter"}:</span>
             {(["week", "month", "3month"] as const).map(p => (
               <button
                 key={p}
@@ -276,7 +275,7 @@ export default function SchoolAbsensi({ schoolId, schoolName, members }: {
                 onClick={() => applyPreset(p)}
                 className="text-xs font-semibold px-2.5 py-1 rounded-lg border border-line bg-white hover:border-ocean-400 hover:text-ocean-700 transition"
               >
-                {p === "week" ? t("school.absensi.presetWeek") : p === "month" ? t("school.absensi.presetMonth") : t("school.absensi.preset3Month")}
+                {p === "week" ? "1 Week" : p === "month" ? "1 Month" : "3 Months"}
               </button>
             ))}
           </div>
@@ -284,7 +283,7 @@ export default function SchoolAbsensi({ schoolId, schoolName, members }: {
           {/* Filter row */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div>
-              <label className="text-[10px] uppercase tracking-widest font-bold text-ink-faint block mb-1">{t("school.absensi.filterFrom")}</label>
+              <label className="text-[10px] uppercase tracking-widest font-bold text-ink-faint block mb-1">{"From Date"}</label>
               <input
                 type="date"
                 value={filterDateFrom}
@@ -293,7 +292,7 @@ export default function SchoolAbsensi({ schoolId, schoolName, members }: {
               />
             </div>
             <div>
-              <label className="text-[10px] uppercase tracking-widest font-bold text-ink-faint block mb-1">{t("school.absensi.filterTo")}</label>
+              <label className="text-[10px] uppercase tracking-widest font-bold text-ink-faint block mb-1">{"To Date"}</label>
               <input
                 type="date"
                 value={filterDateTo}
@@ -302,31 +301,31 @@ export default function SchoolAbsensi({ schoolId, schoolName, members }: {
               />
             </div>
             <div>
-              <label className="text-[10px] uppercase tracking-widest font-bold text-ink-faint block mb-1">{t("school.absensi.filterAllStudents")}</label>
+              <label className="text-[10px] uppercase tracking-widest font-bold text-ink-faint block mb-1">{"All Students"}</label>
               <select
                 value={filterMember}
                 onChange={e => setFilterMember(e.target.value)}
                 className="w-full text-sm border border-line rounded-lg px-2.5 py-1.5 bg-white outline-none focus:border-ocean-400"
               >
-                <option value="all">{t("school.absensi.filterAllStudents")}</option>
+                <option value="all">{"All Students"}</option>
                 {members.map(m => (
-                  <option key={m.id} value={m.id}>{m.name}</option>
+                  <option key={m.id} value={m.id} translate="no">{m.name}</option>
                 ))}
               </select>
             </div>
             <div>
-              <label className="text-[10px] uppercase tracking-widest font-bold text-ink-faint block mb-1">{t("school.absensi.filterAllStatus")}</label>
+              <label className="text-[10px] uppercase tracking-widest font-bold text-ink-faint block mb-1">{"All Status"}</label>
               <select
                 value={filterStatus}
                 onChange={e => setFilterStatus(e.target.value)}
                 className="w-full text-sm border border-line rounded-lg px-2.5 py-1.5 bg-white outline-none focus:border-ocean-400"
               >
-                <option value="all">{t("school.absensi.filterAllStatus")}</option>
-                <option value="hadir">{t("school.absensi.statusHadir")}</option>
-                <option value="izin">{t("school.absensi.statusIzin")}</option>
-                <option value="sakit">{t("school.absensi.statusSakit")}</option>
-                <option value="tidak_hadir">{t("school.absensi.statusTidakHadir")}</option>
-                <option value="telat">{t("school.absensi.statusTelat")}</option>
+                <option value="all">{"All Status"}</option>
+                <option value="hadir">{"Present"}</option>
+                <option value="izin">{"Leave"}</option>
+                <option value="sakit">{"Sick"}</option>
+                <option value="tidak_hadir">{"Absent"}</option>
+                <option value="telat">{"Late"}</option>
               </select>
             </div>
           </div>
@@ -337,21 +336,21 @@ export default function SchoolAbsensi({ schoolId, schoolName, members }: {
           <table className="w-full text-sm">
             <thead>
               <tr className="text-[11px] uppercase tracking-widest text-ink-faint font-bold border-b border-line">
-                <th className="text-left py-3 px-5 font-bold">{t("school.absensi.colDate")}</th>
-                <th className="text-left py-3 px-4 font-bold">{t("school.absensi.colStudent")}</th>
-                <th className="text-left py-3 px-4 font-bold">{t("school.absensi.colSchoolGrade")}</th>
-                <th className="text-left py-3 px-4 font-bold">{t("school.absensi.colClass")}</th>
-                <th className="text-left py-3 px-4 font-bold">{t("school.absensi.colStatus")}</th>
-                <th className="text-left py-3 px-5 font-bold">{t("school.absensi.colMethod")}</th>
+                <th className="text-left py-3 px-5 font-bold">{"Date"}</th>
+                <th className="text-left py-3 px-4 font-bold">{"Student"}</th>
+                <th className="text-left py-3 px-4 font-bold">{"School Grade"}</th>
+                <th className="text-left py-3 px-4 font-bold">{"Class"}</th>
+                <th className="text-left py-3 px-4 font-bold">{"Status"}</th>
+                <th className="text-left py-3 px-5 font-bold">{"Method"}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-line">
               {paginated.map(r => (
                 <tr key={r.id} className="hover:bg-paper-tint transition-colors">
                   <td className="py-3 px-5 font-mono text-xs text-ink-soft">{r.session_date}</td>
-                  <td className="py-3 px-4 font-semibold text-ink">{r.member_name}</td>
-                  <td className="py-3 px-4 text-ink-soft text-xs">{r.school_grade ?? "—"}</td>
-                  <td className="py-3 px-4 text-ink-soft text-xs">{r.class_name}</td>
+                  <td className="py-3 px-4 font-semibold text-ink"><NoTranslate>{r.member_name}</NoTranslate></td>
+                  <td className="py-3 px-4 text-ink-soft text-xs"><NoTranslate>{r.school_grade ?? "—"}</NoTranslate></td>
+                  <td className="py-3 px-4 text-ink-soft text-xs"><NoTranslate>{r.class_name}</NoTranslate></td>
                   <td className="py-3 px-4">
                     <Status kind={memberStatusKind(r.status)}>
                       {getStatusLabel(r.status)}
@@ -363,7 +362,7 @@ export default function SchoolAbsensi({ schoolId, schoolName, members }: {
               {filtered.length === 0 && (
                 <tr>
                   <td colSpan={6} className="py-12 text-center text-ink-mute text-sm">
-                    {t("school.absensi.empty")}
+                    {"No student attendance records found in this period."}
                   </td>
                 </tr>
               )}
@@ -381,17 +380,17 @@ export default function SchoolAbsensi({ schoolId, schoolName, members }: {
                   {getStatusLabel(r.status)}
                 </Status>
               </div>
-              <div className="font-semibold text-sm text-ink">{r.member_name}</div>
-              {r.school_grade && <div className="text-xs text-ink-mute">{r.school_grade}</div>}
+              <div className="font-semibold text-sm text-ink"><NoTranslate>{r.member_name}</NoTranslate></div>
+              {r.school_grade && <div className="text-xs text-ink-mute"><NoTranslate>{r.school_grade}</NoTranslate></div>}
               <div className="flex items-center justify-between text-xs text-ink-mute pt-1 border-t border-line/60">
-                <span>{r.class_name}</span>
+                <span><NoTranslate>{r.class_name}</NoTranslate></span>
                 <span className="font-mono text-[11px] bg-paper-tint px-2 py-0.5 rounded">{getMethodLabel(r.method)}</span>
               </div>
             </div>
           ))}
           {filtered.length === 0 && (
             <div className="py-12 text-center text-ink-mute text-sm">
-              {t("school.absensi.empty")}
+              {"No student attendance records found in this period."}
             </div>
           )}
         </div>
@@ -400,7 +399,7 @@ export default function SchoolAbsensi({ schoolId, schoolName, members }: {
         {totalPages > 1 && (
           <div className="px-4 sm:px-5 py-3.5 border-t border-line flex items-center justify-between flex-wrap gap-3">
             <span className="text-xs text-ink-mute">
-              {t("school.absensi.paginationInfo", { page: safePage + 1, total: totalPages })}
+              {`Page ${safePage + 1} of ${totalPages}`}
             </span>
             <div className="flex items-center gap-1">
               <button
@@ -409,7 +408,7 @@ export default function SchoolAbsensi({ schoolId, schoolName, members }: {
                 onClick={() => setPage(p => p - 1)}
                 className="px-3 py-1.5 rounded-lg border border-line text-ink-mute text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-paper-tint transition"
               >
-                ‹ {t("school.absensi.prevBtn")}
+                ‹ {"Previous"}
               </button>
               <button
                 type="button"
@@ -417,7 +416,7 @@ export default function SchoolAbsensi({ schoolId, schoolName, members }: {
                 onClick={() => setPage(p => p + 1)}
                 className="px-3 py-1.5 rounded-lg border border-line text-ink-mute text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-paper-tint transition"
               >
-                {t("school.absensi.nextBtn")} ›
+                {"Next"} ›
               </button>
             </div>
           </div>

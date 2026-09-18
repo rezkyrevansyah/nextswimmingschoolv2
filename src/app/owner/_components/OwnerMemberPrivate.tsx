@@ -1,7 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/utils/supabase/client";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import AdminMemberPrivate from "@/app/admin/_components/AdminMemberPrivate";
 
 /**
@@ -21,7 +20,6 @@ import AdminMemberPrivate from "@/app/admin/_components/AdminMemberPrivate";
  * refetch. A newly created center needs to be pickable immediately.
  */
 export default function OwnerMemberPrivate({ branches: initialBranches }: { branches: { id: string; name: string }[] }) {
-  const { t } = useLocale();
   const supabase = createClient();
   const [branches, setBranches] = useState(initialBranches);
 
@@ -35,7 +33,7 @@ export default function OwnerMemberPrivate({ branches: initialBranches }: { bran
   /* eslint-enable react-hooks/set-state-in-effect */
 
   if (branches.length === 0) {
-    return <p className="text-sm text-ink-mute">{t("owner.branches.noBranchYet")}</p>;
+    return <p className="text-sm text-ink-mute">{"No center exists yet — add one first from the Center menu."}</p>;
   }
   return <AdminMemberPrivate branches={branches} onBranchesChange={loadBranches} />;
 }

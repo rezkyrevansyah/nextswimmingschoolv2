@@ -3,7 +3,6 @@ import { useState } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import { parseUserApiError } from "../../_utils";
 import type { ClassRow } from "../../_types";
 import type { MemberRow } from "./_types";
@@ -18,7 +17,6 @@ export function useMemberEditData({
 }) {
   const toast = useToast();
   const confirm = useConfirm();
-  const { t } = useLocale();
   const [openEditMember, setOpenEditMember] = useState(false);
   const [editMemberForm, setEditMemberForm] = useState({
     full_name: "", email: "", birth_date: "", gender: "", phone: "", phone_owner: "self",
@@ -54,7 +52,7 @@ export function useMemberEditData({
 
   const saveMemberEdit = async () => {
     if (!detail) return;
-    if (!editMemberForm.full_name) return toast.error(t("admin.members.fullNameRequired2"));
+    if (!editMemberForm.full_name) return toast.error("Full name is required");
     setSavingEdit(true);
 
     // Update email di auth jika berubah
@@ -67,7 +65,7 @@ export function useMemberEditData({
       });
       if (!emailRes.ok) {
         const j = await emailRes.json() as { error?: string; code?: string };
-        const [errT, errS, errD] = parseUserApiError(j, t);
+        const [errT, errS, errD] = parseUserApiError(j);
         setSavingEdit(false);
         return toast.error(errT, errS, errD);
       }
@@ -82,7 +80,7 @@ export function useMemberEditData({
       address: editMemberForm.address || null,
       health_notes: editMemberForm.health_notes || null,
     }).eq("id", detail.profile_id);
-    if (profileErr) { setSavingEdit(false); return toast.error(t("admin.members.updateProfileFailed"), profileErr.message); }
+    if (profileErr) { setSavingEdit(false); return toast.error("Failed to update profile", profileErr.message); }
 
     // Update members row (type, school_id) — member_no is auto-generated at creation, not editable
     await createClient().from("members").update({
@@ -101,7 +99,7 @@ export function useMemberEditData({
       for (const cid of toAdd) {
         const cls = classes.find(c => c.id === cid);
         if (cls && cls.enrolled >= cls.capacity) {
-          const ok = await confirm({ body: t("admin.members.classFullConfirmBodyAdd", { name: cls.name, enrolled: cls.enrolled, capacity: cls.capacity }) });
+          const ok = await confirm({ body: `Class "${cls.name}" is already full (${cls.enrolled}/${cls.capacity}). Add anyway?` });
           if (!ok) { setSavingEdit(false); return; }
         }
       }
@@ -127,7 +125,7 @@ export function useMemberEditData({
     }
 
     setSavingEdit(false);
-    toast.success(t("admin.members.memberDataUpdatedToast"));
+    toast.success("Student data updated");
     setOpenEditMember(false);
     setEditAvatarFile(null);
     setEditAvatarPreview(null);
@@ -153,7 +151,6 @@ export function useMemberEditData({
   };
 
   return {
-    t,
     openEditMember, setOpenEditMember, editMemberForm, setEditMemberForm, savingEdit,
     editAvatarFile, setEditAvatarFile, editAvatarPreview, setEditAvatarPreview,
     openEdit, saveMemberEdit,

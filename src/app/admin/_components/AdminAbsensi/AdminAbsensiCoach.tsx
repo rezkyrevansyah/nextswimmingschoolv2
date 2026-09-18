@@ -3,7 +3,6 @@ import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
 import { Field, Input, Select, Textarea } from "@/components/ui/FormFields";
@@ -11,6 +10,7 @@ import { Card } from "@/components/ui/Card";
 import Status from "@/components/ui/Status";
 import Modal from "@/components/ui/Modal";
 import TimePicker from "@/components/ui/TimePicker";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 import type { AttendanceRow, CoachProfile, ClassRow } from "../../_types";
 import { fmtDate } from "@/lib/utils";
 import { logActivity } from "@/lib/activityLog";
@@ -37,8 +37,7 @@ export default function AdminAbsensiCoach({ branchId }: { branchId: string }) {
   const supabase = createClient();
   const toast = useToast();
   const confirm = useConfirm();
-  const { t, locale } = useLocale();
-  const localeTag = locale === "id" ? "id-ID" : "en-US";
+  const localeTag = "en-US";
 
   const today = new Date().toISOString().split("T")[0];
   const defaultMonth = today.slice(0, 7);
@@ -162,7 +161,7 @@ export default function AdminAbsensiCoach({ branchId }: { branchId: string }) {
   };
 
   const saveManual = async () => {
-    if (!form.coach_id || !form.class_id || !form.session_date) return toast.error(t("admin.absensi.coachDateRequired"));
+    if (!form.coach_id || !form.class_id || !form.session_date) return toast.error("Coach, class, and date are required");
     setSaving(true);
     const user = (await supabase.auth.getUser()).data.user;
     const clockInTime = form.clock_in_time || new Date().toTimeString().slice(0, 8);
@@ -177,9 +176,9 @@ export default function AdminAbsensiCoach({ branchId }: { branchId: string }) {
         status: manualStatus,
       }).eq("id", editTarget.id);
       setSaving(false);
-      if (error) return toast.error(t("admin.absensi.saveFailed"), error.message);
-      toast.success(t("admin.absensi.attendanceUpdatedToast"));
-      logActivity(supabase, { userId: user?.id ?? "unknown", userRole: "admin", userName: user?.user_metadata?.full_name ?? "Admin", branchId, entityType: "coach_attendances", entityId: editTarget.id, action: "update", label: t("admin.absensi.activityManualUpdated", { date: form.session_date }), meta: { coach_id: form.coach_id, session_date: form.session_date, status: manualStatus } });
+      if (error) return toast.error("Failed to save", error.message);
+      toast.success("Attendance updated");
+      logActivity(supabase, { userId: user?.id ?? "unknown", userRole: "admin", userName: user?.user_metadata?.full_name ?? "Admin", branchId, entityType: "coach_attendances", entityId: editTarget.id, action: "update", label: `Manual coach attendance for ${form.session_date} updated`, meta: { coach_id: form.coach_id, session_date: form.session_date, status: manualStatus } });
     } else {
       // Upsert (not insert) — guards against creating a second attendance
       // row for the same coach/class/date, which would double-count honor.
@@ -191,9 +190,9 @@ export default function AdminAbsensiCoach({ branchId }: { branchId: string }) {
         manual_note: form.note || null, status: manualStatus,
       }, { onConflict: COACH_ATTENDANCE_CONFLICT });
       setSaving(false);
-      if (error) return toast.error(t("admin.absensi.saveFailed"), error.message);
-      toast.success(t("admin.absensi.attendanceSavedToast"));
-      logActivity(supabase, { userId: user?.id ?? "unknown", userRole: "admin", userName: user?.user_metadata?.full_name ?? "Admin", branchId, entityType: "coach_attendances", entityId: form.coach_id, action: "create", label: t("admin.absensi.activityManualAdded", { date: form.session_date }), meta: { coach_id: form.coach_id, session_date: form.session_date, status: manualStatus } });
+      if (error) return toast.error("Failed to save", error.message);
+      toast.success("Manual attendance saved");
+      logActivity(supabase, { userId: user?.id ?? "unknown", userRole: "admin", userName: user?.user_metadata?.full_name ?? "Admin", branchId, entityType: "coach_attendances", entityId: form.coach_id, action: "create", label: `Manual coach attendance for ${form.session_date} added`, meta: { coach_id: form.coach_id, session_date: form.session_date, status: manualStatus } });
     }
     setOpenManual(false);
     setEditTarget(null);
@@ -233,11 +232,11 @@ export default function AdminAbsensiCoach({ branchId }: { branchId: string }) {
   };
 
   const deleteRecord = async (r: AttendanceRow) => {
-    const ok = await confirm({ title: t("admin.absensi.deleteConfirmTitle"), body: t("admin.absensi.deleteConfirmBody", { name: r.profile?.full_name ?? "", date: fmtDate(r.session_date) }), confirmLabel: t("common.actions.delete"), danger: true });
+    const ok = await confirm({ title: "Delete attendance?", body: (<>{"Delete "}<NoTranslate>{r.profile?.full_name ?? ""}</NoTranslate>{"'s attendance for "}<NoTranslate>{fmtDate(r.session_date)}</NoTranslate>{"?"}</>), confirmLabel: "Delete", danger: true });
     if (!ok) return;
     const { error } = await supabase.from("coach_attendances").delete().eq("id", r.id);
-    if (error) return toast.error(t("admin.absensi.deleteFailed"), error.message);
-    toast.success(t("admin.absensi.attendanceDeletedToast"));
+    if (error) return toast.error("Failed to delete", error.message);
+    toast.success("Attendance deleted");
     setPage(0);
     loadRecords(0, false);
   };
@@ -247,20 +246,20 @@ export default function AdminAbsensiCoach({ branchId }: { branchId: string }) {
       {/* Filters */}
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <Select value={filterCoach} onChange={e => setFilterCoach(e.target.value)}>
-          <option value="all">{t("admin.absensi.allCoachesOpt")}</option>
-          {coaches.map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
+          <option value="all">{"All Coaches"}</option>
+          {coaches.map(c => <option key={c.id} value={c.id} translate="no">{c.full_name}</option>)}
         </Select>
         <Select value={filterClass2} onChange={e => setFilterClass2(e.target.value)}>
-          <option value="all">{t("admin.absensi.allClassesOpt")}</option>
-          {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          <option value="all">{"All Classes"}</option>
+          {classes.map(c => <option key={c.id} value={c.id} translate="no">{c.name}</option>)}
         </Select>
         <div className="flex items-center gap-2">
           <Input type="date" value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)} className="flex-1" />
-          <span className="text-ink-mute text-xs shrink-0">{t("admin.absensi.toDateSeparator")}</span>
+          <span className="text-ink-mute text-xs shrink-0">{"to"}</span>
           <Input type="date" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)} className="flex-1" />
         </div>
         <div className="flex justify-end">
-          <Btn variant="primary" icon="plus" onClick={() => { setEditTarget(null); setForm({ coach_id: "", class_id: "", session_date: "", clock_in_time: "", note: "" }); setManualStatus("present"); setCoachClassIds(new Set()); setSessionDates([]); setOpenManual(true); }}>{t("admin.absensi.manualAttendanceBtn")}</Btn>
+          <Btn variant="primary" icon="plus" onClick={() => { setEditTarget(null); setForm({ coach_id: "", class_id: "", session_date: "", clock_in_time: "", note: "" }); setManualStatus("present"); setCoachClassIds(new Set()); setSessionDates([]); setOpenManual(true); }}>{"Manual Attendance"}</Btn>
         </div>
       </div>
       {/* Quick month filter */}
@@ -279,29 +278,29 @@ export default function AdminAbsensiCoach({ branchId }: { branchId: string }) {
       </div>
 
       <Card padded={false}>
-        {loading && records.length === 0 ? <div className="p-10 text-center text-ink-mute">{t("admin.absensi.loadingData")}</div> : (
+        {loading && records.length === 0 ? <div className="p-10 text-center text-ink-mute">{"Loading data…"}</div> : (
           <>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead><tr className="text-[11px] uppercase tracking-widest text-ink-faint font-bold border-b border-line">
-                  <th className="text-left py-3 px-5 font-bold">{t("admin.absensi.colDate")}</th><th className="text-left py-3 font-bold">{t("admin.absensi.colCoach")}</th>
-                  <th className="text-left py-3 font-bold">{t("admin.absensi.colClass")}</th><th className="text-left py-3 font-bold">{t("admin.absensi.colClockIn")}</th>
-                  <th className="text-left py-3 font-bold hidden sm:table-cell">{t("admin.absensi.colDistance")}</th><th className="text-left py-3 font-bold hidden sm:table-cell">{t("admin.absensi.colMethod")}</th>
-                  <th className="text-left py-3 font-bold">{t("admin.absensi.colSelfie")}</th>
+                  <th className="text-left py-3 px-5 font-bold">{"Date"}</th><th className="text-left py-3 font-bold">{"Coach"}</th>
+                  <th className="text-left py-3 font-bold">{"Class"}</th><th className="text-left py-3 font-bold">{"Clock-in"}</th>
+                  <th className="text-left py-3 font-bold hidden sm:table-cell">{"Distance"}</th><th className="text-left py-3 font-bold hidden sm:table-cell">{"Method"}</th>
+                  <th className="text-left py-3 font-bold">{"Selfie"}</th>
                   <th className="text-left py-3 pr-5 font-bold"></th>
                 </tr></thead>
                 <tbody className="divide-y divide-line">
                   {records.map((r) => (
                     <tr key={r.id} className="hover:bg-paper-tint">
                       <td className="py-3.5 px-5 text-ink-soft">{fmtDate(r.session_date)}</td>
-                      <td className="font-semibold">{r.profile?.full_name}</td>
-                      <td className="text-ink-soft">{r.class?.name}</td>
+                      <td className="font-semibold"><NoTranslate>{r.profile?.full_name}</NoTranslate></td>
+                      <td className="text-ink-soft"><NoTranslate>{r.class?.name}</NoTranslate></td>
                       <td className="font-mono">{r.clock_in_time?.slice(0, 5) ?? "—"}</td>
                       <td className="font-mono hidden sm:table-cell">{r.distance_meters != null ? `${r.distance_meters} m` : "—"}</td>
                       <td className="hidden sm:table-cell">
                         <div className="flex flex-col gap-1">
-                          {r.is_manual ? <Status kind="manual">{t("admin.absensi.methodManual")}</Status> : <Status kind="active">{t("admin.absensi.methodSelfieGps")}</Status>}
-                          {coachDbToUi(r.status) === "late" && <Status kind="late">{t("admin.absensi.statusLate")}</Status>}
+                          {r.is_manual ? <Status kind="manual">{"Manual"}</Status> : <Status kind="active">{"Selfie + GPS"}</Status>}
+                          {coachDbToUi(r.status) === "late" && <Status kind="late">{"Late"}</Status>}
                         </div>
                       </td>
                       <td>
@@ -309,63 +308,63 @@ export default function AdminAbsensiCoach({ branchId }: { branchId: string }) {
                       </td>
                       <td className="pr-5">
                         <div className="flex items-center gap-1">
-                          <button onClick={() => openEdit(r)} className="p-1.5 rounded hover:bg-paper-tint text-ink-mute hover:text-ink" title={t("common.actions.edit")}><Icon name="edit" className="w-4 h-4" /></button>
-                          <button onClick={() => deleteRecord(r)} className="p-1.5 rounded hover:bg-danger-50 text-ink-mute hover:text-danger-600" title={t("common.actions.delete")}><Icon name="trash" className="w-4 h-4" /></button>
+                          <button onClick={() => openEdit(r)} className="p-1.5 rounded hover:bg-paper-tint text-ink-mute hover:text-ink" title={"Edit"}><Icon name="edit" className="w-4 h-4" /></button>
+                          <button onClick={() => deleteRecord(r)} className="p-1.5 rounded hover:bg-danger-50 text-ink-mute hover:text-danger-600" title={"Delete"}><Icon name="trash" className="w-4 h-4" /></button>
                         </div>
                       </td>
                     </tr>
                   ))}
-                  {records.length === 0 && !loading && <tr><td colSpan={8} className="py-10 text-center text-ink-mute">{t("admin.absensi.noAttendanceYet")}</td></tr>}
+                  {records.length === 0 && !loading && <tr><td colSpan={8} className="py-10 text-center text-ink-mute">{"No attendance yet"}</td></tr>}
                 </tbody>
               </table>
             </div>
             {hasMore && (
               <div className="px-5 py-3 border-t border-line">
-                <Btn variant="ghost" onClick={loadMore} disabled={loading} className="w-full">{loading ? t("admin.absensi.loadingBtn") : t("admin.absensi.showMoreBtn")}</Btn>
+                <Btn variant="ghost" onClick={loadMore} disabled={loading} className="w-full">{loading ? "Loading…" : "Show more"}</Btn>
               </div>
             )}
           </>
         )}
       </Card>
-      <Modal open={openManual} onClose={() => { setOpenManual(false); setEditTarget(null); }} title={editTarget ? t("admin.absensi.editModalTitle") : t("admin.absensi.addModalTitle")}
-        footer={<><Btn variant="ghost" onClick={() => setOpenManual(false)}>{t("common.actions.cancel")}</Btn><Btn variant="primary" onClick={saveManual} disabled={saving}>{saving ? t("common.actions.saving") : t("admin.absensi.saveAttendanceBtn")}</Btn></>}>
+      <Modal open={openManual} onClose={() => { setOpenManual(false); setEditTarget(null); }} title={editTarget ? "Edit Coach Attendance" : "Manual Coach Attendance"}
+        footer={<><Btn variant="ghost" onClick={() => setOpenManual(false)}>{"Cancel"}</Btn><Btn variant="primary" onClick={saveManual} disabled={saving}>{saving ? "Saving…" : "Save attendance"}</Btn></>}>
         <div className="space-y-4">
           <Card className="!p-3 bg-manual-50 border-manual-500/20">
-            <div className="flex items-start gap-2.5 text-sm"><Icon name="info" className="w-5 h-5 text-manual-500 shrink-0" /><span>{t("admin.absensi.manualNoticePrefix")} <b>{t("admin.absensi.manualNoticeBold")}</b> {t("admin.absensi.manualNoticeSuffix")}</span></div>
+            <div className="flex items-start gap-2.5 text-sm"><Icon name="info" className="w-5 h-5 text-manual-500 shrink-0" /><span>{"Manual attendance is labeled"} <b>{"\"Manual — by Admin\""}</b> {"for transparency."}</span></div>
           </Card>
           <div className="grid sm:grid-cols-2 gap-4">
-            <Field label={t("admin.absensi.colCoach")} required>
+            <Field label={"Coach"} required>
               <Select value={form.coach_id} onChange={e => onCoachChange(e.target.value)}>
-                <option value="">{t("admin.absensi.selectCoachPlaceholder")}</option>
-                {coaches.map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
+                <option value="">{"Select coach…"}</option>
+                {coaches.map(c => <option key={c.id} value={c.id} translate="no">{c.full_name}</option>)}
               </Select>
             </Field>
-            <Field label={t("admin.absensi.colClass")} required>
+            <Field label={"Class"} required>
               <Select value={form.class_id} onChange={e => onClassChange(e.target.value)} disabled={!form.coach_id}>
-                <option value="">{form.coach_id ? t("admin.absensi.selectClassPlaceholder") : t("admin.absensi.selectCoachFirstPlaceholder")}</option>
-                {classes.filter(c => coachClassIds.has(c.id)).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                <option value="">{form.coach_id ? "Select class…" : "Select coach first"}</option>
+                {classes.filter(c => coachClassIds.has(c.id)).map(c => <option key={c.id} value={c.id} translate="no">{c.name}</option>)}
               </Select>
             </Field>
-            <Field label={t("admin.absensi.fieldSessionDate")} required>
+            <Field label={"Session / date"} required>
               <Select value={form.session_date} onChange={e => setForm(f => ({ ...f, session_date: e.target.value }))} disabled={!form.class_id}>
-                <option value="">{form.class_id ? t("admin.absensi.selectSessionPlaceholder") : t("admin.absensi.selectClassFirstPlaceholder")}</option>
+                <option value="">{form.class_id ? "Select session…" : "Select class first"}</option>
                 {sessionDates.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
               </Select>
             </Field>
-            <Field label={t("admin.absensi.fieldClockInTime")}><TimePicker value={form.clock_in_time} onChange={v => setForm(f => ({ ...f, clock_in_time: v }))} /></Field>
+            <Field label={"Clock-in time"}><TimePicker value={form.clock_in_time} onChange={v => setForm(f => ({ ...f, clock_in_time: v }))} /></Field>
           </div>
-          <Field label={t("admin.absensi.fieldAttendanceStatus")}>
+          <Field label={"Attendance status"}>
             <Select value={manualStatus} onChange={e => setManualStatus(e.target.value as CoachDbStatus)}>
               {COACH_DB_STATUSES.map(s => (
-                <option key={s} value={s}>{s === "present" ? t("admin.absensi.statusPresentOnTime") : s === "late" ? t("admin.absensi.statusLate") : t("admin.absensi.statusAbsent")}</option>
+                <option key={s} value={s}>{s === "present" ? "Present (On Time)" : s === "late" ? "Late" : "Absent"}</option>
               ))}
             </Select>
           </Field>
-          <Field label={t("admin.absensi.fieldNoteReason")}><Textarea rows={3} value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} placeholder={t("admin.absensi.notePlaceholder")} /></Field>
+          <Field label={"Note / reason"}><Textarea rows={3} value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} placeholder={"E.g. Coach forgot to clock in, already confirmed via WA."} /></Field>
         </div>
       </Modal>
       {lightboxKey && (
-        <PhotoLightbox src={lightboxUrl} name={t("admin.absensi.colSelfie")} onClose={() => setLightboxKey(null)} />
+        <PhotoLightbox src={lightboxUrl} name={"Selfie"} onClose={() => setLightboxKey(null)} />
       )}
     </div>
   );

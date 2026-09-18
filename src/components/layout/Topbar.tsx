@@ -4,7 +4,7 @@ import Icon from "@/components/ui/Icon";
 
 interface TopbarProps {
   title: string;
-  sub?: string;
+  sub?: React.ReactNode;
   search?: string;
   right?: React.ReactNode;
   onMenu?: () => void;

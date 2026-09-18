@@ -9,14 +9,14 @@ type AccountsMasterDataHook = ReturnType<typeof useAccountsMasterData>;
 
 export default function AccountsTable({ hook }: { hook: AccountsMasterDataHook }) {
   const {
-    t, loading, qrSelectMode, filtered, isAllFilteredSelected, toggleSelectAllFiltered,
+    loading, qrSelectMode, filtered, isAllFilteredSelected, toggleSelectAllFiltered,
     selectedQRIds, toggleSelectAccount, setSelected, roleLabel, isKnownRole, toQRCardAccount,
   } = hook;
 
   return (
     <div className="bg-paper rounded-2xl border border-line overflow-hidden shadow-xs">
       {loading ? (
-        <div className="p-10 text-center text-ink-mute">{t("owner.accounts.loading")}</div>
+        <div className="p-10 text-center text-ink-mute">{"Loading data…"}</div>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -32,11 +32,11 @@ export default function AccountsTable({ hook }: { hook: AccountsMasterDataHook }
                     />
                   </th>
                 )}
-                <th className="text-left py-2 px-5 font-bold">{t("owner.accounts.colName")}</th>
-                <th className="text-left py-2 px-3 font-bold w-[140px]">{t("owner.accounts.colRole")}</th>
-                <th className="text-left py-2 px-3 font-bold w-[140px] hidden md:table-cell">{t("owner.accounts.colBranch")}</th>
+                <th className="text-left py-2 px-5 font-bold">{"Name"}</th>
+                <th className="text-left py-2 px-3 font-bold w-[140px]">{"Role"}</th>
+                <th className="text-left py-2 px-3 font-bold w-[140px] hidden md:table-cell">{"Center"}</th>
                 <th className="text-left py-2 px-3 font-bold w-[150px] hidden sm:table-cell">ACCOUNT ID</th>
-                <th className="text-left py-2 px-3 font-bold w-[100px]">{t("owner.accounts.colStatus")}</th>
+                <th className="text-left py-2 px-3 font-bold w-[100px]">{"Status"}</th>
                 <th className="text-right py-2 pr-5 font-bold w-[110px]">ACTIONS</th>
               </tr>
             </thead>
@@ -105,12 +105,12 @@ export default function AccountsTable({ hook }: { hook: AccountsMasterDataHook }
                       {a.is_archived ? (
                         <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600 border border-slate-300/60">
                           <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
-                          {t("owner.accountDetail.inactiveBadge")}
+                          {"Inactive"}
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-ok-50 text-ok-700 border border-ok-200">
                           <span className="w-1.5 h-1.5 rounded-full bg-ok-600" />
-                          {t("owner.accountDetail.activeBadge")}
+                          {"Active"}
                         </span>
                       )}
                     </td>
@@ -120,7 +120,7 @@ export default function AccountsTable({ hook }: { hook: AccountsMasterDataHook }
                           type="button"
                           onClick={() => downloadSingleQRCard(toQRCardAccount(a))}
                           className="w-8 h-8 rounded-lg border border-line bg-paper hover:bg-ocean-50 text-ink-mute hover:text-ocean-700 flex items-center justify-center transition-colors cursor-pointer"
-                          title={t("owner.accountDetail.downloadIdCardPng")}
+                          title={"Download ID Card (PNG)"}
                         >
                           <Icon name="qr" className="w-4 h-4" />
                         </button>
@@ -128,7 +128,7 @@ export default function AccountsTable({ hook }: { hook: AccountsMasterDataHook }
                           type="button"
                           onClick={() => setSelected(a)}
                           className="w-8 h-8 rounded-lg border border-line bg-paper hover:bg-paper-deep text-ink-mute hover:text-ink flex items-center justify-center transition-colors cursor-pointer"
-                          title={t("owner.accountDetail.viewTitle")}
+                          title={"Account Detail"}
                         >
                           <Icon name="eye" className="w-4 h-4" />
                         </button>
@@ -140,7 +140,7 @@ export default function AccountsTable({ hook }: { hook: AccountsMasterDataHook }
               {filtered.length === 0 && (
                 <tr>
                   <td colSpan={qrSelectMode ? 7 : 6} className="text-center py-10 text-ink-mute">
-                    {t("owner.accounts.empty")}
+                    {"No accounts found."}
                   </td>
                 </tr>
               )}

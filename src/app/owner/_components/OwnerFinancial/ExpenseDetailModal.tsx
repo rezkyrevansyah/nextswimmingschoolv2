@@ -5,11 +5,9 @@ import Btn from "@/components/ui/Btn";
 import ProofViewer from "@/components/ui/ProofViewer";
 import { NoTranslate } from "@/components/ui/NoTranslate";
 import { fmtIDR } from "@/lib/utils";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import type { FinancialHook } from "./index";
 
 export default function ExpenseDetailModal({ hook }: { hook: FinancialHook }) {
-  const { t } = useLocale();
   const { selectedExpenseDetail, setSelectedExpenseDetail, copyToClipboard } = hook;
 
   if (!selectedExpenseDetail) return null;
@@ -20,11 +18,11 @@ export default function ExpenseDetailModal({ hook }: { hook: FinancialHook }) {
     <Modal
       open={!!selectedExpenseDetail}
       onClose={() => setSelectedExpenseDetail(null)}
-      title={t("owner.financial.detailModalTitle")}
+      title={"Payroll Expense Breakdown"}
       size="lg"
       footer={
         <div className="flex justify-end">
-          <Btn variant="ghost" onClick={() => setSelectedExpenseDetail(null)}>{t("owner.financial.closeBtn")}</Btn>
+          <Btn variant="ghost" onClick={() => setSelectedExpenseDetail(null)}>{"Close"}</Btn>
         </div>
       }
     >
@@ -37,7 +35,7 @@ export default function ExpenseDetailModal({ hook }: { hook: FinancialHook }) {
               d.status === "approved" ? "bg-ocean-50 text-ocean-700 border border-ocean-200" :
               "bg-warn-50 text-warn-700 border border-warn-200"
             }`}>
-              {d.status === "paid" ? t("owner.financial.statusPaid") : d.status === "approved" ? t("owner.financial.statusApproved") : t("owner.financial.statusPending")}
+              {d.status === "paid" ? "Paid" : d.status === "approved" ? "Approved" : "Pending"}
             </span>
           </div>
           <div className="text-xs text-ink-mute">
@@ -53,15 +51,15 @@ export default function ExpenseDetailModal({ hook }: { hook: FinancialHook }) {
 
         {items.length > 0 && (
           <div>
-            <div className="text-xs font-bold uppercase tracking-wider text-ink-faint mb-2">{t("owner.financial.detailItemsTitle")}</div>
+            <div className="text-xs font-bold uppercase tracking-wider text-ink-faint mb-2">{"Session & Invoice Claim Breakdown"}</div>
             <div className="border border-line rounded-xl overflow-hidden">
               <table className="w-full text-xs">
                 <thead>
                   <tr className="bg-paper-deep text-[10px] uppercase font-bold text-ink-faint">
-                    <th className="text-left px-3 py-2">{t("owner.financial.colItemType")}</th>
-                    <th className="text-right px-3 py-2">{t("owner.financial.colSession")}</th>
-                    <th className="text-right px-3 py-2">{t("owner.financial.colRate")}</th>
-                    <th className="text-right px-3 py-2">{t("owner.financial.colSubtotal")}</th>
+                    <th className="text-left px-3 py-2">{"Type / Description"}</th>
+                    <th className="text-right px-3 py-2">{"Sessions"}</th>
+                    <th className="text-right px-3 py-2">{"Rate"}</th>
+                    <th className="text-right px-3 py-2">{"Subtotal"}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line">
@@ -82,29 +80,29 @@ export default function ExpenseDetailModal({ hook }: { hook: FinancialHook }) {
         <div>
           <div className="border border-line rounded-xl divide-y divide-line text-sm">
             <div className="flex items-center justify-between px-3 py-2">
-              <span className="text-ink-mute">{t("owner.financial.detailGross")}</span>
+              <span className="text-ink-mute">{"Gross Total"}</span>
               <span className="font-mono font-semibold text-ink">{fmtIDR(d.grossAmount)}</span>
             </div>
             {d.taxAmount > 0 && (
               <div className="flex items-center justify-between px-3 py-2">
-                <span className="text-ink-mute">{t("owner.financial.detailTax")}</span>
+                <span className="text-ink-mute">{"Income Tax (PPh 21)"}</span>
                 <span className="font-mono text-warn-700">-{fmtIDR(d.taxAmount)}</span>
               </div>
             )}
             {d.loanDeduction > 0 && (
               <div className="flex items-center justify-between px-3 py-2">
-                <span className="text-ink-mute">{t("owner.financial.detailLoanDeduction")}</span>
+                <span className="text-ink-mute">{"Loan / Cash Advance Deduction"}</span>
                 <span className="font-mono text-purple-700">-{fmtIDR(d.loanDeduction)}</span>
               </div>
             )}
             {d.otherDeductions > 0 && (
               <div className="flex items-center justify-between px-3 py-2">
-                <span className="text-ink-mute">{t("owner.financial.detailOtherDeductions")}</span>
+                <span className="text-ink-mute">{"Other Deductions"}</span>
                 <span className="font-mono text-danger-700">-{fmtIDR(d.otherDeductions)}</span>
               </div>
             )}
             <div className="flex items-center justify-between px-3 py-2 bg-ocean-50/50">
-              <span className="font-bold text-ocean-900">{t("owner.financial.detailNet")}</span>
+              <span className="font-bold text-ocean-900">{"Real Transferred (Net)"}</span>
               <span className="font-mono font-extrabold text-ocean-900">{fmtIDR(d.netTransferredAmount)}</span>
             </div>
           </div>
@@ -112,7 +110,7 @@ export default function ExpenseDetailModal({ hook }: { hook: FinancialHook }) {
 
         {d.bankInfo?.bankAccount && (
           <div>
-            <div className="text-xs font-bold uppercase tracking-wider text-ink-faint mb-2">{t("owner.financial.detailBank")}</div>
+            <div className="text-xs font-bold uppercase tracking-wider text-ink-faint mb-2">{"Destination Bank Account"}</div>
             <div className="border border-line rounded-xl p-3 flex items-center justify-between">
               <div>
                 <div className="font-bold text-sm text-ink"><NoTranslate>{d.bankInfo.bankName ?? "Bank"}</NoTranslate></div>
@@ -122,7 +120,7 @@ export default function ExpenseDetailModal({ hook }: { hook: FinancialHook }) {
               <button
                 onClick={() => copyToClipboard(d.bankInfo!.bankAccount!, d.receiverName)}
                 className="p-2 rounded-lg hover:bg-paper-tint text-ocean-700 hover:text-ocean-900 transition-colors"
-                title={t("owner.financial.copyAccountNumberTitle")}
+                title={"Copy Account Number"}
               >
                 <Icon name="copy" className="w-4 h-4" />
               </button>
@@ -132,7 +130,7 @@ export default function ExpenseDetailModal({ hook }: { hook: FinancialHook }) {
 
         {d.proofUrl && (
           <div>
-            <div className="text-xs font-bold uppercase tracking-wider text-ink-faint mb-2">{t("owner.financial.viewProof")}</div>
+            <div className="text-xs font-bold uppercase tracking-wider text-ink-faint mb-2">{"View proof"}</div>
             <ProofViewer proofUrl={d.proofUrl} label={d.receiverName} />
           </div>
         )}

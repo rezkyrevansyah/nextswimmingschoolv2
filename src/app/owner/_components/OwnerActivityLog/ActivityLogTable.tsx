@@ -1,5 +1,4 @@
 "use client";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import Icon from "@/components/ui/Icon";
 import Status from "@/components/ui/Status";
 import Avatar from "@/components/ui/Avatar";
@@ -10,7 +9,6 @@ import type { useActivityLogData } from "./useActivityLogData";
 type ActivityLogDataHook = ReturnType<typeof useActivityLogData>;
 
 export default function ActivityLogTable({ hook }: { hook: ActivityLogDataHook }) {
-  const { t } = useLocale();
   const {
     logs, loading, setDetailLog, page, setPage, PAGE_SIZE, total, totalPages,
     fmtTime, fmtShortDate, branchName, entityLabel, actionLabel,
@@ -21,15 +19,15 @@ export default function ActivityLogTable({ hook }: { hook: ActivityLogDataHook }
       {loading ? (
         <div className="p-16 text-center text-ink-mute space-y-3">
           <Icon name="refresh" className="w-7 h-7 text-ocean-600 animate-spin mx-auto" />
-          <p className="text-sm font-medium">{t("owner.activityLog.loading")}</p>
+          <p className="text-sm font-medium">{"Loading data…"}</p>
         </div>
       ) : logs.length === 0 ? (
         <div className="p-16 text-center">
           <div className="w-12 h-12 rounded-2xl bg-paper-deep flex items-center justify-center mx-auto mb-3 text-ink-faint">
             <Icon name="clipboard" className="w-6 h-6" />
           </div>
-          <div className="font-display font-bold text-ink text-base">{t("owner.activityLog.empty")}</div>
-          <p className="text-xs text-ink-mute mt-1 max-w-sm mx-auto">{t("owner.activityLog.emptySub")}</p>
+          <div className="font-display font-bold text-ink text-base">{"No activity yet"}</div>
+          <p className="text-xs text-ink-mute mt-1 max-w-sm mx-auto">{"Activity will appear once data changes."}</p>
         </div>
       ) : (
         <>
@@ -38,12 +36,12 @@ export default function ActivityLogTable({ hook }: { hook: ActivityLogDataHook }
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="h-10 bg-paper-deep border-b border-line text-[10px] uppercase font-bold text-ink-faint tracking-wider">
-                  <th className="px-5">{t("owner.activityLog.colTime")}</th>
-                  <th className="px-5">{t("owner.activityLog.colBy")}</th>
-                  <th className="px-5">{t("owner.activityLog.colAction")}</th>
-                  <th className="px-5">{t("owner.activityLog.colEntity")}</th>
-                  <th className="px-5">{t("owner.activityLog.colBranch")}</th>
-                  <th className="px-5">{t("owner.activityLog.colDescription")}</th>
+                  <th className="px-5">{"Time"}</th>
+                  <th className="px-5">{"By"}</th>
+                  <th className="px-5">{"Action"}</th>
+                  <th className="px-5">{"Entity"}</th>
+                  <th className="px-5">{"Center"}</th>
+                  <th className="px-5">{"Description"}</th>
                   <th className="px-5 text-center w-14"></th>
                 </tr>
               </thead>
@@ -138,7 +136,7 @@ export default function ActivityLogTable({ hook }: { hook: ActivityLogDataHook }
           {/* Pagination bar */}
           <div className="flex items-center justify-between px-5 py-3.5 border-t border-line bg-paper-deep/40 text-xs">
             <div className="text-ink-mute font-medium">
-              {t("owner.activityLog.paginationSummary", { from: page * PAGE_SIZE + 1, to: Math.min((page + 1) * PAGE_SIZE, total), total, page: page + 1, total_pages: totalPages })}
+              {`${page * PAGE_SIZE + 1}–${Math.min((page + 1) * PAGE_SIZE, total)} of ${total} activities · page ${page + 1}/${totalPages}`}
             </div>
             <div className="flex gap-1.5">
               {[

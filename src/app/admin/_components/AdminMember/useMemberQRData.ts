@@ -1,12 +1,10 @@
 "use client";
 import { useState } from "react";
 import { useToast } from "@/components/providers/ToastProvider";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import type { MemberRow } from "./_types";
 
 export function useMemberQRData({ members }: { members: MemberRow[] }) {
   const toast = useToast();
-  const { t } = useLocale();
   const [qrSelectMode, setQrSelectMode] = useState(false);
   const [selectedQR, setSelectedQR] = useState<Set<string>>(new Set());
   const [generatingQR, setGeneratingQR] = useState(false);
@@ -43,9 +41,9 @@ export function useMemberQRData({ members }: { members: MemberRow[] }) {
       URL.revokeObjectURL(url);
       setQrSelectMode(false);
       setSelectedQR(new Set());
-      toast.success(t("admin.members.downloadCompleteToast"), t("admin.members.qrDownloadedSub", { count: memberIds.length }));
+      toast.success("Download complete", `${memberIds.length} QR codes downloaded successfully`);
     } catch {
-      toast.error(t("admin.members.generateQrFailedTitle"), t("admin.members.generateQrFailedBody"));
+      toast.error("Failed to generate QR", "An error occurred while creating the ZIP file.");
     }
     setGeneratingQR(false);
   };

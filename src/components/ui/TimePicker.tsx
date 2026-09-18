@@ -1,7 +1,6 @@
 "use client";
 import React, { useState, useRef, useMemo } from "react";
 import { cn } from "@/lib/utils";
-import { useLocale } from "@/components/providers/LocaleProvider";
 
 interface TimePickerProps {
   value: string;
@@ -33,7 +32,6 @@ function clampDigits(digits: string): { hh: string; mm: string } {
 }
 
 export default function TimePicker({ value, onChange, placeholder, className, disabled }: TimePickerProps) {
-  const { t } = useLocale();
   const [digits, setDigits] = useState("");
   const [editing, setEditing] = useState(false);
   const [touched, setTouched] = useState(false);
@@ -105,7 +103,7 @@ export default function TimePicker({ value, onChange, placeholder, className, di
         autoComplete="off"
         disabled={disabled}
         value={displayValue}
-        placeholder={placeholder || t("common.timePicker.placeholder")}
+        placeholder={placeholder || "Select time"}
         onFocus={handleFocus}
         onBlur={handleBlur}
         onChange={handleChange}
@@ -118,7 +116,7 @@ export default function TimePicker({ value, onChange, placeholder, className, di
           disabled && "opacity-50 cursor-not-allowed bg-paper-tint",
         )}
       />
-      <p className="text-[11px] text-ink-faint mt-1">{t("common.timePicker.hint")}</p>
+      <p className="text-[11px] text-ink-faint mt-1">{"24-hour format, e.g. 07:00, 14:00"}</p>
     </div>
   );
 }

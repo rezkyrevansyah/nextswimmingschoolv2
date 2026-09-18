@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
 import { Card, SectionTitle } from "@/components/ui/Card";
-import { useLocale } from "@/components/providers/LocaleProvider";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 import { fmtIDR } from "@/lib/utils";
 import { printPayslip } from "@/lib/printPayslip";
 import { createClient } from "@/utils/supabase/client";
@@ -23,8 +23,7 @@ interface PayslipDeductionRow {
 
 export default function CoachPayslip({ coachId, coachName }: { coachId: string; coachName: string }) {
   const supabase = createClient();
-  const { t, locale } = useLocale();
-  const localeTag = locale === "id" ? "id-ID" : "en-US";
+  const localeTag = "en-US";
   const [payslips, setPayslips] = useState<CoachPayslipItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -62,15 +61,15 @@ export default function CoachPayslip({ coachId, coachName }: { coachId: string; 
 
   return (
     <div className="space-y-4">
-      <SectionTitle sub={t("coach.payslip.sub")}>{t("coach.payslip.title")}</SectionTitle>
+      <SectionTitle sub={"Payslips published by the owner."}>{"Payslip"}</SectionTitle>
 
       {loading ? (
-        <Card className="!p-10 text-center text-ink-mute">{t("coach.payslip.loadingData")}</Card>
+        <Card className="!p-10 text-center text-ink-mute">{"Loading data…"}</Card>
       ) : payslips.length === 0 ? (
         <Card className="!p-10 text-center">
           <Icon name="invoice" className="w-10 h-10 text-ink-faint mx-auto mb-3" />
-          <div className="font-display font-bold text-ink">{t("coach.payslip.noPayslipsYet")}</div>
-          <p className="text-sm text-ink-mute mt-1">{t("coach.payslip.payslipsAppearHint")}</p>
+          <div className="font-display font-bold text-ink">{"No payslips yet"}</div>
+          <p className="text-sm text-ink-mute mt-1">{"Payslips will appear here once the owner publishes them."}</p>
         </Card>
       ) : (
         <div className="space-y-3">
@@ -81,12 +80,12 @@ export default function CoachPayslip({ coachId, coachName }: { coachId: string; 
                   <Icon name="wallet" className="w-5 h-5" />
                 </span>
                 <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-ink">{p.period_label}</div>
-                  <div className="text-xs text-ink-mute mt-0.5">{p.branch?.name ?? "—"} · {p.published_at ? new Date(p.published_at).toLocaleDateString(localeTag, { dateStyle: "long" }) : "—"}</div>
+                  <div className="font-semibold text-ink"><NoTranslate>{p.period_label}</NoTranslate></div>
+                  <div className="text-xs text-ink-mute mt-0.5"><NoTranslate>{p.branch?.name ?? "—"}</NoTranslate> · {p.published_at ? new Date(p.published_at).toLocaleDateString(localeTag, { dateStyle: "long" }) : "—"}</div>
                 </div>
                 <div className="text-right shrink-0">
                   <div className="font-mono font-bold text-ok-700">{fmtIDR(p.net_amount)}</div>
-                  <div className="text-xs text-ink-mute">{t("coach.payslip.netSalaryLabel")}</div>
+                  <div className="text-xs text-ink-mute">{"Net Salary"}</div>
                 </div>
                 <Icon name={expanded === p.id ? "chevronD" : "chevron"} className="w-4 h-4 text-ink-faint shrink-0 rotate-0" />
               </button>
@@ -95,34 +94,34 @@ export default function CoachPayslip({ coachId, coachName }: { coachId: string; 
                 <div className="border-t border-line px-4 py-4 space-y-3 bg-paper-tint">
                   <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
                     <div className="col-span-2">
-                      <div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">{t("coach.payslip.grossSalaryLabel")}</div>
+                      <div className="text-xs text-ink-faint uppercase tracking-widest font-bold mb-0.5">{"Gross Salary"}</div>
                       <div className="font-mono font-semibold">{fmtIDR(p.gross_amount)}</div>
                     </div>
                     {loadingDeductions ? (
-                      <div className="col-span-2 text-xs text-ink-mute">{t("coach.payslip.loadingDeductions")}</div>
+                      <div className="col-span-2 text-xs text-ink-mute">{"Loading deduction details…"}</div>
                     ) : deductions.length > 0 ? (
                       deductions.map(d => (
                         <div key={d.id} className="col-span-2 flex items-center justify-between">
-                          <span className="text-xs text-ink-faint">{d.label}</span>
+                          <span className="text-xs text-ink-faint"><NoTranslate>{d.label}</NoTranslate></span>
                           <span className="font-mono font-semibold text-danger-700 text-sm">- {fmtIDR(d.amount)}</span>
                         </div>
                       ))
                     ) : (
                       <div className="col-span-2 flex items-center justify-between">
-                        <span className="text-xs text-ink-faint uppercase tracking-widest font-bold">{t("coach.payslip.deductionsLabel")}</span>
+                        <span className="text-xs text-ink-faint uppercase tracking-widest font-bold">{"Deductions"}</span>
                         <span className="font-mono font-semibold text-danger-700 text-sm">- {fmtIDR(p.deductions)}</span>
                       </div>
                     )}
                     <div className="col-span-2 bg-ok-50 border border-ok-200 rounded-xl px-3 py-2 flex items-center justify-between">
-                      <span className="text-sm font-semibold text-ok-900">{t("coach.payslip.netSalaryLabel")}</span>
+                      <span className="text-sm font-semibold text-ok-900">{"Net Salary"}</span>
                       <span className="font-mono font-bold text-ok-700 text-base">{fmtIDR(p.net_amount)}</span>
                     </div>
                   </div>
                   {p.notes && (
-                    <div className="text-sm text-ink-mute bg-white rounded-xl px-3 py-2 border border-line">{p.notes}</div>
+                    <div className="text-sm text-ink-mute bg-white rounded-xl px-3 py-2 border border-line"><NoTranslate>{p.notes}</NoTranslate></div>
                   )}
                   <Btn variant="outline" icon="print" size="sm" className="w-full" onClick={() => printSlip(p)}>
-                    {t("coach.payslip.printPayslipBtn")}
+                    {"Print Payslip"}
                   </Btn>
                 </div>
               )}

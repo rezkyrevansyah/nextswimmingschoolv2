@@ -8,14 +8,14 @@ import type { OwnerClassesMasterHook } from "./_hook";
 
 export default function ClassCoachTab({ hook }: { hook: OwnerClassesMasterHook }) {
   const {
-    t, detailClass, detailLoading, availableCoachesForDetail, addCoachId, setAddCoachId, addingCoach,
+    detailClass, detailLoading, availableCoachesForDetail, addCoachId, setAddCoachId, addingCoach,
     assignCoachToClass, detailCoaches, settingRole, setCoachRole, removeCoachFromClass, savingSigner, setRaporSigner,
   } = hook;
 
   return (
     <div className="space-y-4">
       {detailLoading ? (
-        <div className="text-center py-8 text-ink-mute text-sm">{t("owner.classes.coachLoading")}</div>
+        <div className="text-center py-8 text-ink-mute text-sm">{"Loading…"}</div>
       ) : (
         <>
           {/* Add Coach Selector */}
@@ -32,7 +32,7 @@ export default function ClassCoachTab({ hook }: { hook: OwnerClassesMasterHook }
                   backgroundRepeat: "no-repeat",
                 }}
               >
-                <option value="">{t("owner.classes.selectCoachPlaceholder")}</option>
+                <option value="">{"Select coach to assign…"}</option>
                 {availableCoachesForDetail.map((c) => (
                   <option key={c.id} value={c.id} translate="no">
                     {c.full_name}
@@ -40,13 +40,13 @@ export default function ClassCoachTab({ hook }: { hook: OwnerClassesMasterHook }
                 ))}
               </select>
               <Btn variant="primary" size="sm" disabled={!addCoachId || addingCoach} onClick={assignCoachToClass}>
-                {t("owner.classes.addCoachBtn")}
+                {"Assign"}
               </Btn>
             </div>
           )}
 
           {detailCoaches.length === 0 ? (
-            <div className="text-center py-8 text-ink-mute text-sm">{t("owner.classes.coachEmpty")}</div>
+            <div className="text-center py-8 text-ink-mute text-sm">{"No coach in this class yet."}</div>
           ) : (
             <div className="divide-y divide-line border rounded-xl overflow-hidden">
               {detailCoaches.map((c) => (
@@ -67,7 +67,7 @@ export default function ClassCoachTab({ hook }: { hook: OwnerClassesMasterHook }
                           : "bg-paper-deep text-ink-soft hover:bg-paper-deep/80"
                       }`}
                     >
-                      {t("owner.classes.headCoachBtn")}
+                      {"Head Coach"}
                     </button>
                     <button
                       type="button"
@@ -79,7 +79,7 @@ export default function ClassCoachTab({ hook }: { hook: OwnerClassesMasterHook }
                           : "bg-paper-deep text-ink-soft hover:bg-paper-deep/80"
                       }`}
                     >
-                      {t("owner.classes.assistantBtn")}
+                      {"Assistant"}
                     </button>
                     <button
                       type="button"
@@ -97,21 +97,21 @@ export default function ClassCoachTab({ hook }: { hook: OwnerClassesMasterHook }
           {/* Rapor Signer Coach Override */}
           <div className="border-t border-line pt-3">
             <div className="text-xs font-bold uppercase tracking-widest text-ink-faint mb-1.5">
-              {t("owner.classes.raporSignerTitle")}
+              {"Report Signature Owner"}
             </div>
             <Select
               value={detailClass?.rapor_signer_coach_id ?? ""}
               disabled={savingSigner}
               onChange={(e) => detailClass && setRaporSigner(detailClass.id, e.target.value || null)}
             >
-              <option value="">{t("owner.classes.raporSignerAuto")}</option>
+              <option value="">{"Automatic (follows Head Coach)"}</option>
               {detailCoaches.map((c) => (
                 <option key={c.id} value={c.id} translate="no">
                   {c.full_name}
                 </option>
               ))}
             </Select>
-            <p className="text-[11px] text-ink-faint mt-1">{t("owner.classes.raporSignerHint")}</p>
+            <p className="text-[11px] text-ink-faint mt-1">{"The printed report label always shows “Head Coach” regardless of which coach is selected here."}</p>
           </div>
         </>
       )}

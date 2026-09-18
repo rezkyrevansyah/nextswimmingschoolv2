@@ -1,7 +1,6 @@
 "use client";
 import { type ReactNode } from "react";
 import Icon from "@/components/ui/Icon";
-import { useLocale } from "@/components/providers/LocaleProvider";
 
 export default function InfoRow({
   icon,
@@ -17,7 +16,6 @@ export default function InfoRow({
   title?: string;
   onCopy?: () => void;
 }) {
-  const { t } = useLocale();
   return (
     <div className="flex items-start gap-2.5 p-3 rounded-xl bg-paper-tint border border-line/60">
       <span className="w-7 h-7 rounded-lg bg-ocean-100 text-ocean-600 flex items-center justify-center shrink-0 mt-0.5">
@@ -33,7 +31,7 @@ export default function InfoRow({
         <button
           onClick={onCopy}
           className="text-ink-mute hover:text-ocean-600 p-0.5 shrink-0 mt-1"
-          title={t("owner.accountDetail.copyIconTitleAttr")}
+          title={"Copy"}
         >
           <Icon name="copy" className="w-3.5 h-3.5" />
         </button>

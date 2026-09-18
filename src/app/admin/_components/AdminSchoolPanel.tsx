@@ -3,13 +3,13 @@ import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
 import { Field, Input, Select } from "@/components/ui/FormFields";
 import { Card } from "@/components/ui/Card";
 import Status from "@/components/ui/Status";
 import Modal from "@/components/ui/Modal";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 import type { School } from "../_types";
 import { parseUserApiError } from "../_utils";
 import { waLink } from "@/lib/utils";
@@ -20,7 +20,6 @@ export default function AdminSchoolPanel({ branchId }: { branchId: string }) {
   const supabase = createClient();
   const toast = useToast();
   const confirm = useConfirm();
-  const { t } = useLocale();
   const [schools, setSchools] = useState<School[]>([]);
   const [loading, setLoading] = useState(true);
   const [openAdd, setOpenAdd] = useState(false);
@@ -45,15 +44,15 @@ export default function AdminSchoolPanel({ branchId }: { branchId: string }) {
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const create = async () => {
-    if (!form.name || !form.email || !form.password) return toast.error(t("admin.schoolPanel.nameEmailPasswordRequired"));
-    if (form.password.length < 6) return toast.error(t("admin.schoolPanel.passwordMinLength"));
+    if (!form.name || !form.email || !form.password) return toast.error("Name, email, and password are required");
+    if (form.password.length < 6) return toast.error("Password must be at least 6 characters");
     setSaving(true);
     const res = await fetch("/api/admin/users", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email: form.email, password: form.password, full_name: form.name, role: "school", branch_id: branchId }),
     });
     const json = await res.json() as { user_id?: string; error?: string; code?: string };
-    if (!res.ok) { const [errT, errS, errD] = parseUserApiError(json, t); toast.error(errT, errS, errD); setSaving(false); return; }
+    if (!res.ok) { const [errT, errS, errD] = parseUserApiError(json); toast.error(errT, errS, errD); setSaving(false); return; }
 
     const { error } = await supabase.from("schools").insert({
       branch_id: branchId, name: form.name, email: form.email,
@@ -61,8 +60,8 @@ export default function AdminSchoolPanel({ branchId }: { branchId: string }) {
       pic_name: form.pic_name || null, pic_phone: form.pic_phone || null,
     });
     setSaving(false);
-    if (error) return toast.error(t("admin.schoolPanel.addSchoolFailed"), error.message);
-    toast.success(t("admin.schoolPanel.schoolAddedToast"));
+    if (error) return toast.error("Failed to add school", error.message);
+    toast.success("School added & login account created");
     setCreatedCredential({ name: form.name, email: form.email, password: form.password, pic_phone: form.pic_phone });
     setOpenAdd(false);
     setForm(EMPTY_SCHOOL_FORM);
@@ -75,15 +74,15 @@ export default function AdminSchoolPanel({ branchId }: { branchId: string }) {
   };
 
   const saveEdit = async () => {
-    if (!editTarget || !editForm.name) return toast.error(t("admin.schoolPanel.schoolNameRequired"));
+    if (!editTarget || !editForm.name) return toast.error("School name is required");
     setEditSaving(true);
     const { error } = await supabase.from("schools").update({
       name: editForm.name, email: editForm.email || null,
       pic_name: editForm.pic_name || null, pic_phone: editForm.pic_phone || null,
     }).eq("id", editTarget.id);
     setEditSaving(false);
-    if (error) return toast.error(t("admin.schoolPanel.saveFailed"), error.message);
-    toast.success(t("admin.schoolPanel.schoolUpdatedToast"));
+    if (error) return toast.error("Failed to save", error.message);
+    toast.success("School data updated");
     setEditTarget(null);
     // Refresh detail jika sedang dibuka
     if (detailTarget?.id === editTarget.id) {
@@ -93,16 +92,16 @@ export default function AdminSchoolPanel({ branchId }: { branchId: string }) {
   };
 
   const deleteSchool = async (s: School) => {
-    const ok = await confirm({ title: t("admin.schoolPanel.deleteConfirmTitle"), body: t("admin.schoolPanel.deleteConfirmBody", { name: s.name }), confirmLabel: t("common.actions.delete"), danger: true });
+    const ok = await confirm({ title: "Delete school?", body: `Delete "${s.name}"? Affiliated student data will not be deleted.`, confirmLabel: "Delete", danger: true });
     if (!ok) return;
     // Hapus auth.users jika ada profile terkait
     if (s.profile_id) {
       await fetch(`/api/admin/users/${s.profile_id}`, { method: "DELETE" });
     } else {
       const { error } = await supabase.from("schools").delete().eq("id", s.id);
-      if (error) return toast.error(t("admin.schoolPanel.deleteFailed"), error.message);
+      if (error) return toast.error("Failed to delete", error.message);
     }
-    toast.success(t("admin.schoolPanel.schoolDeletedToast"));
+    toast.success("School deleted");
     if (detailTarget?.id === s.id) setDetailTarget(null);
     load();
   };
@@ -110,38 +109,38 @@ export default function AdminSchoolPanel({ branchId }: { branchId: string }) {
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <div><h2 className="font-display font-bold text-2xl">{t("admin.schoolPanel.pageTitle")}</h2><p className="text-ink-mute text-sm mt-0.5">{t("admin.schoolPanel.pageSub")}</p></div>
-        <Btn variant="primary" icon="plus" onClick={() => { setForm(EMPTY_SCHOOL_FORM); setOpenAdd(true); }}>{t("admin.schoolPanel.addSchoolBtn")}</Btn>
+        <div><h2 className="font-display font-bold text-2xl">{"School Panel (Affiliated)"}</h2><p className="text-ink-mute text-sm mt-0.5">{"Manage affiliated schools & the cost recap they cover."}</p></div>
+        <Btn variant="primary" icon="plus" onClick={() => { setForm(EMPTY_SCHOOL_FORM); setOpenAdd(true); }}>{"Add School"}</Btn>
       </div>
-      {loading ? <div className="text-ink-mute text-sm">{t("admin.schoolPanel.loading")}</div> : (
+      {loading ? <div className="text-ink-mute text-sm">{"Loading…"}</div> : (
         <div className="grid lg:grid-cols-2 gap-5">
           {schools.map((s) => (
             <Card key={s.id} className="cursor-pointer hover:shadow-lift transition" onClick={() => setDetailTarget(s)}>
               <div className="flex items-start gap-3">
                 <span className="w-14 h-14 rounded-2xl bg-ocean-700 text-white flex items-center justify-center shrink-0"><Icon name="school" className="w-7 h-7" /></span>
                 <div className="flex-1 min-w-0">
-                  <div className="font-display font-bold text-ink">{s.name}</div>
-                  <div className="text-xs text-ink-mute mt-0.5">{s.email ?? "—"}</div>
-                  {s.pic_name && <div className="text-xs text-ink-soft mt-0.5">{t("admin.schoolPanel.picLine", { name: s.pic_name })}{s.pic_phone ? ` · ${s.pic_phone}` : ""}</div>}
+                  <div className="font-display font-bold text-ink"><NoTranslate>{s.name}</NoTranslate></div>
+                  <div className="text-xs text-ink-mute mt-0.5"><NoTranslate>{s.email ?? "—"}</NoTranslate></div>
+                  {s.pic_name && <div className="text-xs text-ink-soft mt-0.5">{(<>{"PIC: "}<NoTranslate>{s.pic_name}</NoTranslate></>)}{s.pic_phone ? <> · <NoTranslate>{s.pic_phone}</NoTranslate></> : ""}</div>}
                   <div className="mt-2.5 flex gap-2">
-                    <Status kind={s.profile_id ? "active" : "warn"}>{s.profile_id ? t("admin.schoolPanel.accountActiveStatus") : t("admin.schoolPanel.noAccountYetStatus")}</Status>
+                    <Status kind={s.profile_id ? "active" : "warn"}>{s.profile_id ? "Active account" : "No account yet"}</Status>
                   </div>
                 </div>
               </div>
             </Card>
           ))}
-          {schools.length === 0 && <p className="text-ink-mute">{t("admin.schoolPanel.emptyState")}</p>}
+          {schools.length === 0 && <p className="text-ink-mute">{"No affiliated schools yet."}</p>}
         </div>
       )}
 
       {/* Detail modal */}
-      <Modal open={!!detailTarget && !editTarget} onClose={() => setDetailTarget(null)} title={t("admin.schoolPanel.detailModalTitle")} size="sm"
+      <Modal open={!!detailTarget && !editTarget} onClose={() => setDetailTarget(null)} title={"School Detail"} size="sm"
         footer={
           <div className="flex items-center gap-2 w-full">
-            <Btn variant="ghost" size="sm" className="text-danger-500" onClick={() => { const s = detailTarget!; setDetailTarget(null); deleteSchool(s); }}>{t("common.actions.delete")}</Btn>
+            <Btn variant="ghost" size="sm" className="text-danger-500" onClick={() => { const s = detailTarget!; setDetailTarget(null); deleteSchool(s); }}>{"Delete"}</Btn>
             <div className="flex-1" />
-            <Btn variant="ghost" onClick={() => setDetailTarget(null)}>{t("common.actions.close")}</Btn>
-            <Btn variant="primary" icon="edit" onClick={() => openEdit(detailTarget!)}>{t("common.actions.edit")}</Btn>
+            <Btn variant="ghost" onClick={() => setDetailTarget(null)}>{"Close"}</Btn>
+            <Btn variant="primary" icon="edit" onClick={() => openEdit(detailTarget!)}>{"Edit"}</Btn>
           </div>
         }>
         {detailTarget && (
@@ -149,27 +148,31 @@ export default function AdminSchoolPanel({ branchId }: { branchId: string }) {
             <div className="flex items-center gap-3 pb-3 border-b border-line">
               <span className="w-14 h-14 rounded-2xl bg-ocean-700 text-white flex items-center justify-center shrink-0"><Icon name="school" className="w-7 h-7" /></span>
               <div>
-                <div className="font-display font-bold text-lg text-ink">{detailTarget.name}</div>
-                <Status kind={detailTarget.profile_id ? "active" : "warn"}>{detailTarget.profile_id ? t("admin.schoolPanel.accountActiveStatus") : t("admin.schoolPanel.noAccountYetStatus")}</Status>
+                <div className="font-display font-bold text-lg text-ink"><NoTranslate>{detailTarget.name}</NoTranslate></div>
+                <Status kind={detailTarget.profile_id ? "active" : "warn"}>{detailTarget.profile_id ? "Active account" : "No account yet"}</Status>
               </div>
             </div>
             <div className="space-y-2 text-sm">
               <div className="flex justify-between py-2 border-b border-line/60">
-                <span className="text-ink-mute">{t("admin.schoolPanel.loginEmailLabel")}</span>
-                <span className="font-mono text-ink">{detailTarget.email ?? "—"}</span>
+                <span className="text-ink-mute">{"Login email"}</span>
+                <span className="font-mono text-ink"><NoTranslate>{detailTarget.email ?? "—"}</NoTranslate></span>
               </div>
               <div className="flex justify-between py-2 border-b border-line/60">
-                <span className="text-ink-mute">{t("admin.schoolPanel.picNameLabel")}</span>
-                <span className="font-semibold text-ink">{detailTarget.pic_name ?? "—"}</span>
+                <span className="text-ink-mute">{"PIC name"}</span>
+                <span className="font-semibold text-ink"><NoTranslate>{detailTarget.pic_name ?? "—"}</NoTranslate></span>
               </div>
               <div className="flex justify-between py-2">
-                <span className="text-ink-mute">{t("admin.schoolPanel.picPhoneLabel")}</span>
-                <span className="font-semibold text-ink">{detailTarget.pic_phone ?? "—"}</span>
+                <span className="text-ink-mute">{"PIC phone number"}</span>
+                <span className="font-semibold text-ink"><NoTranslate>{detailTarget.pic_phone ?? "—"}</NoTranslate></span>
               </div>
             </div>
             {detailTarget.pic_phone && (
-              <a href={waLink(t("admin.schoolPanel.waDetailMessage", { pic: detailTarget.pic_name ?? "", school: detailTarget.name, email: detailTarget.email ?? "", url: typeof window !== "undefined" ? window.location.origin : "" }), detailTarget.pic_phone)} target="_blank" rel="noreferrer" className="block">
-                <Btn variant="wa" icon="whatsapp" className="w-full">{t("admin.schoolPanel.contactPicWaBtn")}</Btn>
+              <a href={waLink(`Hi ${detailTarget.pic_name ?? ""}, here is the School Panel login access for Next Swimming School for ${detailTarget.name}.
+
+Email: ${detailTarget.email ?? ""}
+
+Please login at: ${typeof window !== "undefined" ? window.location.origin : ""}/login`, detailTarget.pic_phone)} target="_blank" rel="noreferrer" className="block">
+                <Btn variant="wa" icon="whatsapp" className="w-full">{"Contact PIC via WA"}</Btn>
               </a>
             )}
           </div>
@@ -177,29 +180,29 @@ export default function AdminSchoolPanel({ branchId }: { branchId: string }) {
       </Modal>
 
       {/* Edit modal */}
-      <Modal open={!!editTarget} onClose={() => setEditTarget(null)} title={t("admin.schoolPanel.editModalTitle")} size="sm"
-        footer={<><Btn variant="ghost" onClick={() => setEditTarget(null)}>{t("common.actions.cancel")}</Btn><Btn variant="primary" onClick={saveEdit} disabled={editSaving}>{editSaving ? t("common.actions.saving") : t("common.actions.save")}</Btn></>}>
+      <Modal open={!!editTarget} onClose={() => setEditTarget(null)} title={"Edit School"} size="sm"
+        footer={<><Btn variant="ghost" onClick={() => setEditTarget(null)}>{"Cancel"}</Btn><Btn variant="primary" onClick={saveEdit} disabled={editSaving}>{editSaving ? "Saving…" : "Save"}</Btn></>}>
         <div className="space-y-4">
-          <Field label={t("admin.schoolPanel.fieldSchoolName")} required><Input value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} /></Field>
-          <Field label={t("admin.schoolPanel.loginEmailLabel")}><Input type="email" value={editForm.email} onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))} /></Field>
+          <Field label={"School name"} required><Input value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} /></Field>
+          <Field label={"Login email"}><Input type="email" value={editForm.email} onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))} /></Field>
           <div className="grid sm:grid-cols-2 gap-4">
-            <Field label={t("admin.schoolPanel.picNameLabel")}><Input value={editForm.pic_name} onChange={e => setEditForm(f => ({ ...f, pic_name: e.target.value }))} placeholder={t("admin.schoolPanel.picNamePlaceholder")} /></Field>
-            <Field label={t("admin.schoolPanel.picPhoneLabel")}><Input value={editForm.pic_phone} onChange={e => setEditForm(f => ({ ...f, pic_phone: e.target.value }))} placeholder="08xxxxxxxxxx" /></Field>
+            <Field label={"PIC name"}><Input value={editForm.pic_name} onChange={e => setEditForm(f => ({ ...f, pic_name: e.target.value }))} placeholder={"E.g. Mr. Budi"} /></Field>
+            <Field label={"PIC phone number"}><Input value={editForm.pic_phone} onChange={e => setEditForm(f => ({ ...f, pic_phone: e.target.value }))} placeholder="08xxxxxxxxxx" /></Field>
           </div>
         </div>
       </Modal>
 
       {/* Add school modal */}
-      <Modal open={openAdd} onClose={() => setOpenAdd(false)} title={t("admin.schoolPanel.addSchoolModalTitle")} size="sm"
-        footer={<><Btn variant="ghost" onClick={() => setOpenAdd(false)}>{t("common.actions.cancel")}</Btn><Btn variant="primary" onClick={create} disabled={saving}>{saving ? t("common.actions.saving") : t("admin.schoolPanel.createSchoolBtn")}</Btn></>}>
+      <Modal open={openAdd} onClose={() => setOpenAdd(false)} title={"Add Affiliated School"} size="sm"
+        footer={<><Btn variant="ghost" onClick={() => setOpenAdd(false)}>{"Cancel"}</Btn><Btn variant="primary" onClick={create} disabled={saving}>{saving ? "Saving…" : "Create School & Account"}</Btn></>}>
         <div className="space-y-4">
-          <Field label={t("admin.schoolPanel.fieldSchoolName")} required><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder={t("admin.schoolPanel.schoolNamePlaceholder")} /></Field>
+          <Field label={"School name"} required><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder={"E.g. SMAN 4 Bekasi"} /></Field>
           <div className="grid sm:grid-cols-2 gap-4">
-            <Field label={t("admin.schoolPanel.picNameLabel")}><Input value={form.pic_name} onChange={e => setForm(f => ({ ...f, pic_name: e.target.value }))} placeholder={t("admin.schoolPanel.picNamePlaceholder")} /></Field>
-            <Field label={t("admin.schoolPanel.picPhoneLabel")} hint={t("admin.schoolPanel.picPhoneHintAdd")}><Input value={form.pic_phone} onChange={e => setForm(f => ({ ...f, pic_phone: e.target.value }))} placeholder="08xxxxxxxxxx" /></Field>
+            <Field label={"PIC name"}><Input value={form.pic_name} onChange={e => setForm(f => ({ ...f, pic_name: e.target.value }))} placeholder={"E.g. Mr. Budi"} /></Field>
+            <Field label={"PIC phone number"} hint={"WA credential sent here"}><Input value={form.pic_phone} onChange={e => setForm(f => ({ ...f, pic_phone: e.target.value }))} placeholder="08xxxxxxxxxx" /></Field>
           </div>
-          <Field label={t("admin.schoolPanel.loginEmailLabel")} required hint={t("admin.schoolPanel.fieldEmailHint")}><Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} /></Field>
-          <Field label={t("admin.schoolPanel.fieldPasswordLabel")} required hint={t("admin.schoolPanel.fieldPasswordHint")}>
+          <Field label={"Login email"} required hint={"Used to login to the school page"}><Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} /></Field>
+          <Field label={"Password"} required hint={"Min. 6 characters"}>
             <div className="relative">
               <Input type={showSchoolPwd ? "text" : "password"} value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder="••••••••" className="pr-10" />
               <button type="button" tabIndex={-1} onClick={() => setShowSchoolPwd(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-mute hover:text-ink transition-colors">
@@ -211,26 +214,31 @@ export default function AdminSchoolPanel({ branchId }: { branchId: string }) {
       </Modal>
 
       {/* Credential popup after create */}
-      <Modal open={!!createdCredential} onClose={() => setCreatedCredential(null)} title={t("admin.schoolPanel.credentialModalTitle")} size="sm"
+      <Modal open={!!createdCredential} onClose={() => setCreatedCredential(null)} title={"School Added Successfully"} size="sm"
         footer={
           <div className="flex items-center gap-2 w-full">
-            <Btn variant="ghost" onClick={() => setCreatedCredential(null)}>{t("common.actions.close")}</Btn>
+            <Btn variant="ghost" onClick={() => setCreatedCredential(null)}>{"Close"}</Btn>
             <div className="flex-1" />
             {createdCredential?.pic_phone && (
-              <a href={waLink(t("admin.schoolPanel.waCredentialMessage", { school: createdCredential.name, email: createdCredential.email, password: createdCredential.password, url: typeof window !== "undefined" ? window.location.origin : "" }))} target="_blank" rel="noreferrer">
-                <Btn variant="wa" icon="whatsapp">{t("admin.schoolPanel.sendToWaPicBtn")}</Btn>
+              <a href={waLink(`Hi, here is the School Panel login access for Next Swimming School for ${createdCredential.name}:
+
+Email: ${createdCredential.email}
+Password: ${createdCredential.password}
+
+Login at: ${typeof window !== "undefined" ? window.location.origin : ""}/login`)} target="_blank" rel="noreferrer">
+                <Btn variant="wa" icon="whatsapp">{"Send to PIC's WA"}</Btn>
               </a>
             )}
           </div>
         }>
         <div className="space-y-4">
           <Card className="!p-4 bg-ok-50 border-ok-200">
-            <div className="flex items-start gap-2.5 text-sm text-ok-700"><Icon name="check" className="w-5 h-5 shrink-0 mt-0.5" /><span>{t("admin.schoolPanel.accountCreatedNotice")}</span></div>
+            <div className="flex items-start gap-2.5 text-sm text-ok-700"><Icon name="check" className="w-5 h-5 shrink-0 mt-0.5" /><span>{"Login account created successfully. Send this credential to the school."}</span></div>
           </Card>
           <div className="space-y-2 text-sm">
-            <div className="flex justify-between p-3 rounded-lg bg-paper-tint"><span className="text-ink-mute">{t("admin.schoolPanel.schoolLabel")}</span><span className="font-semibold text-ink">{createdCredential?.name}</span></div>
-            <div className="flex justify-between p-3 rounded-lg bg-paper-tint"><span className="text-ink-mute">{t("admin.schoolPanel.emailLabel")}</span><span className="font-mono text-ink">{createdCredential?.email}</span></div>
-            <div className="flex justify-between p-3 rounded-lg bg-paper-tint"><span className="text-ink-mute">{t("admin.schoolPanel.passwordLabel")}</span><span className="font-mono text-ink">{createdCredential?.password}</span></div>
+            <div className="flex justify-between p-3 rounded-lg bg-paper-tint"><span className="text-ink-mute">{"School"}</span><span className="font-semibold text-ink"><NoTranslate>{createdCredential?.name}</NoTranslate></span></div>
+            <div className="flex justify-between p-3 rounded-lg bg-paper-tint"><span className="text-ink-mute">{"Email"}</span><span className="font-mono text-ink"><NoTranslate>{createdCredential?.email}</NoTranslate></span></div>
+            <div className="flex justify-between p-3 rounded-lg bg-paper-tint"><span className="text-ink-mute">{"Password"}</span><span className="font-mono text-ink"><NoTranslate>{createdCredential?.password}</NoTranslate></span></div>
           </div>
         </div>
       </Modal>

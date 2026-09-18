@@ -2,11 +2,9 @@
 import Modal from "@/components/ui/Modal";
 import Btn from "@/components/ui/Btn";
 import { Field, Input } from "@/components/ui/FormFields";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import type { PayslipHook } from "./index";
 
 export default function TaxSettingsModal({ hook }: { hook: PayslipHook }) {
-  const { t } = useLocale();
   const {
     showTaxModal, setShowTaxModal, saveTaxSetting, savingTax,
     taxMode, setTaxMode, taxPercent, setTaxPercent, taxFixed, setTaxFixed,
@@ -16,22 +14,22 @@ export default function TaxSettingsModal({ hook }: { hook: PayslipHook }) {
     <Modal
       open={showTaxModal}
       onClose={() => setShowTaxModal(false)}
-      title={t("owner.payslip.taxSettingsTitle")}
+      title={"Tax Settings (PPh 21)"}
       size="sm"
       footer={
         <div className="flex gap-2 justify-end w-full">
           <Btn variant="ghost" onClick={() => setShowTaxModal(false)}>
-            {t("common.actions.cancel")}
+            {"Cancel"}
           </Btn>
           <Btn variant="primary" onClick={saveTaxSetting} disabled={savingTax}>
-            {savingTax ? t("owner.payslip.savingLabel") : t("owner.payslip.saveSettingsBtn")}
+            {savingTax ? "Saving..." : "Save Settings"}
           </Btn>
         </div>
       }
     >
       <div className="space-y-4">
         <p className="text-xs text-ink-mute">
-          {t("owner.payslip.taxSettingsModalSub")}
+          {"Set the default income tax (PPh 21) withholding rate for coach honoraria and staff payslips. This rate is applied automatically when generating a payslip."}
         </p>
         <div className="space-y-3">
           <div className="flex gap-2">
@@ -42,7 +40,7 @@ export default function TaxSettingsModal({ hook }: { hook: PayslipHook }) {
                 taxMode === "percent" ? "bg-ocean-700 text-white shadow-xs" : "bg-paper-tint text-ink-soft hover:bg-paper-deep"
               }`}
             >
-              {t("owner.payslip.taxModePercent")}
+              {"Percentage (%)"}
             </button>
             <button
               type="button"
@@ -51,12 +49,12 @@ export default function TaxSettingsModal({ hook }: { hook: PayslipHook }) {
                 taxMode === "fixed" ? "bg-ocean-700 text-white shadow-xs" : "bg-paper-tint text-ink-soft hover:bg-paper-deep"
               }`}
             >
-              {t("owner.payslip.taxModeFixed")}
+              {"Fixed Amount (Rp)"}
             </button>
           </div>
           <div>
             {taxMode === "percent" ? (
-              <Field label={t("owner.payslip.fieldTaxPercentageRate")}>
+              <Field label={"Tax Percentage Rate"}>
                 <Input
                   type="number"
                   inputMode="decimal"
@@ -65,18 +63,18 @@ export default function TaxSettingsModal({ hook }: { hook: PayslipHook }) {
                   step="0.01"
                   value={taxPercent}
                   onChange={(e) => setTaxPercent(e.target.value)}
-                  placeholder={t("owner.payslip.fieldTaxPercentagePlaceholder")}
+                  placeholder={"E.g.: 2.5 or 5"}
                   className="font-mono text-sm"
                 />
               </Field>
             ) : (
-              <Field label={t("owner.payslip.fieldTaxFixedAmount")}>
+              <Field label={"Fixed Tax Amount"}>
                 <Input
                   type="text"
                   inputMode="numeric"
                   value={taxFixed ? Number(taxFixed).toLocaleString("id-ID") : ""}
                   onChange={(e) => setTaxFixed(e.target.value.replace(/\D/g, ""))}
-                  placeholder={t("owner.payslip.fieldTaxFixedPlaceholder")}
+                  placeholder={"E.g.: 50,000"}
                   className="font-mono text-sm"
                 />
               </Field>

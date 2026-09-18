@@ -7,12 +7,12 @@ export function fmtBytes(n: number): string {
   return n + " B";
 }
 
-export function fmtRelTime(iso: string, t: (key: string, vars?: Record<string, string | number>) => string): string {
+export function fmtRelTime(iso: string): string {
   const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-  if (diff < 60) return t("owner.storage.justNow");
-  if (diff < 3600) return t("owner.storage.minutesAgo", { n: Math.floor(diff / 60) });
-  if (diff < 86400) return t("owner.storage.hoursAgo", { n: Math.floor(diff / 3600) });
-  return t("owner.storage.daysAgo", { n: Math.floor(diff / 86400) });
+  if (diff < 60) return "just now";
+  if (diff < 3600) return `${Math.floor(diff / 60)} minutes ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)} hours ago`;
+  return `${Math.floor(diff / 86400)} days ago`;
 }
 
 // Stable color per category (keyed by prefix, not array position) so the
@@ -34,12 +34,12 @@ export function categoryColor(prefix: string): string {
 }
 
 export const BACKUP_CATEGORIES = [
-  { key: "avatars",     labelKey: "owner.storage.categoryAvatars"     },
-  { key: "logos",       labelKey: "owner.storage.categoryLogos"       },
-  { key: "classes",     labelKey: "owner.storage.categoryClasses"     },
-  { key: "payments",    labelKey: "owner.storage.categoryPayments"    },
-  { key: "certs",       labelKey: "owner.storage.categoryCerts"       },
-  { key: "attendances", labelKey: "owner.storage.categoryAttendances" },
+  { key: "avatars",     label: "Profile Avatars"     },
+  { key: "logos",       label: "Center Logos"        },
+  { key: "classes",     label: "Class Photos"        },
+  { key: "payments",    label: "Payment Proofs"      },
+  { key: "certs",       label: "Coach Certificates"  },
+  { key: "attendances", label: "Attendance Selfies"  },
 ];
 
 export const BACKUP_PAGE_SIZE = 20;

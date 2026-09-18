@@ -1,14 +1,12 @@
 "use client";
 import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import type { useOwnerStorage } from "./useOwnerStorage";
 import { fmtBytes, fmtRelTime, categoryColor, STORAGE_LIMIT } from "./_utils";
 
 type Hook = ReturnType<typeof useOwnerStorage>;
 
 export default function StorageOverview({ hook }: { hook: Hook }) {
-  const { t } = useLocale();
   const { statsLoading, stats, statsError, loadStats, publicSize, privateSize } = hook;
 
   return (
@@ -27,24 +25,24 @@ export default function StorageOverview({ hook }: { hook: Hook }) {
         <div className="rounded-2xl border border-danger-200/60 bg-danger-50 p-5 shadow-xs flex items-center gap-3 text-danger-700">
           <Icon name="warning" className="w-5 h-5 shrink-0 text-danger-600" />
           <div className="flex-1">
-            <div className="font-semibold text-sm">{t("owner.storage.statsLoadFailed")}</div>
-            <div className="text-xs text-danger-600/80 mt-0.5">{t("owner.storage.statsLoadFailedSub")}</div>
+            <div className="font-semibold text-sm">{"Failed to load storage data"}</div>
+            <div className="text-xs text-danger-600/80 mt-0.5">{"Make sure the Supabase Storage connection is working normally."}</div>
           </div>
-          <Btn variant="ghost" size="sm" icon="refresh" onClick={loadStats}>{t("common.actions.retry")}</Btn>
+          <Btn variant="ghost" size="sm" icon="refresh" onClick={loadStats}>{"Retry"}</Btn>
         </div>
       ) : stats ? (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Card 1: TOTAL USED */}
           <div className="bg-paper rounded-2xl border border-line shadow-xs p-4 sm:p-5 flex flex-col justify-between">
             <div>
-              <div className="text-[10px] uppercase tracking-wider font-bold text-ink-faint">{t("owner.storage.totalSize")}</div>
+              <div className="text-[10px] uppercase tracking-wider font-bold text-ink-faint">{"Total Size"}</div>
               <div className="font-display font-extrabold text-2xl text-ocean-600 mt-1 tabular-nums">
                 {fmtBytes(stats.totalSize)}
               </div>
             </div>
             <div className="mt-3">
               <div className="flex justify-between items-center text-[10px] font-semibold text-ink-mute mb-1">
-                <span>{((stats.totalSize / STORAGE_LIMIT) * 100).toFixed(1)}% {t("owner.storage.usedLabel")}</span>
+                <span>{((stats.totalSize / STORAGE_LIMIT) * 100).toFixed(1)}% {"Used"}</span>
                 <span>1.0 GB limit</span>
               </div>
               <div className="h-1.5 w-full bg-paper-deep rounded-full overflow-hidden">
@@ -87,20 +85,20 @@ export default function StorageOverview({ hook }: { hook: Hook }) {
           {/* Card 4: FILES */}
           <div className="bg-paper rounded-2xl border border-line shadow-xs p-4 sm:p-5 flex flex-col justify-between">
             <div>
-              <div className="text-[10px] uppercase tracking-wider font-bold text-ink-faint">{t("owner.storage.totalFiles")}</div>
+              <div className="text-[10px] uppercase tracking-wider font-bold text-ink-faint">{"Total Files"}</div>
               <div className="font-display font-extrabold text-2xl text-ink mt-1 tabular-nums">
                 {stats.totalCount.toLocaleString("id-ID")}
               </div>
             </div>
             <div className="mt-3 flex items-center justify-between text-xs text-ink-mute">
-              <span>{fmtRelTime(stats.fetchedAt, t)}</span>
+              <span>{fmtRelTime(stats.fetchedAt)}</span>
               <button
                 type="button"
                 onClick={loadStats}
                 className="inline-flex items-center gap-1 font-semibold text-ocean-600 hover:text-ocean-700 transition-colors"
               >
                 <Icon name="refresh" className="w-3.5 h-3.5" />
-                {t("owner.storage.refreshBtn")}
+                {"Refresh"}
               </button>
             </div>
           </div>
@@ -113,8 +111,8 @@ export default function StorageOverview({ hook }: { hook: Hook }) {
           <Icon name="warning" className="w-4 h-4" />
         </div>
         <div className="space-y-1 text-xs leading-relaxed">
-          <div className="font-bold text-danger-800 text-sm">{t("owner.storage.warningTitle")}</div>
-          <div className="text-danger-700/90">{t("owner.storage.warningBody")}</div>
+          <div className="font-bold text-danger-800 text-sm">{"Note:"}</div>
+          <div className="text-danger-700/90">{"Backup is processed in the browser. The attendance-selfie category can be very large and take a long time. Backing up per category is recommended for large numbers of files. Make sure your browser has enough RAM for large ZIPs."}</div>
         </div>
       </div>
 
@@ -122,8 +120,8 @@ export default function StorageOverview({ hook }: { hook: Hook }) {
       {stats && (
         <div className="bg-paper rounded-2xl border border-line shadow-xs overflow-hidden">
           <div className="p-5 border-b border-line">
-            <h3 className="font-display font-bold text-base text-ink">{t("owner.storage.distributionTitle")}</h3>
-            <p className="text-xs text-ink-mute mt-0.5">{t("owner.storage.distributionSub")}</p>
+            <h3 className="font-display font-bold text-base text-ink">{"Storage Distribution"}</h3>
+            <p className="text-xs text-ink-mute mt-0.5">{"Storage usage by file category"}</p>
 
             {/* Stacked bar */}
             <div className="h-3.5 rounded-full overflow-hidden flex mt-4 bg-paper-deep relative">
@@ -141,7 +139,7 @@ export default function StorageOverview({ hook }: { hook: Hook }) {
               })}
               {stats.totalSize === 0 && (
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <span className="text-[10px] font-semibold text-ink-faint">{t("owner.storage.noFilesYet")}</span>
+                  <span className="text-[10px] font-semibold text-ink-faint">{"No files yet"}</span>
                 </div>
               )}
             </div>
@@ -152,10 +150,10 @@ export default function StorageOverview({ hook }: { hook: Hook }) {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="h-10 bg-paper-deep border-b border-line text-[10px] uppercase font-bold text-ink-faint tracking-wider">
-                  <th className="px-5">{t("owner.storage.colCategory")}</th>
+                  <th className="px-5">{"Category"}</th>
                   <th className="px-5">BUCKET</th>
-                  <th className="px-5 text-right">{t("owner.storage.colFiles")}</th>
-                  <th className="px-5 text-right">{t("owner.storage.colSize")}</th>
+                  <th className="px-5 text-right">{"Files"}</th>
+                  <th className="px-5 text-right">{"Size"}</th>
                   <th className="px-5 text-right">PROPORSI</th>
                 </tr>
               </thead>
@@ -192,7 +190,7 @@ export default function StorageOverview({ hook }: { hook: Hook }) {
                       <td className="px-5 py-3 text-right">
                         <div className="font-bold text-ink tabular-nums">{fmtBytes(cat.size)}</div>
                         <div className="text-[11px] text-ink-faint">
-                          {empty ? t("owner.storage.emptyBadge") : `${pctOfLimit.toFixed(2)}% limit`}
+                          {empty ? "empty" : `${pctOfLimit.toFixed(2)}% limit`}
                         </div>
                       </td>
                       <td className="px-5 py-3 text-right">

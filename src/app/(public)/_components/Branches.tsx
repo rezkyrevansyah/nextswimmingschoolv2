@@ -5,7 +5,6 @@ import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
 import BorderGlowCard from "@/components/BorderGlowCard";
 import { waLink } from "@/lib/utils";
-import { useLocale } from "@/components/providers/LocaleProvider";
 
 interface BranchDisplayItem {
   id: string;
@@ -19,7 +18,6 @@ interface BranchDisplayItem {
 }
 
 export default function Branches({ branches }: { branches: BranchDisplayItem[] }) {
-  const { t } = useLocale();
   const withName = branches.filter((b) => b.name);
 
   if (withName.length === 0) return null;
@@ -29,12 +27,12 @@ export default function Branches({ branches }: { branches: BranchDisplayItem[] }
       <div className="mx-auto max-w-6xl px-6">
         <div className="text-center max-w-2xl mx-auto">
           <p className="text-xs font-semibold tracking-wide uppercase text-wave-600">
-            {t("landing.branches.label")}
+            {"Our Centers"}
           </p>
           <h2 className="mt-2 font-display font-extrabold text-3xl sm:text-4xl text-ink">
-            {t("landing.branches.headline")}
+            {"Visit us at a center near you."}
           </h2>
-          <p className="mt-3 text-ink-mute">{t("landing.branches.subtitle")}</p>
+          <p className="mt-3 text-ink-mute">{"Active centers ready to welcome new swimmers."}</p>
         </div>
 
         <div className="mt-12 grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -62,13 +60,13 @@ export default function Branches({ branches }: { branches: BranchDisplayItem[] }
                 )}
                 <div className="mt-4 flex flex-wrap items-center gap-2">
                   {b.phone && (
-                    <Btn variant="wa" size="sm" icon="whatsapp" href={waLink(t("landing.branches.chatOnWhatsapp"), b.phone)} target="_blank" rel="noreferrer">
-                      {t("landing.branches.chatOnWhatsapp")}
+                    <Btn variant="wa" size="sm" icon="whatsapp" href={waLink("Chat on WhatsApp", b.phone)} target="_blank" rel="noreferrer">
+                      {"Chat on WhatsApp"}
                     </Btn>
                   )}
                   {b.lat != null && b.lng != null && (
                     <Btn variant="outline" size="sm" icon="pin" href={`https://www.google.com/maps?q=${b.lat},${b.lng}`} target="_blank" rel="noreferrer">
-                      {t("landing.branches.viewOnMap")}
+                      {"View on Map"}
                     </Btn>
                   )}
                 </div>

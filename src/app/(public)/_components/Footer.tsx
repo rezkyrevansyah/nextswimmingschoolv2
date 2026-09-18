@@ -3,7 +3,6 @@
 import Icon from "@/components/ui/Icon";
 import Logo from "@/components/ui/Logo";
 import { waLink, mailtoLink } from "@/lib/utils";
-import { useLocale } from "@/components/providers/LocaleProvider";
 
 interface FooterConfig {
   footer_tagline: string | null;
@@ -16,17 +15,16 @@ interface FooterConfig {
   social_youtube: string | null;
 }
 
-const NAV_LINKS: { href: string; labelKey: string }[] = [
-  { href: "#programs", labelKey: "landing.nav.groups.programs.links.programs" },
-  { href: "#coaches", labelKey: "landing.nav.groups.programs.links.coaches" },
-  { href: "#why-next", labelKey: "landing.nav.groups.about.links.whyNext" },
-  { href: "#testimonials", labelKey: "landing.nav.groups.about.links.testimonials" },
-  { href: "#branches", labelKey: "landing.nav.groups.visit.links.branches" },
-  { href: "#faq", labelKey: "landing.nav.groups.visit.links.faq" },
+const NAV_LINKS: { href: string; label: string }[] = [
+  { href: "#programs", label: "Our Programs" },
+  { href: "#coaches", label: "Our Coaches" },
+  { href: "#why-next", label: "Why Next" },
+  { href: "#testimonials", label: "Testimonials" },
+  { href: "#branches", label: "Our Centers" },
+  { href: "#faq", label: "FAQ" },
 ];
 
 export default function Footer({ config }: { config: FooterConfig | null }) {
-  const { t } = useLocale();
   const year = new Date().getFullYear();
   const socials = [
     { key: "social_instagram", icon: "instagram" as const, url: config?.social_instagram },
@@ -43,18 +41,18 @@ export default function Footer({ config }: { config: FooterConfig | null }) {
         </div>
 
         <div>
-          <div className="text-xs font-semibold uppercase tracking-wide text-white/40">{t("landing.footer.linksHeading")}</div>
+          <div className="text-xs font-semibold uppercase tracking-wide text-white/40">{"Explore"}</div>
           <ul className="mt-3 space-y-2 text-sm">
             {NAV_LINKS.map((link) => (
               <li key={link.href}>
-                <a href={link.href} className="hover:text-white transition-colors">{t(link.labelKey)}</a>
+                <a href={link.href} className="hover:text-white transition-colors">{link.label}</a>
               </li>
             ))}
           </ul>
         </div>
 
         <div>
-          <div className="text-xs font-semibold uppercase tracking-wide text-white/40">{t("landing.footer.contactHeading")}</div>
+          <div className="text-xs font-semibold uppercase tracking-wide text-white/40">{"Contact"}</div>
           <ul className="mt-3 space-y-2 text-sm">
             {config?.footer_wa_number && (
               <li>
@@ -80,7 +78,7 @@ export default function Footer({ config }: { config: FooterConfig | null }) {
 
         {socials.length > 0 && (
           <div>
-            <div className="text-xs font-semibold uppercase tracking-wide text-white/40">{t("landing.footer.followHeading")}</div>
+            <div className="text-xs font-semibold uppercase tracking-wide text-white/40">{"Follow Us"}</div>
             <div className="mt-3 flex items-center gap-3">
               {socials.map((s) => (
                 <a key={s.key} href={s.url!} target="_blank" rel="noreferrer"
@@ -95,7 +93,7 @@ export default function Footer({ config }: { config: FooterConfig | null }) {
 
       <div className="border-t border-white/10">
         <div className="mx-auto max-w-6xl px-6 py-5 text-xs text-white/40 text-center">
-          {(config?.copyright_text || t("landing.footer.copyrightFallback")).replace("{year}", String(year))}
+          {(config?.copyright_text || "© {year} Next Swimming School. All rights reserved.").replace("{year}", String(year))}
         </div>
       </div>
     </footer>

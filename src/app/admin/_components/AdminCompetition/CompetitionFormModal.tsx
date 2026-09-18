@@ -7,7 +7,7 @@ import type { AdminCompetitionHook } from "./_hook";
 
 export default function CompetitionFormModal({ hook, onSaved }: { hook: AdminCompetitionHook; onSaved?: (newCompId: string) => void }) {
   const {
-    t, openCompForm, setOpenCompForm, editComp, compForm, setCompForm, savingComp, handleSaveComp,
+    openCompForm, setOpenCompForm, editComp, compForm, setCompForm, savingComp, handleSaveComp,
   } = hook;
 
   if (!openCompForm) return null;
@@ -16,46 +16,46 @@ export default function CompetitionFormModal({ hook, onSaved }: { hook: AdminCom
     <Modal
       open={openCompForm}
       onClose={() => setOpenCompForm(false)}
-      title={editComp ? t("admin.competition.editCompModalTitle") : t("admin.competition.addCompModalTitle")}
+      title={editComp ? "Edit Competition" : "Add New Competition"}
     >
       <form onSubmit={e => handleSaveComp(e, onSaved)} className="space-y-4">
-        <Field label={t("admin.competition.fieldName")} required hint={t("admin.competition.fieldNameHint")}>
+        <Field label={"Competition Name"} required hint={"E.g. West Java Regional Swimming Championship 2026"}>
           <Input
             value={compForm.name}
             onChange={e => setCompForm(prev => ({ ...prev, name: e.target.value }))}
-            placeholder={t("admin.competition.fieldNamePlaceholder")}
+            placeholder={"Enter official competition name"}
             required
           />
         </Field>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <Field label={t("admin.competition.fieldOrganizer")} hint={t("admin.competition.fieldOrganizerHint")}>
+          <Field label={"Organizer"} hint={"E.g.: West Java Swimming Association / Ministry of Youth and Sports"}>
             <Input
               value={compForm.organizer}
               onChange={e => setCompForm(prev => ({ ...prev, organizer: e.target.value }))}
-              placeholder={t("admin.competition.fieldOrganizerPlaceholder")}
+              placeholder={"Event organizer"}
             />
           </Field>
-          <Field label={t("admin.competition.fieldLevel")}>
+          <Field label={"Level"}>
             <Select value={compForm.level} onChange={e => setCompForm(prev => ({ ...prev, level: e.target.value }))}>
-              <option value="internal">{t("admin.competition.levelInternal")}</option>
-              <option value="local">{t("admin.competition.levelLocal")}</option>
-              <option value="regional">{t("admin.competition.levelRegional")}</option>
-              <option value="national">{t("admin.competition.levelNational")}</option>
-              <option value="international">{t("admin.competition.levelInternational")}</option>
+              <option value="internal">{"Internal"}</option>
+              <option value="local">{"Local / City"}</option>
+              <option value="regional">{"Regional / Province"}</option>
+              <option value="national">{"National"}</option>
+              <option value="international">{"International"}</option>
             </Select>
           </Field>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <Field label={t("admin.competition.fieldLocation")}>
+          <Field label={"Pool Location / Venue"}>
             <Input
               value={compForm.location}
               onChange={e => setCompForm(prev => ({ ...prev, location: e.target.value }))}
-              placeholder={t("admin.competition.fieldLocationPlaceholder")}
+              placeholder={"E.g.: UPI Bandung Swimming Pool"}
             />
           </Field>
-          <Field label={t("admin.competition.fieldCity")}>
+          <Field label={"City"}>
             <Input
               value={compForm.city}
               onChange={e => setCompForm(prev => ({ ...prev, city: e.target.value }))}
@@ -65,13 +65,13 @@ export default function CompetitionFormModal({ hook, onSaved }: { hook: AdminCom
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <Field label={t("admin.competition.fieldStartDate")} required>
+          <Field label={"Start Date"} required>
             <DatePicker
               value={compForm.start_date}
               onChange={d => setCompForm(prev => ({ ...prev, start_date: d }))}
             />
           </Field>
-          <Field label={t("admin.competition.fieldEndDate")}>
+          <Field label={"End Date (Optional)"}>
             <DatePicker
               value={compForm.end_date}
               onChange={d => setCompForm(prev => ({ ...prev, end_date: d }))}
@@ -79,12 +79,12 @@ export default function CompetitionFormModal({ hook, onSaved }: { hook: AdminCom
           </Field>
         </div>
 
-        <Field label={t("admin.competition.fieldNotes")}>
+        <Field label={"Notes / Description (Optional)"}>
           <Textarea
             rows={3}
             value={compForm.description}
             onChange={e => setCompForm(prev => ({ ...prev, description: e.target.value }))}
-            placeholder={t("admin.competition.fieldNotesPlaceholder")}
+            placeholder={"Additional notes on qualifying rounds, age requirements, etc."}
           />
         </Field>
 
@@ -93,7 +93,7 @@ export default function CompetitionFormModal({ hook, onSaved }: { hook: AdminCom
             Batal
           </Btn>
           <Btn variant="primary" type="submit" disabled={savingComp}>
-            {savingComp ? t("admin.competition.savingBtn") : editComp ? t("admin.competition.saveChangesBtn") : t("admin.competition.createCompBtn")}
+            {savingComp ? "Saving..." : editComp ? "Save Changes" : "Create Competition"}
           </Btn>
         </div>
       </form>

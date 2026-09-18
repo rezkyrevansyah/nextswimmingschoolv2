@@ -3,17 +3,13 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import { logActivity } from "@/lib/activityLog";
-import { getMemberTypeLabels, getAwardLabels, type CompetitionRow, type MemberOption, type CoachOption } from "./_types";
+import { MEMBER_TYPE_LABELS, AWARD_LABELS, type CompetitionRow, type MemberOption, type CoachOption } from "./_types";
 
 export function useCompetitionData(branchId: string) {
   const supabase = createClient();
   const toast = useToast();
   const confirm = useConfirm();
-  const { t } = useLocale();
-  const MEMBER_TYPE_LABELS = getMemberTypeLabels(t);
-  const AWARD_LABELS = getAwardLabels(t);
 
   const [competitions, setCompetitions] = useState<CompetitionRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -56,7 +52,7 @@ export function useCompetitionData(branchId: string) {
       .order("start_date", { ascending: false });
 
     if (error) {
-      toast.error(t("admin.competition.loadFailed", { error: error.message }));
+      toast.error(`Failed to load competition list: ${error.message}`);
       setLoading(false);
       return;
     }
@@ -183,7 +179,7 @@ export function useCompetitionData(branchId: string) {
   const handleSaveComp = async (e: React.FormEvent, onSaved?: (newCompId: string) => void) => {
     e.preventDefault();
     if (!compForm.name.trim() || !compForm.start_date) {
-      toast.error(t("admin.competition.nameDateRequired"));
+      toast.error("Competition name and start date are required.");
       return;
     }
 
@@ -207,10 +203,10 @@ export function useCompetitionData(branchId: string) {
         .eq("id", editComp.id);
 
       if (error) {
-        toast.error(t("admin.competition.updateFailed", { error: error.message }));
+        toast.error(`Failed to update competition: ${error.message}`);
       } else {
-        toast.success(t("admin.competition.updated"));
-        await triggerLog("update", editComp.id, compForm.name, t("admin.competition.activityUpdatedComp", { name: compForm.name }));
+        toast.success("Competition updated successfully.");
+        await triggerLog("update", editComp.id, compForm.name, `Updated competition ${compForm.name}`);
         setOpenCompForm(false);
         setCompFormReturnToPart(false);
         loadCompetitions();
@@ -233,11 +229,11 @@ export function useCompetitionData(branchId: string) {
         .single();
 
       if (error) {
-        toast.error(t("admin.competition.addFailed", { error: error.message }));
+        toast.error(`Failed to add competition: ${error.message}`);
       } else {
-        toast.success(t("admin.competition.added"));
+        toast.success("New competition added successfully.");
         if (newComp) {
-          await triggerLog("create", newComp.id, compForm.name, t("admin.competition.activityAddedComp", { name: compForm.name }));
+          await triggerLog("create", newComp.id, compForm.name, `Added competition ${compForm.name}`);
           if (compFormReturnToPart) {
             onSaved?.(newComp.id);
           }
@@ -252,9 +248,9 @@ export function useCompetitionData(branchId: string) {
 
   const handleDeleteComp = async (comp: CompetitionRow) => {
     const ok = await confirm({
-      title: t("admin.competition.deleteConfirmTitle", { name: comp.name }),
-      body: t("admin.competition.deleteConfirmBody", { count: comp.participations_count ?? 0 }),
-      confirmLabel: t("admin.competition.deleteConfirmLabel"),
+      title: `Delete Competition "${comp.name}"?`,
+      body: `Deleting this competition will remove all participation & result data for ${comp.participations_count ?? 0} participants. This action cannot be undone.`,
+      confirmLabel: "Delete Competition",
       danger: true,
     });
 
@@ -262,11 +258,11 @@ export function useCompetitionData(branchId: string) {
 
     const { error } = await supabase.from("competitions").delete().eq("id", comp.id);
     if (error) {
-      toast.error(t("admin.competition.deleteFailed", { error: error.message }));
+      toast.error(`Failed to delete competition: ${error.message}`);
       return false;
     }
-    toast.success(t("admin.competition.deleted"));
-    await triggerLog("delete", comp.id, comp.name, t("admin.competition.activityDeletedComp", { name: comp.name }));
+    toast.success("Competition deleted successfully.");
+    await triggerLog("delete", comp.id, comp.name, `Deleted competition ${comp.name}`);
     loadCompetitions();
     return true;
   };
@@ -288,7 +284,7 @@ export function useCompetitionData(branchId: string) {
   const totalMedals = competitions.reduce((acc, c) => acc + (c.medals_count ?? 0), 0);
 
   return {
-    t, branchId, MEMBER_TYPE_LABELS, AWARD_LABELS,
+    branchId, MEMBER_TYPE_LABELS, AWARD_LABELS,
     competitions, loading, search, setSearch, levelFilter, setLevelFilter,
     openCompForm, setOpenCompForm, editComp, compForm, setCompForm, savingComp,
     selectedComp, setSelectedComp,

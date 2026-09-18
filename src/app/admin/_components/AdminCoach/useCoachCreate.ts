@@ -2,7 +2,6 @@
 import { useState } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import { parseUserApiError } from "../../_utils";
 import type { Database } from "@/types/database";
 import { EMPTY_COACH_FORM } from "./_types";
@@ -10,8 +9,6 @@ import { toDbDate } from "./_utils";
 
 export function useCoachCreate(branchId: string, load: () => void) {
   const toast = useToast();
-  const { t } = useLocale();
-
   const [openAdd, setOpenAdd] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(EMPTY_COACH_FORM);
@@ -22,14 +19,14 @@ export function useCoachCreate(branchId: string, load: () => void) {
   const [createCerts, setCreateCerts] = useState<{ title: string; issuer: string; valid_from: string; valid_until: string; no_expiry: boolean }[]>([]);
 
   const createCoach = async () => {
-    if (!form.full_name || !form.email || !form.password) return toast.error(t("admin.coaches.nameEmailPasswordRequired"));
+    if (!form.full_name || !form.email || !form.password) return toast.error("Name, email, and password are required");
     setSaving(true);
     const res = await fetch("/api/admin/users", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...form, role: "coach", branch_id: branchId }),
     });
     const json = await res.json() as { user_id?: string; error?: string; code?: string };
-    if (!res.ok) { const [errT, errS, errD] = parseUserApiError(json, t); toast.error(errT, errS, errD); setSaving(false); return; }
+    if (!res.ok) { const [errT, errS, errD] = parseUserApiError(json); toast.error(errT, errS, errD); setSaving(false); return; }
 
     const uid = json.user_id!;
     const db = createClient();

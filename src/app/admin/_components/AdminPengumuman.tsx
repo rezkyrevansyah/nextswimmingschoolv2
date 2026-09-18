@@ -3,13 +3,13 @@ import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
 import { Field, Input, Select, Textarea } from "@/components/ui/FormFields";
 import { Card } from "@/components/ui/Card";
 import Status from "@/components/ui/Status";
 import Modal from "@/components/ui/Modal";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 import type { ClassRow } from "../_types";
 import { fmtDate } from "@/lib/utils";
 
@@ -19,21 +19,17 @@ interface Announcement {
   target_roles: string[];
 }
 
-function buildRoleLabels(t: (key: string) => string) {
-  return [
-    { value: "member", label: t("admin.pengumuman.memberRole") },
-    { value: "coach",  label: t("admin.pengumuman.coachRole") },
-    { value: "admin",  label: t("admin.pengumuman.adminBranchRole") },
-    { value: "school", label: t("admin.pengumuman.schoolRole") },
-  ] as const;
-}
+const ANNOUNCEMENT_ROLE_LABELS = [
+  { value: "member", label: "Student" },
+  { value: "coach",  label: "Coach" },
+  { value: "admin",  label: "Branch Admin" },
+  { value: "school", label: "School" },
+] as const;
 
 export default function AdminPengumuman({ branchId }: { branchId: string }) {
   const supabase = createClient();
   const toast = useToast();
   const confirm = useConfirm();
-  const { t } = useLocale();
-  const ANNOUNCEMENT_ROLE_LABELS = buildRoleLabels(t);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState(true);
   const [openAdd, setOpenAdd] = useState(false);
@@ -75,9 +71,9 @@ export default function AdminPengumuman({ branchId }: { branchId: string }) {
   };
 
   const create = async () => {
-    if (!form.title || !form.body) return toast.error(t("admin.pengumuman.titleBodyRequired"));
-    if (form.target === "class" && form.class_ids.length === 0) return toast.error(t("admin.pengumuman.selectAtLeastOneClass"));
-    if (form.target_roles.length === 0) return toast.error(t("admin.pengumuman.selectAtLeastOneRecipient"));
+    if (!form.title || !form.body) return toast.error("Title and body are required");
+    if (form.target === "class" && form.class_ids.length === 0) return toast.error("Select at least one class");
+    if (form.target_roles.length === 0) return toast.error("Select at least one recipient");
     setSaving(true);
     const user = (await supabase.auth.getUser()).data.user;
     const { data: ann, error } = await supabase.from("announcements").insert({
@@ -87,7 +83,7 @@ export default function AdminPengumuman({ branchId }: { branchId: string }) {
       valid_from: form.valid_from || new Date().toISOString().slice(0, 10),
       valid_until: form.valid_until || null, created_by: user?.id ?? "",
     }).select("id").single();
-    if (error || !ann) { setSaving(false); return toast.error(t("admin.pengumuman.createFailed"), error?.message); }
+    if (error || !ann) { setSaving(false); return toast.error("Failed to create announcement", error?.message); }
     if (form.target === "class" && form.class_ids.length > 0) {
       await supabase.from("announcement_classes").insert(form.class_ids.map(class_id => ({ announcement_id: ann.id, class_id })));
     }
@@ -133,11 +129,11 @@ export default function AdminPengumuman({ branchId }: { branchId: string }) {
     const uniqueIds = [...new Set(targetUserIds)];
     if (uniqueIds.length > 0) {
       await supabase.from("notifications").insert(
-        uniqueIds.map(uid => ({ user_id: uid, title: t("admin.pengumuman.newAnnouncementNotifTitle"), body: notifBody, icon: "bell", kind: "info", created_at: today }))
+        uniqueIds.map(uid => ({ user_id: uid, title: "New announcement", body: notifBody, icon: "bell", kind: "info", created_at: today }))
       );
     }
     setSaving(false);
-    toast.success(t("admin.pengumuman.createdToast"));
+    toast.success("Announcement created");
     setOpenAdd(false);
     setForm({ title: "", body: "", target: "all", target_roles: ["member"], valid_from: "", valid_until: "", class_ids: [] });
     load();
@@ -146,31 +142,31 @@ export default function AdminPengumuman({ branchId }: { branchId: string }) {
   const deactivate = async (id: string) => {
     await supabase.from("announcements").update({ active: false }).eq("id", id);
     setAnnouncements(prev => prev.map(a => a.id === id ? { ...a, active: false } : a));
-    toast.success(t("admin.pengumuman.deactivatedToast"));
+    toast.success("Announcement deactivated");
   };
 
   const activate = async (id: string) => {
     await supabase.from("announcements").update({ active: true }).eq("id", id);
     setAnnouncements(prev => prev.map(a => a.id === id ? { ...a, active: true } : a));
-    toast.success(t("admin.pengumuman.activatedToast"));
+    toast.success("Announcement activated");
   };
 
   const deleteAnn = async (id: string) => {
-    const ok = await confirm({ body: t("admin.pengumuman.deleteConfirmBody") });
+    const ok = await confirm({ body: "Delete this announcement? This action cannot be undone." });
     if (!ok) return;
     const { error } = await supabase.from("announcements").delete().eq("id", id);
-    if (error) return toast.error(t("admin.pengumuman.deleteFailed"), error.message);
+    if (error) return toast.error("Failed to delete", error.message);
     setAnnouncements(prev => prev.filter(a => a.id !== id));
-    toast.success(t("admin.pengumuman.deletedToast"));
+    toast.success("Announcement deleted");
   };
 
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <div><h2 className="font-display font-bold text-2xl">{t("admin.pengumuman.pageTitle")}</h2><p className="text-ink-mute text-sm mt-0.5">{t("admin.pengumuman.pageSub")}</p></div>
-        <Btn variant="primary" icon="plus" onClick={() => { setForm({ title: "", body: "", target: "all", target_roles: ["member"], valid_from: "", valid_until: "", class_ids: [] }); setOpenAdd(true); }}>{t("admin.pengumuman.createBtn")}</Btn>
+        <div><h2 className="font-display font-bold text-2xl">{"Announcements"}</h2><p className="text-ink-mute text-sm mt-0.5">{"Shown on the student home page as a banner."}</p></div>
+        <Btn variant="primary" icon="plus" onClick={() => { setForm({ title: "", body: "", target: "all", target_roles: ["member"], valid_from: "", valid_until: "", class_ids: [] }); setOpenAdd(true); }}>{"Create Announcement"}</Btn>
       </div>
-      {loading ? <div className="text-ink-mute text-sm">{t("admin.pengumuman.loading")}</div> : (
+      {loading ? <div className="text-ink-mute text-sm">{"Loading…"}</div> : (
         <div className="grid lg:grid-cols-2 gap-5">
           {announcements.map((a) => {
             const annClasses = (a as unknown as { announcement_classes?: { class_id: string; class?: { name: string } | null }[] }).announcement_classes;
@@ -179,10 +175,10 @@ export default function AdminPengumuman({ branchId }: { branchId: string }) {
                 <div className="flex items-start gap-3">
                   <span className="w-11 h-11 rounded-xl bg-ocean-50 text-ocean-700 flex items-center justify-center shrink-0"><Icon name="bell" className="w-5 h-5" /></span>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap"><h3 className="font-display font-bold text-ink">{a.title}</h3><Status kind={a.active ? "active" : "inactive"}>{a.active ? t("admin.pengumuman.activeStatus") : t("admin.pengumuman.inactiveStatus")}</Status></div>
+                    <div className="flex items-center gap-2 flex-wrap"><h3 className="font-display font-bold text-ink"><NoTranslate>{a.title}</NoTranslate></h3><Status kind={a.active ? "active" : "inactive"}>{a.active ? "Active" : "Inactive"}</Status></div>
                     <div className="text-xs text-ink-mute mt-1 flex flex-wrap items-center gap-1.5">
-                      {a.valid_until && <span>{t("admin.pengumuman.validUntilLine", { date: fmtDate(a.valid_until) })}</span>}
-                      <span>{t("admin.pengumuman.targetLabel")} <b>{a.target_all ? t("admin.pengumuman.targetAll") : annClasses && annClasses.length > 0 ? annClasses.map(ac => ac.class?.name ?? "").join(", ") : t("admin.pengumuman.targetSpecific")}</b></span>
+                      {a.valid_until && <span>{`Valid until ${fmtDate(a.valid_until)} ·`}</span>}
+                      <span>{"Target:"} <b>{a.target_all ? "Everyone" : annClasses && annClasses.length > 0 ? <NoTranslate>{annClasses.map(ac => ac.class?.name ?? "").join(", ")}</NoTranslate> : "Specific"}</b></span>
                       {(a.target_roles ?? []).length > 0 && (
                         <div className="flex gap-1 flex-wrap">
                           {ANNOUNCEMENT_ROLE_LABELS.filter(r => (a.target_roles ?? []).includes(r.value)).map(r => (
@@ -191,28 +187,28 @@ export default function AdminPengumuman({ branchId }: { branchId: string }) {
                         </div>
                       )}
                     </div>
-                    <p className="text-sm text-ink-soft mt-3 leading-relaxed">{a.body}</p>
+                    <p className="text-sm text-ink-soft mt-3 leading-relaxed"><NoTranslate>{a.body}</NoTranslate></p>
                     <div className="mt-4 flex gap-2">
                       {a.active
-                        ? <Btn variant="ghost" size="sm" onClick={() => deactivate(a.id)}>{t("admin.pengumuman.deactivateBtn")}</Btn>
-                        : <Btn variant="soft" size="sm" icon="check" onClick={() => activate(a.id)}>{t("admin.pengumuman.activateBtn")}</Btn>
+                        ? <Btn variant="ghost" size="sm" onClick={() => deactivate(a.id)}>{"Deactivate"}</Btn>
+                        : <Btn variant="soft" size="sm" icon="check" onClick={() => activate(a.id)}>{"Activate"}</Btn>
                       }
-                      <Btn variant="ghost" size="sm" className="text-danger-500" onClick={() => deleteAnn(a.id)}>{t("common.actions.delete")}</Btn>
+                      <Btn variant="ghost" size="sm" className="text-danger-500" onClick={() => deleteAnn(a.id)}>{"Delete"}</Btn>
                     </div>
                   </div>
                 </div>
               </Card>
             );
           })}
-          {announcements.length === 0 && <p className="text-ink-mute">{t("admin.pengumuman.emptyState")}</p>}
+          {announcements.length === 0 && <p className="text-ink-mute">{"No announcements yet."}</p>}
         </div>
       )}
-      <Modal open={openAdd} onClose={() => setOpenAdd(false)} title={t("admin.pengumuman.createBtn")}
-        footer={<><Btn variant="ghost" onClick={() => setOpenAdd(false)}>{t("common.actions.cancel")}</Btn><Btn variant="primary" onClick={create} disabled={saving}>{saving ? t("common.actions.saving") : t("admin.pengumuman.publishBtn")}</Btn></>}>
+      <Modal open={openAdd} onClose={() => setOpenAdd(false)} title={"Create Announcement"}
+        footer={<><Btn variant="ghost" onClick={() => setOpenAdd(false)}>{"Cancel"}</Btn><Btn variant="primary" onClick={create} disabled={saving}>{saving ? "Saving…" : "Publish"}</Btn></>}>
         <div className="space-y-4">
-          <Field label={t("admin.pengumuman.fieldTitle")} required><Input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} /></Field>
-          <Field label={t("admin.pengumuman.fieldBody")} required><Textarea rows={4} value={form.body} onChange={e => setForm(f => ({ ...f, body: e.target.value }))} /></Field>
-          <Field label={t("admin.pengumuman.fieldRecipients")} required hint={t("admin.pengumuman.fieldRecipientsHint")}>
+          <Field label={"Title"} required><Input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} /></Field>
+          <Field label={"Announcement body"} required><Textarea rows={4} value={form.body} onChange={e => setForm(f => ({ ...f, body: e.target.value }))} /></Field>
+          <Field label={"Recipients"} required hint={"Choose which roles receive this announcement"}>
             <div className="flex flex-wrap gap-2 mt-1">
               {ANNOUNCEMENT_ROLE_LABELS.map(({ value, label }) => (
                 <button key={value} type="button" onClick={() => toggleRole(value)}
@@ -223,25 +219,25 @@ export default function AdminPengumuman({ branchId }: { branchId: string }) {
             </div>
           </Field>
           <div className="grid sm:grid-cols-2 gap-4">
-            <Field label={t("admin.pengumuman.fieldMemberTarget")}>
+            <Field label={"Student target"}>
               <Select value={form.target} onChange={e => setForm(f => ({ ...f, target: e.target.value, class_ids: [] }))}>
-                <option value="all">{t("admin.pengumuman.targetAllMembers")}</option>
-                <option value="class">{t("admin.pengumuman.targetPerClass")}</option>
+                <option value="all">{"All students"}</option>
+                <option value="class">{"Per class (students)"}</option>
               </Select>
             </Field>
-            <Field label={t("admin.pengumuman.fieldValidFrom")} hint={t("admin.pengumuman.validFromHint")}><Input type="date" value={form.valid_from} onChange={e => setForm(f => ({ ...f, valid_from: e.target.value }))} /></Field>
+            <Field label={"Valid from"} hint={"Empty = today"}><Input type="date" value={form.valid_from} onChange={e => setForm(f => ({ ...f, valid_from: e.target.value }))} /></Field>
           </div>
-          <Field label={t("admin.pengumuman.fieldValidUntil")} hint={t("admin.pengumuman.validUntilHint")}><Input type="date" value={form.valid_until} onChange={e => setForm(f => ({ ...f, valid_until: e.target.value }))} /></Field>
+          <Field label={"Valid until"} hint={"Optional — empty = shown until manually deleted"}><Input type="date" value={form.valid_until} onChange={e => setForm(f => ({ ...f, valid_until: e.target.value }))} /></Field>
           {form.target === "class" && (
-            <Field label={t("admin.pengumuman.fieldSelectClasses")} hint={t("admin.pengumuman.selectClassesHint")}>
+            <Field label={"Select classes"} hint={"Can select more than one"}>
               <div className="flex flex-wrap gap-2 mt-1">
                 {classes.map(c => (
                   <button key={c.id} type="button" onClick={() => toggleClass(c.id)}
                     className={`px-3 py-1.5 rounded-lg text-sm font-semibold border transition ${form.class_ids.includes(c.id) ? "bg-ocean-600 text-white border-ocean-600" : "bg-white text-ink-soft border-line hover:border-ocean-300"}`}>
-                    {c.name}
+                    <NoTranslate>{c.name}</NoTranslate>
                   </button>
                 ))}
-                {classes.length === 0 && <span className="text-sm text-ink-mute">{t("admin.pengumuman.noActiveClasses")}</span>}
+                {classes.length === 0 && <span className="text-sm text-ink-mute">{"No active classes"}</span>}
               </div>
             </Field>
           )}

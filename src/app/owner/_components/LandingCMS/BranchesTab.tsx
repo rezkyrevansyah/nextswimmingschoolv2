@@ -3,7 +3,6 @@ import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import Modal from "@/components/ui/Modal";
 import Btn from "@/components/ui/Btn";
@@ -18,7 +17,6 @@ import type { BranchEntryItem, CoreBranchOption } from "./_types";
 // Dual-mode: "linked" references an existing core branch (live-joined via the
 // public_branches view), "standalone" stores its own minimal display fields.
 export default function BranchesTab() {
-  const { t } = useLocale();
   const toast = useToast();
   const confirm = useConfirm();
   const supabase = createClient();
@@ -88,16 +86,16 @@ export default function BranchesTab() {
           .insert({ ...payload, photo_url: photoFile ? null : (form.photo_url.trim() || null) })
           .select("id")
           .single();
-        if (error || !inserted) throw new Error(error?.message ?? t("owner.landingCms.saveFailedGeneric"));
+        if (error || !inserted) throw new Error(error?.message ?? "Failed to save");
         if (photoFile) await upload.landingImage(photoFile, "branch", inserted.id);
       }
     } catch (e) {
-      toast.error(t("owner.landingCms.branches.saveFailed"), (e as Error).message);
+      toast.error("Failed to save", (e as Error).message);
       setSaving(false);
       return;
     }
     await revalidate();
-    toast.success(t("owner.landingCms.branches.saved"));
+    toast.success("Branch entry saved");
     setSaving(false);
     setShowModal(false);
     load();
@@ -105,12 +103,12 @@ export default function BranchesTab() {
 
   const del = async (item: BranchEntryItem) => {
     const label = item.branch_id ? item.linked?.name : item.name;
-    const yes = await confirm({ title: t("owner.landingCms.branches.deleteConfirmTitle"), body: label || t("owner.landingCms.branches.deleteConfirmBody"), danger: true });
+    const yes = await confirm({ title: "Delete this branch entry?", body: label || "This entry will be removed from the landing page. The core branch record itself is not affected.", danger: true });
     if (!yes) return;
     const { error } = await supabase.from("landing_branches").delete().eq("id", item.id);
-    if (error) return toast.error(t("owner.landingCms.branches.deleteFailed"), error.message);
+    if (error) return toast.error("Failed to delete", error.message);
     await revalidate();
-    toast.success(t("owner.landingCms.branches.deleted"));
+    toast.success("Branch entry deleted");
     load();
   };
 
@@ -119,8 +117,8 @@ export default function BranchesTab() {
   return (
     <Card>
       <div className="flex items-center justify-between">
-        <SectionTitle sub={t("owner.landingCms.branches.sectionSub")}>{t("owner.landingCms.branches.sectionTitle")}</SectionTitle>
-        <Btn variant="soft" size="sm" icon="plus" onClick={openAdd}>{t("owner.landingCms.add")}</Btn>
+        <SectionTitle sub={"Branch locations shown in the Our Branches section"}>{"Branches"}</SectionTitle>
+        <Btn variant="soft" size="sm" icon="plus" onClick={openAdd}>{"Add"}</Btn>
       </div>
       <div className="mt-4 grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {items.map((item) => {
@@ -136,10 +134,10 @@ export default function BranchesTab() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5">
                     <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${item.branch_id ? "bg-ocean-50 text-ocean-700" : "bg-wave-50 text-wave-700"}`}>
-                      {item.branch_id ? t("owner.landingCms.branches.modeLinked") : t("owner.landingCms.branches.modeStandalone")}
+                      {item.branch_id ? "Link Existing Branch" : "Standalone Entry"}
                     </span>
                   </div>
-                  <div className="text-sm font-bold text-ink truncate mt-1">{display.name ? <NoTranslate>{display.name}</NoTranslate> : t("owner.landingCms.noName")}</div>
+                  <div className="text-sm font-bold text-ink truncate mt-1">{display.name ? <NoTranslate>{display.name}</NoTranslate> : "Unnamed"}</div>
                   {display.city && <div className="text-xs text-ink-mute"><NoTranslate>{display.city}</NoTranslate></div>}
                 </div>
                 <button onClick={() => openEdit(item)} className="w-7 h-7 rounded-lg border border-line bg-white flex items-center justify-center hover:bg-paper-deep shrink-0"><Icon name="edit" className="w-3.5 h-3.5 text-ink-mute" /></button>
@@ -148,52 +146,52 @@ export default function BranchesTab() {
             </div>
           );
         })}
-        {items.length === 0 && <div className="py-8 text-center text-ink-mute text-sm sm:col-span-2 lg:col-span-3">{t("owner.landingCms.branches.empty")}</div>}
+        {items.length === 0 && <div className="py-8 text-center text-ink-mute text-sm sm:col-span-2 lg:col-span-3">{"No branches yet."}</div>}
       </div>
 
-      <Modal open={showModal} onClose={() => setShowModal(false)} title={editItem ? t("owner.landingCms.branches.editModalTitle") : t("owner.landingCms.branches.addModalTitle")} size="sm"
-        footer={<><Btn variant="ghost" onClick={() => setShowModal(false)}>{t("common.actions.cancel")}</Btn><Btn variant="primary" onClick={save} disabled={saving || uploading || (mode === "linked" ? !form.branch_id : !form.name.trim())}>{saving || uploading ? t("common.actions.saving") : t("common.actions.save")}</Btn></>}>
+      <Modal open={showModal} onClose={() => setShowModal(false)} title={editItem ? "Edit Branch Entry" : "Add Branch Entry"} size="sm"
+        footer={<><Btn variant="ghost" onClick={() => setShowModal(false)}>{"Cancel"}</Btn><Btn variant="primary" onClick={save} disabled={saving || uploading || (mode === "linked" ? !form.branch_id : !form.name.trim())}>{saving || uploading ? "Saving…" : "Save"}</Btn></>}>
         <div className="space-y-3">
           <div className="flex gap-2">
             <button type="button" onClick={() => setMode("linked")}
               className={`flex-1 py-2 rounded-lg text-sm font-semibold border transition-colors ${mode === "linked" ? "bg-ocean-700 text-white border-ocean-700" : "bg-white text-ink-soft border-line hover:bg-paper-tint"}`}>
-              {t("owner.landingCms.branches.modeLinked")}
+              {"Link Existing Branch"}
             </button>
             <button type="button" onClick={() => setMode("standalone")}
               className={`flex-1 py-2 rounded-lg text-sm font-semibold border transition-colors ${mode === "standalone" ? "bg-ocean-700 text-white border-ocean-700" : "bg-white text-ink-soft border-line hover:bg-paper-tint"}`}>
-              {t("owner.landingCms.branches.modeStandalone")}
+              {"Standalone Entry"}
             </button>
           </div>
 
           {mode === "linked" ? (
             <>
-              <Field label={t("owner.landingCms.branches.fieldLinkedBranch")}>
+              <Field label={"Branch"}>
                 <Select value={form.branch_id} onChange={(e) => setForm({ ...form, branch_id: e.target.value })}>
-                  <option value="" disabled>{t("owner.landingCms.branches.fieldLinkedBranchPlaceholder")}</option>
+                  <option value="" disabled>{"Select a branch…"}</option>
                   {coreBranches.map((b) => <option key={b.id} value={b.id} translate="no" className="notranslate">{b.name}{b.city ? ` — ${b.city}` : ""}</option>)}
                 </Select>
               </Field>
               <div className="rounded-xl bg-paper-tint border border-line p-3 text-sm text-ink-mute">
-                {selectedCoreBranch ? <NoTranslate>{selectedCoreBranch.name}{selectedCoreBranch.city ? ` — ${selectedCoreBranch.city}` : ""}</NoTranslate> : t("owner.landingCms.branches.linkedPreviewEmpty")}
+                {selectedCoreBranch ? <NoTranslate>{selectedCoreBranch.name}{selectedCoreBranch.city ? ` — ${selectedCoreBranch.city}` : ""}</NoTranslate> : "Select a branch to preview its details."}
               </div>
-              <ImageField label={t("owner.landingCms.branches.fieldPhotoOverride")} url={form.photo_url} onUrlChange={(url) => setForm({ ...form, photo_url: url })} onFileChange={setPhotoFile} />
+              <ImageField label={"Photo (optional — overrides the branch logo)"} url={form.photo_url} onUrlChange={(url) => setForm({ ...form, photo_url: url })} onFileChange={setPhotoFile} />
             </>
           ) : (
             <>
-              <ImageField label={t("owner.landingCms.branches.fieldPhoto")} url={form.photo_url} onUrlChange={(url) => setForm({ ...form, photo_url: url })} onFileChange={setPhotoFile} />
-              <Field label={t("owner.landingCms.branches.fieldName")}><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={t("owner.landingCms.branches.fieldNamePlaceholder")} /></Field>
-              <Field label={t("owner.landingCms.branches.fieldAddress")}><Input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder={t("owner.landingCms.branches.fieldAddressPlaceholder")} /></Field>
-              <Field label={t("owner.landingCms.branches.fieldCity")}><Input value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} placeholder={t("owner.landingCms.branches.fieldCityPlaceholder")} /></Field>
-              <Field label={t("owner.landingCms.branches.fieldPhone")}><Input type="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder={t("owner.landingCms.branches.fieldPhonePlaceholder")} className="font-mono" /></Field>
+              <ImageField label={"Photo"} url={form.photo_url} onUrlChange={(url) => setForm({ ...form, photo_url: url })} onFileChange={setPhotoFile} />
+              <Field label={"Name"}><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={"Jakarta Selatan Branch"} /></Field>
+              <Field label={"Address"}><Input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder={"Jl. Sudirman No. 1"} /></Field>
+              <Field label={"City"}><Input value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} placeholder={"Jakarta"} /></Field>
+              <Field label={"Phone / WhatsApp"}><Input type="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder={"081234567890"} className="font-mono" /></Field>
             </>
           )}
 
           <div className="grid grid-cols-2 gap-2">
-            <Field label={t("owner.landingCms.branches.fieldLat")}><Input inputMode="decimal" value={form.lat} onChange={(e) => setForm({ ...form, lat: e.target.value })} placeholder="-6.2615" className="font-mono" /></Field>
-            <Field label={t("owner.landingCms.branches.fieldLng")}><Input inputMode="decimal" value={form.lng} onChange={(e) => setForm({ ...form, lng: e.target.value })} placeholder="106.8106" className="font-mono" /></Field>
+            <Field label={"Latitude (optional)"}><Input inputMode="decimal" value={form.lat} onChange={(e) => setForm({ ...form, lat: e.target.value })} placeholder="-6.2615" className="font-mono" /></Field>
+            <Field label={"Longitude (optional)"}><Input inputMode="decimal" value={form.lng} onChange={(e) => setForm({ ...form, lng: e.target.value })} placeholder="106.8106" className="font-mono" /></Field>
           </div>
-          <p className="text-[11px] text-ink-faint">{t("owner.landingCms.branches.fieldMapHint")}</p>
-          <Field label={t("owner.landingCms.branches.fieldOrder")}><Input type="number" value={String(form.sort_order)} onChange={(e) => setForm({ ...form, sort_order: Number(e.target.value) })} /></Field>
+          <p className="text-[11px] text-ink-faint">{"Fill in both to show a \"View on Map\" link on the landing page."}</p>
+          <Field label={"Order"}><Input type="number" value={String(form.sort_order)} onChange={(e) => setForm({ ...form, sort_order: Number(e.target.value) })} /></Field>
         </div>
       </Modal>
     </Card>

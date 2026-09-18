@@ -3,7 +3,6 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import { useUpload } from "@/hooks/useUpload";
 import { parseUserApiError } from "../../_utils";
 import { logActivity } from "@/lib/activityLog";
@@ -14,9 +13,8 @@ export function useApprovementData(branchId: string) {
   const supabase = createClient();
   const toast = useToast();
   const confirm = useConfirm();
-  const { t, tArray } = useLocale();
-  const monthsLong = tArray("common.months.long");
-  const genderLabel = (g: string | null | undefined) => g === "male" ? t("admin.approvement.genderMale") : g === "female" ? t("admin.approvement.genderFemale") : null;
+  const monthsLong = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  const genderLabel = (g: string | null | undefined) => g === "male" ? "Male" : g === "female" ? "Female" : null;
   const upload = useUpload();
 
   // ── Data ──────────────────────────────────────────────────────────────────
@@ -122,18 +120,18 @@ export function useApprovementData(branchId: string) {
       health_notes: editRegForm.health_notes ?? null,
     }).eq("id", editReg.id);
     setSavingEdit(false);
-    if (error) return toast.error(t("admin.approvement.saveFailedGeneric"), error.message);
-    toast.success(t("admin.approvement.regDataUpdatedToast"));
+    if (error) return toast.error("Failed to save", error.message);
+    toast.success("Registration data updated");
     setEditReg(null);
     load();
   };
 
   const deleteReg = async (r: RegistrationRow) => {
-    const ok = await confirm({ title: t("admin.approvement.deleteConfirmTitle", { name: r.full_name }), body: t("admin.approvement.deleteConfirmBody2"), confirmLabel: t("common.actions.delete") });
+    const ok = await confirm({ title: `Delete registration "${r.full_name}"?`, body: "This action cannot be undone.", confirmLabel: "Delete" });
     if (!ok) return;
     await supabase.from("registrations").delete().eq("id", r.id);
     setDetailReg(null);
-    toast.success(t("admin.approvement.registrationDeletedToast"));
+    toast.success("Registration deleted");
     load();
   };
 
@@ -142,13 +140,13 @@ export function useApprovementData(branchId: string) {
 
   const confirmRejectReg = async () => {
     if (!rejectRegTarget) return;
-    if (!regRejectReason.trim()) return toast.error(t("admin.approvement.reasonRequired"));
+    if (!regRejectReason.trim()) return toast.error("Rejection reason is required");
     setRejectingReg(true);
     const user = (await supabase.auth.getUser()).data.user;
     await supabase.from("registrations").update({ status: "rejected", reject_reason: regRejectReason.trim(), reviewed_by: user?.id, reviewed_at: new Date().toISOString() }).eq("id", rejectRegTarget.id);
     setRejectingReg(false);
-    toast.success(t("admin.approvement.registrationRejectedToast"));
-    logActivity(supabase, { userId: user?.id ?? "unknown", userRole: "admin", userName: user?.user_metadata?.full_name ?? "Admin", branchId, entityType: "registrations", entityId: rejectRegTarget.id, entityLabel: rejectRegTarget.full_name, action: "reject", label: t("admin.approvement.activityRegRejected", { name: rejectRegTarget.full_name, reason: regRejectReason.trim() }), meta: { reason: regRejectReason.trim() } });
+    toast.success("Registration rejected");
+    logActivity(supabase, { userId: user?.id ?? "unknown", userRole: "admin", userName: user?.user_metadata?.full_name ?? "Admin", branchId, entityType: "registrations", entityId: rejectRegTarget.id, entityLabel: rejectRegTarget.full_name, action: "reject", label: `Registration for ${rejectRegTarget.full_name} rejected — ${regRejectReason.trim()}`, meta: { reason: regRejectReason.trim() } });
     setRejectRegTarget(null);
     setDetailReg(null);
     load();
@@ -162,7 +160,7 @@ export function useApprovementData(branchId: string) {
     if (proofFile) proofUrl = await upload.upload.paymentProof(proofFile, r.id);
     const memberEmail = r.email?.trim();
     if (!memberEmail) {
-      toast.error(t("admin.approvement.emailNotFilledTitle"), t("admin.approvement.editRegFirstHint"));
+      toast.error("Email not filled in registration data", "Edit the registration first to fill in the email.");
       setApprovingId(null);
       return;
     }
@@ -174,7 +172,7 @@ export function useApprovementData(branchId: string) {
     });
     const json = await res.json() as { user_id?: string; member_id?: string; error?: string; code?: string; class_assignment_error?: string };
     if (!res.ok) {
-      const [errT, errS, errD] = parseUserApiError(json, t);
+      const [errT, errS, errD] = parseUserApiError(json);
       toast.error(errT, errS, errD);
       setApprovingId(null);
       return;
@@ -182,8 +180,8 @@ export function useApprovementData(branchId: string) {
     // Account creation + registration status update now happen together
     // server-side (see /api/admin/users) so they can't drift out of sync.
     const user = (await supabase.auth.getUser()).data.user;
-    toast.success(t("admin.approvement.registrationApprovedToast"), t("admin.approvement.memberInMenuHint"));
-    logActivity(supabase, { userId: user?.id ?? "unknown", userRole: "admin", userName: user?.user_metadata?.full_name ?? "Admin", branchId, entityType: "registrations", entityId: r.id, entityLabel: r.full_name, action: "approve", label: t("admin.approvement.activityRegApproved", { name: r.full_name, email: r.email ?? "" }) });
+    toast.success("Registration approved", "Student added to the Student menu — complete data & send credential.");
+    logActivity(supabase, { userId: user?.id ?? "unknown", userRole: "admin", userName: user?.user_metadata?.full_name ?? "Admin", branchId, entityType: "registrations", entityId: r.id, entityLabel: r.full_name, action: "approve", label: `Registration for ${r.full_name} (${r.email ?? ""}) approved` });
     setApprovingId(null);
     setApproveTarget(null);
     setDetailReg(null);
@@ -195,26 +193,26 @@ export function useApprovementData(branchId: string) {
     const cert = certs.find(c => c.id === id);
     const user = (await supabase.auth.getUser()).data.user;
     await supabase.from("certifications").update({ status: "approved", reject_reason: null }).eq("id", id);
-    toast.success(t("admin.approvement.certVerifiedToast"));
-    logActivity(supabase, { userId: user?.id ?? "unknown", userRole: "admin", userName: user?.user_metadata?.full_name ?? "Admin", branchId, entityType: "certifications", entityId: id, entityLabel: cert?.profile?.full_name ?? undefined, action: "approve", label: t("admin.approvement.activityCertApproved", { title: cert?.title ?? cert?.name ?? id, name: cert?.profile?.full_name ?? "coach" }) });
+    toast.success("Certification verified");
+    logActivity(supabase, { userId: user?.id ?? "unknown", userRole: "admin", userName: user?.user_metadata?.full_name ?? "Admin", branchId, entityType: "certifications", entityId: id, entityLabel: cert?.profile?.full_name ?? undefined, action: "approve", label: `Certification '${cert?.title ?? cert?.name ?? id}' for coach ${cert?.profile?.full_name ?? "coach"} approved` });
     load();
   };
 
   const confirmRejectCert = async () => {
     if (!rejectCertTarget) return;
-    if (!certRejectReason.trim()) return toast.error(t("admin.approvement.reasonRequired"));
+    if (!certRejectReason.trim()) return toast.error("Rejection reason is required");
     setRejectingCert(true);
     const user = (await supabase.auth.getUser()).data.user;
     await supabase.from("certifications").update({ status: "rejected", reject_reason: certRejectReason.trim() }).eq("id", rejectCertTarget.id);
     setRejectingCert(false);
-    toast.success(t("admin.approvement.certRejectedToast"));
-    logActivity(supabase, { userId: user?.id ?? "unknown", userRole: "admin", userName: user?.user_metadata?.full_name ?? "Admin", branchId, entityType: "certifications", entityId: rejectCertTarget.id, entityLabel: rejectCertTarget.profile?.full_name ?? undefined, action: "reject", label: t("admin.approvement.activityCertRejected", { title: rejectCertTarget.title ?? rejectCertTarget.name, name: rejectCertTarget.profile?.full_name ?? "coach" }), meta: { reason: certRejectReason.trim() } });
+    toast.success("Certification rejected");
+    logActivity(supabase, { userId: user?.id ?? "unknown", userRole: "admin", userName: user?.user_metadata?.full_name ?? "Admin", branchId, entityType: "certifications", entityId: rejectCertTarget.id, entityLabel: rejectCertTarget.profile?.full_name ?? undefined, action: "reject", label: `Certification '${rejectCertTarget.title ?? rejectCertTarget.name}' for coach ${rejectCertTarget.profile?.full_name ?? "coach"} rejected`, meta: { reason: certRejectReason.trim() } });
     setRejectCertTarget(null);
     load();
   };
 
   return {
-    t, monthsLong, genderLabel,
+    monthsLong, genderLabel,
     registrations, certs, loading, load,
     tab, setTab, search, setSearch, genderFilter, setGenderFilter, page, setPage,
     detailReg, setDetailReg, editReg, setEditReg, editRegForm, setEditRegForm, savingEdit,

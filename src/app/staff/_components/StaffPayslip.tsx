@@ -1,18 +1,17 @@
 "use client";
 import Btn from "@/components/ui/Btn";
 import { Card, SectionTitle } from "@/components/ui/Card";
-import { useLocale } from "@/components/providers/LocaleProvider";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 import { fmtIDR } from "@/lib/utils";
 import type { useStaffData } from "./useStaffData";
 
 export default function StaffPayslip({ hook }: { hook: ReturnType<typeof useStaffData> }) {
-  const { t } = useLocale();
   const { salaries, handlePrintPayslip } = hook;
 
   return (
     <Card className="space-y-4">
-      <SectionTitle sub={t("staff.payslip.sub")}>
-        {t("staff.payslip.title")}
+      <SectionTitle sub={"Monthly payslips issued by Owner / Management."}>
+        {"Monthly Payslip List"}
       </SectionTitle>
 
       {/* Desktop Table */}
@@ -20,20 +19,20 @@ export default function StaffPayslip({ hook }: { hook: ReturnType<typeof useStaf
         <table className="w-full text-sm">
           <thead>
             <tr className="text-[11px] uppercase tracking-widest text-ink-faint font-bold border-b border-line">
-              <th className="text-left py-3 px-4">{t("staff.payslip.colPeriod")}</th>
-              <th className="text-right py-3 px-4">{t("staff.payslip.colBaseSalary")}</th>
-              <th className="text-right py-3 px-4">{t("staff.payslip.colAllowances")}</th>
-              <th className="text-right py-3 px-4">{t("staff.payslip.colReimburse")}</th>
-              <th className="text-right py-3 px-4">{t("staff.payslip.colDeductions")}</th>
-              <th className="text-right py-3 px-4">{t("staff.payslip.colTotalSalary")}</th>
-              <th className="text-center py-3 px-4">{t("staff.payslip.colStatus")}</th>
-              <th className="text-right py-3 px-4">{t("staff.payslip.colAction")}</th>
+              <th className="text-left py-3 px-4">{"Period"}</th>
+              <th className="text-right py-3 px-4">{"Base Salary"}</th>
+              <th className="text-right py-3 px-4">{"Allowances"}</th>
+              <th className="text-right py-3 px-4">{"Reimbursements"}</th>
+              <th className="text-right py-3 px-4">{"Deductions"}</th>
+              <th className="text-right py-3 px-4">{"Total Net Salary"}</th>
+              <th className="text-center py-3 px-4">{"Status"}</th>
+              <th className="text-right py-3 px-4">{"Action"}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
             {salaries.map(sal => (
               <tr key={sal.id} className="hover:bg-paper-tint">
-                <td className="py-3.5 px-4 font-bold text-ink">{sal.period_month}</td>
+                <td className="py-3.5 px-4 font-bold text-ink"><NoTranslate>{sal.period_month}</NoTranslate></td>
                 <td className="py-3.5 px-4 text-right font-mono text-ink-soft">{fmtIDR(sal.base_salary)}</td>
                 <td className="py-3.5 px-4 text-right font-mono text-ok-600">{sal.allowances > 0 ? `+${fmtIDR(sal.allowances)}` : "—"}</td>
                 <td className="py-3.5 px-4 text-right font-mono text-ok-600">{sal.reimburse_amount > 0 ? `+${fmtIDR(sal.reimburse_amount)}` : "—"}</td>
@@ -44,13 +43,13 @@ export default function StaffPayslip({ hook }: { hook: ReturnType<typeof useStaf
                     sal.status === "paid" ? "bg-ok-50 text-ok-700" :
                     sal.status === "approved" ? "bg-ocean-50 text-ocean-700" : "bg-paper-deep text-ink-mute"
                   }`}>
-                    {sal.status === "paid" ? t("staff.payslip.statusPaid") :
-                     sal.status === "approved" ? t("staff.payslip.statusApproved") : t("staff.payslip.statusDraft")}
+                    {sal.status === "paid" ? "Paid" :
+                     sal.status === "approved" ? "Approved" : "Draft"}
                   </span>
                 </td>
                 <td className="py-3.5 px-4 text-right">
                   <Btn variant="outline" size="sm" icon="print" onClick={() => handlePrintPayslip(sal)}>
-                    {t("staff.payslip.printBtn")}
+                    {"Print Payslip"}
                   </Btn>
                 </td>
               </tr>
@@ -58,7 +57,7 @@ export default function StaffPayslip({ hook }: { hook: ReturnType<typeof useStaf
             {salaries.length === 0 && (
               <tr>
                 <td colSpan={8} className="py-10 text-center text-ink-mute">
-                  {t("staff.payslip.empty")}
+                  {"No payslip data issued by management yet."}
                 </td>
               </tr>
             )}
@@ -71,13 +70,13 @@ export default function StaffPayslip({ hook }: { hook: ReturnType<typeof useStaf
         {salaries.map(sal => (
           <div key={sal.id} className="p-4 rounded-xl border border-line bg-white shadow-2xs space-y-3">
             <div className="flex items-center justify-between">
-              <span className="font-display font-bold text-base text-ink">{sal.period_month}</span>
+              <span className="font-display font-bold text-base text-ink"><NoTranslate>{sal.period_month}</NoTranslate></span>
               <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${
                 sal.status === "paid" ? "bg-ok-50 text-ok-700" :
                 sal.status === "approved" ? "bg-ocean-50 text-ocean-700" : "bg-paper-deep text-ink-mute"
               }`}>
-                {sal.status === "paid" ? t("staff.payslip.statusPaid") :
-                 sal.status === "approved" ? t("staff.payslip.statusApproved") : t("staff.payslip.statusDraft")}
+                {sal.status === "paid" ? "Paid" :
+                 sal.status === "approved" ? "Approved" : "Draft"}
               </span>
             </div>
 
@@ -110,14 +109,14 @@ export default function StaffPayslip({ hook }: { hook: ReturnType<typeof useStaf
                 <div className="font-mono font-extrabold text-base text-ocean-700">{fmtIDR(sal.total_salary)}</div>
               </div>
               <Btn variant="outline" size="sm" icon="print" onClick={() => handlePrintPayslip(sal)}>
-                {t("staff.payslip.printBtn")}
+                {"Print Payslip"}
               </Btn>
             </div>
           </div>
         ))}
         {salaries.length === 0 && (
           <div className="py-8 text-center text-xs text-ink-mute">
-            {t("staff.payslip.empty")}
+            {"No payslip data issued by management yet."}
           </div>
         )}
       </div>

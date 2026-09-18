@@ -1,7 +1,6 @@
 "use client";
 import { useState } from "react";
 import { useToast } from "@/components/providers/ToastProvider";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import { Field } from "@/components/ui/FormFields";
 import Icon from "@/components/ui/Icon";
 import type { CompetitionDocumentRow } from "./_types";
@@ -22,7 +21,6 @@ export default function CompetitionDocUploader({
   onView: (doc: CompetitionDocumentRow) => void;
 }) {
   const toast = useToast();
-  const { t } = useLocale();
   const [uploading, setUploading] = useState(false);
 
   const handleFile = async (file: File | null) => {
@@ -36,15 +34,15 @@ export default function CompetitionDocUploader({
     const json = await res.json().catch(() => ({})) as { url?: string; content_type?: string; error?: string };
     setUploading(false);
     if (!res.ok || !json.url) {
-      toast.error(t("admin.competition.docUploadFailed"), json.error);
+      toast.error("Failed to upload document", json.error);
       return;
     }
-    toast.success(t("admin.competition.docUploadedSuccess"));
+    toast.success("Document uploaded successfully.");
     onUploaded({ id: doc?.id ?? "", competition_id: competitionId, member_id: memberId, document_url: json.url, content_type: json.content_type ?? null });
   };
 
   return (
-    <Field label={t("admin.competition.docFieldLabel")} hint={t("admin.competition.docFieldHint")}>
+    <Field label={"Competition Certificate / Document (Optional)"} hint={"One document for all events won by this student at this competition. Format: JPG, PNG, PDF (Max 10MB)"}>
       <div className="flex items-center gap-2 flex-wrap">
         {doc && (
           <button
@@ -52,12 +50,12 @@ export default function CompetitionDocUploader({
             onClick={() => onView(doc)}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-ocean-200 bg-ocean-50 text-ocean-700 text-xs font-semibold hover:bg-ocean-100 transition-colors"
           >
-            <Icon name="eye" className="w-3.5 h-3.5" /> {t("admin.competition.docViewBtn")}
+            <Icon name="eye" className="w-3.5 h-3.5" /> {"View Document"}
           </button>
         )}
         <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-line text-xs font-semibold text-ink-soft hover:bg-paper-tint transition-colors">
           <Icon name={uploading ? "refresh" : "upload"} className={`w-3.5 h-3.5 ${uploading ? "animate-spin" : ""}`} />
-          {uploading ? t("admin.competition.docUploadingBtn") : doc ? t("admin.competition.docChangeBtn") : t("admin.competition.docUploadBtn")}
+          {uploading ? "Uploading..." : doc ? "Change Document" : "Upload Document"}
           <input
             type="file"
             accept="image/*,application/pdf"

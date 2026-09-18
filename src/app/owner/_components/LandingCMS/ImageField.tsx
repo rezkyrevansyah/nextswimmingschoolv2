@@ -2,7 +2,6 @@
 import { useState } from "react";
 import Icon from "@/components/ui/Icon";
 import { Field, Input } from "@/components/ui/FormFields";
-import { useLocale } from "@/components/providers/LocaleProvider";
 
 export default function ImageField({
   label,
@@ -20,14 +19,13 @@ export default function ImageField({
   /** Pad the uploaded image to a square canvas (no crop, transparent padding for PNG/WebP) — for logos. */
   square?: boolean;
 }) {
-  const { t } = useLocale();
   const [mode, setMode] = useState<"url" | "upload">("upload");
   const [preview, setPreview] = useState<string | null>(null);
   const [fileName, setFileName] = useState("");
   const [processing, setProcessing] = useState(false);
 
   return (
-    <Field label={label} hint={square ? t("owner.landingCms.imageFieldSquareHint") : (hint ?? t("owner.landingCms.imageFieldDefaultHint"))}>
+    <Field label={label} hint={square ? "The image will automatically be padded to a square (no crop, transparent padding)." : (hint ?? "Use storage upload. Manual URL is only for pre-approved domains.")}>
       <div className="space-y-3">
         <div className="flex gap-2">
           <button
@@ -35,14 +33,14 @@ export default function ImageField({
             onClick={() => { setMode("upload"); onFileChange(null); }}
             className={`flex-1 py-2 rounded-lg text-sm font-semibold border transition-colors ${mode === "upload" ? "bg-ocean-700 text-white border-ocean-700" : "bg-white text-ink-soft border-line hover:bg-paper-tint"}`}
           >
-            {t("owner.landingCms.uploadFile")}
+            {"Upload File"}
           </button>
           <button
             type="button"
             onClick={() => { setMode("url"); onFileChange(null); setPreview(null); setFileName(""); }}
             className={`flex-1 py-2 rounded-lg text-sm font-semibold border transition-colors ${mode === "url" ? "bg-ocean-700 text-white border-ocean-700" : "bg-white text-ink-soft border-line hover:bg-paper-tint"}`}
           >
-            {t("owner.landingCms.useUrl")}
+            {"Use URL"}
           </button>
         </div>
 
@@ -50,7 +48,7 @@ export default function ImageField({
           <>
             <label className="cursor-pointer flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-line hover:border-ocean-400 bg-paper-tint hover:bg-ocean-50/30 transition-colors py-6 px-3">
               <Icon name="camera" className="w-6 h-6 text-ink-mute" />
-              <span className="text-xs text-ink-mute font-medium">{processing ? t("owner.landingCms.processingImage") : (fileName || t("owner.landingCms.clickToChooseImage"))}</span>
+              <span className="text-xs text-ink-mute font-medium">{processing ? "Processing image..." : (fileName || "Click to choose an image")}</span>
               <input
                 type="file"
                 accept="image/*"

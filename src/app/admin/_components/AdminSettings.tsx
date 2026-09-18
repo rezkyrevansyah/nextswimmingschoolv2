@@ -6,17 +6,16 @@ import Logo from "@/components/ui/Logo";
 import Btn from "@/components/ui/Btn";
 import Icon from "@/components/ui/Icon";
 import Avatar from "@/components/ui/Avatar";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 import { Field, Input } from "@/components/ui/FormFields";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import { useUpload } from "@/hooks/useUpload";
 import type { Branch } from "../_types";
 
 function MapLoading() {
-  const { t } = useLocale();
-  return <div className="rounded-xl border border-line bg-paper-tint h-[260px] flex items-center justify-center text-ink-mute text-sm">{t("admin.settings.mapLoading")}</div>;
+  return <div className="rounded-xl border border-line bg-paper-tint h-[260px] flex items-center justify-center text-ink-mute text-sm">{"Loading map…"}</div>;
 }
 const MapPicker = dynamic(() => import("@/components/ui/MapPicker"), { ssr: false, loading: MapLoading });
 
@@ -37,7 +36,6 @@ interface StaffProfile {
 
 export default function AdminSettings({ branch, onRefresh }: { branch: Branch | null; onRefresh: () => void; userId: string }) {
   const toast = useToast();
-  const { t } = useLocale();
   const supabase = createClient();
   const { upload, uploading } = useUpload();
   const [lat, setLat] = useState(branch?.lat?.toString() ?? "");
@@ -88,8 +86,8 @@ export default function AdminSettings({ branch, onRefresh }: { branch: Branch | 
     const clean = waPhone.trim() ? [waPhone.trim()] : [];
     const { error } = await supabase.from("branches").update({ name, address, lat: lat ? parseFloat(lat) : null, lng: lng ? parseFloat(lng) : null, wa_numbers: clean }).eq("id", branch.id);
     setSaving(false);
-    if (error) return toast.error(t("admin.settings.toastSaveFailed"), error.message);
-    toast.success(t("admin.settings.toastSettingsSaved"));
+    if (error) return toast.error("Failed to save", error.message);
+    toast.success("Settings saved");
     onRefresh();
   };
 
@@ -98,9 +96,9 @@ export default function AdminSettings({ branch, onRefresh }: { branch: Branch | 
     if (!file || !branch) return;
     try {
       const url = await upload.logo(file, branch.id);
-      if (url) { toast.success(t("admin.settings.toastLogoUpdated")); onRefresh(); }
+      if (url) { toast.success("Logo updated"); onRefresh(); }
     } catch (err) {
-      toast.error(t("admin.settings.toastLogoUploadFailed"), err instanceof Error ? err.message : undefined);
+      toast.error("Failed to upload logo", err instanceof Error ? err.message : undefined);
     }
   };
 
@@ -110,27 +108,27 @@ export default function AdminSettings({ branch, onRefresh }: { branch: Branch | 
       <div className="grid lg:grid-cols-2 gap-5">
         {/* Identitas Cabang */}
         <Card className="space-y-5">
-          <SectionTitle sub={t("admin.settings.branchIdentitySub")}>{t("admin.settings.branchIdentityTitle")}</SectionTitle>
+          <SectionTitle sub={"Basic center information"}>{"Center Identity"}</SectionTitle>
           <div className="flex items-center gap-4">
             <div className="w-20 h-20 rounded-2xl bg-paper-tint flex items-center justify-center border border-line overflow-hidden shrink-0">
               {branch?.logo_url ? <Image src={branch.logo_url} alt="logo" width={80} height={80} className="w-full h-full object-cover" /> : <Logo size={52} />}
             </div>
             <div>
-              <div className="font-semibold text-ink text-sm">{t("admin.settings.logoLabel")}</div>
-              <p className="text-xs text-ink-mute mt-0.5">{t("admin.settings.logoHint")}</p>
+              <div className="font-semibold text-ink text-sm">{"Center Logo"}</div>
+              <p className="text-xs text-ink-mute mt-0.5">{"1:1 ratio, max 2MB."}</p>
               <label className="mt-2 inline-flex cursor-pointer">
-                <Btn variant="outline" size="sm" icon="upload" disabled={uploading}>{t("admin.settings.changeLogoBtn")}</Btn>
+                <Btn variant="outline" size="sm" icon="upload" disabled={uploading}>{"Change logo"}</Btn>
                 <input type="file" accept="image/*" className="sr-only" onChange={handleLogo} />
               </label>
             </div>
           </div>
           <div className="grid sm:grid-cols-2 gap-4 pt-4 border-t border-line">
-            <Field label={t("admin.settings.fieldBranchName")} required><Input value={name} onChange={e => setName(e.target.value)} /></Field>
-            <Field label={t("admin.settings.fieldFullAddress")} required><Input value={address} onChange={e => setAddress(e.target.value)} /></Field>
+            <Field label={"Center name"} required><Input value={name} onChange={e => setName(e.target.value)} /></Field>
+            <Field label={"Full address"} required><Input value={address} onChange={e => setAddress(e.target.value)} /></Field>
           </div>
           <div className="pt-4 border-t border-line">
-            <Field label={t("admin.settings.fieldBranchWhatsapp")} hint={t("admin.settings.fieldBranchWhatsappHint")}>
-              <Input type="tel" value={waPhone} onChange={e => setWaPhone(e.target.value)} placeholder={t("admin.settings.phonePlaceholder")} className="font-mono" />
+            <Field label={"Center WhatsApp Number"} hint={"Shown on the \"Contact Admin\" button in the student and coach panels."}>
+              <Input type="tel" value={waPhone} onChange={e => setWaPhone(e.target.value)} placeholder={"E.g. 081234567890"} className="font-mono" />
             </Field>
           </div>
         </Card>
@@ -139,11 +137,11 @@ export default function AdminSettings({ branch, onRefresh }: { branch: Branch | 
         <Card className="space-y-4 flex flex-col justify-between">
           <div className="space-y-4">
             <div className="flex items-center justify-between gap-2">
-              <SectionTitle sub={t("admin.settings.staffListSub")}>
-                {t("admin.settings.staffListTitle")}
+              <SectionTitle sub={"Staff assigned to manage operations at this center."}>
+                {"Center Staff & Admin Team"}
               </SectionTitle>
               <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-ocean-50 text-ocean-700 border border-ocean-200">
-                {t("admin.settings.activeStaffBadge", { count: staffList.length })}
+                {`${staffList.length} Active Staff`}
               </span>
             </div>
 
@@ -152,9 +150,9 @@ export default function AdminSettings({ branch, onRefresh }: { branch: Branch | 
             ) : staffList.length === 0 ? (
               <div className="p-6 rounded-2xl border-2 border-dashed border-line text-center space-y-1.5 bg-paper-tint/50">
                 <Icon name="users" className="w-8 h-8 text-ink-mute mx-auto stroke-1" />
-                <div className="font-semibold text-xs text-ink">{t("admin.settings.noStaffTitle")}</div>
+                <div className="font-semibold text-xs text-ink">{"No Staff Assigned Yet"}</div>
                 <div className="text-[11px] text-ink-mute max-w-xs mx-auto">
-                  {t("admin.settings.noStaffSub")}
+                  {"Add or assign staff to this center through the Master Accounts menu in the Owner Panel."}
                 </div>
               </div>
             ) : (
@@ -164,9 +162,9 @@ export default function AdminSettings({ branch, onRefresh }: { branch: Branch | 
                     <Avatar name={st.full_name} size={40} className="shrink-0 mt-0.5" />
                     <div className="flex-1 min-w-0 space-y-1">
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="font-semibold text-xs text-ink truncate">{st.full_name}</span>
+                        <span className="font-semibold text-xs text-ink truncate"><NoTranslate>{st.full_name}</NoTranslate></span>
                         <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-paper-deep text-ink-soft">
-                          {st.custom_role_label || (st.role === "manager_center" ? "Manager Cabang" : "Staff Cabang")}
+                          {st.custom_role_label ? <NoTranslate>{st.custom_role_label}</NoTranslate> : (st.role === "manager_center" ? "Manager Cabang" : "Staff Cabang")}
                         </span>
                       </div>
                       <div className="text-[11px] text-ink-mute flex items-center gap-2 flex-wrap">
@@ -178,17 +176,17 @@ export default function AdminSettings({ branch, onRefresh }: { branch: Branch | 
                             className="text-ok-700 hover:underline flex items-center gap-1"
                           >
                             <Icon name="whatsapp" className="w-3 h-3 text-ok-600" />
-                            {st.phone}
+                            <NoTranslate>{st.phone}</NoTranslate>
                           </a>
                         )}
-                        {st.email && <span>{st.email}</span>}
+                        {st.email && <span><NoTranslate>{st.email}</NoTranslate></span>}
                       </div>
                       {st.bank_account ? (
                         <div className="flex items-center gap-1.5 text-[11px] bg-paper-tint px-2 py-1 rounded-lg border border-line/60">
                           <Icon name="card" className="w-3 h-3 text-ocean-600 shrink-0" />
-                          <span className="font-medium text-ink">{st.bank_name}</span>
-                          <span className="font-mono text-ocean-800 font-semibold">{st.bank_account}</span>
-                          {st.bank_holder && <span className="text-ink-mute">({st.bank_holder})</span>}
+                          <span className="font-medium text-ink"><NoTranslate>{st.bank_name}</NoTranslate></span>
+                          <span className="font-mono text-ocean-800 font-semibold"><NoTranslate>{st.bank_account}</NoTranslate></span>
+                          {st.bank_holder && <span className="text-ink-mute">(<NoTranslate>{st.bank_holder}</NoTranslate>)</span>}
                           <button
                             type="button"
                             onClick={() => {
@@ -215,7 +213,7 @@ export default function AdminSettings({ branch, onRefresh }: { branch: Branch | 
 
       {/* Row 2: Koordinat Lokasi — full width dengan Interactive Google Maps Picker */}
       <Card>
-        <SectionTitle sub={t("admin.settings.locationCoordSub")}>{t("admin.settings.locationCoordTitle")}</SectionTitle>
+        <SectionTitle sub={"Used for coach attendance radius validation and student map guidance"}>{"Center Location Coordinates"}</SectionTitle>
         <div className="mt-4">
           <MapPicker
             lat={lat}
@@ -226,11 +224,11 @@ export default function AdminSettings({ branch, onRefresh }: { branch: Branch | 
             }}
           />
           <div className="mt-3 grid sm:grid-cols-2 gap-3 max-w-sm">
-            <Field label={t("admin.settings.fieldLatitude")}><Input value={lat} onChange={e => setLat(e.target.value)} className="font-mono" placeholder="-6.2615" /></Field>
-            <Field label={t("admin.settings.fieldLongitude")}><Input value={lng} onChange={e => setLng(e.target.value)} className="font-mono" placeholder="106.8106" /></Field>
+            <Field label={"Latitude"}><Input value={lat} onChange={e => setLat(e.target.value)} className="font-mono" placeholder="-6.2615" /></Field>
+            <Field label={"Longitude"}><Input value={lng} onChange={e => setLng(e.target.value)} className="font-mono" placeholder="106.8106" /></Field>
           </div>
           <div className="mt-4 pt-4 border-t border-line">
-            <Btn variant="primary" onClick={save} disabled={saving}>{saving ? t("common.actions.saving") : t("admin.settings.saveIdentityLocationBtn")}</Btn>
+            <Btn variant="primary" onClick={save} disabled={saving}>{saving ? "Saving…" : "Save identity & location"}</Btn>
           </div>
         </div>
       </Card>

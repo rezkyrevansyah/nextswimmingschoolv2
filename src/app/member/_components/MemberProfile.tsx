@@ -7,7 +7,7 @@ import { Card, SectionTitle } from "@/components/ui/Card";
 import Avatar from "@/components/ui/Avatar";
 import QRBox from "@/components/ui/QRBox";
 import PhotoLightbox from "@/components/ui/PhotoLightbox";
-import { useLocale } from "@/components/providers/LocaleProvider";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 import { fmtDate, waLink } from "@/lib/utils";
 import { createClient } from "@/utils/supabase/client";
 import { useUpload } from "@/hooks/useUpload";
@@ -22,7 +22,6 @@ function calcAge(birthDate: string): number {
 }
 
 export default function MemberProfile({ memberId, memberName, onLogout, onProfileComplete, onAvatarChange }: { memberId: string; memberName: string; onLogout: () => void; onProfileComplete?: () => void; onAvatarChange?: (url: string) => void }) {
-  const { t } = useLocale();
   const supabase = createClient();
   const { upload } = useUpload();
   const [profile, setProfile] = useState<{
@@ -92,8 +91,8 @@ export default function MemberProfile({ memberId, memberName, onLogout, onProfil
 
   const changePwd = async () => {
     setPwdError("");
-    if (newPwd !== confirmPwd) { setPwdError(t("member.profile.errorPasswordMismatch")); return; }
-    if (newPwd.length < 6) { setPwdError(t("member.profile.errorPasswordMinLength")); return; }
+    if (newPwd !== confirmPwd) { setPwdError("Passwords do not match"); return; }
+    if (newPwd.length < 6) { setPwdError("Password must be at least 6 characters"); return; }
     setPwdSaving(true);
     const { error } = await supabase.auth.updateUser({ password: newPwd });
     setPwdSaving(false);
@@ -119,20 +118,20 @@ export default function MemberProfile({ memberId, memberName, onLogout, onProfil
             </div>
           </button>
           <div className="flex-1 min-w-0">
-            <div className="font-display font-bold text-xl text-ink">{profile?.full_name ?? memberName}</div>
-            <div className="text-sm text-ocean-700 font-semibold">{age != null ? t("member.profile.ageMember", { age }) : t("member.profile.roleMember")}</div>
-            {profile?.date_start && <div className="text-xs text-ink-mute mt-1">{t("member.profile.memberSince", { date: fmtDate(profile.date_start) })}</div>}
-            {profile?.member_no && <div className="text-xs text-ink-mute font-mono mt-0.5">{profile.member_no}</div>}
+            <div className="font-display font-bold text-xl text-ink"><NoTranslate>{profile?.full_name ?? memberName}</NoTranslate></div>
+            <div className="text-sm text-ocean-700 font-semibold">{age != null ? `${age} yo · Student` : "Student"}</div>
+            {profile?.date_start && <div className="text-xs text-ink-mute mt-1">{`Student since ${fmtDate(profile.date_start)}`}</div>}
+            {profile?.member_no && <div className="text-xs text-ink-mute font-mono mt-0.5"><NoTranslate>{profile.member_no}</NoTranslate></div>}
             {avatarSaving && (
-              <div className="mt-2 text-xs text-ink-mute font-semibold animate-pulse">{t("member.profile.uploadingPhoto")}</div>
+              <div className="mt-2 text-xs text-ink-mute font-semibold animate-pulse">{"Uploading photo…"}</div>
             )}
           </div>
         </div>
         {(regInfo?.parent_name || regInfo?.parent_phone) && (
           <Card className="!p-3 mt-4 bg-paper-tint border-line">
             <div className="grid grid-cols-2 gap-3 text-sm">
-              {regInfo.parent_name && <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("member.profile.guardianName")}</div><div className="font-semibold text-ink">{regInfo.parent_name}</div></div>}
-              {regInfo.parent_phone && <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("member.profile.guardianPhone")}</div><div className="font-semibold text-ink font-mono text-xs">{regInfo.parent_phone}</div></div>}
+              {regInfo.parent_name && <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{"Guardian"}</div><div className="font-semibold text-ink"><NoTranslate>{regInfo.parent_name}</NoTranslate></div></div>}
+              {regInfo.parent_phone && <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{"Guardian Phone"}</div><div className="font-semibold text-ink font-mono text-xs"><NoTranslate>{regInfo.parent_phone}</NoTranslate></div></div>}
             </div>
           </Card>
         )}
@@ -140,8 +139,8 @@ export default function MemberProfile({ memberId, memberName, onLogout, onProfil
 
       <Card className="text-center">
         <div className="mb-4">
-          <h2 className="font-display font-bold text-xl text-ink leading-tight">{t("member.profile.qrTitle")}</h2>
-          <p className="text-sm text-ink-mute mt-0.5">{t("member.profile.qrSub")}</p>
+          <h2 className="font-display font-bold text-xl text-ink leading-tight">{"Attendance QR Code"}</h2>
+          <p className="text-sm text-ink-mute mt-0.5">{"Print as attendance card — QR never changes"}</p>
         </div>
         <div className="flex justify-center my-4">
           <QRBox
@@ -152,30 +151,30 @@ export default function MemberProfile({ memberId, memberName, onLogout, onProfil
           />
         </div>
         <div className="flex justify-center gap-2">
-          <a href={waLink(t("member.profile.waRequestPrint"))} target="_blank" rel="noreferrer">
-            <Btn variant="wa" size="md" icon="whatsapp">{t("member.profile.requestPrintBtn")}</Btn>
+          <a href={waLink("Hello, please send my child's attendance QR card for printing.")} target="_blank" rel="noreferrer">
+            <Btn variant="wa" size="md" icon="whatsapp">{"Request Print"}</Btn>
           </a>
         </div>
       </Card>
 
       <Card>
-        <SectionTitle sub={t("member.profile.editableSub")}>{t("member.profile.editableTitle")}</SectionTitle>
+        <SectionTitle sub={"Editable by you"}>{"Editable Information"}</SectionTitle>
         <div className="space-y-3">
-          <Field label={t("member.profile.fieldPhone")}><Input value={editPhone} onChange={(e) => setEditPhone(e.target.value)} /></Field>
-          <Field label={t("member.profile.fieldAddress")}><Textarea rows={2} value={editAddress} onChange={(e) => setEditAddress(e.target.value)} /></Field>
-          <Field label={t("member.profile.fieldHealth")}><Textarea rows={2} value={editHealth} onChange={(e) => setEditHealth(e.target.value)} /></Field>
-          <Btn variant="primary" disabled={saving} onClick={saveProfile}>{t("member.profile.saveBtn")}</Btn>
+          <Field label={"Phone Number"}><Input value={editPhone} onChange={(e) => setEditPhone(e.target.value)} /></Field>
+          <Field label={"Address"}><Textarea rows={2} value={editAddress} onChange={(e) => setEditAddress(e.target.value)} /></Field>
+          <Field label={"Medical history / allergies"}><Textarea rows={2} value={editHealth} onChange={(e) => setEditHealth(e.target.value)} /></Field>
+          <Btn variant="primary" disabled={saving} onClick={saveProfile}>{"Save changes"}</Btn>
         </div>
         <div className="mt-4 pt-4 border-t border-line text-xs text-ink-mute flex items-start gap-2">
           <Icon name="info" className="w-4 h-4 mt-0.5 text-wave-600" />
-          {t("member.profile.adminContactHint")}
+          {"To change name, date of birth, or class — please contact center admin."}
         </div>
       </Card>
 
       <Card>
-        <SectionTitle>{t("member.profile.changePasswordTitle")}</SectionTitle>
+        <SectionTitle>{"Change Password"}</SectionTitle>
         <div className="space-y-3">
-          <Field label={t("member.profile.fieldNewPassword")}>
+          <Field label={"New password"}>
             <div className="relative">
               <Input type={showNewPwd ? "text" : "password"} value={newPwd} onChange={(e) => setNewPwd(e.target.value)} className="pr-10" />
               <button type="button" tabIndex={-1} onClick={() => setShowNewPwd(v => !v)}
@@ -184,7 +183,7 @@ export default function MemberProfile({ memberId, memberName, onLogout, onProfil
               </button>
             </div>
           </Field>
-          <Field label={t("member.profile.fieldConfirmPassword")}>
+          <Field label={"Confirm password"}>
             <div className="relative">
               <Input type={showConfirmPwd ? "text" : "password"} value={confirmPwd} onChange={(e) => setConfirmPwd(e.target.value)} className="pr-10" />
               <button type="button" tabIndex={-1} onClick={() => setShowConfirmPwd(v => !v)}
@@ -194,7 +193,7 @@ export default function MemberProfile({ memberId, memberName, onLogout, onProfil
             </div>
           </Field>
           {pwdError && <p className="text-xs text-danger-600">{pwdError}</p>}
-          <Btn variant="primary" disabled={pwdSaving} onClick={changePwd}>{t("member.profile.savePasswordBtn")}</Btn>
+          <Btn variant="primary" disabled={pwdSaving} onClick={changePwd}>{"Save new password"}</Btn>
         </div>
       </Card>
 
@@ -203,7 +202,7 @@ export default function MemberProfile({ memberId, memberName, onLogout, onProfil
           <span className="w-9 h-9 rounded-xl bg-danger-50 text-danger-500 flex items-center justify-center group-hover:bg-danger-100 transition-colors">
             <Icon name="logout" className="w-4 h-4" />
           </span>
-          <span className="font-semibold text-danger-600 group-hover:text-danger-700">{t("member.profile.logoutBtn")}</span>
+          <span className="font-semibold text-danger-600 group-hover:text-danger-700">{"Log out of account"}</span>
         </button>
       </Card>
 

@@ -1,7 +1,6 @@
 "use client";
 import { useState, useCallback, useEffect } from "react";
 import { useToast } from "@/components/providers/ToastProvider";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import { createClient } from "@/utils/supabase/client";
 import { useUpload } from "@/hooks/useUpload";
 import type { User } from "@supabase/supabase-js";
@@ -9,7 +8,6 @@ import type { StaffProfile } from "../_types";
 
 export function useStaffExpense({ user, profile, onSaved }: { user: User | null; profile: StaffProfile | null; onSaved: () => void }) {
   const toast = useToast();
-  const { t } = useLocale();
   const supabase = createClient();
   const { upload, uploading } = useUpload();
 
@@ -58,10 +56,10 @@ export function useStaffExpense({ user, profile, onSaved }: { user: User | null;
 
   // Handle Save Expense Reimburse
   const handleSaveExpense = async () => {
-    if (!profile?.branch_id || !user) return toast.error(t("staff.expenses.branchUndefinedError"));
-    if (!expenseForm.description.trim()) return toast.error(t("staff.expenses.descriptionRequired"));
+    if (!profile?.branch_id || !user) return toast.error("Center is not defined in your profile");
+    if (!expenseForm.description.trim()) return toast.error("Expense description is required");
     const amountNum = Number(expenseForm.amount);
-    if (!amountNum || amountNum <= 0) return toast.error(t("staff.expenses.invalidAmount"));
+    if (!amountNum || amountNum <= 0) return toast.error("Expense amount is invalid");
 
     setSavingExpense(true);
 
@@ -74,7 +72,7 @@ export function useStaffExpense({ user, profile, onSaved }: { user: User | null;
     const activePeriodId = periodRows?.[0]?.id;
     if (!activePeriodId) {
       setSavingExpense(false);
-      return toast.error(t("staff.expenses.periodClosedTitle"), t("staff.expenses.periodClosedBody"));
+      return toast.error("Reimbursement submission is closed", "Currently there is no open submission period from management.");
     }
 
     let proofUrl = expenseForm.proof_url;
@@ -83,7 +81,7 @@ export function useStaffExpense({ user, profile, onSaved }: { user: User | null;
         const uploaded = await upload.paymentProof(expenseProofFile, `staff-${user.id}-${Date.now()}`);
         if (uploaded) proofUrl = uploaded;
       } catch (err) {
-        toast.error(t("staff.expenses.uploadProofFailed"), err instanceof Error ? err.message : undefined);
+        toast.error("Failed to upload expense receipt", err instanceof Error ? err.message : undefined);
         setSavingExpense(false);
         return;
       }
@@ -107,11 +105,11 @@ export function useStaffExpense({ user, profile, onSaved }: { user: User | null;
 
     setSavingExpense(false);
     if (error) {
-      toast.error(t("staff.expenses.submitFailed"), error.message);
+      toast.error("Failed to submit reimbursement claim", error.message);
       return;
     }
 
-    toast.success(t("staff.expenses.submitSuccessTitle"), t("staff.expenses.submitSuccessSub"));
+    toast.success("Reimbursement claim submitted successfully", "Awaiting confirmation from Management / Owner");
     setShowExpenseModal(false);
     setExpenseForm({
       description: "",

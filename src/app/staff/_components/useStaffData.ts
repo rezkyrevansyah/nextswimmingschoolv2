@@ -3,7 +3,6 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import { createClient } from "@/utils/supabase/client";
 import { useUpload } from "@/hooks/useUpload";
 import { printPayslip } from "@/lib/printPayslip";
@@ -16,7 +15,6 @@ export function useStaffData() {
   const router = useRouter();
   const toast = useToast();
   const confirm = useConfirm();
-  const { t } = useLocale();
   const supabase = createClient();
   const { upload } = useUpload();
 
@@ -207,7 +205,7 @@ export function useStaffData() {
       selfieUrl = await upload.staffSelfie(photoFile, today);
     } catch {
       setClockLoading(false);
-      toast.error(t("staff.actions.selfieUploadFailedTitle"), t("staff.actions.selfieUploadFailedBody"));
+      toast.error("Selfie upload failed", "Attendance was not saved — please try again");
       return;
     }
 
@@ -228,17 +226,17 @@ export function useStaffData() {
     setClockLoading(false);
     if (error) {
       if (isUniqueViolation(error.message)) {
-        toast.error(t("staff.actions.alreadyClockedInTitle"), t("staff.actions.alreadyClockedInBody"));
+        toast.error("Already clocked in", "Today's attendance is already recorded.");
         return;
       }
-      toast.error(t("staff.actions.clockInFailed"), error.message);
+      toast.error("Failed to clock in", error.message);
       return;
     }
 
     setTodayAttendance(data as unknown as StaffAttendance);
     setClockNotes("");
     setShowSelfieFlow(false);
-    toast.success(t("staff.actions.clockInSuccessTitle"), t("staff.actions.clockInSuccessBody", { time: timeStr }));
+    toast.success("Clock-In Successful!", `Recorded at ${timeStr}`);
     await loadData(user.id);
   };
 
@@ -260,24 +258,24 @@ export function useStaffData() {
 
     setClockLoading(false);
     if (error) {
-      toast.error(t("staff.actions.clockOutFailed"), error.message);
+      toast.error("Failed to clock out", error.message);
       return;
     }
 
     setTodayAttendance(prev => prev ? { ...prev, clock_out_time: isoTimestamp } : null);
     setClockNotes("");
-    toast.success(t("staff.actions.clockOutSuccessTitle"), t("staff.actions.clockOutSuccessBody", { time: timeStr }));
+    toast.success("Clock-Out Successful!", `Recorded at ${timeStr}. Have a good rest!`);
     if (user) await loadData(user.id);
   };
 
   // Handle Leave / Sakit
   const handleRecordLeave = async (status: "izin" | "sakit") => {
     if (!user || !profile) return;
-    const label = status === "izin" ? t("staff.home.leaveBtn") : t("staff.home.sickBtn");
+    const label = status === "izin" ? "Leave" : "Sick";
     const yes = await confirm({
-      title: t("staff.actions.leaveConfirmTitle", { type: label }),
-      body: t("staff.actions.leaveConfirmBody", { type: label }),
-      confirmLabel: t("staff.actions.leaveConfirmBtn", { type: label }),
+      title: `Request Leave: ${label}`,
+      body: `Submit a ${label} request for today? Your owner will review it before it's recorded.`,
+      confirmLabel: "Yes, Submit Request",
     });
     if (!yes) return;
 
@@ -297,10 +295,10 @@ export function useStaffData() {
 
     setClockLoading(false);
     if (error) {
-      return toast.error(t("staff.actions.recordLeaveFailed", { type: label }), error.message);
+      return toast.error(`Failed to submit ${label} request`, error.message);
     }
     setClockNotes("");
-    toast.success(t("staff.actions.recordLeaveSuccess", { type: label }));
+    toast.success(`${label} request submitted for approval`);
     await loadLeaveRequests(user.id);
   };
 
@@ -327,7 +325,7 @@ export function useStaffData() {
       .eq("id", user.id);
 
     setSavingProfile(false);
-    if (error) return toast.error(t("staff.profile.saveFailed"), error.message);
+    if (error) return toast.error("Failed to save profile", error.message);
 
     setProfile(prev => prev ? ({
       ...prev,
@@ -341,7 +339,7 @@ export function useStaffData() {
       is_profile_complete: nowComplete,
     }) : null);
 
-    toast.success(t("staff.profile.saveSuccess"));
+    toast.success("Profile & bank account updated successfully");
   };
 
   // Payslip Print Preview — uses the unified printPayslip engine identical to Owner and Coach panels
@@ -350,13 +348,13 @@ export function useStaffData() {
   };
 
   const pageTitles: Record<TabId, [string, string]> = useMemo(() => ({
-    home: [t("staff.titles.home.title"), t("staff.titles.home.sub", { name: profile?.full_name ?? "Staff" })],
-    absen: [t("staff.titles.absen.title"), t("staff.titles.absen.sub")],
-    invoice: [t("staff.titles.invoice.title"), t("staff.titles.invoice.sub")],
-    payslip: [t("staff.titles.payslip.title"), t("staff.titles.payslip.sub")],
-    expenses: [t("staff.titles.expenses.title"), t("staff.titles.expenses.sub")],
-    profile: [t("staff.titles.profile.title"), t("staff.titles.profile.sub")],
-  }), [t, profile?.full_name]);
+    home: ["Staff Home", `Welcome, ${profile?.full_name ?? "Staff"}!`],
+    absen: ["Daily Attendance", "Record and review your attendance history."],
+    invoice: ["Invoice", "Submit your own salary invoice — from attendance or manual entry."],
+    payslip: ["Payslip", "Monthly payslip history issued by management."],
+    expenses: ["Reimbursement Claims", "Submit operational expenses with receipt proofs."],
+    profile: ["Profile & Bank Account", "Account information and bank details for salary transfer."],
+  }), [profile?.full_name]);
 
   // Attendances filtered by month
   const filteredAttendances = useMemo(() => {
@@ -370,7 +368,7 @@ export function useStaffData() {
   const staffStatusBadge = (status: StaffDbStatus) => {
     const kind = staffStatusKind(status);
     const className = kind === "present" ? "bg-ok-50 text-ok-700" : kind === "sick" ? "bg-amber-50 text-amber-700" : kind === "excused" ? "bg-warn-50 text-warn-700" : "bg-danger-50 text-danger-700";
-    const label = kind === "present" ? t("staff.attendance.statusPresent") : kind === "sick" ? t("staff.attendance.statusSick") : kind === "excused" ? t("staff.attendance.statusLeave") : t("staff.attendance.statusAbsent");
+    const label = kind === "present" ? "Present" : kind === "sick" ? "Sick" : kind === "excused" ? "Leave" : "Absent";
     return { className, label };
   };
 
@@ -381,7 +379,7 @@ export function useStaffData() {
   const expense = useStaffExpense({ user, profile, onSaved: () => user && loadData(user.id) });
 
   return {
-    t, supabase,
+    supabase,
     active, setActive, mobileNav, setMobileNav,
     user, profile, setProfile, branch,
     todayAttendance, leaveRequests, attendances, salaries, expenses,

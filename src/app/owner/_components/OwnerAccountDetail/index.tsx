@@ -10,7 +10,7 @@ export type { AccountProfile, AccountMemberData } from "./_types";
 
 export default function OwnerAccountDetail(props: Props) {
   const hook = useAccountDetailData(props);
-  const { t, account, open, editing, setEditing, setShowPwdReset, onClose } = hook;
+  const { account, open, editing, setEditing, setShowPwdReset, onClose } = hook;
   const { saving, saveEdit, banning, handleBanToggle, handleDelete } = hook;
 
   if (!account) return null;
@@ -23,25 +23,25 @@ export default function OwnerAccountDetail(props: Props) {
         setShowPwdReset(false);
         onClose();
       }}
-      title={editing ? t("owner.accountDetail.editTitle") : t("owner.accountDetail.viewTitle")}
+      title={editing ? "Edit Account Profile" : "Account Detail"}
       size="lg"
       footer={
         editing ? (
           <>
             <Btn variant="ghost" onClick={() => setEditing(false)}>
-              {t("owner.accountDetail.cancelBtn")}
+              {"Cancel"}
             </Btn>
             <Btn variant="primary" onClick={saveEdit} disabled={saving}>
-              {saving ? t("owner.accountDetail.savingBtn") : t("owner.accountDetail.saveBtn")}
+              {saving ? "Saving..." : "Save Changes"}
             </Btn>
           </>
         ) : (
           <div className="flex items-center gap-2 flex-wrap">
             <Btn variant="ghost" icon="edit" onClick={hook.openEdit}>
-              {t("owner.accountDetail.editBtn")}
+              {"Edit"}
             </Btn>
             <Btn variant="ghost" icon="key" onClick={() => setShowPwdReset((v) => !v)}>
-              {t("owner.accountDetail.resetPasswordBtn")}
+              {"Reset Password"}
             </Btn>
             <Btn
               variant="ghost"
@@ -53,10 +53,10 @@ export default function OwnerAccountDetail(props: Props) {
               disabled={banning}
             >
               {banning
-                ? t("owner.accountDetail.processingBtn")
+                ? "Processing..."
                 : account.is_archived
-                ? t("owner.accountDetail.reactivateBtn")
-                : t("owner.accountDetail.deactivateBtn")}
+                ? "Reactivate"
+                : "Deactivate"}
             </Btn>
             <Btn
               variant="ghost"
@@ -64,7 +64,7 @@ export default function OwnerAccountDetail(props: Props) {
               className="text-danger-600 hover:bg-danger-50"
               onClick={handleDelete}
             >
-              {t("owner.accountDetail.deleteBtn")}
+              {"Delete"}
             </Btn>
           </div>
         )

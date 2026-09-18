@@ -6,12 +6,11 @@ import { Field, Input, Textarea } from "@/components/ui/FormFields";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import Status from "@/components/ui/Status";
 import Modal from "@/components/ui/Modal";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 import { useToast } from "@/components/providers/ToastProvider";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import { createClient } from "@/utils/supabase/client";
 
 export default function MemberLeave({ memberId, onSwitchToAbsen }: { memberId: string; onSwitchToAbsen?: () => void }) {
-  const { t, tArray } = useLocale();
   const supabase = createClient();
   const toast = useToast();
   const [openForm, setOpenForm] = useState(false);
@@ -53,11 +52,11 @@ export default function MemberLeave({ memberId, onSwitchToAbsen }: { memberId: s
   const submit = async () => {
     if (!form.start_date || !form.type) return;
     if (form.class_ids.length === 0) {
-      return toast.error(t("member.leave.errorNoClassTitle"), t("member.leave.errorNoClassBody"));
+      return toast.error("Select at least one class", "Choose the class(es) this leave applies to.");
     }
     const endDate = form.end_date || form.start_date;
     if (endDate < form.start_date) {
-      return toast.error(t("member.leave.errorDateRangeTitle"), t("member.leave.errorDateRangeBody"));
+      return toast.error("Invalid date range", "End date must be on or after the start date.");
     }
     setSubmitting(true);
     const { data: newLeave, error } = await supabase.from("member_leaves").insert({
@@ -76,24 +75,24 @@ export default function MemberLeave({ memberId, onSwitchToAbsen }: { memberId: s
     if (!error) {
       setOpenForm(false);
       setForm({ class_ids: [], start_date: "", end_date: "", type: "izin", notes: "" });
-      toast.success(t("member.leave.toastSuccessTitle"), t("member.leave.toastSuccessBody"));
+      toast.success("Leave request submitted successfully", "Awaiting admin approval.");
       load();
     }
   };
 
-  const monthNames = tArray("common.months.short");
+  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
   const getTypeLabel = (type: string) => {
-    if (type === "izin") return t("member.leave.typeIzin");
-    if (type === "sakit") return t("member.leave.typeSakit");
-    if (type === "ujian") return t("member.leave.typeUjian");
-    return t("member.leave.typeLainnya");
+    if (type === "izin") return "Leave";
+    if (type === "sakit") return "Sick";
+    if (type === "ujian") return "Exam";
+    return "Other";
   };
 
   const getStatusLabel = (status: string) => {
-    if (status === "approved") return t("member.leave.statusApproved");
-    if (status === "rejected") return t("member.leave.statusRejected");
-    return t("member.leave.statusPending");
+    if (status === "approved") return "Approved";
+    if (status === "rejected") return "Rejected";
+    return "Pending";
   };
 
   return (
@@ -105,18 +104,18 @@ export default function MemberLeave({ memberId, onSwitchToAbsen }: { memberId: s
             onClick={onSwitchToAbsen}
             className="flex-1 py-2 text-xs font-semibold rounded-lg text-ink-mute hover:text-ink text-center transition"
           >
-            {t("member.nav.attendance")}
+            {"Attendance"}
           </button>
           <button
             type="button"
             className="flex-1 py-2 text-xs font-bold rounded-lg bg-ocean-50 text-ocean-700 shadow-2xs text-center"
           >
-            {t("member.nav.leave")}
+            {"Leave"}
           </button>
         </div>
       )}
-      <Btn variant="primary" size="lg" icon="plus" className="w-full" onClick={() => setOpenForm(true)}>{t("member.leave.newLeaveBtn")}</Btn>
-      <SectionTitle sub={t("member.leave.historySub")}>{t("member.leave.historyTitle")}</SectionTitle>
+      <Btn variant="primary" size="lg" icon="plus" className="w-full" onClick={() => setOpenForm(true)}>{"Request New Leave"}</Btn>
+      <SectionTitle sub={"Your requests"}>{"Leave History"}</SectionTitle>
       <Card padded={false}>
         <div className="divide-y divide-line">
           {leaves.map((l) => {
@@ -135,48 +134,48 @@ export default function MemberLeave({ memberId, onSwitchToAbsen }: { memberId: s
                   </span>
                   <div className="flex-1 min-w-0">
                     <div className="font-semibold text-ink text-sm">{typeLabel} · {dateRange}</div>
-                    <div className="text-xs text-ink-mute">{t("member.leave.appliedOn", { date: dateStr })}{l.reason ? ` · ${l.reason}` : ""}</div>
+                    <div className="text-xs text-ink-mute">{`Submitted ${dateStr}`}{l.reason ? <> · <NoTranslate>{l.reason}</NoTranslate></> : ""}</div>
                   </div>
                   <Status kind={l.status as "approved" | "rejected" | "pending"}>{getStatusLabel(l.status)}</Status>
                 </div>
-                {l.reject_reason && <div className="mt-2 text-xs text-danger-600 bg-danger-50 rounded-lg p-2.5"><b>{t("member.leave.rejectReasonLabel")}</b> {l.reject_reason}</div>}
+                {l.reject_reason && <div className="mt-2 text-xs text-danger-600 bg-danger-50 rounded-lg p-2.5"><b>{"Rejection reason:"}</b> <NoTranslate>{l.reject_reason}</NoTranslate></div>}
               </div>
             );
           })}
-          {leaves.length === 0 && <div className="px-5 py-8 text-center text-sm text-ink-mute">{t("member.leave.emptyHistory")}</div>}
+          {leaves.length === 0 && <div className="px-5 py-8 text-center text-sm text-ink-mute">{"No leave requests yet."}</div>}
         </div>
       </Card>
 
-      <Modal open={openForm} onClose={() => setOpenForm(false)} title={t("member.leave.modalTitle")}
-        footer={<><Btn variant="ghost" onClick={() => setOpenForm(false)}>{t("common.actions.cancel")}</Btn><Btn variant="primary" disabled={submitting} onClick={submit}>{t("common.actions.save")}</Btn></>}>
+      <Modal open={openForm} onClose={() => setOpenForm(false)} title={"Request Leave"}
+        footer={<><Btn variant="ghost" onClick={() => setOpenForm(false)}>{"Cancel"}</Btn><Btn variant="primary" disabled={submitting} onClick={submit}>{"Save"}</Btn></>}>
         <div className="space-y-4">
-          <Field label={t("member.leave.fieldClasses")} required hint={t("member.leave.fieldClassesHint")}>
+          <Field label={"Class"} required hint={"You can select more than one"}>
             <div className="flex flex-wrap gap-2 mt-1">
               {myClasses.map((c) => (
                 <button key={c.id} type="button"
                   onClick={() => setForm((f) => ({ ...f, class_ids: f.class_ids.includes(c.id) ? f.class_ids.filter((x) => x !== c.id) : [...f.class_ids, c.id] }))}
                   className={`px-3 py-1.5 rounded-lg text-sm font-semibold border transition ${form.class_ids.includes(c.id) ? "bg-ocean-600 text-white border-ocean-600" : "bg-white text-ink-soft border-line hover:border-ocean-300"}`}>
-                  {c.name}
+                  <NoTranslate>{c.name}</NoTranslate>
                 </button>
               ))}
-              {myClasses.length === 0 && <span className="text-sm text-ink-mute">{t("member.leave.noClasses")}</span>}
+              {myClasses.length === 0 && <span className="text-sm text-ink-mute">{"No registered classes"}</span>}
             </div>
           </Field>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Field label={t("member.leave.startDate")} required><Input type="date" value={form.start_date} onChange={(e) => setForm((f) => ({ ...f, start_date: e.target.value }))} /></Field>
-            <Field label={t("member.leave.endDate")}><Input type="date" value={form.end_date} onChange={(e) => setForm((f) => ({ ...f, end_date: e.target.value }))} /></Field>
+            <Field label={"Start date"} required><Input type="date" value={form.start_date} onChange={(e) => setForm((f) => ({ ...f, start_date: e.target.value }))} /></Field>
+            <Field label={"End date"}><Input type="date" value={form.end_date} onChange={(e) => setForm((f) => ({ ...f, end_date: e.target.value }))} /></Field>
           </div>
-          <Field label={t("member.leave.fieldLeaveType")} required>
+          <Field label={"Leave type"} required>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              {[["izin", t("member.leave.typeIzin")], ["sakit", t("member.leave.typeSakit")], ["ujian", t("member.leave.typeUjian")], ["lainnya", t("member.leave.typeLainnya")]].map(([val, label]) => (
+              {[["izin", "Leave"], ["sakit", "Sick"], ["ujian", "Exam"], ["lainnya", "Other"]].map(([val, label]) => (
                 <label key={val} className={`px-2 py-2 rounded-xl border text-xs font-semibold text-center cursor-pointer ${form.type === val ? "border-ocean-500 bg-ocean-50 text-ocean-700" : "border-line text-ink-soft hover:bg-paper-tint"}`}>
                   <input type="radio" name="lt" className="sr-only" checked={form.type === val} onChange={() => setForm((f) => ({ ...f, type: val }))} />{label}
                 </label>
               ))}
             </div>
           </Field>
-          <Field label={t("member.leave.fieldReason")}><Textarea rows={3} placeholder={t("member.leave.reasonPlaceholder")} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} /></Field>
-          <div className="text-xs text-ink-mute bg-paper-tint rounded-lg p-3 flex items-start gap-2"><Icon name="info" className="w-4 h-4 mt-0.5 text-wave-600" />{t("member.leave.pendingApprovalHint")}</div>
+          <Field label={"Additional reason"}><Textarea rows={3} placeholder={"E.g. Fever, unable to attend"} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} /></Field>
+          <div className="text-xs text-ink-mute bg-paper-tint rounded-lg p-3 flex items-start gap-2"><Icon name="info" className="w-4 h-4 mt-0.5 text-wave-600" />{"Requests will await admin approval."}</div>
         </div>
       </Modal>
     </div>

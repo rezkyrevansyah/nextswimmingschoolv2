@@ -1,7 +1,6 @@
 "use client";
 import { useState } from "react";
 import { useToast } from "@/components/providers/ToastProvider";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import { downloadRaporPdf } from "@/lib/printRapor";
 import { downloadRaporZip } from "@/lib/downloadRaporZip";
 import type { Student } from "../_types";
@@ -9,7 +8,6 @@ import type { useSchoolRaporData } from "./useSchoolRaporData";
 
 export function useSchoolRaporExport(data: ReturnType<typeof useSchoolRaporData>) {
   const toast = useToast();
-  const { t } = useLocale();
   const { students, filteredSorted, selected, schoolName, branchName } = data;
 
   const [bulkDownloading, setBulkDownloading] = useState(false);
@@ -43,11 +41,11 @@ export function useSchoolRaporExport(data: ReturnType<typeof useSchoolRaporData>
         zipName,
         (done, total) => setDownloadProgress({ done, total })
       );
-      if (failed === 0) toast.success(t("school.rapor.zipSuccessToast"));
-      else if (success === 0) toast.error(t("school.rapor.zipFailedToast"));
-      else toast.error(t("school.rapor.zipPartialToast", { success, failed }));
+      if (failed === 0) toast.success("ZIP downloaded successfully");
+      else if (success === 0) toast.error("Failed to download ZIP");
+      else toast.error(`${success} succeeded, ${failed} failed`);
     } catch {
-      toast.error(t("school.rapor.zipFailedToast"));
+      toast.error("Failed to download ZIP");
     } finally {
       setBulkDownloading(false);
       setDownloadProgress(null);
@@ -59,9 +57,9 @@ export function useSchoolRaporExport(data: ReturnType<typeof useSchoolRaporData>
     setDownloadingId(s.id);
     try {
       await downloadRaporPdf(toPrintStudent(s));
-      toast.success(t("school.rapor.pdfSuccessToast"));
+      toast.success("PDF downloaded successfully");
     } catch {
-      toast.error(t("school.rapor.pdfFailedToast"));
+      toast.error("Failed to download PDF");
     } finally {
       setDownloadingId(null);
     }
@@ -69,8 +67,8 @@ export function useSchoolRaporExport(data: ReturnType<typeof useSchoolRaporData>
   const handlePrintSelected = () => void downloadZipFor(students.filter(s => selected.has(s.id) && s.is_filled));
   const handlePrintFiltered = () => void downloadZipFor(filteredSorted.filter(s => s.is_filled));
   const bulkDownloadingLabel = downloadProgress
-    ? t("school.rapor.downloadingZipProgress", { done: downloadProgress.done, total: downloadProgress.total })
-    : t("school.rapor.downloadingZip");
+    ? `Generating… (${downloadProgress.done}/${downloadProgress.total})`
+    : "Generating ZIP…";
 
   return {
     bulkDownloading, downloadingId, downloadProgress, bulkDownloadingLabel,

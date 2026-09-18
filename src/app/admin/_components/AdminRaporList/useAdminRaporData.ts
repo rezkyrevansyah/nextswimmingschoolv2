@@ -2,7 +2,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import { downloadRaporPdf, type PrintBestTime } from "@/lib/printRapor";
 import { downloadRaporZip } from "@/lib/downloadRaporZip";
 import { resolveRaporSigner, buildSchoolRaporSignatures } from "@/lib/rapor";
@@ -13,7 +12,6 @@ const PAGE_SIZE = 15;
 export function useAdminRaporData(branchId: string, periods: RaporPeriod[]) {
   const supabase = createClient();
   const toast = useToast();
-  const { t } = useLocale();
   const [selectedPeriodId, setSelectedPeriodId] = useState<string>("");
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
@@ -171,7 +169,7 @@ export function useAdminRaporData(branchId: string, periods: RaporPeriod[]) {
     try {
       await downloadRaporPdf(toPrintStudent(s));
     } catch {
-      toast.error(t("admin.rapor.downloadPdfFailed"), t("admin.rapor.tryAgainGeneric"));
+      toast.error("Failed to download PDF", "An error occurred. Try again.");
     } finally {
       setDownloadingId(null);
     }
@@ -183,13 +181,13 @@ export function useAdminRaporData(branchId: string, periods: RaporPeriod[]) {
     try {
       const zipName = `rapor-${(selectedPeriod?.label ?? "periode").replace(/[^a-zA-Z0-9]/g, "_")}-${new Date().toISOString().slice(0, 10)}`;
       const { success, failed } = await downloadRaporZip(targets.map(toPrintStudent), zipName);
-      if (failed === 0) toast.success(t("admin.rapor.reportsDownloadedToast", { count: success }));
-      else if (success === 0) toast.error(t("admin.rapor.downloadReportsFailedTitle"), t("admin.rapor.allReportsFailedBody"));
-      else toast.error(t("admin.rapor.partialSuccessTitle", { success, failed }), t("admin.rapor.partialSuccessBody"));
+      if (failed === 0) toast.success(`${success} report cards downloaded successfully`);
+      else if (success === 0) toast.error("Failed to download report cards", "All report cards failed to process, try again.");
+      else toast.error(`${success} succeeded, ${failed} failed`, "Some report cards failed to process, try again for the failed ones.");
       setSelectMode(false);
       setSelected(new Set());
     } catch {
-      toast.error(t("admin.rapor.downloadReportsFailedTitle"), t("admin.rapor.tryAgainGeneric"));
+      toast.error("Failed to download report cards", "An error occurred. Try again.");
     } finally {
       setBulkDownloading(false);
     }

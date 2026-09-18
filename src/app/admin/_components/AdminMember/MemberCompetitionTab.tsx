@@ -1,5 +1,6 @@
 "use client";
 import Icon from "@/components/ui/Icon";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 import { fmtDate } from "@/lib/utils";
 import type { AdminMemberHook } from "./_hook";
 
@@ -24,19 +25,19 @@ export default function MemberCompetitionTab({ hook }: { hook: AdminMemberHook }
               item.award === "gold" ? "🥇 Medali Emas" :
               item.award === "silver" ? "🥈 Medali Perak" :
               item.award === "bronze" ? "🥉 Medali Perunggu" :
-              item.award === "custom" && item.custom_award_label ? `🏆 ${item.custom_award_label}` :
+              item.award === "custom" && item.custom_award_label ? <>🏆 <NoTranslate>{item.custom_award_label}</NoTranslate></> :
               item.rank ? `Juara ${item.rank}` : "🏊 Peserta";
 
             return (
               <div key={item.id} className="p-3 bg-paper-tint/70 rounded-xl border border-line flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
                 <div>
-                  <div className="font-bold text-ink-strong text-sm">{compName}</div>
+                  <div className="font-bold text-ink-strong text-sm"><NoTranslate>{compName}</NoTranslate></div>
                   <div className="text-ink-mute mt-0.5">
                     <span>{compDate}</span>
-                    {compLoc && <span> · {compLoc}</span>}
+                    {compLoc && <span> · <NoTranslate>{compLoc}</NoTranslate></span>}
                   </div>
                   <div className="mt-1 font-semibold text-ocean-700">
-                    {item.category} {item.age_group ? `(${item.age_group})` : ""}
+                    <NoTranslate>{item.category}</NoTranslate> {item.age_group ? <>(<NoTranslate>{item.age_group}</NoTranslate>)</> : ""}
                   </div>
                 </div>
 

@@ -3,8 +3,6 @@ import React, { useState, useEffect, useCallback } from "react";
 import Icon from "@/components/ui/Icon";
 import { createClient } from "@/utils/supabase/client";
 import type { Notification } from "@/lib/data";
-import { useLocale } from "@/components/providers/LocaleProvider";
-
 interface BellProps {
   /** Pass either static items (mock/demo) or a userId to load from DB */
   items?: Notification[];
@@ -21,18 +19,17 @@ interface DbNotif {
   created_at: string;
 }
 
-function relativeTime(iso: string, t: (key: string, vars?: Record<string, string | number>) => string) {
+function relativeTime(iso: string) {
   const diff = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diff / 60000);
-  if (mins < 1) return t("common.bell.justNow");
-  if (mins < 60) return t("common.bell.minutesAgo", { n: mins });
+  if (mins < 1) return "Just now";
+  if (mins < 60) return `${mins} min ago`;
   const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return t("common.bell.hoursAgo", { n: hrs });
-  return t("common.bell.daysAgo", { n: Math.floor(hrs / 24) });
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
 }
 
 export default function Bell({ items: staticItems, userId }: BellProps) {
-  const { t } = useLocale();
   const [open, setOpen] = useState(false);
   const [dbItems, setDbItems] = useState<DbNotif[]>([]);
   const supabase = createClient();
@@ -96,19 +93,19 @@ export default function Bell({ items: staticItems, userId }: BellProps) {
           <div className="absolute right-0 mt-2 w-[340px] max-w-[90vw] bg-white rounded-2xl border border-line shadow-lift z-40 anim-in overflow-hidden">
             <div className="px-4 py-3 border-b border-line flex items-center justify-between">
               <div>
-                <div className="font-display font-bold text-ink">{t("common.bell.title")}</div>
-                <div className="text-xs text-ink-mute">{t("common.bell.unread", { n: unread })}</div>
+                <div className="font-display font-bold text-ink">{"Notifications"}</div>
+                <div className="text-xs text-ink-mute">{`${unread} unread`}</div>
               </div>
               {unread > 0 && (
                 <button className="text-xs font-semibold text-ocean-600 hover:text-ocean-700" onClick={markAllRead}>
-                  {t("common.bell.markAllRead")}
+                  {"Mark all as read"}
                 </button>
               )}
             </div>
             <div className="max-h-[60vh] overflow-y-auto divide-y divide-line">
               {useDb ? (
                 dbItems.length === 0 ? (
-                  <div className="p-6 text-center text-sm text-ink-mute">{t("common.bell.empty")}</div>
+                  <div className="p-6 text-center text-sm text-ink-mute">{"No notifications yet"}</div>
                 ) : dbItems.map((n) => (
                   <div
                     key={n.id}
@@ -125,13 +122,13 @@ export default function Bell({ items: staticItems, userId }: BellProps) {
                     <div className="min-w-0">
                       <div className="text-sm font-semibold text-ink leading-tight">{n.title}</div>
                       {n.body && <div className="text-xs text-ink-mute mt-0.5 line-clamp-2">{n.body}</div>}
-                      <div className="text-[10px] text-ink-faint uppercase tracking-wide mt-1">{relativeTime(n.created_at, t)}</div>
+                      <div className="text-[10px] text-ink-faint uppercase tracking-wide mt-1">{relativeTime(n.created_at)}</div>
                     </div>
                   </div>
                 ))
               ) : (
                 (staticItems ?? []).length === 0 ? (
-                  <div className="p-6 text-center text-sm text-ink-mute">{t("common.bell.empty")}</div>
+                  <div className="p-6 text-center text-sm text-ink-mute">{"No notifications yet"}</div>
                 ) : (staticItems ?? []).map((n) => (
                   <div
                     key={n.id}

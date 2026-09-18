@@ -6,11 +6,9 @@ import Avatar from "@/components/ui/Avatar";
 import Status from "@/components/ui/Status";
 import { fmtIDR } from "@/lib/utils";
 import { NoTranslate } from "@/components/ui/NoTranslate";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import type { PayslipHook } from "./index";
 
 export default function PayslipSummaryTable({ hook }: { hook: PayslipHook }) {
-  const { t } = useLocale();
   const {
     branches, setShowTaxModal, openGenerateManual,
     summaryCounts,
@@ -29,7 +27,7 @@ export default function PayslipSummaryTable({ hook }: { hook: PayslipHook }) {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h2 className="font-display font-bold text-2xl text-ink">
-            {t("owner.payslip.pageTitle") || "Staff Payroll & Payslips"}
+            {"Staff Payroll"}
           </h2>
           <p className="text-xs text-ink-mute mt-0.5">
             Manage invoice verification, salary approvals, loan deductions, and official payslip generation for Coaches & Staff.
@@ -48,24 +46,24 @@ export default function PayslipSummaryTable({ hook }: { hook: PayslipHook }) {
       {/* ── 4 SUMMARY STAT CARDS ────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="bg-paper border border-line rounded-2xl p-4 space-y-1 shadow-xs">
-          <div className="text-[10px] font-bold text-ink-faint uppercase tracking-wider">{t("owner.payslip.statPendingLabel")}</div>
+          <div className="text-[10px] font-bold text-ink-faint uppercase tracking-wider">{"Pending Review"}</div>
           <div className="text-2xl font-bold font-mono text-warn-600">{summaryCounts.pending}</div>
-          <div className="text-xs text-ink-mute">{t("owner.payslip.statPendingSub")}</div>
+          <div className="text-xs text-ink-mute">{"Invoices & claims need approval"}</div>
         </div>
         <div className="bg-paper border border-line rounded-2xl p-4 space-y-1 shadow-xs">
-          <div className="text-[10px] font-bold text-ink-faint uppercase tracking-wider">{t("owner.payslip.statReadyLabel")}</div>
+          <div className="text-[10px] font-bold text-ink-faint uppercase tracking-wider">{"Ready to Generate"}</div>
           <div className="text-2xl font-bold font-mono text-ocean-700">{summaryCounts.approved}</div>
-          <div className="text-xs text-ink-mute">{t("owner.payslip.statReadySub")}</div>
+          <div className="text-xs text-ink-mute">{"Approved, ready to generate"}</div>
         </div>
         <div className="bg-paper border border-line rounded-2xl p-4 space-y-1 shadow-xs">
-          <div className="text-[10px] font-bold text-ink-faint uppercase tracking-wider">{t("owner.payslip.statDraftLabel")}</div>
+          <div className="text-[10px] font-bold text-ink-faint uppercase tracking-wider">{"Draft Payslips"}</div>
           <div className="text-2xl font-bold font-mono text-purple-700">{summaryCounts.draft}</div>
-          <div className="text-xs text-ink-mute">{t("owner.payslip.statDraftSub")}</div>
+          <div className="text-xs text-ink-mute">{"Draft slips awaiting publish"}</div>
         </div>
         <div className="bg-paper border border-line rounded-2xl p-4 space-y-1 shadow-xs">
-          <div className="text-[10px] font-bold text-ink-faint uppercase tracking-wider">{t("owner.payslip.statPublishedStatLabel")}</div>
+          <div className="text-[10px] font-bold text-ink-faint uppercase tracking-wider">{"Officially Published"}</div>
           <div className="text-2xl font-bold font-mono text-ok-700">{summaryCounts.published}</div>
-          <div className="text-xs text-ink-mute">{t("owner.payslip.statPublishedSub")}</div>
+          <div className="text-xs text-ink-mute">{"Published slips, ready to print/view"}</div>
         </div>
       </div>
 
@@ -79,7 +77,7 @@ export default function PayslipSummaryTable({ hook }: { hook: PayslipHook }) {
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder={t("owner.payslip.searchUnifiedPlaceholder")}
+              placeholder={"Search name, center, invoice number..."}
               className="pl-9 text-sm"
             />
           </div>
@@ -97,16 +95,16 @@ export default function PayslipSummaryTable({ hook }: { hook: PayslipHook }) {
                 type="button"
                 onClick={() => setMonthFilter("")}
                 className="h-10 px-3 text-xs font-semibold text-ink-mute hover:text-ink bg-paper border border-line rounded-xl hover:bg-paper-deep transition-colors cursor-pointer"
-                title={t("owner.payslip.showAllPeriodsTitle")}
+                title={"Show All Periods"}
               >
-                {t("owner.payslip.allPeriodsBtn")}
+                {"All"}
               </button>
             )}
           </div>
 
           {/* Branch Filter */}
           <Select value={branchFilter} onChange={(e) => setBranchFilter(e.target.value)} className="!w-44 shrink-0">
-            <option value="all">{t("owner.payslip.filterAllCenters")}</option>
+            <option value="all">{"All Centers"}</option>
             {branches.map((b) => (
               <option key={b.id} value={b.id}>{b.name}</option>
             ))}
@@ -114,26 +112,26 @@ export default function PayslipSummaryTable({ hook }: { hook: PayslipHook }) {
 
           {/* Role Filter */}
           <Select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value as "all" | "coach" | "staff")} className="!w-44 shrink-0">
-            <option value="all">{t("owner.payslip.filterAllRoles")}</option>
-            <option value="coach">{t("owner.payslip.filterCoachOnly")}</option>
-            <option value="staff">{t("owner.payslip.filterStaffOnly")}</option>
+            <option value="all">{"All Roles"}</option>
+            <option value="coach">{"Coach Only"}</option>
+            <option value="staff">{"Staff Only"}</option>
           </Select>
 
           {/* Status Filter */}
           <Select value={workflowStatusFilter} onChange={(e) => setWorkflowStatusFilter(e.target.value)} className="!w-48 shrink-0">
-            <option value="all">{t("owner.payslip.filterAllStatus")}</option>
-            <option value="pending">{t("owner.payslip.statusPendingReview")}</option>
-            <option value="approved">{t("owner.payslip.statusReadyToGenerate")}</option>
-            <option value="draft">{t("owner.payslip.statusDraftSlip")}</option>
-            <option value="published">{t("owner.payslip.statusPublishedPaid")}</option>
-            <option value="rejected">{t("owner.payslip.statusRejected")}</option>
+            <option value="all">{"All statuses"}</option>
+            <option value="pending">{"Pending Review"}</option>
+            <option value="approved">{"Ready to Generate"}</option>
+            <option value="draft">{"Draft Slip"}</option>
+            <option value="published">{"Published / Paid"}</option>
+            <option value="rejected">{"Rejected"}</option>
           </Select>
         </div>
 
         {/* Unified Table Card */}
         <div className="bg-paper border border-line rounded-2xl overflow-hidden shadow-xs">
           {loadingInvoices || loadingPayslips ? (
-            <div className="p-12 text-center text-ink-mute text-sm">{t("owner.payslip.loadingUnified")}</div>
+            <div className="p-12 text-center text-ink-mute text-sm">{"Loading payslips & invoices..."}</div>
           ) : filteredUnifiedItems.length === 0 ? (
             <div className="p-12 text-center text-ink-mute text-sm space-y-2">
               <Icon name="invoice" className="w-8 h-8 mx-auto text-ink-faint" />
@@ -265,14 +263,14 @@ export default function PayslipSummaryTable({ hook }: { hook: PayslipHook }) {
                           }
                         >
                           {item.workflowStatus === "published"
-                            ? t("owner.payslip.statusPublishedPaid")
+                            ? "Published / Paid"
                             : item.workflowStatus === "rejected"
-                            ? t("owner.payslip.statusRejected")
+                            ? "Rejected"
                             : item.workflowStatus === "pending"
-                            ? t("owner.payslip.statusPendingReview")
+                            ? "Pending Review"
                             : item.workflowStatus === "draft"
-                            ? t("owner.payslip.statusDraftSlip")
-                            : t("owner.payslip.statusReadyToGenerate")}
+                            ? "Draft Slip"
+                            : "Ready to Generate"}
                         </Status>
                       </td>
 
@@ -288,7 +286,7 @@ export default function PayslipSummaryTable({ hook }: { hook: PayslipHook }) {
                                 onClick={() => approveInvoice(item.rawInvoice!.id)}
                                 disabled={approvingId === item.rawInvoice.id}
                               >
-                                {approvingId === item.rawInvoice.id ? "…" : t("owner.payslip.approveBtn")}
+                                {approvingId === item.rawInvoice.id ? "…" : "Approve"}
                               </Btn>
                               <Btn
                                 variant="ghost"
@@ -298,13 +296,13 @@ export default function PayslipSummaryTable({ hook }: { hook: PayslipHook }) {
                                   setRejectReason("");
                                 }}
                               >
-                                {t("owner.payslip.rejectBtn")}
+                                {"Reject"}
                               </Btn>
                               <button
                                 type="button"
                                 onClick={() => setInvoiceDetail(item.rawInvoice!)}
                                 className="w-8 h-8 rounded-lg border border-line bg-white hover:bg-paper-tint flex items-center justify-center text-ink-mute hover:text-ocean-600 transition-colors"
-                                title={t("owner.payslip.viewBreakdownTitle")}
+                                title={"View Breakdown"}
                               >
                                 <Icon name="eye" className="w-3.5 h-3.5" />
                               </button>
@@ -319,14 +317,14 @@ export default function PayslipSummaryTable({ hook }: { hook: PayslipHook }) {
                                 size="sm"
                                 onClick={() => openGenerateForInvoice(item.rawInvoice!)}
                               >
-                                {t("owner.payslip.generatePayslip")}
+                                {"Generate Payslip"}
                               </Btn>
                               <Btn
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => unapproveInvoice(item.rawInvoice!)}
                                 disabled={unapprovingId === item.rawInvoice.id}
-                                title={t("owner.payslip.unapproveBtn")}
+                                title={"Undo Approval"}
                               >
                                 {unapprovingId === item.rawInvoice.id ? "…" : <Icon name="undo" className="w-3.5 h-3.5" />}
                               </Btn>
@@ -334,7 +332,7 @@ export default function PayslipSummaryTable({ hook }: { hook: PayslipHook }) {
                                 type="button"
                                 onClick={() => setInvoiceDetail(item.rawInvoice!)}
                                 className="w-8 h-8 rounded-lg border border-line bg-white hover:bg-paper-tint flex items-center justify-center text-ink-mute hover:text-ocean-600 transition-colors"
-                                title={t("owner.payslip.viewDetailsTitle")}
+                                title={"View Details"}
                               >
                                 <Icon name="eye" className="w-3.5 h-3.5" />
                               </button>
@@ -350,13 +348,13 @@ export default function PayslipSummaryTable({ hook }: { hook: PayslipHook }) {
                                 onClick={() => publishPayslip(item.rawPayslip!)}
                                 disabled={publishingId === item.rawPayslip.id}
                               >
-                                {publishingId === item.rawPayslip.id ? "…" : t("owner.payslip.publishBtn")}
+                                {publishingId === item.rawPayslip.id ? "…" : "Publish"}
                               </Btn>
                               <button
                                 type="button"
                                 onClick={() => openEditSlip(item.rawPayslip!)}
                                 className="w-8 h-8 rounded-lg border border-line bg-white hover:bg-paper-tint flex items-center justify-center text-ink-mute hover:text-ocean-600 transition-colors"
-                                title={t("owner.payslip.editDraftSlipTitle")}
+                                title={"Edit Draft Slip"}
                               >
                                 <Icon name="edit" className="w-3.5 h-3.5" />
                               </button>
@@ -364,7 +362,7 @@ export default function PayslipSummaryTable({ hook }: { hook: PayslipHook }) {
                                 type="button"
                                 onClick={() => deletePayslip(item.rawPayslip!)}
                                 className="w-8 h-8 rounded-lg border border-line bg-white hover:bg-danger-50 flex items-center justify-center text-ink-mute hover:text-danger-600 transition-colors"
-                                title={t("owner.payslip.deleteDraftSlipTitle")}
+                                title={"Delete Draft Slip"}
                               >
                                 <Icon name="trash" className="w-3.5 h-3.5" />
                               </button>
@@ -378,16 +376,16 @@ export default function PayslipSummaryTable({ hook }: { hook: PayslipHook }) {
                                 type="button"
                                 onClick={() => printPayslip(item.rawPayslip!)}
                                 className="px-2.5 py-1.5 rounded-lg border border-line bg-white hover:bg-paper-tint text-xs font-semibold text-ink-mute hover:text-ocean-700 flex items-center gap-1.5 transition-colors"
-                                title={t("owner.payslip.printPayslipTitle")}
+                                title={"Print Payslip / PDF"}
                               >
                                 <Icon name="print" className="w-3.5 h-3.5" />
-                                <span>{t("owner.payslip.printBtn")}</span>
+                                <span>{"Print"}</span>
                               </button>
                               <button
                                 type="button"
                                 onClick={() => openViewSlip(item.rawPayslip!)}
                                 className="w-8 h-8 rounded-lg border border-line bg-white hover:bg-paper-tint flex items-center justify-center text-ink-mute hover:text-ocean-600 transition-colors"
-                                title={t("owner.payslip.viewPayslipBreakdownTitle")}
+                                title={"View Payslip Breakdown"}
                               >
                                 <Icon name="eye" className="w-3.5 h-3.5" />
                               </button>
@@ -402,7 +400,7 @@ export default function PayslipSummaryTable({ hook }: { hook: PayslipHook }) {
                               className="px-2.5 py-1 text-xs font-semibold rounded-lg border border-danger-200 bg-danger-50 text-danger-700 hover:bg-danger-100 flex items-center gap-1 transition-colors"
                             >
                               <Icon name="warning" className="w-3 h-3" />
-                              <span>{t("owner.payslip.reasonBtn")}</span>
+                              <span>{"Reason"}</span>
                             </button>
                           )}
                         </div>

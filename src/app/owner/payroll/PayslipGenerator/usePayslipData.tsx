@@ -4,13 +4,12 @@ import { logActivity } from "@/lib/activityLog";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
-import { useLocale } from "@/components/providers/LocaleProvider";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 import { parsePeriodToMonth } from "../../_utils";
 import type { Branch } from "../../_types";
 import type { CoachInvoiceRow, OwnerPayslipRow, PayslipDeductionRow, ProfileOption, UnifiedPayslipItem } from "./_types";
 
 export function usePayslipData({ branches, userId, userName }: { branches: Branch[]; userId: string; userName: string }) {
-  const { t, tNode } = useLocale();
   const supabase = createClient();
   const toast = useToast();
   const confirm = useConfirm();
@@ -92,82 +91,82 @@ export function usePayslipData({ branches, userId, userName }: { branches: Branc
     setApprovingId(id);
     const { error } = await supabase.from("coach_invoices").update({ status: "approved", approved_at: new Date().toISOString() }).eq("id", id);
     setApprovingId(null);
-    if (error) return toast.error(t("owner.invoices.approveFailed"), error.message);
+    if (error) return toast.error("Failed to approve", error.message);
     const inv = coachInvoices.find((i) => i.id === id);
     setCoachInvoices((prev) => prev.map((i) => (i.id === id ? { ...i, status: "approved", approved_at: new Date().toISOString() } : i)));
     if (invoiceDetail?.id === id) setInvoiceDetail((prev) => (prev ? { ...prev, status: "approved" } : prev));
     if (inv?.coach?.id) {
       await supabase.from("notifications").insert({
         user_id: inv.coach.id,
-        title: t("owner.invoices.notifApprovedTitle"),
-        body: t("owner.invoices.notifApprovedBody", { number: inv.invoice_number, period: inv.period_label }),
+        title: "Invoice approved",
+        body: `Invoice ${inv.invoice_number} (${inv.period_label}) has been approved. Awaiting payment.`,
         icon: "check",
         kind: "success",
       });
     }
-    toast.success(t("owner.invoices.approved"));
+    toast.success("Invoice approved");
     logActivity(supabase, {
       userId, userRole: "owner", userName, entityType: "coach_invoices", entityId: id,
       entityLabel: inv?.invoice_number ?? id, action: "update",
-      label: t("owner.invoices.activityApproved", { number: inv?.invoice_number ?? id }),
+      label: `Invoice ${inv?.invoice_number ?? id} approved`,
     });
   };
 
   const rejectInvoice = async (id: string, reason: string) => {
-    if (!reason.trim()) return toast.error(t("owner.invoices.reasonRequired"));
+    if (!reason.trim()) return toast.error("Enter a rejection reason");
     setRejectingId(id);
     const { error } = await supabase.from("coach_invoices").update({ status: "rejected", rejected_at: new Date().toISOString(), rejection_reason: reason.trim() }).eq("id", id);
     setRejectingId(null);
-    if (error) return toast.error(t("owner.invoices.rejectFailed"), error.message);
+    if (error) return toast.error("Failed to reject", error.message);
     const inv = coachInvoices.find((i) => i.id === id);
     setCoachInvoices((prev) => prev.map((i) => (i.id === id ? { ...i, status: "rejected", rejection_reason: reason } : i)));
     if (invoiceDetail?.id === id) setInvoiceDetail((prev) => (prev ? { ...prev, status: "rejected", rejection_reason: reason } : prev));
     if (inv?.coach?.id) {
       await supabase.from("notifications").insert({
         user_id: inv.coach.id,
-        title: t("owner.invoices.notifRejectedTitle"),
-        body: t("owner.invoices.notifRejectedBody", { number: inv.invoice_number, period: inv.period_label, reason }),
+        title: "Invoice rejected",
+        body: `Invoice ${inv.invoice_number} (${inv.period_label}) was rejected. Reason: ${reason}`,
         icon: "warning",
         kind: "warn",
       });
     }
     setRejectModal(null);
     setRejectReason("");
-    toast.success(t("owner.invoices.rejected"));
+    toast.success("Invoice rejected");
     logActivity(supabase, {
       userId, userRole: "owner", userName, entityType: "coach_invoices", entityId: id,
       entityLabel: inv?.invoice_number ?? id, action: "update",
-      label: t("owner.invoices.activityRejected", { number: inv?.invoice_number ?? id, reason }),
+      label: `Invoice ${inv?.invoice_number ?? id} rejected: ${reason}`,
     });
   };
 
   const unapproveInvoice = async (inv: CoachInvoiceRow) => {
     const ok = await confirm({
-      title: t("owner.payslip.unapproveConfirmTitle"),
-      body: tNode("owner.payslip.unapproveConfirmBody", { coach: inv.coach?.full_name ?? "coach" }),
-      confirmLabel: t("owner.payslip.unapproveConfirmLabel"),
+      title: "Undo Invoice Approval?",
+      body: (<><NoTranslate>{inv.coach?.full_name ?? "coach"}</NoTranslate>{"'s invoice will return to \"Awaiting Review\" status so it can be reviewed again."}</>),
+      confirmLabel: "Yes, Undo",
       danger: true,
     });
     if (!ok) return;
     setUnapprovingId(inv.id);
     const { error } = await supabase.from("coach_invoices").update({ status: "pending", approved_at: null }).eq("id", inv.id);
     setUnapprovingId(null);
-    if (error) return toast.error(t("owner.payslip.unapproveFailed"), error.message);
+    if (error) return toast.error("Failed to undo approval", error.message);
     setCoachInvoices((prev) => prev.map((i) => (i.id === inv.id ? { ...i, status: "pending", approved_at: null } : i)));
     if (inv.coach?.id) {
       await supabase.from("notifications").insert({
         user_id: inv.coach.id,
-        title: t("owner.payslip.notifUnapprovedTitle"),
-        body: t("owner.payslip.notifUnapprovedBody", { number: inv.invoice_number, period: inv.period_label }),
+        title: "Invoice approval undone",
+        body: `Your invoice ${inv.invoice_number} (${inv.period_label}) approval was undone by the owner and is back under review.`,
         icon: "warning",
         kind: "warn",
       });
     }
-    toast.success(t("owner.payslip.unapproved"));
+    toast.success("Approval undone");
     logActivity(supabase, {
       userId, userRole: "owner", userName, entityType: "coach_invoices", entityId: inv.id,
       entityLabel: inv.invoice_number, action: "update",
-      label: t("owner.payslip.activityUnapproved", { number: inv.invoice_number }),
+      label: `Approval undone for invoice ${inv.invoice_number}`,
     });
   };
 
@@ -177,8 +176,8 @@ export function usePayslipData({ branches, userId, userName }: { branches: Branc
     const itemMap: Record<string, { name: string; sessions: number; rate: number }> = {};
     (iv.coach_invoice_items ?? []).forEach((item) => {
       const key = item.item_type === "class" ? (item.class_id ?? item.id) : item.id;
-      const label = item.item_type === "extra" ? t("owner.invoices.printItemExtra")
-        : item.item_type === "reimburse" ? t("owner.invoices.printItemReimburse", { description: item.description ?? "" })
+      const label = item.item_type === "extra" ? "Extra Session"
+        : item.item_type === "reimburse" ? `Reimburse — ${item.description ?? ""}`
         : (item.class?.name ?? item.class_id ?? "—");
       if (!itemMap[key]) itemMap[key] = { name: label, sessions: 0, rate: item.rate };
       itemMap[key].sessions += item.session_count;
@@ -196,14 +195,14 @@ export function usePayslipData({ branches, userId, userName }: { branches: Branc
       .badge{display:inline-block;padding:2px 10px;border-radius:4px;font-size:11px;font-weight:700;background:${iv.status === "paid" ? "#dcfce7" : "#fef9c3"};color:${iv.status === "paid" ? "#166534" : "#854d0e"}}
       footer{margin-top:40px;border-top:1px solid #e2e8f0;padding-top:12px;font-size:11px;color:#94a3b8;text-align:center}
       </style></head><body>
-      <h1>${t("owner.invoices.printHeading")}</h1>
-      <div class="sub">${iv.invoice_number} &nbsp;·&nbsp; <span class="badge">${iv.status === "paid" ? t("owner.invoices.printStatusPaid") : t("owner.invoices.printStatusPending")}</span></div>
-      <div class="section">${t("owner.invoices.printInfoSectionTitle")}</div>
-      <div class="meta"><b>${t("owner.invoices.printPeriodLabel")}:</b> ${iv.period_label}<br/><b>${t("owner.invoices.printCoachLabel")}:</b> ${iv.coach?.full_name ?? "—"}<br/><b>${t("owner.invoices.printBranchLabel")}:</b> ${iv.branch?.name ?? "—"}<br/><b>${t("owner.invoices.printBankLabel")}:</b> ${iv.bank_info ?? "—"}${iv.paid_at ? `<br/><b>${t("owner.invoices.printPaidLabel")}:</b> ${new Date(iv.paid_at).toLocaleDateString("id-ID", { dateStyle: "long" })}` : ""}</div>
-      <div class="section">${t("owner.invoices.printItemsSectionTitle")}</div>
-      ${itemRows || `<div class="row"><span style="color:#94a3b8">${t("owner.invoices.printNoItems")}</span></div>`}
-      <div class="total"><span>${t("owner.invoices.printTotalLabel")}</span><span>Rp ${iv.total_amount.toLocaleString("id-ID")}</span></div>
-      <footer>${t("owner.invoices.printFooter", { date: new Date().toLocaleDateString("id-ID", { dateStyle: "long" }) })}</footer>
+      <h1>${"Coach Invoice"}</h1>
+      <div class="sub">${iv.invoice_number} &nbsp;·&nbsp; <span class="badge">${iv.status === "paid" ? "Paid" : "Pending"}</span></div>
+      <div class="section">${"Information"}</div>
+      <div class="meta"><b>${"Period"}:</b> ${iv.period_label}<br/><b>${"Coach"}:</b> ${iv.coach?.full_name ?? "—"}<br/><b>${"Center"}:</b> ${iv.branch?.name ?? "—"}<br/><b>${"Bank Account"}:</b> ${iv.bank_info ?? "—"}${iv.paid_at ? `<br/><b>${"Paid"}:</b> ${new Date(iv.paid_at).toLocaleDateString("id-ID", { dateStyle: "long" })}` : ""}</div>
+      <div class="section">${"Class Breakdown"}</div>
+      ${itemRows || `<div class="row"><span style="color:#94a3b8">${"No breakdown"}</span></div>`}
+      <div class="total"><span>${"Total"}</span><span>Rp ${iv.total_amount.toLocaleString("id-ID")}</span></div>
+      <footer>${`Next Swimming School · Printed ${new Date().toLocaleDateString("id-ID", { dateStyle: "long" })}`}</footer>
       </body></html>`);
     w.document.close(); w.focus(); w.print();
   };
@@ -359,7 +358,7 @@ export function usePayslipData({ branches, userId, userName }: { branches: Branc
   }, [unifiedPayslipItems]);
 
   return {
-    supabase, toast, t, tNode, branches, userId, userName,
+    supabase, toast, branches, userId, userName,
     payslips, setPayslips, loadingPayslips, loadPayslips,
     coachList, staffList,
     search, setSearch, branchFilter, setBranchFilter, roleFilter, setRoleFilter,

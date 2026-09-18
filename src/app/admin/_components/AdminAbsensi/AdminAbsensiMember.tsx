@@ -1,19 +1,18 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/utils/supabase/client";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import Btn from "@/components/ui/Btn";
 import { Input, Select } from "@/components/ui/FormFields";
 import { Card } from "@/components/ui/Card";
 import Status from "@/components/ui/Status";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 import type { MemberAttendanceRow } from "../../_types";
 import { fmtDate } from "@/lib/utils";
 import { memberStatusKind, memberDbToUi } from "@/lib/attendance";
 
 export default function AdminAbsensiMember({ branchId }: { branchId: string }) {
   const supabase = createClient();
-  const { t, locale } = useLocale();
-  const localeTag = locale === "id" ? "id-ID" : "en-US";
+  const localeTag = "en-US";
   const PAGE_SIZE = 30;
 
   const today = new Date().toISOString().split("T")[0];
@@ -118,61 +117,61 @@ export default function AdminAbsensiMember({ branchId }: { branchId: string }) {
           {monthOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </Select>
         <Select value={filterClass} onChange={e => setFilterClass(e.target.value)}>
-          <option value="all">{t("admin.absensi.allClassesOpt")}</option>
-          {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          <option value="all">{"All Classes"}</option>
+          {classes.map(c => <option key={c.id} value={c.id} translate="no">{c.name}</option>)}
         </Select>
         <Select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
-          <option value="all">{t("admin.absensi.allStatusesOpt")}</option>
-          <option value="hadir">{t("admin.absensi.statusPresent")}</option>
-          <option value="telat">{t("admin.absensi.statusLate")}</option>
-          <option value="izin">{t("admin.absensi.statusExcused")}</option>
-          <option value="sakit">{t("admin.absensi.statusSick")}</option>
-          <option value="tidak_hadir">{t("admin.absensi.statusAbsent")}</option>
+          <option value="all">{"All Statuses"}</option>
+          <option value="hadir">{"Present"}</option>
+          <option value="telat">{"Late"}</option>
+          <option value="izin">{"Excused"}</option>
+          <option value="sakit">{"Sick"}</option>
+          <option value="tidak_hadir">{"Absent"}</option>
         </Select>
-        <Input placeholder={t("admin.absensi.searchMemberNamePlaceholder")} value={filterName} onChange={e => setFilterName(e.target.value)} />
+        <Input placeholder={"Search student name…"} value={filterName} onChange={e => setFilterName(e.target.value)} />
       </div>
 
       <Card padded={false}>
         {loading && records.length === 0 ? (
-          <div className="p-10 text-center text-ink-mute">{t("admin.absensi.loadingData")}</div>
+          <div className="p-10 text-center text-ink-mute">{"Loading data…"}</div>
         ) : (
           <>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-[11px] uppercase tracking-widest text-ink-faint font-bold border-b border-line">
-                    <th className="text-left py-3 px-5 font-bold">{t("admin.absensi.colDate")}</th>
-                    <th className="text-left py-3 font-bold">{t("admin.absensi.colMember")}</th>
-                    <th className="text-left py-3 font-bold">{t("admin.absensi.colClass")}</th>
-                    <th className="text-left py-3 font-bold">{t("admin.absensi.colStatus")}</th>
-                    <th className="text-left py-3 pr-5 font-bold hidden sm:table-cell">{t("admin.absensi.colMethod")}</th>
+                    <th className="text-left py-3 px-5 font-bold">{"Date"}</th>
+                    <th className="text-left py-3 font-bold">{"Student"}</th>
+                    <th className="text-left py-3 font-bold">{"Class"}</th>
+                    <th className="text-left py-3 font-bold">{"Status"}</th>
+                    <th className="text-left py-3 pr-5 font-bold hidden sm:table-cell">{"Method"}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line">
                   {records.map(r => (
                     <tr key={r.id} className="hover:bg-paper-tint">
                       <td className="py-3 px-5 font-mono whitespace-nowrap text-ink-soft">{fmtDate(r.session_date)}</td>
-                      <td className="py-3 font-semibold text-ink">{r.member?.profile?.full_name ?? "—"}</td>
-                      <td className="py-3 text-ink-soft">{r.class?.name ?? "—"}</td>
+                      <td className="py-3 font-semibold text-ink"><NoTranslate>{r.member?.profile?.full_name ?? "—"}</NoTranslate></td>
+                      <td className="py-3 text-ink-soft"><NoTranslate>{r.class?.name ?? "—"}</NoTranslate></td>
                       <td className="py-3">
                         {(() => {
                           const ui = memberDbToUi(r.status);
                           const kind = memberStatusKind(r.status);
-                          const label = ui === "present" ? t("admin.absensi.statusPresent")
-                            : ui === "late" ? t("admin.absensi.statusLate")
-                            : ui === "izin" ? t("admin.absensi.statusExcused")
-                            : ui === "sick" ? t("admin.absensi.statusSick")
-                            : t("admin.absensi.statusAbsent");
+                          const label = ui === "present" ? "Present"
+                            : ui === "late" ? "Late"
+                            : ui === "izin" ? "Excused"
+                            : ui === "sick" ? "Sick"
+                            : "Absent";
                           return <Status kind={kind} dot={false}>{label}</Status>;
                         })()}
                       </td>
                       <td className="py-3 pr-5 hidden sm:table-cell text-ink-mute capitalize">
-                        {r.method === "manual" ? t("admin.absensi.methodManual") : r.method === "qr" ? t("admin.absensi.methodQr") : r.method ?? "—"}
+                        {r.method === "manual" ? "Manual" : r.method === "qr" ? "QR Scan" : r.method ?? "—"}
                       </td>
                     </tr>
                   ))}
                   {records.length === 0 && !loading && (
-                    <tr><td colSpan={5} className="py-10 text-center text-ink-mute">{t("admin.absensi.noAttendanceData")}</td></tr>
+                    <tr><td colSpan={5} className="py-10 text-center text-ink-mute">{"No attendance data."}</td></tr>
                   )}
                 </tbody>
               </table>
@@ -180,7 +179,7 @@ export default function AdminAbsensiMember({ branchId }: { branchId: string }) {
             {hasMore && (
               <div className="px-5 py-3 border-t border-line">
                 <Btn variant="ghost" onClick={loadMore} disabled={loading} className="w-full">
-                  {loading ? t("admin.absensi.loadingBtn") : t("admin.absensi.showMoreBtn")}
+                  {loading ? "Loading…" : "Show more"}
                 </Btn>
               </div>
             )}

@@ -6,7 +6,6 @@ import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
 import { Card } from "@/components/ui/Card";
 import BetaFeedback, { BETA_FEEDBACK_ENABLED } from "@/components/layout/BetaFeedback";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import { fmtDateLong, toLocalDateStr } from "@/lib/utils";
 import { createClient } from "@/utils/supabase/client";
 import type { User } from "@supabase/supabase-js";
@@ -22,14 +21,14 @@ import CoachInvoice from "./_components/CoachInvoice";
 import CoachRapor from "./_components/CoachRapor";
 import CoachProfile from "./_components/CoachProfile";
 import CoachPayslip from "./_components/CoachPayslip";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 import type { ClassRow, CoachSpreadsheetRow, ProfileData, TabId } from "./_types";
 
 function LockedNotice({ feature, reason }: { feature: string; reason: string }) {
-  const { t } = useLocale();
   return (
     <Card className="!p-8 text-center border-dashed border-2">
       <Icon name="lock" className="w-8 h-8 text-ink-faint mx-auto mb-3" />
-      <div className="font-display font-bold text-ink">{feature} {t("coach.lockedNotice.unavailableSuffix")}</div>
+      <div className="font-display font-bold text-ink">{feature} {"unavailable"}</div>
       <p className="text-sm text-ink-mute mt-1">{reason}</p>
     </Card>
   );
@@ -37,8 +36,7 @@ function LockedNotice({ feature, reason }: { feature: string; reason: string }) 
 
 export default function CoachPage() {
   const router = useRouter();
-  const { t, locale } = useLocale();
-  const localeTag = locale === "id" ? "id-ID" : "en-US";
+  const localeTag = "en-US";
   const supabase = useMemo(() => createClient(), []);
   const [active, setActive] = useState<TabId>("home");
   const [overlay, setOverlay] = useState<string | null>(null);
@@ -143,7 +141,7 @@ export default function CoachPage() {
       setUser(u);
       const p = await loadProfile(u.id);
       if (!p) {
-        setInitError(t("coach.page.accountNotFoundBody"));
+        setInitError("Account data not found in the database. The data may have been reset. Please contact admin to recreate your account.");
         return;
       }
       loadClasses(p.id);
@@ -193,15 +191,15 @@ export default function CoachPage() {
     : !!(profile.phone && profile.gender && profile.birth_date && profile.bank_name && profile.bank_account && profile.bank_holder);
 
   const todayName = new Date().toLocaleDateString(localeTag, { weekday: "long" });
-  const title = active === "home" ? (profile?.full_name ?? t("coach.home.defaultCoachName")) : {
-    absen: t("coach.tabs.absenLabel"), kelas: t("coach.tabs.kelasLabel"), invoice: t("coach.tabs.invoiceLabel"),
-    rapor: t("coach.tabs.raporLabel"), payslip: t("coach.tabs.payslipLabel"), profile: t("coach.tabs.profileLabel")
+  const title = active === "home" ? (profile?.full_name ? <NoTranslate>{profile.full_name}</NoTranslate> : "Coach") : {
+    absen: "Attendance", kelas: "Class", invoice: "Invoice",
+    rapor: "Report Card", payslip: "Payslip", profile: "Profile"
   }[active] ?? "";
   const sub = active === "home" ? `${todayName} · ${fmtDateLong(new Date())}` : {
-    absen: t("coach.page.absenSub"), kelas: t("coach.page.kelasSub"),
-    invoice: t("coach.page.invoiceSub"), rapor: t("coach.page.raporSub"),
-    payslip: t("coach.page.payslipSub"),
-    profile: t("coach.page.profileSub")
+    absen: "Clock-in & scan QR", kelas: "Classes you handle",
+    invoice: "Generate monthly invoice", rapor: "Fill in student report cards",
+    payslip: "Payslips published by the owner",
+    profile: "Personal data & certifications"
   }[active] ?? "";
 
   // Suspend countdown hook — ticks every second
@@ -211,17 +209,17 @@ export default function CoachPage() {
     if (!isSuspended || !profile?.suspend_until) { setSuspendCountdown(""); return; }
     const tick = () => {
       const diff = new Date(profile.suspend_until!).getTime() - Date.now();
-      if (diff <= 0) { setSuspendCountdown(t("coach.page.activeAgainSoon")); return; }
+      if (diff <= 0) { setSuspendCountdown("Active again soon…"); return; }
       const days = Math.floor(diff / 86400000);
       const hrs  = Math.floor((diff % 86400000) / 3600000);
       const mins = Math.floor((diff % 3600000) / 60000);
       const secs = Math.floor((diff % 60000) / 1000);
-      setSuspendCountdown(t("coach.page.countdownFormat", { days, hrs, mins, secs }));
+      setSuspendCountdown(`${days}d ${hrs}h ${mins}m ${secs}s`);
     };
     tick();
     const intervalId = setInterval(tick, 1000);
     return () => clearInterval(intervalId);
-  }, [isSuspended, profile?.suspend_until, t]);
+  }, [isSuspended, profile?.suspend_until]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   // Suspend/incomplete banners shown at the top of each tab's content
@@ -230,25 +228,25 @@ export default function CoachPage() {
       <div className="flex items-start gap-3">
         <span className="w-10 h-10 rounded-xl bg-danger-100 text-danger-600 flex items-center justify-center shrink-0 animate-pulse"><Icon name="warning" className="w-5 h-5" /></span>
         <div className="flex-1">
-          <div className="font-display font-bold text-danger-700 text-base">{t("coach.page.accountSuspendedTitle")}</div>
-          {profile?.suspend_reason && <p className="text-sm text-danger-600 mt-1">{t("coach.page.reasonLabel")} {profile.suspend_reason}</p>}
+          <div className="font-display font-bold text-danger-700 text-base">{"Your account is currently suspended"}</div>
+          {profile?.suspend_reason && <p className="text-sm text-danger-600 mt-1">{"Reason:"} <NoTranslate>{profile.suspend_reason}</NoTranslate></p>}
           <div className="mt-2 flex items-center gap-2">
-            <span className="text-xs text-danger-500 font-semibold">{t("coach.page.activeAgainIn")}</span>
+            <span className="text-xs text-danger-500 font-semibold">{"Active again in:"}</span>
             <span className="bg-danger-100 text-danger-700 font-mono text-xs font-bold px-2 py-0.5 rounded-lg">{suspendCountdown}</span>
           </div>
-          <p className="text-xs text-danger-500 mt-1">{t("coach.page.suspendedFeaturesHint")}</p>
+          <p className="text-xs text-danger-500 mt-1">{"All features are unavailable while suspended. Contact the center admin if you have questions."}</p>
         </div>
       </div>
     </Card>
   ) : null;
 
   const missingFields = profile && !isProfileComplete ? [
-    !profile.phone && t("coach.page.missingPhone"),
-    !profile.gender && t("coach.page.missingGender"),
-    !profile.birth_date && t("coach.page.missingBirthDate"),
-    !profile.bank_name && t("coach.page.missingBankName"),
-    !profile.bank_account && t("coach.page.missingAccountNumber"),
-    !profile.bank_holder && t("coach.page.missingAccountHolder"),
+    !profile.phone && "Phone No.",
+    !profile.gender && "Gender",
+    !profile.birth_date && "Date of Birth",
+    !profile.bank_name && "Bank Name",
+    !profile.bank_account && "Account Number",
+    !profile.bank_holder && "Account Holder Name",
   ].filter(Boolean) : [];
 
   const IncompleteBanner = (!isSuspended && profile && !isProfileComplete) ? (
@@ -256,8 +254,8 @@ export default function CoachPage() {
       <div className="flex items-start gap-3">
         <span className="w-10 h-10 rounded-xl bg-warn-100 text-warn-600 flex items-center justify-center shrink-0"><Icon name="warning" className="w-5 h-5" /></span>
         <div>
-          <div className="font-display font-bold text-warn-700">{t("coach.page.incompleteProfileTitle")}</div>
-          <p className="text-sm text-warn-600 mt-1">{t("coach.page.incompleteProfileHintPrefix")} <strong>{t("coach.page.incompleteProfileHintTab")}</strong> {t("coach.page.incompleteProfileHintSuffix")}</p>
+          <div className="font-display font-bold text-warn-700">{"Profile incomplete"}</div>
+          <p className="text-sm text-warn-600 mt-1">{"Complete the following in the"} <strong>{"Profile"}</strong> {"tab to enable Clock In, Invoice, and Report Card."}</p>
           {missingFields.length > 0 && (
             <div className="flex flex-wrap gap-1 mt-2">
               {missingFields.map(f => (
@@ -272,7 +270,7 @@ export default function CoachPage() {
 
   // Lock active features when suspended or profile incomplete
   const locked = isSuspended || !isProfileComplete;
-  const lockReason = isSuspended ? t("coach.lockedNotice.accountSuspended") : t("coach.lockedNotice.completeProfileFirst");
+  const lockReason = isSuspended ? "Your account is currently suspended." : "Please complete your profile first.";
 
   const clockinClassId = overlay?.startsWith("clockin:") ? overlay.slice(8) : null;
   const content = (overlay === "clockin" || overlay?.startsWith("clockin:"))
@@ -283,10 +281,10 @@ export default function CoachPage() {
     ? <LeaveHistory back={() => setOverlay(null)} coachId={coachId} />
     : {
         home:    <>{SuspendBanner}{IncompleteBanner}<CoachHome setOverlay={setOverlay} setActive={(tab) => setActive(tab as TabId)} coachId={coachId} branchId={branchId} profile={profile} classes={classes} holidayClassIds={holidayClassIds} clockedInIds={clockedInIds} setClockedInIds={setClockedInIds} ownSpreadsheets={ownSpreadsheets} /></>,
-        absen:   <>{SuspendBanner}{IncompleteBanner}{locked ? <LockedNotice feature={t("coach.tabs.absenLabel")} reason={lockReason} /> : <CoachAbsensi setOverlay={setOverlay} coachId={coachId} branchId={branchId} classes={classes} holidayClassIds={holidayClassIds} clockedInIds={clockedInIds} />}</>,
+        absen:   <>{SuspendBanner}{IncompleteBanner}{locked ? <LockedNotice feature={"Attendance"} reason={lockReason} /> : <CoachAbsensi setOverlay={setOverlay} coachId={coachId} branchId={branchId} classes={classes} holidayClassIds={holidayClassIds} clockedInIds={clockedInIds} />}</>,
         kelas:   <CoachKelas classes={classes} coachId={coachId} classSpreadsheets={classSpreadsheets} ownSpreadsheets={ownSpreadsheets} onRefreshClasses={refreshClasses} />,
-        invoice: <>{SuspendBanner}{IncompleteBanner}{locked ? <LockedNotice feature={t("coach.tabs.invoiceLabel")} reason={lockReason} /> : <CoachInvoice coachId={coachId} branchId={branchId} profile={profile} />}</>,
-        rapor:   <>{SuspendBanner}{IncompleteBanner}{locked ? <LockedNotice feature={t("coach.tabs.raporLabel")} reason={lockReason} /> : <CoachRapor coachId={coachId} branchId={branchId} coachName={profile?.full_name ?? ""} branchName={coachBranches.find(b => b.branch_id === branchId)?.name ?? ""} />}</>,
+        invoice: <>{SuspendBanner}{IncompleteBanner}{locked ? <LockedNotice feature={"Invoice"} reason={lockReason} /> : <CoachInvoice coachId={coachId} branchId={branchId} profile={profile} />}</>,
+        rapor:   <>{SuspendBanner}{IncompleteBanner}{locked ? <LockedNotice feature={"Report Card"} reason={lockReason} /> : <CoachRapor coachId={coachId} branchId={branchId} coachName={profile?.full_name ?? ""} branchName={coachBranches.find(b => b.branch_id === branchId)?.name ?? ""} />}</>,
         payslip: <CoachPayslip coachId={coachId} coachName={profile?.full_name ?? ""} />,
         profile: <CoachProfile profile={profile} onRefresh={() => user && loadProfile(user.id)} onLogout={logout} onAvatarChange={url => setProfile(prev => prev ? { ...prev, avatar_url: url } : prev)} />,
       }[active];
@@ -298,11 +296,11 @@ export default function CoachPage() {
           <Icon name="warning" className="w-7 h-7" />
         </div>
         <div>
-          <h2 className="font-display font-bold text-xl text-ink">{t("coach.page.accountNotFoundTitle")}</h2>
+          <h2 className="font-display font-bold text-xl text-ink">{"Data Not Found"}</h2>
           <p className="text-sm text-ink-mute mt-2 leading-relaxed">{initError}</p>
         </div>
         <Btn variant="primary" className="w-full" onClick={async () => { await supabase.auth.signOut(); window.location.href = "/login"; }}>
-          {t("coach.page.backToLoginBtn")}
+          {"Back to Login"}
         </Btn>
       </div>
     </div>

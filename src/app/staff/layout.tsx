@@ -1,6 +1,12 @@
 import type { ReactNode } from "react";
 import MonoFontScope from "@/components/layout/MonoFontScope";
+import { GoogleTranslate } from "@/components/GoogleTranslate";
 
 export default function StaffLayout({ children }: { children: ReactNode }) {
-  return <MonoFontScope>{children}</MonoFontScope>;
+  return (
+    <MonoFontScope>
+      <GoogleTranslate />
+      {children}
+    </MonoFontScope>
+  );
 }

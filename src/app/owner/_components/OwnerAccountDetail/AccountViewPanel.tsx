@@ -17,7 +17,7 @@ type AccountDetailDataHook = ReturnType<typeof useAccountDetailData>;
 
 export default function AccountViewPanel({ hook }: { hook: AccountDetailDataHook }) {
   const {
-    t, ROLE_LABELS, account,
+    ROLE_LABELS, account,
     coachClasses, certifications, memberData, downloadingQr, linkedStaff,
     copyToClipboard, handleDownloadSingleQR, calcAge,
   } = hook;
@@ -49,7 +49,7 @@ export default function AccountViewPanel({ hook }: { hook: AccountDetailDataHook
           {account.is_archived && (
             <div
               className="absolute -top-1 -right-1 w-5 h-5 bg-danger-500 rounded-full flex items-center justify-center shadow"
-              title={t("owner.accountDetail.inactiveTitleAttr")}
+              title={"Inactive Account"}
             >
               <Icon name="x" className="w-3 h-3 text-white" />
             </div>
@@ -61,9 +61,9 @@ export default function AccountViewPanel({ hook }: { hook: AccountDetailDataHook
               <NoTranslate>{displayName}</NoTranslate>
             </h3>
             {account.is_archived ? (
-              <Status kind="archived">{t("owner.accountDetail.inactiveBadge")}</Status>
+              <Status kind="archived">{"Inactive"}</Status>
             ) : (
-              <Status kind="active">{t("owner.accountDetail.activeBadge")}</Status>
+              <Status kind="active">{"Active"}</Status>
             )}
           </div>
           <div className="flex items-center gap-2 mt-1 flex-wrap">
@@ -85,7 +85,7 @@ export default function AccountViewPanel({ hook }: { hook: AccountDetailDataHook
             )}
           </div>
           <div className="text-xs text-ink-mute mt-1.5 flex items-center gap-1.5 flex-wrap">
-            <span>{t("owner.accountDetail.registeredOn", { date: fmtDate(account.created_at) })}</span>
+            <span>{`Registered ${fmtDate(account.created_at)}`}</span>
             {account.branch?.name && (
               <>
                 <span>·</span>
@@ -102,13 +102,13 @@ export default function AccountViewPanel({ hook }: { hook: AccountDetailDataHook
       <div className="flex items-center gap-3">
         <div
           className="shrink-0"
-          title={t("owner.accountDetail.qrUsageHint")}
+          title={"Use this code to scan attendance, class check-in, and official profile verification."}
         >
           <QRBox value={activeQR} size={56} hideCaption />
         </div>
         <div className="flex-1 min-w-0">
           <div className="text-[10px] font-bold uppercase tracking-widest text-ink-faint">
-            {t("owner.accountDetail.idLabel")}
+            {"ID"}
           </div>
           <div
             className="font-mono text-sm font-semibold text-ink truncate"
@@ -122,8 +122,8 @@ export default function AccountViewPanel({ hook }: { hook: AccountDetailDataHook
             variant="ghost"
             size="sm"
             icon="copy"
-            onClick={() => copyToClipboard(activeQR, t("owner.accountDetail.qrCodeCopyLabel"))}
-            title={t("owner.accountDetail.copyCodeBtn")}
+            onClick={() => copyToClipboard(activeQR, "QR Code")}
+            title={"Copy Code"}
           />
           <Btn
             variant="ghost"
@@ -131,7 +131,7 @@ export default function AccountViewPanel({ hook }: { hook: AccountDetailDataHook
             icon="download"
             onClick={handleDownloadSingleQR}
             disabled={downloadingQr}
-            title={t("owner.accountDetail.downloadIdCardTitleAttr")}
+            title={"Download ID card (PNG)"}
           />
         </div>
       </div>
@@ -139,34 +139,34 @@ export default function AccountViewPanel({ hook }: { hook: AccountDetailDataHook
       {/* Member Specific Stats & Classes */}
       {account.role === "member" && memberData && (
         <div>
-          <SectionLabel sub={t("owner.accountDetail.membershipTypeLabel", { type: memberData.type })}>
-            {t("owner.accountDetail.membershipDetailsTitle")}
+          <SectionLabel sub={`Type: ${memberData.type}`}>
+            {"Student Membership Details"}
           </SectionLabel>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
             <div className="bg-paper-tint rounded-xl p-2.5 border border-line/60 text-center">
-              <div className="text-[10px] text-ink-faint uppercase font-bold">{t("owner.accountDetail.fieldRemainingSessions")}</div>
+              <div className="text-[10px] text-ink-faint uppercase font-bold">{"Remaining Sessions"}</div>
               <div className="text-xl font-bold font-mono text-ocean-700">
                 {memberData.remaining_sessions ?? "—"}
               </div>
             </div>
             <div className="bg-paper-tint rounded-xl p-2.5 border border-line/60 text-center">
-              <div className="text-[10px] text-ink-faint uppercase font-bold">{t("owner.accountDetail.fieldTotalSessions")}</div>
+              <div className="text-[10px] text-ink-faint uppercase font-bold">{"Total Sessions"}</div>
               <div className="text-xl font-bold font-mono text-ink">
                 {memberData.total_sessions ?? "—"}
               </div>
             </div>
             <div className="bg-paper-tint rounded-xl p-2.5 border border-line/60 text-center col-span-2 sm:col-span-2">
-              <div className="text-[10px] text-ink-faint uppercase font-bold">{t("owner.accountDetail.schoolAffiliateLabel")}</div>
+              <div className="text-[10px] text-ink-faint uppercase font-bold">{"School Affiliate"}</div>
               <div className="text-sm font-semibold text-ink truncate mt-0.5">
                 {memberData.school?.name ? (
                   <NoTranslate>{memberData.school.name}</NoTranslate>
                 ) : (
-                  t("owner.accountDetail.nonAffiliatedFallback")
+                  "Non-Affiliated"
                 )}
               </div>
               {memberData.school_grade && (
                 <div className="text-xs text-ink-mute mt-0.5">
-                  {t("owner.accounts.fieldSchoolGrade")}: <NoTranslate>{memberData.school_grade}</NoTranslate>
+                  {"School Grade"}: <NoTranslate>{memberData.school_grade}</NoTranslate>
                 </div>
               )}
             </div>
@@ -175,7 +175,7 @@ export default function AccountViewPanel({ hook }: { hook: AccountDetailDataHook
           {/* Enrolled classes */}
           {memberData.member_classes && memberData.member_classes.length > 0 && (
             <div className="pt-2 mt-2.5 border-t border-line/60">
-              <div className="text-[11px] font-bold text-ink-mute mb-1.5">{t("owner.accountDetail.enrolledClasses")}</div>
+              <div className="text-[11px] font-bold text-ink-mute mb-1.5">{"Enrolled Classes:"}</div>
               <div className="flex flex-wrap gap-1.5">
                 {memberData.member_classes.map((mc, idx) => (
                   <span
@@ -199,10 +199,10 @@ export default function AccountViewPanel({ hook }: { hook: AccountDetailDataHook
       {/* Coach Specific Classes & Certifications */}
       {account.role === "coach" && (
         <div>
-          <SectionLabel>{t("owner.accountDetail.coachClassesAndCerts")}</SectionLabel>
+          <SectionLabel>{"Coach Classes & Certifications"}</SectionLabel>
           {coachClasses.length > 0 ? (
             <div>
-              <div className="text-[11px] font-bold text-ink-mute mb-1.5">{t("owner.accountDetail.classesTaught")}</div>
+              <div className="text-[11px] font-bold text-ink-mute mb-1.5">{"Classes Taught:"}</div>
               <div className="flex flex-wrap gap-1.5">
                 {coachClasses.map((c) => (
                   <span
@@ -243,44 +243,44 @@ export default function AccountViewPanel({ hook }: { hook: AccountDetailDataHook
 
       {/* Contact & personal info */}
       <div>
-      <SectionLabel>{t("owner.accountDetail.contactPersonalSection")}</SectionLabel>
+      <SectionLabel>{"Contact & Personal Info"}</SectionLabel>
       <div className="grid sm:grid-cols-2 gap-3">
         <InfoRow
           icon="mail"
-          label={t("owner.accountDetail.emailLabel")}
+          label={"Email"}
           value={<NoTranslate>{account.email ?? "—"}</NoTranslate>}
           title={account.email ?? undefined}
           onCopy={
             account.email
-              ? () => copyToClipboard(account.email!, t("owner.accountDetail.emailLabel"))
+              ? () => copyToClipboard(account.email!, "Email")
               : undefined
           }
         />
         <InfoRow
           icon="phone"
-          label={t("owner.accountDetail.phoneLabel")}
+          label={"Phone / WhatsApp"}
           value={<NoTranslate>{account.phone ?? "—"}</NoTranslate>}
           title={account.phone ?? undefined}
           onCopy={
             account.phone
-              ? () => copyToClipboard(account.phone!, t("owner.accountDetail.phoneLabel"))
+              ? () => copyToClipboard(account.phone!, "Phone / WhatsApp")
               : undefined
           }
         />
         <InfoRow
           icon="user"
-          label={t("owner.accountDetail.genderLabel")}
+          label={"Gender"}
           value={
             personalSource.gender === "male"
-              ? t("owner.accountDetail.genderMale")
+              ? "Male"
               : personalSource.gender === "female"
-              ? t("owner.accountDetail.genderFemale")
+              ? "Female"
               : "—"
           }
         />
         <InfoRow
           icon="calendar"
-          label={t("owner.accountDetail.birthDateLabel")}
+          label={"Date of Birth"}
           value={
             personalSource.birth_date
               ? `${fmtDate(personalSource.birth_date)}${age !== null ? ` (${age} yrs)` : ""}`
@@ -289,20 +289,20 @@ export default function AccountViewPanel({ hook }: { hook: AccountDetailDataHook
         />
         <InfoRow
           icon="pin"
-          label={t("owner.accountDetail.branchLabel")}
+          label={"Center"}
           value={<NoTranslate>{account.branch?.name ?? "—"}</NoTranslate>}
           title={account.branch?.name ?? undefined}
         />
         <InfoRow
           icon="home"
-          label={t("owner.accountDetail.addressLabel")}
+          label={"Address"}
           value={<NoTranslate>{personalSource.address ?? "—"}</NoTranslate>}
           title={personalSource.address ?? undefined}
         />
         {account.specialization && (
           <InfoRow
             icon="star"
-            label={t("owner.accountDetail.specializationLabel")}
+            label={"Specialization"}
             value={<NoTranslate>{account.specialization}</NoTranslate>}
             title={account.specialization}
           />
@@ -310,7 +310,7 @@ export default function AccountViewPanel({ hook }: { hook: AccountDetailDataHook
         {account.bio && (
           <InfoRow
             icon="clipboard"
-            label={t("owner.accountDetail.bioLabel")}
+            label={"Bio"}
             value={<NoTranslate>{account.bio}</NoTranslate>}
             title={account.bio}
           />
@@ -321,7 +321,7 @@ export default function AccountViewPanel({ hook }: { hook: AccountDetailDataHook
       {account.role === "school" && (
         <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-50 border border-amber-100 text-sm text-amber-800">
           <Icon name="info" className="w-4 h-4 shrink-0 text-amber-500" />
-          <span>{t("owner.accountDetail.schoolSettingsHint")}</span>
+          <span>{"This is a school partner account. Logo, signature configuration, and other school-specific settings are managed from the Schools menu."}</span>
         </div>
       )}
 

@@ -1,13 +1,11 @@
 "use client";
 import Btn from "@/components/ui/Btn";
 import { cn } from "@/lib/utils";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import type { FinancialPreset } from "./_types";
 import { startOfMonthISO, endOfMonthISO } from "./_utils";
 import type { FinancialHook } from "./index";
 
 export default function FinancialFilterBar({ hook }: { hook: FinancialHook }) {
-  const { t } = useLocale();
   const {
     financialPreset, applyFinancialPreset, financialFrom, setFinancialFrom, financialTo, setFinancialTo,
     downloadFinancialExcel, exportingExcel,
@@ -18,10 +16,10 @@ export default function FinancialFilterBar({ hook }: { hook: FinancialHook }) {
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex gap-1.5 flex-wrap items-center">
           {([
-            { id: "this_month", label: t("owner.financial.presetThisMonth") },
-            { id: "last_month", label: t("owner.financial.presetLastMonth") },
-            { id: "custom", label: t("owner.financial.presetCustom") },
-            { id: "multi_month", label: t("owner.financial.presetMultiMonth") },
+            { id: "this_month", label: "This Month" },
+            { id: "last_month", label: "Last Month" },
+            { id: "custom", label: "Custom Range" },
+            { id: "multi_month", label: "Multi-Month" },
           ] as { id: FinancialPreset; label: string }[]).map(p => (
             <button
               key={p.id}
@@ -38,20 +36,20 @@ export default function FinancialFilterBar({ hook }: { hook: FinancialHook }) {
           ))}
         </div>
         <Btn variant="soft" size="sm" icon="download" onClick={downloadFinancialExcel} disabled={exportingExcel}>
-          {exportingExcel ? t("owner.financial.exportingExcel") : t("owner.financial.exportExcelBtn")}
+          {exportingExcel ? "Exporting…" : "Export Excel"}
         </Btn>
       </div>
 
       {financialPreset === "custom" && (
         <div className="flex items-center gap-2 flex-wrap">
           <div>
-            <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-faint mb-1">{t("owner.financial.filterFromLabel")}</label>
+            <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-faint mb-1">{"From"}</label>
             <input type="date" value={financialFrom} onChange={e => setFinancialFrom(e.target.value)}
               className="h-8 text-xs rounded-xl border border-line bg-paper px-3 text-ink focus:outline-none focus:border-ocean-500" />
           </div>
           <span className="text-ink-faint text-sm mt-4">—</span>
           <div>
-            <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-faint mb-1">{t("owner.financial.filterToLabel")}</label>
+            <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-faint mb-1">{"To"}</label>
             <input type="date" value={financialTo} onChange={e => setFinancialTo(e.target.value)}
               className="h-8 text-xs rounded-xl border border-line bg-paper px-3 text-ink focus:outline-none focus:border-ocean-500" />
           </div>
@@ -60,14 +58,14 @@ export default function FinancialFilterBar({ hook }: { hook: FinancialHook }) {
       {financialPreset === "multi_month" && (
         <div className="flex items-center gap-2 flex-wrap">
           <div>
-            <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-faint mb-1">{t("owner.financial.filterFromLabel")}</label>
+            <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-faint mb-1">{"From"}</label>
             <input type="month" value={financialFrom.slice(0, 7)}
               onChange={e => setFinancialFrom(startOfMonthISO(new Date(e.target.value + "-01")))}
               className="h-8 text-xs rounded-xl border border-line bg-paper px-3 font-mono font-semibold text-ink focus:outline-none focus:border-ocean-500" />
           </div>
           <span className="text-ink-faint text-sm mt-4">—</span>
           <div>
-            <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-faint mb-1">{t("owner.financial.filterToLabel")}</label>
+            <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-faint mb-1">{"To"}</label>
             <input type="month" value={financialTo.slice(0, 7)}
               onChange={e => setFinancialTo(endOfMonthISO(new Date(e.target.value + "-01")))}
               className="h-8 text-xs rounded-xl border border-line bg-paper px-3 font-mono font-semibold text-ink focus:outline-none focus:border-ocean-500" />

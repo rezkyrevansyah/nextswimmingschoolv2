@@ -2,18 +2,19 @@
 import Icon from "@/components/ui/Icon";
 import Avatar from "@/components/ui/Avatar";
 import Status from "@/components/ui/Status";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 import { calcAge } from "../../_utils";
 import type { AdminMemberHook } from "./_hook";
 
 export default function MembersTable({ hook }: { hook: AdminMemberHook }) {
   const {
-    t, loading, qrSelectMode, filteredSorted, selectedQR, setSelectedQR, sortBy, toggleSort, sortDir,
+    loading, qrSelectMode, filteredSorted, selectedQR, setSelectedQR, sortBy, toggleSort, sortDir,
     paginated, setDetail, setDetailTab, setAttLoaded, setBillsLoaded, setAttendances, setBills,
     setAttClassFilter, setRegProofUrl, loadRegProof, totalPages, safePage, setPage,
     resetFilters, setSearch, search, activeFilterCount,
   } = hook;
 
-  if (loading) return <div className="p-10 text-center text-ink-mute">{t("admin.members.loadingData2")}</div>;
+  if (loading) return <div className="p-10 text-center text-ink-mute">{"Loading data…"}</div>;
 
   return (
     <>
@@ -34,15 +35,15 @@ export default function MembersTable({ hook }: { hook: AdminMemberHook }) {
                 onClick={() => toggleSort("name")}
               >
                 <span className="inline-flex items-center gap-1">
-                  {t("admin.members.colMember2")}
+                  {"Student"}
                   <span className={`transition-opacity ${sortBy === "name" ? "opacity-100 text-ocean-600" : "opacity-0 group-hover:opacity-40"}`}>
                     {sortBy === "name" ? (sortDir === "asc" ? "↑" : "↓") : "↕"}
                   </span>
                 </span>
               </th>
-              <th className="text-left py-3 font-bold hidden sm:table-cell">{t("admin.members.colType2")}</th>
-              <th className="text-left py-3 font-bold hidden md:table-cell">{t("admin.members.colClass2")}</th>
-              <th className="text-left py-3 font-bold">{t("admin.members.colStatus2")}</th>
+              <th className="text-left py-3 font-bold hidden sm:table-cell">{"Type"}</th>
+              <th className="text-left py-3 font-bold hidden md:table-cell">{"Class"}</th>
+              <th className="text-left py-3 font-bold">{"Status"}</th>
               {!qrSelectMode && <th className="px-5" />}
             </tr>
           </thead>
@@ -74,14 +75,14 @@ export default function MembersTable({ hook }: { hook: AdminMemberHook }) {
                     <div className="flex items-center gap-3">
                       <Avatar name={fullName} src={m.profile?.avatar_url ?? undefined} size={38} />
                       <div className="min-w-0">
-                        <div className="font-semibold text-ink truncate max-w-[120px] sm:max-w-none">{fullName}</div>
-                        {age && <div className="text-xs text-ink-mute">{t("admin.approvement.yearsSuffix", { n: age })}</div>}
+                        <div className="font-semibold text-ink truncate max-w-[120px] sm:max-w-none"><NoTranslate>{fullName}</NoTranslate></div>
+                        {age && <div className="text-xs text-ink-mute">{`${age} y`}</div>}
                       </div>
                     </div>
                   </td>
-                  <td className="hidden sm:table-cell"><Status kind={m.type === "private" ? "substitute" : m.type === "school_affiliate" ? "school_covered" : "active"} dot={false}>{m.type === "reguler" ? t("admin.members.typeRegularShort") : m.type === "private" ? t("admin.members.typePrivateShort") : t("admin.members.typeAffiliateShort")}</Status></td>
-                  <td className="text-ink-soft text-xs hidden md:table-cell max-w-[150px] truncate">{cls}</td>
-                  <td><Status kind={m.status === "suspended" ? "suspended" : "active"}>{m.status === "suspended" ? t("admin.members.statusSuspend2") : t("admin.members.statusActive2")}</Status></td>
+                  <td className="hidden sm:table-cell"><Status kind={m.type === "private" ? "substitute" : m.type === "school_affiliate" ? "school_covered" : "active"} dot={false}>{m.type === "reguler" ? "Regular" : m.type === "private" ? "Private" : "Affiliate"}</Status></td>
+                  <td className="text-ink-soft text-xs hidden md:table-cell max-w-[150px] truncate"><NoTranslate>{cls}</NoTranslate></td>
+                  <td><Status kind={m.status === "suspended" ? "suspended" : "active"}>{m.status === "suspended" ? "Suspend" : "Active"}</Status></td>
                   {!qrSelectMode && <td className="px-5"><button className="text-ink-mute hover:text-ocean-600 p-1.5"><Icon name="eye" className="w-4 h-4" /></button></td>}
                 </tr>
               );
@@ -90,9 +91,9 @@ export default function MembersTable({ hook }: { hook: AdminMemberHook }) {
               <tr>
                 <td colSpan={5} className="py-14 text-center">
                   <Icon name="search" className="w-8 h-8 text-ink-faint mx-auto mb-3" />
-                  <div className="text-sm font-semibold text-ink-mute">{t("admin.members.noMatchingMembers")}</div>
+                  <div className="text-sm font-semibold text-ink-mute">{"No matching students"}</div>
                   {(search || activeFilterCount > 0) && (
-                    <button type="button" onClick={() => { resetFilters(); setSearch(""); }} className="mt-2 text-xs text-ocean-600 hover:underline font-semibold">{t("admin.members.clearFiltersBtn")}</button>
+                    <button type="button" onClick={() => { resetFilters(); setSearch(""); }} className="mt-2 text-xs text-ocean-600 hover:underline font-semibold">{"Clear all filters"}</button>
                   )}
                 </td>
               </tr>
@@ -105,11 +106,11 @@ export default function MembersTable({ hook }: { hook: AdminMemberHook }) {
       {totalPages > 1 && (
         <div className="px-5 py-3.5 border-t border-line flex items-center justify-between flex-wrap gap-3">
           <span className="text-xs text-ink-mute tabular-nums">
-            {t("admin.members.memberCountPageLabel", { count: filteredSorted.length, page: safePage + 1, total: totalPages })}
+            {`${filteredSorted.length} student · page ${safePage + 1} of ${totalPages}`}
           </span>
           <div className="flex items-center gap-1">
             <button type="button" disabled={safePage === 0} onClick={() => setPage(0)} className="px-2 py-1.5 rounded-lg border border-line text-ink-mute text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-paper-tint transition">«</button>
-            <button type="button" disabled={safePage === 0} onClick={() => setPage(p => p - 1)} className="px-3 py-1.5 rounded-lg border border-line text-ink-mute text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-paper-tint transition">{t("admin.members.prevBtn")}</button>
+            <button type="button" disabled={safePage === 0} onClick={() => setPage(p => p - 1)} className="px-3 py-1.5 rounded-lg border border-line text-ink-mute text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-paper-tint transition">{"‹ Previous"}</button>
             {Array.from({ length: totalPages }, (_, i) => i)
               .filter(i => i === 0 || i === totalPages - 1 || Math.abs(i - safePage) <= 1)
               .reduce<(number | "…")[]>((acc, i, idx, arr) => {
@@ -122,7 +123,7 @@ export default function MembersTable({ hook }: { hook: AdminMemberHook }) {
                 : <button key={item} type="button" onClick={() => setPage(item as number)} className={`w-8 h-8 rounded-lg text-sm font-semibold transition ${safePage === item ? "bg-ocean-600 text-white" : "border border-line text-ink-mute hover:bg-paper-tint"}`}>{(item as number) + 1}</button>
               )
             }
-            <button type="button" disabled={safePage === totalPages - 1} onClick={() => setPage(p => p + 1)} className="px-3 py-1.5 rounded-lg border border-line text-ink-mute text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-paper-tint transition">{t("admin.members.nextBtn")}</button>
+            <button type="button" disabled={safePage === totalPages - 1} onClick={() => setPage(p => p + 1)} className="px-3 py-1.5 rounded-lg border border-line text-ink-mute text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-paper-tint transition">{"Next ›"}</button>
             <button type="button" disabled={safePage === totalPages - 1} onClick={() => setPage(totalPages - 1)} className="px-2 py-1.5 rounded-lg border border-line text-ink-mute text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-paper-tint transition">»</button>
           </div>
         </div>

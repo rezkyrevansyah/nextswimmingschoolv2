@@ -3,7 +3,6 @@ import { useState } from "react";
 import { useToast } from "@/components/providers/ToastProvider";
 import Btn from "@/components/ui/Btn";
 import Icon from "@/components/ui/Icon";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import { cn } from "@/lib/utils";
 import { buildTabs, revalidate } from "./_utils";
 import type { Tab } from "./_types";
@@ -18,17 +17,16 @@ import FaqTab from "./FaqTab";
 import FooterTab from "./FooterTab";
 
 export default function LandingCMS() {
-  const { t } = useLocale();
   const toast = useToast();
   const [tab, setTab] = useState<Tab>("programs");
   const [republishing, setRepublishing] = useState(false);
-  const tabs = buildTabs(t);
+  const tabs = buildTabs();
 
   const handleRepublish = async () => {
     setRepublishing(true);
     try {
       await revalidate();
-      toast.success(t("owner.landingCms.republished") || "Halaman landing berhasil dipublikasikan ulang!");
+      toast.success("Landing page republished successfully!");
     } catch {
       toast.error("Gagal mempublikasikan ulang halaman landing.");
     } finally {

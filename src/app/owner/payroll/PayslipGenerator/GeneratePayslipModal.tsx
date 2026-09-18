@@ -5,11 +5,9 @@ import Modal from "@/components/ui/Modal";
 import { Field, Input, Select, Textarea } from "@/components/ui/FormFields";
 import { fmtIDR } from "@/lib/utils";
 import { NoTranslate } from "@/components/ui/NoTranslate";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import type { PayslipHook } from "./index";
 
 export default function GeneratePayslipModal({ hook }: { hook: PayslipHook }) {
-  const { t, tNode } = useLocale();
   const {
     showGenModal, setShowGenModal, genMode, setGenMode, modalLockedInvoice, savingSlip,
     handleSavePayslip, netPreview,
@@ -33,15 +31,15 @@ export default function GeneratePayslipModal({ hook }: { hook: PayslipHook }) {
     <Modal
       open={showGenModal}
       onClose={() => setShowGenModal(false)}
-      title={t("owner.payslip.generateModalTitle")}
+      title={"Generate Payslip"}
       size="lg"
       footer={
         <div className="flex gap-2 justify-end w-full">
           <Btn variant="ghost" onClick={() => setShowGenModal(false)}>
-            {t("common.actions.cancel")}
+            {"Cancel"}
           </Btn>
           <Btn variant="primary" onClick={handleSavePayslip} disabled={savingSlip || netPreview < 0}>
-            {savingSlip ? t("common.actions.saving") : t("owner.payslip.saveAsDraft")}
+            {savingSlip ? "Saving…" : "Save as Draft"}
           </Btn>
         </div>
       }
@@ -57,7 +55,7 @@ export default function GeneratePayslipModal({ hook }: { hook: PayslipHook }) {
                 genMode === "manual_coach" ? "bg-ocean-700 text-white shadow-xs" : "bg-paper-tint text-ink-soft hover:bg-paper-deep"
               }`}
             >
-              {t("owner.payslip.modeManualCoach")}
+              {"Manual Coach"}
             </button>
             <button
               type="button"
@@ -66,7 +64,7 @@ export default function GeneratePayslipModal({ hook }: { hook: PayslipHook }) {
                 genMode === "manual_staff" ? "bg-purple-700 text-white shadow-xs" : "bg-paper-tint text-ink-soft hover:bg-paper-deep"
               }`}
             >
-              {t("owner.payslip.modeManualStaff")}
+              {"Manual Staff"}
             </button>
           </div>
         )}
@@ -75,19 +73,19 @@ export default function GeneratePayslipModal({ hook }: { hook: PayslipHook }) {
         {genMode === "from_invoice" && modalLockedInvoice && (
           <div className="space-y-4">
             <div className="bg-paper-tint border border-line rounded-xl px-4 py-3 text-sm">
-              <div className="text-xs text-ink-mute font-bold uppercase tracking-widest mb-1">{t("owner.payslip.lockedInvoiceLabel")}</div>
+              <div className="text-xs text-ink-mute font-bold uppercase tracking-widest mb-1">{"Generating for invoice"}</div>
               <div className="font-mono font-semibold text-ink"><NoTranslate>{modalLockedInvoice.invoice_number}</NoTranslate></div>
               <div className="text-xs text-ink-mute"><NoTranslate>{modalLockedInvoice.coach?.full_name}</NoTranslate> · <NoTranslate>{modalLockedInvoice.period_label}</NoTranslate> · {fmtIDR(modalLockedInvoice.total_amount)}</div>
             </div>
 
-            <Field label={t("owner.payslip.fieldPeriod")}>
+            <Field label={"Period"}>
               <Input
                 value={genPeriod}
                 onChange={(e) => setGenPeriod(e.target.value)}
-                placeholder={t("owner.payslip.fieldPeriodPlaceholder")}
+                placeholder={"E.g.: June 2026"}
               />
             </Field>
-            <Field label={t("owner.payslip.fieldGrossSalary")}>
+            <Field label={"Gross Salary (Rp)"}>
               <Input
                 type="number"
                 inputMode="numeric"
@@ -103,9 +101,9 @@ export default function GeneratePayslipModal({ hook }: { hook: PayslipHook }) {
         {genMode === "manual_coach" && (
           <div className="space-y-4">
             <div className="grid sm:grid-cols-2 gap-3">
-              <Field label={t("owner.payslip.fieldCoach")} required>
+              <Field label={"Select Coach"} required>
                 <Select value={manualCoachId} onChange={(e) => handleManualCoachChange(e.target.value)}>
-                  <option value="">{t("owner.payslip.selectCoachPlaceholder")}</option>
+                  <option value="">{"— Select coach —"}</option>
                   {coachList.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.full_name}
@@ -113,9 +111,9 @@ export default function GeneratePayslipModal({ hook }: { hook: PayslipHook }) {
                   ))}
                 </Select>
               </Field>
-              <Field label={t("owner.payslip.fieldBranch")} required>
+              <Field label={"Center / Branch"} required>
                 <Select value={manualCoachBranchId} onChange={(e) => setManualCoachBranchId(e.target.value)}>
-                  <option value="">{t("owner.payslip.selectBranchPlaceholder")}</option>
+                  <option value="">{"— Select center —"}</option>
                   {branches.map((b) => (
                     <option key={b.id} value={b.id}>
                       {b.name}
@@ -126,14 +124,14 @@ export default function GeneratePayslipModal({ hook }: { hook: PayslipHook }) {
             </div>
 
             <div className="grid sm:grid-cols-2 gap-3">
-              <Field label={t("owner.payslip.fieldPeriod")} required>
+              <Field label={"Period"} required>
                 <Input
                   value={genPeriod}
                   onChange={(e) => setGenPeriod(e.target.value)}
-                  placeholder={t("owner.payslip.fieldPeriodPlaceholder")}
+                  placeholder={"E.g.: June 2026"}
                 />
               </Field>
-              <Field label={t("owner.payslip.fieldGrossSalary")} required>
+              <Field label={"Gross Salary (Rp)"} required>
                 <Input
                   type="number"
                   inputMode="numeric"
@@ -146,11 +144,11 @@ export default function GeneratePayslipModal({ hook }: { hook: PayslipHook }) {
               </Field>
             </div>
 
-            <Field label={t("owner.payslip.fieldDescription")} hint="Salary purpose or description">
+            <Field label={"Salary Description / Purpose"} hint="Salary purpose or description">
               <Input
                 value={manualDescription}
                 onChange={(e) => setManualDescription(e.target.value)}
-                placeholder={t("owner.payslip.fieldDescriptionPlaceholderCoach")}
+                placeholder={"e.g. Extra Session Teaching Fee, Private Bonus, etc."}
               />
             </Field>
           </div>
@@ -160,9 +158,9 @@ export default function GeneratePayslipModal({ hook }: { hook: PayslipHook }) {
         {genMode === "manual_staff" && (
           <div className="space-y-4">
             <div className="grid sm:grid-cols-2 gap-3">
-              <Field label={t("owner.payslip.fieldStaff")} required>
+              <Field label={"Select Staff"} required>
                 <Select value={manualStaffId} onChange={(e) => handleManualStaffChange(e.target.value)}>
-                  <option value="">{t("owner.payslip.selectStaffPlaceholder")}</option>
+                  <option value="">{"— Select staff —"}</option>
                   {staffList.map((s) => (
                     <option key={s.id} value={s.id}>
                       {s.full_name}
@@ -170,9 +168,9 @@ export default function GeneratePayslipModal({ hook }: { hook: PayslipHook }) {
                   ))}
                 </Select>
               </Field>
-              <Field label={t("owner.payslip.fieldBranch")} required>
+              <Field label={"Center / Branch"} required>
                 <Select value={manualStaffBranchId} onChange={(e) => setManualStaffBranchId(e.target.value)}>
-                  <option value="">{t("owner.payslip.selectBranchPlaceholder")}</option>
+                  <option value="">{"— Select center —"}</option>
                   {branches.map((b) => (
                     <option key={b.id} value={b.id}>
                       {b.name}
@@ -183,18 +181,18 @@ export default function GeneratePayslipModal({ hook }: { hook: PayslipHook }) {
             </div>
 
             <div className="grid sm:grid-cols-2 gap-3">
-              <Field label={t("owner.payslip.fieldPeriod")} required>
+              <Field label={"Period"} required>
                 <Input
                   value={genPeriod}
                   onChange={(e) => setGenPeriod(e.target.value)}
-                  placeholder={t("owner.payslip.periodFreeformPlaceholder")}
+                  placeholder={"E.g.: September 2026 or 2026-09"}
                 />
               </Field>
-              <Field label={t("owner.payslip.fieldDescription")} hint="Salary purpose or description">
+              <Field label={"Salary Description / Purpose"} hint="Salary purpose or description">
                 <Input
                   value={manualDescription}
                   onChange={(e) => setManualDescription(e.target.value)}
-                  placeholder={t("owner.payslip.fieldDescriptionPlaceholderStaff")}
+                  placeholder={"e.g. Monthly Operations Staff Salary, Overtime Bonus, etc."}
                 />
               </Field>
             </div>
@@ -204,7 +202,7 @@ export default function GeneratePayslipModal({ hook }: { hook: PayslipHook }) {
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold uppercase tracking-wider text-purple-900 flex items-center gap-1.5">
                   <Icon name="checkCircle" className="w-3.5 h-3.5 text-purple-700" />
-                  {t("owner.payslip.attendanceCalculator")}
+                  {"Calculate from Attendance"}
                 </span>
                 <button
                   type="button"
@@ -212,13 +210,13 @@ export default function GeneratePayslipModal({ hook }: { hook: PayslipHook }) {
                   disabled={loadingStaffAttendance || !manualStaffId}
                   className="text-xs font-semibold text-purple-700 hover:underline"
                 >
-                  {loadingStaffAttendance ? t("owner.payslip.calculating") : t("owner.payslip.attendanceCheckBtn")}
+                  {loadingStaffAttendance ? "Calculating…" : "Calculate from Attendance"}
                 </button>
               </div>
               {staffPresentDays !== null && (
                 <div className="flex items-center gap-2 flex-wrap text-sm">
                   <span className="font-semibold text-purple-900">
-                    {t("owner.payslip.daysPresent", { count: staffPresentDays })}
+                    {`${staffPresentDays} days present`}
                   </span>
                   <span>×</span>
                   <div className="w-36">
@@ -227,19 +225,19 @@ export default function GeneratePayslipModal({ hook }: { hook: PayslipHook }) {
                       inputMode="numeric"
                       value={staffDailyRate}
                       onChange={(e) => setStaffDailyRate(e.target.value.replace(/\D/g, ""))}
-                      placeholder={t("owner.payslip.dailyRatePlaceholder")}
+                      placeholder={"Daily rate (Rp)"}
                       className="text-xs font-mono"
                     />
                   </div>
                   <Btn variant="soft" size="sm" onClick={applyStaffAttendanceSalary} disabled={!staffDailyRate}>
-                    {t("owner.payslip.applyAttendanceRate")}
+                    {"Apply"}
                   </Btn>
                 </div>
               )}
             </div>
 
             <div className="grid sm:grid-cols-3 gap-3">
-              <Field label={t("owner.payslip.fieldBaseSalary")} required>
+              <Field label={"Base Salary (Rp)"} required>
                 <Input
                   type="number"
                   inputMode="numeric"
@@ -250,7 +248,7 @@ export default function GeneratePayslipModal({ hook }: { hook: PayslipHook }) {
                   className="font-mono text-sm"
                 />
               </Field>
-              <Field label={t("owner.payslip.fieldAllowances")}>
+              <Field label={"Allowances (Rp, optional)"}>
                 <Input
                   type="number"
                   inputMode="numeric"
@@ -261,7 +259,7 @@ export default function GeneratePayslipModal({ hook }: { hook: PayslipHook }) {
                   className="font-mono text-sm"
                 />
               </Field>
-              <Field label={t("owner.payslip.fieldReimbursements")}>
+              <Field label={"Reimbursements (Rp, optional)"}>
                 <Input
                   type="number"
                   inputMode="numeric"
@@ -274,7 +272,7 @@ export default function GeneratePayslipModal({ hook }: { hook: PayslipHook }) {
               </Field>
             </div>
 
-            <Field label={t("owner.payslip.fieldOtherDeduction")}>
+            <Field label={"Other Deduction (Rp, optional)"}>
               <Input
                 type="number"
                 inputMode="numeric"
@@ -294,7 +292,7 @@ export default function GeneratePayslipModal({ hook }: { hook: PayslipHook }) {
             {/* Tax Box */}
             <div className="border border-line rounded-xl p-3.5 space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-semibold text-ink">{t("owner.payslip.incomeTaxLabel")}</span>
+                <span className="text-sm font-semibold text-ink">{"Tax"}</span>
                 {(genMode === "from_invoice" ? genTaxOverride : genMode === "manual_coach" ? manualCoachTaxOverride : manualStaffTaxOverride) == null ? (
                   <button
                     type="button"
@@ -305,7 +303,7 @@ export default function GeneratePayslipModal({ hook }: { hook: PayslipHook }) {
                     }}
                     className="text-xs text-ocean-600 hover:underline flex items-center gap-1"
                   >
-                    <Icon name="edit" className="w-3 h-3" /> {t("owner.payslip.editManually")}
+                    <Icon name="edit" className="w-3 h-3" /> {"Edit manually"}
                   </button>
                 ) : (
                   <button
@@ -317,7 +315,7 @@ export default function GeneratePayslipModal({ hook }: { hook: PayslipHook }) {
                     }}
                     className="text-xs text-ink-mute hover:underline"
                   >
-                    {t("owner.payslip.useAutomatic")}
+                    {"Use automatic"}
                   </button>
                 )}
               </div>
@@ -342,14 +340,14 @@ export default function GeneratePayslipModal({ hook }: { hook: PayslipHook }) {
 
             {/* Active Loans Installment Box (Coach & Staff) */}
             {loadingLoans ? (
-              <div className="text-sm text-ink-mute">{t("owner.payslip.checkingActiveLoans")}</div>
+              <div className="text-sm text-ink-mute">{"Checking active loans…"}</div>
             ) : (
               genLoanCandidates.length > 0 && (
                 <div className="border border-line rounded-xl p-3.5 space-y-3 bg-paper-tint/30">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-semibold text-ink">{t("owner.payslip.loanInstallmentsLabel")}</span>
+                    <span className="text-sm font-semibold text-ink">{"Loan Installments"}</span>
                     <span className="text-[10px] font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
-                      {t("owner.payslip.activeLoanDeductions")}
+                      {"Active Deduction"}
                     </span>
                   </div>
                   {genLoanCandidates.map((c) => (
@@ -364,14 +362,10 @@ export default function GeneratePayslipModal({ hook }: { hook: PayslipHook }) {
                       />
                       <div className="flex-1 min-w-0">
                         <div className="text-xs text-ink-soft font-medium">
-                          {tNode("owner.payslip.installmentOf", {
-                            number: c.next.installmentNumber,
-                            total: c.loan.tenor_months,
-                            reason: c.loan.reason ? ` · ${c.loan.reason}` : "",
-                          })}
+                          {(<>{"Installment #"}<NoTranslate>{c.next.installmentNumber}</NoTranslate>{" of "}<NoTranslate>{c.loan.tenor_months}</NoTranslate><NoTranslate>{c.loan.reason ? ` · ${c.loan.reason}` : ""}</NoTranslate></>)}
                         </div>
                         <div className="text-[11px] text-ink-faint font-mono">
-                          {t("owner.payslip.remainingLabel")}: {fmtIDR(c.next.remainingBefore)}
+                          {"Remaining"}: {fmtIDR(c.next.remainingBefore)}
                         </div>
                       </div>
                       <div className="w-28">
@@ -392,14 +386,14 @@ export default function GeneratePayslipModal({ hook }: { hook: PayslipHook }) {
                       </div>
                     </div>
                   ))}
-                  <p className="text-[11px] text-ink-faint">{t("owner.payslip.skipInstallmentHint")}</p>
+                  <p className="text-[11px] text-ink-faint">{"Uncheck to skip this month's installment (e.g. coach is on leave)."}</p>
                 </div>
               )
             )}
 
             {/* Other Deductions (Coach only, staff has it above) */}
             {genMode !== "manual_staff" && (
-              <Field label={t("owner.payslip.fieldOtherDeduction")}>
+              <Field label={"Other Deduction (Rp, optional)"}>
                 <Input
                   type="number"
                   inputMode="numeric"
@@ -421,29 +415,29 @@ export default function GeneratePayslipModal({ hook }: { hook: PayslipHook }) {
         {currentGross > 0 && (
           <div className="bg-paper-tint border border-line rounded-xl px-4 py-3 space-y-1.5 text-sm">
             <div className="flex justify-between">
-              <span>{t("owner.payslip.grossSalaryLabel")}</span>
+              <span>{"Gross Salary"}</span>
               <span className="font-mono font-semibold">{fmtIDR(currentGross)}</span>
             </div>
             {effectiveTaxForMode > 0 && (
               <div className="flex justify-between text-danger-700">
-                <span>{t("owner.payslip.taxLabel")}</span>
+                <span>{"Tax"}</span>
                 <span className="font-mono">- {fmtIDR(effectiveTaxForMode)}</span>
               </div>
             )}
             {includedLoanTotal > 0 && (
               <div className="flex justify-between text-danger-700">
-                <span>{t("owner.payslip.loanInstallmentLabel")}</span>
+                <span>{"Loan Installment"}</span>
                 <span className="font-mono">- {fmtIDR(includedLoanTotal)}</span>
               </div>
             )}
             {otherDeductionAmount > 0 && (
               <div className="flex justify-between text-danger-700">
-                <span>{t("owner.payslip.otherDeductionLabel")}</span>
+                <span>{"Other Deduction"}</span>
                 <span className="font-mono">- {fmtIDR(otherDeductionAmount)}</span>
               </div>
             )}
             <div className="flex justify-between font-bold text-base pt-1.5 border-t border-line">
-              <span className={netPreview < 0 ? "text-danger-700" : "text-ok-900"}>{t("owner.payslip.netSalaryLabel")}</span>
+              <span className={netPreview < 0 ? "text-danger-700" : "text-ok-900"}>{"Net Salary"}</span>
               <span className={`font-mono ${netPreview < 0 ? "text-danger-700" : "text-ok-700"}`}>{fmtIDR(netPreview)}</span>
             </div>
           </div>
@@ -452,16 +446,16 @@ export default function GeneratePayslipModal({ hook }: { hook: PayslipHook }) {
         {netPreview < 0 && (
           <div className="flex items-center gap-2 text-xs text-danger-700 bg-danger-50 border border-danger-200 rounded-lg px-3 py-2">
             <Icon name="warning" className="w-4 h-4 shrink-0" />
-            {t("owner.payslip.excessDeductionsWarning")}
+            {"Deductions exceed the gross salary — net salary would be negative."}
           </div>
         )}
 
-        <Field label={t("owner.payslip.fieldNotes")}>
+        <Field label={"Notes (optional)"}>
           <Textarea
             value={genNotes}
             onChange={(e) => setGenNotes(e.target.value)}
             rows={2}
-            placeholder={t("owner.payslip.fieldNotesPlaceholder")}
+            placeholder={"Notes for the coach…"}
           />
         </Field>
       </div>

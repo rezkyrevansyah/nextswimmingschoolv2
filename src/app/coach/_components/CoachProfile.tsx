@@ -9,11 +9,11 @@ import Avatar from "@/components/ui/Avatar";
 import QRBox from "@/components/ui/QRBox";
 import Modal from "@/components/ui/Modal";
 import PhotoLightbox from "@/components/ui/PhotoLightbox";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 import MonthYearPicker from "@/components/ui/MonthYearPicker";
 import DatePicker from "@/components/ui/DatePicker";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import { createClient } from "@/utils/supabase/client";
 import { useUpload } from "@/hooks/useUpload";
 import { useSignedUrl } from "@/hooks/useSignedUrl";
@@ -35,7 +35,6 @@ export default function CoachProfile({ profile, onRefresh, onLogout, onAvatarCha
   const supabase = createClient();
   const toast = useToast();
   const confirm = useConfirm();
-  const { t } = useLocale();
   const { upload, uploading } = useUpload();
   // Password
   const [newPwd, setNewPwd] = useState("");
@@ -84,13 +83,13 @@ export default function CoachProfile({ profile, onRefresh, onLogout, onAvatarCha
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const changePassword = async () => {
-    if (!newPwd || newPwd.length < 6) return toast.error(t("coach.profile.pwdMinLength"));
-    if (newPwd !== confirmPwd) return toast.error(t("coach.profile.pwdMismatch"));
+    if (!newPwd || newPwd.length < 6) return toast.error("Password must be at least 6 characters");
+    if (newPwd !== confirmPwd) return toast.error("Passwords don't match");
     setSavingPwd(true);
     const { error } = await supabase.auth.updateUser({ password: newPwd });
     setSavingPwd(false);
-    if (error) return toast.error(t("coach.profile.pwdChangeFailed"), error.message);
-    toast.success(t("coach.profile.pwdChanged"));
+    if (error) return toast.error("Failed to change password", error.message);
+    toast.success("Password changed");
     setNewPwd(""); setConfirmPwd("");
   };
 
@@ -105,16 +104,16 @@ export default function CoachProfile({ profile, onRefresh, onLogout, onAvatarCha
       onAvatarChange?.(url);
       setAvatarPreview(null);
       setPendingAvatarFile(null);
-      toast.success(t("coach.profile.avatarUpdated"));
+      toast.success("Profile photo updated");
     } catch {
-      toast.error(t("coach.profile.photoUploadFailed"));
+      toast.error("Failed to upload photo, try again");
       setAvatarPreview(null);
       setPendingAvatarFile(null);
     }
   };
 
   const saveCert = async () => {
-    if (!profile?.id) return toast.error(t("coach.profile.profileNotLoaded"));
+    if (!profile?.id) return toast.error("Profile not loaded yet, try refreshing");
     setSavingCert(true);
     const title = certForm.title.trim();
 
@@ -128,7 +127,7 @@ export default function CoachProfile({ profile, onRefresh, onLogout, onAvatarCha
       status: "pending",
     }).select("id").single();
 
-    if (error) { setSavingCert(false); return toast.error(t("coach.profile.addCertFailed"), error.message); }
+    if (error) { setSavingCert(false); return toast.error("Failed to add certification", error.message); }
 
     // 2. Upload photo if provided — route handler already updates photo_url in DB
     if (cert && certFile) {
@@ -136,7 +135,7 @@ export default function CoachProfile({ profile, onRefresh, onLogout, onAvatarCha
     }
 
     setSavingCert(false);
-    toast.success(t("coach.profile.certAddedTitle"), t("coach.profile.certAddedBody"));
+    toast.success("Certification added", "Awaiting admin verification");
     setOpenAddCert(false);
     setCertForm({ title: "", issuer: "", issued_at: "", expires_at: "", no_expiry: false });
     setCertFile(null);
@@ -151,11 +150,11 @@ export default function CoachProfile({ profile, onRefresh, onLogout, onAvatarCha
   };
 
   const deleteCert = async (s: { id: string; title: string }) => {
-    const ok = await confirm({ title: t("coach.profile.deleteCertConfirmTitle"), body: t("coach.profile.deleteCertConfirmBody", { title: s.title }), confirmLabel: t("coach.profile.deleteCertConfirmLabel"), danger: true });
+    const ok = await confirm({ title: "Delete certification?", body: `Delete "${s.title}"? This action cannot be undone.`, confirmLabel: "Delete", danger: true });
     if (!ok) return;
     const { error } = await supabase.from("certifications").delete().eq("id", s.id);
-    if (error) return toast.error(t("coach.profile.deleteCertFailed"), error.message);
-    toast.success(t("coach.profile.certDeleted"));
+    if (error) return toast.error("Failed to delete", error.message);
+    toast.success("Certification deleted");
     onRefresh();
   };
 
@@ -163,13 +162,13 @@ export default function CoachProfile({ profile, onRefresh, onLogout, onAvatarCha
     const { error } = await supabase.from("certifications")
       .update({ status: "pending", reject_reason: null })
       .eq("id", id);
-    if (error) return toast.error(t("coach.profile.resubmitCertFailed"), error.message);
-    toast.success(t("coach.profile.certResubmittedTitle"), t("coach.profile.certResubmittedBody"));
+    if (error) return toast.error("Failed to resubmit", error.message);
+    toast.success("Certification resubmitted", "Awaiting admin verification");
     onRefresh();
   };
 
   const saveCertEdit = async () => {
-    if (!editCertTarget) return toast.error(t("coach.profile.certNotFound"));
+    if (!editCertTarget) return toast.error("Certification not found, try refreshing");
     setSavingCert(true);
     const title = certForm.title.trim();
     // Any edit on an approved or rejected cert resets it to pending for re-approval
@@ -185,8 +184,8 @@ export default function CoachProfile({ profile, onRefresh, onLogout, onAvatarCha
       try { await upload.cert(certFile, editCertTarget.id); } catch { /* non-fatal */ }
     }
     setSavingCert(false);
-    if (error) return toast.error(t("coach.profile.updateCertFailed"), error.message);
-    toast.success(t("coach.profile.certUpdated"));
+    if (error) return toast.error("Failed to update certification", error.message);
+    toast.success("Certification updated");
     setOpenAddCert(false);
     setEditCertTarget(null);
     onRefresh();
@@ -216,8 +215,8 @@ export default function CoachProfile({ profile, onRefresh, onLogout, onAvatarCha
       is_profile_complete: nowComplete,
     }).eq("id", profile?.id ?? "");
     setSavingProfile(false);
-    if (error) return toast.error(t("coach.profile.saveProfileFailed"), error.message);
-    toast.success(t("coach.profile.profileUpdated"));
+    if (error) return toast.error("Failed to save profile", error.message);
+    toast.success("Profile updated");
     onRefresh();
   };
 
@@ -227,7 +226,7 @@ export default function CoachProfile({ profile, onRefresh, onLogout, onAvatarCha
   };
 
   const saveBank = async () => {
-    if (!bankForm.bank_name || !bankForm.bank_account || !bankForm.bank_holder) return toast.error(t("coach.profile.bankFieldsRequired"));
+    if (!bankForm.bank_name || !bankForm.bank_account || !bankForm.bank_holder) return toast.error("All bank account fields are required");
     setSavingBank(true);
     const nowComplete = !!(
       bankForm.bank_name && bankForm.bank_account && bankForm.bank_holder &&
@@ -238,8 +237,8 @@ export default function CoachProfile({ profile, onRefresh, onLogout, onAvatarCha
       is_profile_complete: nowComplete,
     }).eq("id", profile?.id ?? "");
     setSavingBank(false);
-    if (error) return toast.error(t("coach.profile.saveBankFailed"), error.message);
-    toast.success(t("coach.profile.bankUpdated"));
+    if (error) return toast.error("Failed to save bank account", error.message);
+    toast.success("Bank account information updated");
     setOpenEditBank(false);
     onRefresh();
   };
@@ -256,9 +255,9 @@ export default function CoachProfile({ profile, onRefresh, onLogout, onAvatarCha
             </div>
           </button>
           <div className="flex-1 min-w-0">
-            <div className="font-display font-bold text-xl text-ink leading-tight">{profile?.full_name ?? "—"}</div>
-            {profile?.nick_name && <div className="text-sm text-ink-mute">({profile.nick_name})</div>}
-            <div className="text-sm text-ocean-700 font-semibold mt-0.5">{profile?.specialization ?? t("coach.home.defaultCoachName")}</div>
+            <div className="font-display font-bold text-xl text-ink leading-tight"><NoTranslate>{profile?.full_name ?? "—"}</NoTranslate></div>
+            {profile?.nick_name && <div className="text-sm text-ink-mute">(<NoTranslate>{profile.nick_name}</NoTranslate>)</div>}
+            <div className="text-sm text-ocean-700 font-semibold mt-0.5">{profile?.specialization ?? "Coach"}</div>
           </div>
           {profile?.qr_code && (
             <div className="shrink-0">
@@ -267,84 +266,84 @@ export default function CoachProfile({ profile, onRefresh, onLogout, onAvatarCha
           )}
         </div>
         {uploading && (
-          <div className="mt-2 text-xs text-ink-mute font-semibold animate-pulse">{t("coach.profile.uploadingPhoto")}</div>
+          <div className="mt-2 text-xs text-ink-mute font-semibold animate-pulse">{"Uploading photo…"}</div>
         )}
       </Card>
 
       {/* ── Inline Profile form ── */}
       <Card>
-        <SectionTitle>{t("coach.profile.myProfileTitle")}</SectionTitle>
+        <SectionTitle>{"My Profile"}</SectionTitle>
         <div className="mt-4 space-y-4">
-          <div className="text-xs font-bold text-ink-mute uppercase tracking-widest">{t("coach.profile.personalDataLabel")}</div>
+          <div className="text-xs font-bold text-ink-mute uppercase tracking-widest">{"Personal Data"}</div>
           <div className="grid sm:grid-cols-2 gap-3">
-            <Field label={t("coach.profile.fieldNickname")}><Input value={profileForm.nick_name} onChange={e => setProfileForm(f => ({ ...f, nick_name: e.target.value }))} placeholder={t("coach.profile.nicknamePlaceholder")} /></Field>
-            <Field label={t("coach.profile.fieldGender")}>
+            <Field label={"Nickname"}><Input value={profileForm.nick_name} onChange={e => setProfileForm(f => ({ ...f, nick_name: e.target.value }))} placeholder={"E.g. Coach Reza"} /></Field>
+            <Field label={"Gender"}>
               <Select value={profileForm.gender} onChange={e => setProfileForm(f => ({ ...f, gender: e.target.value }))}>
-                <option value="">{t("coach.profile.selectEllipsis")}</option>
-                <option value="male">{t("coach.kelas.memberGenderMale")}</option>
-                <option value="female">{t("coach.kelas.memberGenderFemale")}</option>
+                <option value="">{"Select…"}</option>
+                <option value="male">{"Male"}</option>
+                <option value="female">{"Female"}</option>
               </Select>
             </Field>
           </div>
           <div className="grid sm:grid-cols-2 gap-3">
-            <Field label={t("coach.profile.fieldBirthDate")}><DatePicker value={profileForm.birth_date} onChange={v => setProfileForm(f => ({ ...f, birth_date: v }))} /></Field>
-            <Field label={t("coach.profile.fieldWaNumber")}><Input type="tel" value={profileForm.phone} onChange={e => setProfileForm(f => ({ ...f, phone: e.target.value }))} placeholder="08xxxxxxxxxx" /></Field>
+            <Field label={"Date of Birth"}><DatePicker value={profileForm.birth_date} onChange={v => setProfileForm(f => ({ ...f, birth_date: v }))} /></Field>
+            <Field label={"WhatsApp Number"}><Input type="tel" value={profileForm.phone} onChange={e => setProfileForm(f => ({ ...f, phone: e.target.value }))} placeholder="08xxxxxxxxxx" /></Field>
           </div>
           <div className="grid sm:grid-cols-2 gap-3">
             <div>
-              <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-1">{t("coach.profile.emailLabel")}</div>
-              <div className="text-sm font-semibold text-ink">{profile?.email ?? "—"}</div>
+              <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-1">{"Email"}</div>
+              <div className="text-sm font-semibold text-ink"><NoTranslate>{profile?.email ?? "—"}</NoTranslate></div>
             </div>
             <div>
-              <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-1">{t("coach.profile.idNumberLabel")}</div>
-              <div className="text-sm font-semibold text-ink font-mono">{profile?.user_no ?? "—"}</div>
+              <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-1">{"ID Number"}</div>
+              <div className="text-sm font-semibold text-ink font-mono"><NoTranslate>{profile?.user_no ?? "—"}</NoTranslate></div>
             </div>
           </div>
-          <Field label={t("coach.profile.fieldAddress")}><Textarea rows={2} value={profileForm.address} onChange={e => setProfileForm(f => ({ ...f, address: e.target.value }))} placeholder={t("coach.profile.addressPlaceholder")} /></Field>
+          <Field label={"Address"}><Textarea rows={2} value={profileForm.address} onChange={e => setProfileForm(f => ({ ...f, address: e.target.value }))} placeholder={"E.g. 12 Anggrek St., Bekasi"} /></Field>
 
           <div className="pt-3 border-t border-line">
-            <div className="text-xs font-bold text-ink-mute uppercase tracking-widest mb-3">{t("coach.profile.educationSectionTitle")}</div>
+            <div className="text-xs font-bold text-ink-mute uppercase tracking-widest mb-3">{"Education"}</div>
             <div className="grid sm:grid-cols-2 gap-3">
-              <Field label={t("coach.profile.fieldEducationLevel")}>
+              <Field label={"Highest Education"}>
                 <Select value={profileForm.education_level} onChange={e => setProfileForm(f => ({ ...f, education_level: e.target.value }))}>
-                  <option value="">{t("coach.profile.selectEllipsis")}</option>
+                  <option value="">{"Select…"}</option>
                   {["TK","SD","SMP","SMA","D1","D2","D3","S1/D4","S2","S3"].map(l => <option key={l} value={l}>{l}</option>)}
                 </Select>
               </Field>
-              <Field label={t("coach.profile.fieldInstitutionName")}><Input value={profileForm.education_institution} onChange={e => setProfileForm(f => ({ ...f, education_institution: e.target.value }))} placeholder={t("coach.profile.institutionPlaceholder")} /></Field>
+              <Field label={"Institution Name"}><Input value={profileForm.education_institution} onChange={e => setProfileForm(f => ({ ...f, education_institution: e.target.value }))} placeholder={"E.g. University of Indonesia"} /></Field>
             </div>
           </div>
 
           <div className="pt-3 border-t border-line">
-            <div className="text-xs font-bold text-ink-mute uppercase tracking-widest mb-3">{t("coach.profile.coachProfileSectionTitle")}</div>
+            <div className="text-xs font-bold text-ink-mute uppercase tracking-widest mb-3">{"Coach Profile"}</div>
             <div className="space-y-3">
-              <Field label={t("coach.profile.fieldSpecialization")}><Input value={profileForm.specialization} onChange={e => setProfileForm(f => ({ ...f, specialization: e.target.value }))} placeholder={t("coach.profile.specializationPlaceholder")} /></Field>
-              <Field label={t("coach.profile.fieldBio")}><Textarea rows={3} value={profileForm.bio} onChange={e => setProfileForm(f => ({ ...f, bio: e.target.value }))} placeholder={t("coach.profile.bioPlaceholder")} /></Field>
+              <Field label={"Specialization"}><Input value={profileForm.specialization} onChange={e => setProfileForm(f => ({ ...f, specialization: e.target.value }))} placeholder={"E.g. Freestyle swimming, children"} /></Field>
+              <Field label={"Bio / Description"}><Textarea rows={3} value={profileForm.bio} onChange={e => setProfileForm(f => ({ ...f, bio: e.target.value }))} placeholder={"E.g. 5 years of experience teaching young children to swim with a play-based approach."} /></Field>
             </div>
           </div>
 
-          <Btn variant="primary" size="md" onClick={saveProfileInfo} disabled={savingProfile}>{savingProfile ? t("coach.absen.savingBtn") : t("coach.profile.saveProfileBtn")}</Btn>
+          <Btn variant="primary" size="md" onClick={saveProfileInfo} disabled={savingProfile}>{savingProfile ? "Saving…" : "Save Profile"}</Btn>
         </div>
       </Card>
 
       {/* ── Bank info ── */}
       <Card>
         <div className="flex items-center justify-between mb-3">
-          <SectionTitle>{t("coach.profile.bankInfoTitle")}</SectionTitle>
-          <Btn variant="ghost" size="sm" icon="edit" onClick={openBankEdit}>{t("common.actions.edit")}</Btn>
+          <SectionTitle>{"Bank Account Information"}</SectionTitle>
+          <Btn variant="ghost" size="sm" icon="edit" onClick={openBankEdit}>{"Edit"}</Btn>
         </div>
         {profile?.bank_name ? (
-          <div className="text-sm font-semibold text-ink">{profile.bank_name} · <span className="font-mono">{profile.bank_account}</span> a/n {profile.bank_holder}</div>
+          <div className="text-sm font-semibold text-ink"><NoTranslate>{profile.bank_name}</NoTranslate> · <span className="font-mono"><NoTranslate>{profile.bank_account}</NoTranslate></span> a/n <NoTranslate>{profile.bank_holder}</NoTranslate></div>
         ) : (
-          <div className="text-sm text-warn-600 font-semibold">{t("coach.profile.bankNotFilled")}</div>
+          <div className="text-sm text-warn-600 font-semibold">{"Not filled in yet — required to generate invoices"}</div>
         )}
       </Card>
 
       {/* ── Certifications ── */}
       <Card padded={false}>
         <div className="p-5 border-b border-line flex items-center justify-between">
-          <SectionTitle sub={t("coach.profile.certsSub")}>{t("coach.profile.certsTitle")}</SectionTitle>
-          <Btn variant="soft" size="sm" icon="plus" onClick={() => { setCertForm({ title: "", issuer: "", issued_at: "", expires_at: "", no_expiry: false }); setCertFile(null); setEditCertTarget(null); setOpenAddCert(true); }}>{t("coach.invoice.addBtn")}</Btn>
+          <SectionTitle sub={"Requires admin approval when added"}>{"Certifications"}</SectionTitle>
+          <Btn variant="soft" size="sm" icon="plus" onClick={() => { setCertForm({ title: "", issuer: "", issued_at: "", expires_at: "", no_expiry: false }); setCertFile(null); setEditCertTarget(null); setOpenAddCert(true); }}>{"Add"}</Btn>
         </div>
         <div className="divide-y divide-line">
           {(profile?.certifications ?? []).map((s) => (
@@ -352,13 +351,13 @@ export default function CoachProfile({ profile, onRefresh, onLogout, onAvatarCha
               <div className="flex items-center gap-3">
                 <span className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${s.status === "approved" ? "bg-ok-50 text-ok-600" : s.status === "rejected" ? "bg-danger-50 text-danger-600" : "bg-warn-50 text-warn-600"}`}><Icon name="shield" className="w-5 h-5" /></span>
                 <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-ink text-sm">{s.title}</div>
-                  {s.valid_from && <div className="text-xs text-ink-mute">{fmtMonthYear(s.valid_from)}{s.valid_until ? ` – ${fmtMonthYear(s.valid_until)}` : ` · ${t("coach.profile.noExpiryLabel")}`}</div>}
+                  <div className="font-semibold text-ink text-sm"><NoTranslate>{s.title}</NoTranslate></div>
+                  {s.valid_from && <div className="text-xs text-ink-mute">{fmtMonthYear(s.valid_from)}{s.valid_until ? ` – ${fmtMonthYear(s.valid_until)}` : ` · ${"No expiry"}`}</div>}
                 </div>
-                <Status kind={s.status}>{s.status === "approved" ? t("coach.profile.certStatusApproved") : s.status === "rejected" ? t("coach.profile.certStatusRejected") : t("coach.profile.certStatusPending")}</Status>
+                <Status kind={s.status}>{s.status === "approved" ? "Approved" : s.status === "rejected" ? "Rejected" : "Pending"}</Status>
                 <div className="flex items-center gap-1">
-                  <button onClick={() => openCertEdit(s)} className="p-1.5 rounded hover:bg-paper-tint text-ink-mute hover:text-ink" title={t("common.actions.edit")}><Icon name="edit" className="w-4 h-4" /></button>
-                  <button onClick={() => deleteCert(s)} className="p-1.5 rounded hover:bg-danger-50 text-ink-mute hover:text-danger-600" title={t("coach.profile.deleteTitleAttr")}><Icon name="trash" className="w-4 h-4" /></button>
+                  <button onClick={() => openCertEdit(s)} className="p-1.5 rounded hover:bg-paper-tint text-ink-mute hover:text-ink" title={"Edit"}><Icon name="edit" className="w-4 h-4" /></button>
+                  <button onClick={() => deleteCert(s)} className="p-1.5 rounded hover:bg-danger-50 text-ink-mute hover:text-danger-600" title={"Delete"}><Icon name="trash" className="w-4 h-4" /></button>
                 </div>
               </div>
               {s.status === "rejected" && (
@@ -367,63 +366,63 @@ export default function CoachProfile({ profile, onRefresh, onLogout, onAvatarCha
                     <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-danger-50 border border-danger-100">
                       <Icon name="warning" className="w-4 h-4 text-danger-500 shrink-0 mt-0.5" />
                       <div>
-                        <div className="text-xs font-bold text-danger-600 uppercase tracking-wide mb-0.5">{t("coach.profile.rejectedReasonLabel")}</div>
-                        <div className="text-sm text-danger-700">{s.reject_reason}</div>
+                        <div className="text-xs font-bold text-danger-600 uppercase tracking-wide mb-0.5">{"Rejection Reason"}</div>
+                        <div className="text-sm text-danger-700"><NoTranslate>{s.reject_reason}</NoTranslate></div>
                       </div>
                     </div>
                   )}
-                  <Btn variant="soft" size="sm" icon="refresh" onClick={() => resubmitCert(s.id)}>{t("coach.profile.resubmitBtn")}</Btn>
+                  <Btn variant="soft" size="sm" icon="refresh" onClick={() => resubmitCert(s.id)}>{"Resubmit"}</Btn>
                 </div>
               )}
               {s.photo_url && <CertPhotoLink storageKey={s.photo_url} title={s.title} />}
             </div>
           ))}
-          {(profile?.certifications?.length ?? 0) === 0 && <div className="px-5 py-4 text-sm text-ink-mute">{t("coach.profile.noCertsYet")}</div>}
+          {(profile?.certifications?.length ?? 0) === 0 && <div className="px-5 py-4 text-sm text-ink-mute">{"No certifications yet."}</div>}
         </div>
       </Card>
 
       {/* ── Change password ── */}
       <Card>
-        <SectionTitle>{t("coach.profile.changePasswordTitle")}</SectionTitle>
+        <SectionTitle>{"Change Password"}</SectionTitle>
         <div className="mt-4 space-y-3">
-          <Field label={t("coach.profile.fieldNewPassword")}><Input type="password" placeholder="••••••••" value={newPwd} onChange={e => setNewPwd(e.target.value)} /></Field>
-          <Field label={t("coach.profile.fieldConfirmPassword")}><Input type="password" placeholder="••••••••" value={confirmPwd} onChange={e => setConfirmPwd(e.target.value)} /></Field>
-          <Btn variant="primary" size="md" onClick={changePassword} disabled={savingPwd}>{savingPwd ? t("coach.absen.savingBtn") : t("coach.profile.savePasswordBtn")}</Btn>
+          <Field label={"New Password"}><Input type="password" placeholder="••••••••" value={newPwd} onChange={e => setNewPwd(e.target.value)} /></Field>
+          <Field label={"Confirm"}><Input type="password" placeholder="••••••••" value={confirmPwd} onChange={e => setConfirmPwd(e.target.value)} /></Field>
+          <Btn variant="primary" size="md" onClick={changePassword} disabled={savingPwd}>{savingPwd ? "Saving…" : "Save new password"}</Btn>
         </div>
       </Card>
 
       {/* ── Cert modal ── */}
-      <Modal open={openAddCert} onClose={() => { setOpenAddCert(false); setEditCertTarget(null); }} title={editCertTarget ? t("coach.profile.editCertModalTitle") : t("coach.profile.addCertModalTitle")} size="sm"
-        footer={<><Btn variant="ghost" onClick={() => { setOpenAddCert(false); setEditCertTarget(null); }}>{t("common.actions.cancel")}</Btn><Btn variant="primary" onClick={editCertTarget ? saveCertEdit : saveCert} disabled={savingCert}>{savingCert ? t("coach.absen.savingBtn") : t("coach.clockIn.submitBtn")}</Btn></>}>
+      <Modal open={openAddCert} onClose={() => { setOpenAddCert(false); setEditCertTarget(null); }} title={editCertTarget ? "Edit Certification" : "Add Certification"} size="sm"
+        footer={<><Btn variant="ghost" onClick={() => { setOpenAddCert(false); setEditCertTarget(null); }}>{"Cancel"}</Btn><Btn variant="primary" onClick={editCertTarget ? saveCertEdit : saveCert} disabled={savingCert}>{savingCert ? "Saving…" : "Submit"}</Btn></>}>
         <div className="space-y-4">
           {editCertTarget?.status === "approved" && (
             <div className="flex items-start gap-2 p-3 rounded-xl bg-warn-50 border border-warn-200 text-xs text-warn-800">
               <Icon name="info" className="w-4 h-4 shrink-0 mt-0.5 text-warn-600" />
-              {t("coach.profile.approvedCertEditWarningPrefix")} <strong>{t("coach.profile.approvedCertEditWarningMiddle")}</strong> {t("coach.profile.approvedCertEditWarningSuffix")}
+              {"Editing an approved certification will reset its status to"} <strong>{"Pending Approval"}</strong> {"for re-review by the admin."}
             </div>
           )}
-          <Field label={t("coach.profile.fieldCertName")}><Input value={certForm.title} onChange={e => setCertForm(f => ({ ...f, title: e.target.value }))} placeholder={t("coach.profile.certNamePlaceholder")} /></Field>
-          <Field label={t("coach.profile.fieldIssuer")}><Input value={certForm.issuer} onChange={e => setCertForm(f => ({ ...f, issuer: e.target.value }))} placeholder={t("coach.profile.issuerPlaceholder")} /></Field>
-          <Field label={t("coach.profile.fieldValidFrom")}><MonthYearPicker value={certForm.issued_at} onChange={v => setCertForm(f => ({ ...f, issued_at: v }))} placeholder={t("coach.profile.monthYearPlaceholder")} /></Field>
-          <Field label={t("coach.profile.fieldValidUntil")}><MonthYearPicker value={certForm.expires_at} onChange={v => setCertForm(f => ({ ...f, expires_at: v }))} placeholder={t("coach.profile.monthYearPlaceholder")} disabled={certForm.no_expiry} /></Field>
+          <Field label={"Certification Name"}><Input value={certForm.title} onChange={e => setCertForm(f => ({ ...f, title: e.target.value }))} placeholder={"E.g. Lifeguard ARC"} /></Field>
+          <Field label={"Issuer"}><Input value={certForm.issuer} onChange={e => setCertForm(f => ({ ...f, issuer: e.target.value }))} placeholder={"E.g. PMI / FINA"} /></Field>
+          <Field label={"Valid From"}><MonthYearPicker value={certForm.issued_at} onChange={v => setCertForm(f => ({ ...f, issued_at: v }))} placeholder={"Select month & year"} /></Field>
+          <Field label={"Valid Until"}><MonthYearPicker value={certForm.expires_at} onChange={v => setCertForm(f => ({ ...f, expires_at: v }))} placeholder={"Select month & year"} disabled={certForm.no_expiry} /></Field>
           <label className="flex items-center gap-2 text-sm text-ink-soft cursor-pointer">
             <input type="checkbox" checked={certForm.no_expiry} onChange={e => setCertForm(f => ({ ...f, no_expiry: e.target.checked, expires_at: "" }))} className="rounded" />
-            {t("coach.profile.noExpiryCheckbox")}
+            {"No expiry"}
           </label>
           <div>
-            <div className="text-sm font-semibold text-ink mb-1.5">{t("coach.profile.certPhotoLabel")} <span className="text-ink-faint font-normal text-xs">{t("coach.profile.certPhotoOptionalHint")}</span></div>
+            <div className="text-sm font-semibold text-ink mb-1.5">{"Certificate Photo"} <span className="text-ink-faint font-normal text-xs">{"(optional, helps the verification process)"}</span></div>
             {editCertTargetPhotoUrl && !certFile && (
-              <img src={editCertTargetPhotoUrl} alt={t("coach.profile.currentPhotoAlt")} className="w-full max-h-36 object-cover rounded-xl border border-line mb-2" />
+              <img src={editCertTargetPhotoUrl} alt={"Current photo"} className="w-full max-h-36 object-cover rounded-xl border border-line mb-2" />
             )}
             {certFile && (
               // eslint-disable-next-line @next/next/no-img-element -- blob URL from file picker
-              <img src={URL.createObjectURL(certFile)} alt={t("coach.profile.previewAlt")} className="w-full max-h-36 object-cover rounded-xl border border-line mb-2" />
+              <img src={URL.createObjectURL(certFile)} alt={"Preview"} className="w-full max-h-36 object-cover rounded-xl border border-line mb-2" />
             )}
             <div className="flex items-center gap-3">
               <button type="button" onClick={() => certFileInputRef.current?.click()}
                 className="flex items-center gap-2 px-3 py-2 rounded-lg border border-line bg-paper-tint hover:bg-white hover:border-ocean-400 transition-colors text-sm font-semibold text-ink-soft hover:text-ink">
                 <Icon name="camera" className="w-4 h-4" />
-                {certFile ? t("coach.profile.changePhotoBtn") : editCertTarget?.photo_url ? t("coach.profile.changePhotoBtn") : t("coach.profile.choosePhotoBtn")}
+                {certFile ? "Change photo" : editCertTarget?.photo_url ? "Change photo" : "Choose photo"}
               </button>
               {certFile && <span className="text-sm text-ink-mute truncate max-w-[160px]">{certFile.name}</span>}
               <input ref={certFileInputRef} type="file" accept="image/*" className="sr-only" onChange={e => setCertFile(e.target.files?.[0] ?? null)} />
@@ -433,12 +432,12 @@ export default function CoachProfile({ profile, onRefresh, onLogout, onAvatarCha
       </Modal>
 
       {/* ── Bank modal ── */}
-      <Modal open={openEditBank} onClose={() => setOpenEditBank(false)} title={t("coach.profile.editBankModalTitle")} size="sm"
-        footer={<><Btn variant="ghost" onClick={() => setOpenEditBank(false)}>{t("common.actions.cancel")}</Btn><Btn variant="primary" onClick={saveBank} disabled={savingBank}>{savingBank ? t("coach.absen.savingBtn") : t("coach.kelas.saveBtn")}</Btn></>}>
+      <Modal open={openEditBank} onClose={() => setOpenEditBank(false)} title={"Edit Bank Account Information"} size="sm"
+        footer={<><Btn variant="ghost" onClick={() => setOpenEditBank(false)}>{"Cancel"}</Btn><Btn variant="primary" onClick={saveBank} disabled={savingBank}>{savingBank ? "Saving…" : "Save"}</Btn></>}>
         <div className="space-y-4">
-          <Field label={t("coach.profile.fieldBankName")} required><Input value={bankForm.bank_name} onChange={e => setBankForm(f => ({ ...f, bank_name: e.target.value }))} placeholder={t("coach.profile.bankNamePlaceholder")} /></Field>
-          <Field label={t("coach.profile.fieldAccountNumber")} required><Input value={bankForm.bank_account} onChange={e => setBankForm(f => ({ ...f, bank_account: e.target.value }))} placeholder={t("coach.profile.accountNumberPlaceholder")} /></Field>
-          <Field label={t("coach.profile.fieldAccountHolder")} required><Input value={bankForm.bank_holder} onChange={e => setBankForm(f => ({ ...f, bank_holder: e.target.value }))} placeholder={t("coach.profile.accountHolderPlaceholder")} /></Field>
+          <Field label={"Bank Name"} required><Input value={bankForm.bank_name} onChange={e => setBankForm(f => ({ ...f, bank_name: e.target.value }))} placeholder={"E.g. BCA, BRI, Mandiri"} /></Field>
+          <Field label={"Account Number"} required><Input value={bankForm.bank_account} onChange={e => setBankForm(f => ({ ...f, bank_account: e.target.value }))} placeholder={"E.g. 1234567890"} /></Field>
+          <Field label={"Account Holder Name"} required><Input value={bankForm.bank_holder} onChange={e => setBankForm(f => ({ ...f, bank_holder: e.target.value }))} placeholder={"E.g. Reza Fahlevi"} /></Field>
         </div>
       </Modal>
 
@@ -447,7 +446,7 @@ export default function CoachProfile({ profile, onRefresh, onLogout, onAvatarCha
           <span className="w-9 h-9 rounded-xl bg-danger-50 text-danger-500 flex items-center justify-center group-hover:bg-danger-100 transition-colors">
             <Icon name="logout" className="w-4 h-4" />
           </span>
-          <span className="font-semibold text-danger-600 group-hover:text-danger-700">{t("coach.profile.logoutBtn")}</span>
+          <span className="font-semibold text-danger-600 group-hover:text-danger-700">{"Log out"}</span>
         </button>
       </Card>
 

@@ -1,12 +1,13 @@
 "use client";
 import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 import { fmtDate } from "@/lib/utils";
 import type { AdminCompetitionHook } from "./_hook";
 
 export default function CompetitionsTab({ hook }: { hook: AdminCompetitionHook }) {
   const {
-    t, search, setSearch, levelFilter, setLevelFilter, openCreateComp,
+    search, setSearch, levelFilter, setLevelFilter, openCreateComp,
     loading, filteredComps, setSelectedComp, loadParticipations, openEditComp, handleDeleteComp,
   } = hook;
 
@@ -19,7 +20,7 @@ export default function CompetitionsTab({ hook }: { hook: AdminCompetitionHook }
             <Icon name="search" className="w-4 h-4 text-ink-faint absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="text"
-              placeholder={t("admin.competition.searchCompPlaceholder")}
+              placeholder={"Search competition, organizer, location..."}
               value={search}
               onChange={e => setSearch(e.target.value)}
               className="w-full h-10 pl-9 pr-3 text-sm bg-paper border border-line rounded-xl text-ink placeholder:text-ink-faint focus:outline-none focus:border-ocean-500 transition-colors"
@@ -30,34 +31,34 @@ export default function CompetitionsTab({ hook }: { hook: AdminCompetitionHook }
             onChange={e => setLevelFilter(e.target.value)}
             className="h-10 text-sm border border-line rounded-xl px-3 bg-paper text-ink-soft outline-none focus:border-ocean-500 transition-colors"
           >
-            <option value="all">{t("admin.competition.allLevels")}</option>
-            <option value="internal">{t("admin.competition.levelInternal")}</option>
-            <option value="local">{t("admin.competition.levelLocal")}</option>
-            <option value="regional">{t("admin.competition.levelRegional")}</option>
-            <option value="national">{t("admin.competition.levelNational")}</option>
-            <option value="international">{t("admin.competition.levelInternational")}</option>
+            <option value="all">{"All Levels"}</option>
+            <option value="internal">{"Internal"}</option>
+            <option value="local">{"Local / City"}</option>
+            <option value="regional">{"Regional / Province"}</option>
+            <option value="national">{"National"}</option>
+            <option value="international">{"International"}</option>
           </select>
         </div>
         <Btn variant="primary" icon="plus" onClick={openCreateComp} className="!h-10 !rounded-xl">
-          {t("admin.competition.addCompBtn")}
+          {"Add Competition"}
         </Btn>
       </div>
 
       {/* Competitions Table */}
       <div className="bg-paper border border-line rounded-2xl overflow-hidden shadow-xs">
         {loading ? (
-          <div className="py-12 text-center text-ink-mute text-sm">{t("admin.competition.loadingCompData")}</div>
+          <div className="py-12 text-center text-ink-mute text-sm">{"Loading competition data..."}</div>
         ) : filteredComps.length === 0 ? (
           <div className="py-12 text-center text-ink-mute text-sm">
-            {t("admin.competition.noCompYet")}
+            {"No competitions registered yet. Click Add Competition to record a new event."}
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="h-9 bg-paper-deep border-b border-line text-left text-[10px] uppercase font-bold text-ink-faint tracking-wider">
                 <tr>
-                  <th className="py-2 px-5 min-w-[240px]">{t("admin.competition.colCompName")}</th>
-                  <th className="py-2 px-5 min-w-[160px] whitespace-nowrap">{t("admin.competition.colDateTime")}</th>
+                  <th className="py-2 px-5 min-w-[240px]">{"Competition Name"}</th>
+                  <th className="py-2 px-5 min-w-[160px] whitespace-nowrap">{"Date & Location"}</th>
                   <th className="py-2 px-5 min-w-[180px]">Penyelenggara</th>
                   <th className="py-2 px-5 text-center w-28 whitespace-nowrap">Level</th>
                   <th className="py-2 px-5 text-center w-20 whitespace-nowrap">Peserta</th>
@@ -69,8 +70,8 @@ export default function CompetitionsTab({ hook }: { hook: AdminCompetitionHook }
                 {filteredComps.map(comp => (
                   <tr key={comp.id} className="hover:bg-paper-tint/60 transition-colors">
                     <td className="py-3 px-5 min-w-[240px]">
-                      <div className="font-bold text-ink leading-snug">{comp.name}</div>
-                      {comp.description && <div className="text-xs text-ink-mute mt-0.5 line-clamp-1 max-w-md">{comp.description}</div>}
+                      <div className="font-bold text-ink leading-snug"><NoTranslate>{comp.name}</NoTranslate></div>
+                      {comp.description && <div className="text-xs text-ink-mute mt-0.5 line-clamp-1 max-w-md"><NoTranslate>{comp.description}</NoTranslate></div>}
                     </td>
                     <td className="py-3 px-5 min-w-[160px]">
                       <div className="font-medium text-ink whitespace-nowrap flex items-center gap-1.5 text-xs">
@@ -83,12 +84,12 @@ export default function CompetitionsTab({ hook }: { hook: AdminCompetitionHook }
                       {(comp.location || comp.city) && (
                         <div className="text-[11px] text-ink-mute mt-0.5 flex items-center gap-1 line-clamp-1 max-w-[220px]">
                           <Icon name="mapPin" className="w-3 h-3 text-ink-faint shrink-0" />
-                          <span className="truncate">{comp.location || comp.city}</span>
+                          <span className="truncate"><NoTranslate>{comp.location || comp.city}</NoTranslate></span>
                         </div>
                       )}
                     </td>
                     <td className="py-3 px-5 min-w-[180px] text-ink-soft text-xs leading-relaxed">
-                      <span className="line-clamp-2">{comp.organizer || "—"}</span>
+                      <span className="line-clamp-2"><NoTranslate>{comp.organizer || "—"}</NoTranslate></span>
                     </td>
                     <td className="py-3 px-5 text-center whitespace-nowrap">
                       <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-ocean-50 text-ocean-700 border border-ocean-200/80">
@@ -119,7 +120,7 @@ export default function CompetitionsTab({ hook }: { hook: AdminCompetitionHook }
                         <button
                           type="button"
                           onClick={() => openEditComp(comp)}
-                          title={t("admin.competition.editTitle")}
+                          title={"Edit"}
                           className="w-8 h-8 rounded-lg border border-line bg-paper hover:bg-paper-deep text-ink-mute hover:text-ink inline-flex items-center justify-center transition-colors"
                         >
                           <Icon name="edit" className="w-3.5 h-3.5" />

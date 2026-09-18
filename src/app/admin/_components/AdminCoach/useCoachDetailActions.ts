@@ -3,7 +3,6 @@ import { useState, useRef } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import { useUpload } from "@/hooks/useUpload";
 import { calcAge } from "../../_utils";
 import type { Database } from "@/types/database";
@@ -14,7 +13,6 @@ import { toDbDate } from "./_utils";
 export function useCoachDetailActions(load: () => void) {
   const toast = useToast();
   const confirm = useConfirm();
-  const { t } = useLocale();
   const { upload } = useUpload();
 
   // detail panel
@@ -48,7 +46,7 @@ export function useCoachDetailActions(load: () => void) {
 
   const saveEdit = async () => {
     if (!detail) return;
-    if (!editForm.full_name) return toast.error(t("admin.coaches.nameRequired"));
+    if (!editForm.full_name) return toast.error("Name is required");
     setEditSaving(true);
     const { error } = await createClient().from("profiles")
       .update({
@@ -67,7 +65,7 @@ export function useCoachDetailActions(load: () => void) {
         bank_holder: editForm.bank_holder || null,
       })
       .eq("id", detail.id);
-    if (error) { setEditSaving(false); return toast.error(t("admin.approvement.saveFailedGeneric"), error.message); }
+    if (error) { setEditSaving(false); return toast.error("Failed to save", error.message); }
 
     // Upload avatar if changed
     if (editAvatarFile) {
@@ -80,7 +78,7 @@ export function useCoachDetailActions(load: () => void) {
     }
 
     setEditSaving(false);
-    toast.success(t("admin.coaches.coachDataUpdatedToast"));
+    toast.success("Coach data updated");
     setOpenEdit(false);
     setEditAvatarFile(null);
     setEditAvatarPreview(null);
@@ -89,7 +87,7 @@ export function useCoachDetailActions(load: () => void) {
   };
 
   const addCert = async () => {
-    if (!detail) return toast.error(t("admin.coaches.coachDataNotLoadedError"));
+    if (!detail) return toast.error("Coach data not loaded, try refreshing");
     setSavingCert(true);
     const title = certForm.title.trim();
     const { data, error } = await createClient().from("certifications").insert({
@@ -100,12 +98,12 @@ export function useCoachDetailActions(load: () => void) {
       no_expiry: certForm.no_expiry,
       status: "pending",
     }).select("id, name, title, status, valid_from, valid_until").single();
-    if (error || !data) { setSavingCert(false); return toast.error(t("admin.coaches.addCertFailed"), error?.message ?? t("admin.coaches.dataNotSavedFallback")); }
+    if (error || !data) { setSavingCert(false); return toast.error("Failed to add certification", error?.message ?? "Data not saved"); }
     if (certPhotoFile) {
       try { await upload.cert(certPhotoFile, data.id); } catch { /* non-fatal */ }
     }
     setSavingCert(false);
-    toast.success(t("admin.coaches.certAddedToast"));
+    toast.success("Certification added");
     setOpenAddCert(false);
     setCertForm({ title: "", issuer: "", issued_at: "", expires_at: "", no_expiry: false });
     setCertPhotoFile(null);
@@ -114,21 +112,21 @@ export function useCoachDetailActions(load: () => void) {
 
   const deleteCert = async (certId: string) => {
     if (!detail) return;
-    const ok = await confirm({ body: t("admin.coaches.deleteCertConfirmBody") });
+    const ok = await confirm({ body: "Delete this certification?" });
     if (!ok) return;
     const { error } = await createClient().from("certifications").delete().eq("id", certId);
-    if (error) return toast.error(t("admin.coaches.deleteCertFailed"), error.message);
-    toast.success(t("admin.coaches.certDeletedToast"));
+    if (error) return toast.error("Failed to delete certification", error.message);
+    toast.success("Certification deleted");
     setDetail(prev => prev ? { ...prev, certifications: (prev.certifications ?? []).filter(c => c.id !== certId) } : prev);
   };
 
   const doSuspend = async () => {
-    if (!suspendTarget || !suspendForm.reason || !suspendForm.until) return toast.error(t("admin.coaches.reasonUntilRequired"));
+    if (!suspendTarget || !suspendForm.reason || !suspendForm.until) return toast.error("Reason and end date are required");
     setSuspending(true);
     const { error } = await createClient().from("profiles").update({ suspend_until: suspendForm.until, suspend_reason: suspendForm.reason } satisfies Database["public"]["Tables"]["profiles"]["Update"]).eq("id", suspendTarget.id);
     setSuspending(false);
-    if (error) return toast.error(t("admin.coaches.suspendFailed"), error.message);
-    toast.success(t("admin.coaches.suspendedUntilToast", { name: suspendTarget.full_name, date: fmtDate(suspendForm.until) }));
+    if (error) return toast.error("Failed to suspend coach", error.message);
+    toast.success(`${suspendTarget.full_name} suspended until ${fmtDate(suspendForm.until)}`);
     setSuspendTarget(null);
     if (detail?.id === suspendTarget.id) setDetail(prev => prev ? { ...prev, suspend_until: suspendForm.until, suspend_reason: suspendForm.reason } : prev);
     load();
@@ -136,38 +134,38 @@ export function useCoachDetailActions(load: () => void) {
 
   const liftSuspend = async (c: CoachFull) => {
     const { error } = await createClient().from("profiles").update({ suspend_until: null, suspend_reason: null } satisfies Database["public"]["Tables"]["profiles"]["Update"]).eq("id", c.id);
-    if (error) return toast.error(t("admin.coaches.endSuspendFailed"), error.message);
-    toast.success(t("admin.coaches.suspendEndedToast"));
+    if (error) return toast.error("Failed to end suspend", error.message);
+    toast.success("Suspend ended");
     if (detail?.id === c.id) setDetail(prev => prev ? { ...prev, suspend_until: null, suspend_reason: null } : prev);
     load();
   };
 
   const toggleArchive = async (c: CoachFull) => {
     const archiving = !c.is_archived;
-    const ok = await confirm({ body: archiving ? t("admin.coaches.archiveConfirmBody2", { name: c.full_name }) : t("admin.coaches.reactivateConfirmBody", { name: c.full_name }) });
+    const ok = await confirm({ body: archiving ? `Archive coach ${c.full_name}? The coach will no longer appear in the active list.` : `Reactivate coach ${c.full_name}?` });
     if (!ok) return;
     const { error } = await createClient().from("profiles").update({ is_archived: archiving } satisfies Database["public"]["Tables"]["profiles"]["Update"]).eq("id", c.id);
-    if (error) return toast.error(t("admin.coaches.changeStatusFailed"), error.message);
-    toast.success(archiving ? t("admin.coaches.coachArchivedToast") : t("admin.coaches.coachReactivatedToast"));
+    if (error) return toast.error("Failed to change status", error.message);
+    toast.success(archiving ? "Coach archived" : "Coach reactivated");
     if (detail?.id === c.id) { setDetail(prev => prev ? { ...prev, is_archived: archiving } : prev); }
     load();
   };
 
   const deleteCoach = async (c: CoachFull) => {
-    const ok = await confirm({ body: t("admin.coaches.deleteCoachConfirmBody", { name: c.full_name }), danger: true, confirmLabel: t("common.actions.delete") });
+    const ok = await confirm({ body: `Permanently delete coach account ${c.full_name}? This action cannot be undone.`, danger: true, confirmLabel: "Delete" });
     if (!ok) return;
     const res = await fetch(`/api/admin/users/${c.id}`, { method: "DELETE" });
     if (!res.ok) {
       const j = await res.json() as { error?: string };
-      return toast.error(t("admin.coaches.deleteCoachFailed"), j.error);
+      return toast.error("Failed to delete coach", j.error);
     }
-    toast.success(t("admin.coaches.coachDeletedToast"));
+    toast.success("Coach deleted");
     setDetail(null);
     load();
   };
 
   const resetPassword = async () => {
-    if (!detail || !newPassword || newPassword.length < 6) return toast.error(t("admin.schoolPanel.passwordMinLength"));
+    if (!detail || !newPassword || newPassword.length < 6) return toast.error("Password must be at least 6 characters");
     setResetSaving(true);
     const res = await fetch(`/api/admin/users/${detail.id}`, {
       method: "PATCH", headers: { "Content-Type": "application/json" },
@@ -175,8 +173,8 @@ export function useCoachDetailActions(load: () => void) {
     });
     const j = await res.json() as { error?: string };
     setResetSaving(false);
-    if (!res.ok) return toast.error(t("admin.coaches.resetPasswordFailed"), j.error);
-    toast.success(t("admin.coaches.passwordResetToast"));
+    if (!res.ok) return toast.error("Failed to reset password", j.error);
+    toast.success("Password reset successfully");
     setOpenReset(false);
     setNewPassword("");
     setShowNewPassword(false);

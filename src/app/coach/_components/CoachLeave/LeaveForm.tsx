@@ -4,15 +4,14 @@ import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
 import { Field, Input, Select, Textarea } from "@/components/ui/FormFields";
 import { Card, SectionTitle } from "@/components/ui/Card";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 import { useToast } from "@/components/providers/ToastProvider";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import { createClient } from "@/utils/supabase/client";
 import type { ClassRow } from "../../_types";
 
 export default function LeaveForm({ back, coachId, branchId, classes }: { back: () => void; coachId: string; branchId?: string; classes: ClassRow[] }) {
   const toast = useToast();
   const supabase = createClient();
-  const { t } = useLocale();
   const [type, setType] = useState("sakit");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -53,9 +52,9 @@ export default function LeaveForm({ back, coachId, branchId, classes }: { back: 
   const canSubmit = selectedClasses.length > 0 && selectedClasses.every(c => !!c.substitute_id);
 
   const submit = async () => {
-    if (!startDate || !endDate) return toast.error(t("coach.leave.startEndDateRequired"));
-    if (selectedClasses.length === 0) return toast.error(t("coach.leave.selectAtLeastOneClass"));
-    if (!selectedClasses.every(c => c.substitute_id)) return toast.error(t("coach.leave.everyClassNeedsSubstitute"));
+    if (!startDate || !endDate) return toast.error("Start and end date are required");
+    if (selectedClasses.length === 0) return toast.error("Select at least 1 affected class");
+    if (!selectedClasses.every(c => c.substitute_id)) return toast.error("Every class must have a substitute coach");
     setSaving(true);
 
     const { data: leave, error } = await supabase.from("coach_leaves").insert({
@@ -69,7 +68,7 @@ export default function LeaveForm({ back, coachId, branchId, classes }: { back: 
       substitute_id: selectedClasses[0]?.substitute_id || null,
     }).select("id").single();
 
-    if (error || !leave) { toast.error(t("coach.leave.submitLeaveFailed"), error?.message ?? ""); setSaving(false); return; }
+    if (error || !leave) { toast.error("Failed to submit leave request", error?.message ?? ""); setSaving(false); return; }
 
     // Insert per-class entries with individual substitute_id
     await supabase.from("coach_leave_classes").insert(
@@ -81,21 +80,21 @@ export default function LeaveForm({ back, coachId, branchId, classes }: { back: 
     );
 
     setSaving(false);
-    toast.success(t("coach.leave.requestSentToast"), t("coach.leave.awaitingAdminApproval"));
+    toast.success("Request sent", "Awaiting admin approval");
     back();
   };
 
   return (
     <div className="max-w-md mx-auto space-y-4">
       <button onClick={back} className="text-sm text-ink-mute hover:text-ocean-600 font-semibold inline-flex items-center gap-1">
-        <Icon name="arrowL" className="w-4 h-4" /> {t("coach.clockIn.backBtn")}
+        <Icon name="arrowL" className="w-4 h-4" /> {"Back"}
       </button>
       <Card>
-        <SectionTitle sub={t("coach.leave.formSub")}>{t("coach.leave.formTitle")}</SectionTitle>
+        <SectionTitle sub={"Will go to admin for approval"}>{"Request Leave"}</SectionTitle>
         <div className="space-y-4">
-          <Field label={t("coach.leave.fieldLeaveType")} required>
+          <Field label={"Leave type"} required>
             <div className="grid grid-cols-3 gap-2">
-              {[["izin", t("coach.leave.typeIzin")], ["sakit", t("coach.leave.typeSakit")], ["lainnya", t("coach.leave.typeLainnya")]].map(([val, label]) => (
+              {[["izin", "Leave"], ["sakit", "Sick"], ["lainnya", "Other"]].map(([val, label]) => (
                 <label key={val} className={`px-3 py-2 rounded-xl border text-sm font-semibold text-center cursor-pointer ${type === val ? "border-ocean-500 bg-ocean-50 text-ocean-700" : "border-line text-ink-soft hover:bg-paper-tint"}`}>
                   <input type="radio" name="leave" className="sr-only" checked={type === val} onChange={() => setType(val)} />{label}
                 </label>
@@ -103,13 +102,13 @@ export default function LeaveForm({ back, coachId, branchId, classes }: { back: 
             </div>
           </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label={t("coach.leave.fieldStart")} required><Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} /></Field>
-            <Field label={t("coach.leave.fieldEnd")} required><Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} /></Field>
+            <Field label={"Start"} required><Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} /></Field>
+            <Field label={"End"} required><Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} /></Field>
           </div>
 
-          <Field label={t("coach.leave.fieldAffectedClasses")} required hint={t("coach.leave.affectedClassesHint")}>
+          <Field label={"Affected classes"} required hint={"Select all affected classes. Each class must have a substitute coach."}>
             <div className="space-y-2 mt-1">
-              {classes.length === 0 && <p className="text-xs text-ink-mute">{t("coach.leave.noClassesRegistered")}</p>}
+              {classes.length === 0 && <p className="text-xs text-ink-mute">{"No registered classes."}</p>}
               {classes.map(c => {
                 const sel = selectedClasses.find(s => s.class_id === c.id);
                 const isChecked = !!sel;
@@ -124,8 +123,8 @@ export default function LeaveForm({ back, coachId, branchId, classes }: { back: 
                         className="mt-0.5 accent-ocean-600 w-4 h-4 shrink-0"
                       />
                       <div className="flex-1 min-w-0">
-                        <div className="text-sm font-semibold text-ink">{c.name}</div>
-                        {scheduleLabel && <div className="text-xs text-ink-mute">{scheduleLabel}</div>}
+                        <div className="text-sm font-semibold text-ink"><NoTranslate>{c.name}</NoTranslate></div>
+                        {scheduleLabel && <div className="text-xs text-ink-mute"><NoTranslate>{scheduleLabel}</NoTranslate></div>}
                       </div>
                       {isChecked && (
                         sel?.substitute_id
@@ -139,13 +138,13 @@ export default function LeaveForm({ back, coachId, branchId, classes }: { back: 
                           value={sel?.substitute_id ?? ""}
                           onChange={e => setSubstituteForClass(c.id, e.target.value)}
                         >
-                          <option value="">{t("coach.leave.selectSubstitutePlaceholder")}</option>
+                          <option value="">{"— select substitute coach —"}</option>
                           {allCoaches.map(coach => (
-                            <option key={coach.id} value={coach.id}>{coach.full_name}</option>
+                            <option key={coach.id} value={coach.id} translate="no">{coach.full_name}</option>
                           ))}
                         </Select>
                         {!sel?.substitute_id && (
-                          <p className="text-xs text-warn-600 mt-1">{t("coach.leave.substituteRequiredForClass")}</p>
+                          <p className="text-xs text-warn-600 mt-1">{"A substitute coach is required for this class"}</p>
                         )}
                       </div>
                     )}
@@ -155,9 +154,9 @@ export default function LeaveForm({ back, coachId, branchId, classes }: { back: 
             </div>
           </Field>
 
-          <Field label={t("coach.leave.fieldReasonDesc")}><Textarea rows={3} value={reason} onChange={e => setReason(e.target.value)} placeholder={t("coach.leave.reasonPlaceholder")} /></Field>
+          <Field label={"Reason / description"}><Textarea rows={3} value={reason} onChange={e => setReason(e.target.value)} placeholder={"E.g. Fever and not feeling well"} /></Field>
           <Btn variant="primary" size="lg" className="w-full" onClick={submit} disabled={saving || !canSubmit}>
-            {saving ? t("coach.leave.sendingBtn") : !canSubmit && selectedClasses.length > 0 ? t("coach.leave.completeSubstitutesBtn") : t("coach.leave.submitRequestBtn")}
+            {saving ? "Sending…" : !canSubmit && selectedClasses.length > 0 ? "Complete substitute for each class" : "Submit request"}
           </Btn>
         </div>
       </Card>

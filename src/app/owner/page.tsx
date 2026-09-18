@@ -10,7 +10,6 @@ import Bell from "@/components/layout/Bell";
 import BetaFeedback, { BETA_FEEDBACK_ENABLED } from "@/components/layout/BetaFeedback";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/utils/supabase/client";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import LandingCMS from "./_components/LandingCMS";
 import OwnerSchools from "./_components/OwnerSchools";
 import OwnerMasterData from "./_components/OwnerMasterData";
@@ -36,47 +35,47 @@ import type { Branch } from "./_types";
 
 // ── Nav items ──────────────────────────────────────────────────────────────────
 
-function buildNavItems(t: (key: string) => string): NavItem[] {
+function buildNavItems(): NavItem[] {
   return [
-    { id: "dashboard",     label: t("owner.nav.dashboard"),     icon: "dashboard" },
-    { id: "branches",      label: t("owner.nav.branches"),      icon: "apartment" },
-    { id: "master",        label: t("owner.nav.master"),        icon: "database" },
-    { id: "accounts",      label: t("owner.nav.accounts"),      icon: "manage_accounts" },
-    { id: "schools",       label: t("owner.nav.schools"),       icon: "school" },
-    { id: "levels",        label: t("owner.nav.levels"),        icon: "workspace_premium" },
-    { id: "classes",       label: t("owner.nav.classes"),       icon: "pool" },
+    { id: "dashboard",     label: "Dashboard",     icon: "dashboard" },
+    { id: "branches",      label: "Centers",      icon: "apartment" },
+    { id: "master",        label: "Master Data",        icon: "database" },
+    { id: "accounts",      label: "Account Master Data",      icon: "manage_accounts" },
+    { id: "schools",       label: "Schools",       icon: "school" },
+    { id: "levels",        label: "Report Levels",        icon: "workspace_premium" },
+    { id: "classes",       label: "Classes",       icon: "pool" },
     { id: "memberPrivate", label: "Private Students",           icon: "person" },
-    { id: "rates",         label: t("owner.nav.rates"),         icon: "sell" },
-    { id: "competitions",  label: t("owner.nav.competitions"),  icon: "trophy" },
+    { id: "rates",         label: "Coach Rates",         icon: "sell" },
+    { id: "competitions",  label: "Competitions",  icon: "trophy" },
     { id: "staffPresensi", label: "Attendance",                 icon: "fact_check" },
-    { id: "invoices",      label: t("owner.nav.invoices"),      icon: "receipt_long" },
-    { id: "loans",         label: t("owner.nav.loans"),         icon: "wallet" },
-    { id: "financial",     label: t("owner.nav.financial"),     icon: "chart" },
-    { id: "landing",       label: t("owner.nav.landing"),       icon: "web" },
-    { id: "storage",       label: t("owner.nav.storage"),       icon: "storage" },
-    { id: "activity",      label: t("owner.nav.activity"),      icon: "history" },
+    { id: "invoices",      label: "Payslips",      icon: "receipt_long" },
+    { id: "loans",         label: "Loan List",         icon: "wallet" },
+    { id: "financial",     label: "Financial",     icon: "chart" },
+    { id: "landing",       label: "Landing Page",       icon: "web" },
+    { id: "storage",       label: "System Storage",       icon: "storage" },
+    { id: "activity",      label: "Activity Log",      icon: "history" },
   ];
 }
 
-function buildTitles(t: (key: string) => string): Record<string, [string, string]> {
+function buildTitles(): Record<string, [string, string]> {
   return {
-    dashboard:     [t("owner.titles.dashboard.title"), t("owner.titles.dashboard.sub")],
-    branches:      [t("owner.titles.branches.title"),  t("owner.titles.branches.sub")],
-    master:        [t("owner.titles.master.title"),    t("owner.titles.master.sub")],
-    accounts:      [t("owner.titles.accounts.title"),  t("owner.titles.accounts.sub")],
-    schools:       [t("owner.titles.schools.title"),   t("owner.titles.schools.sub")],
-    levels:        [t("owner.titles.levels.title"),    t("owner.titles.levels.sub")],
-    classes:       [t("owner.titles.classes.title"),   t("owner.titles.classes.sub")],
+    dashboard:     ["Dashboard", "Owner overview · all centers"],
+    branches:      ["Centers",  "Manage Next Swimming School centers"],
+    master:        ["Master Data & Global Configuration",    "Manage Head of NEXT profile, global digital signatures, and finance categories."],
+    accounts:      ["Account Master Data",  "View and manage every account in the system — admin, coach, student, school, and staff"],
+    schools:       ["Partner Schools & Signatures",   "Manage partner schools, upload logos, and configure report card digital signatures."],
+    levels:        ["Report Levels",    "Criteria templates & time standards per swim level"],
+    classes:       ["Classes",   "All classes across centers"],
     memberPrivate: ["Private Students", "Manage private student assignments and coaches"],
-    rates:         [t("owner.titles.rates.title"),     t("owner.titles.rates.sub")],
-    competitions:  [t("owner.titles.competitions.title"), t("owner.titles.competitions.sub")],
-    staffPresensi: [t("owner.titles.staffPresensi.title"), t("owner.titles.staffPresensi.sub")],
-    invoices:      [t("owner.titles.invoices.title"),  t("owner.titles.invoices.sub")],
-    loans:         [t("owner.titles.loans.title"),     t("owner.titles.loans.sub")],
-    financial:     [t("owner.titles.financial.title"), t("owner.titles.financial.sub")],
-    landing:       [t("owner.titles.landing.title"),   t("owner.titles.landing.sub")],
-    storage:       [t("owner.titles.storage.title"),   t("owner.titles.storage.sub")],
-    activity:      [t("owner.titles.activity.title"),  t("owner.titles.activity.sub")],
+    rates:         ["Rate Settings",     "Coach rates per class"],
+    competitions:  ["Competitions & Achievements", "Track students' competitions and awards across all centers"],
+    staffPresensi: ["Staff Attendance & Leave", "Review staff clock-ins with their selfie, and approve or reject leave requests"],
+    invoices:      ["Payslips",  "Coach invoices & payslip issuance"],
+    loans:         ["Loan List",     "Manage coach loans & installments"],
+    financial:     ["Financial", "Income, expenses & payroll across centers"],
+    landing:       ["Landing Page",   "Manage the front page content"],
+    storage:       ["System Storage",   "Monitoring, backup, and system file storage management"],
+    activity:      ["Activity Log",  "All CRUD activity across centers"],
   };
 }
 
@@ -85,7 +84,6 @@ function buildTitles(t: (key: string) => string): Record<string, [string, string
 export default function OwnerPage() {
   const supabase = createClient();
   const router = useRouter();
-  const { t } = useLocale();
   const [active, setActive] = useState("dashboard");
   const [mobileNav, setMobileNav] = useState(false);
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -147,7 +145,7 @@ export default function OwnerPage() {
       // Non-owner somehow on owner page
       const { data: prof } = await supabase.from("profiles").select("id").eq("id", user.id).maybeSingle();
       if (!prof) {
-        setInitError(t("owner.shell.notFoundBody"));
+        setInitError("Account data was not found in the database. Data may have been reset. Please contact the owner to recreate your account.");
         return;
       }
       setProfile({ full_name: user.user_metadata?.full_name ?? "Owner" });
@@ -182,8 +180,8 @@ export default function OwnerPage() {
     activity:  <OwnerActivityLog branches={branches} />,
   };
 
-  const navItems = useMemo(() => buildNavItems(t), [t]);
-  const [title, sub] = buildTitles(t)[active] ?? ["Owner", ""];
+  const navItems = useMemo(() => buildNavItems(), []);
+  const [title, sub] = buildTitles()[active] ?? ["Owner", ""];
 
   const brand = useMemo(() => (
     <div className="px-4 py-4 flex items-center justify-center min-h-[64px]">
@@ -209,11 +207,11 @@ export default function OwnerPage() {
           <Icon name="warning" className="w-7 h-7" />
         </div>
         <div>
-          <h2 className="font-display font-bold text-xl text-ink">{t("owner.shell.notFoundTitle")}</h2>
+          <h2 className="font-display font-bold text-xl text-ink">{"Data Not Found"}</h2>
           <p className="text-sm text-ink-mute mt-2 leading-relaxed">{initError}</p>
         </div>
         <Btn variant="primary" className="w-full" onClick={async () => { await supabase.auth.signOut(); window.location.href = "/login"; }}>
-          {t("owner.shell.backToLogin")}
+          {"Back to Login"}
         </Btn>
       </div>
     </div>
@@ -232,7 +230,7 @@ export default function OwnerPage() {
             className="w-full flex items-center gap-2.5 px-3 h-[38px] rounded-[10px] text-sm font-medium text-ink-soft hover:bg-paper-tint hover:text-danger-600 transition group cursor-pointer"
           >
             <Icon name="logout" className="w-5 h-5 text-ink-mute group-hover:text-danger-600 transition-colors shrink-0" strokeWidth={1.8} />
-            <span>{t("common.actions.logout")}</span>
+            <span>{"Logout"}</span>
           </button>
         }
       />
@@ -275,7 +273,7 @@ export default function OwnerPage() {
                 className="w-full flex items-center gap-2.5 px-3 h-[38px] rounded-[10px] text-sm font-medium text-ink-soft hover:bg-paper-tint hover:text-danger-600 transition group cursor-pointer"
               >
                 <Icon name="logout" className="w-5 h-5 text-ink-mute group-hover:text-danger-600 transition-colors shrink-0" strokeWidth={1.8} />
-                <span>{t("common.actions.logout")}</span>
+                <span>{"Logout"}</span>
               </button>
             </div>
           </div>

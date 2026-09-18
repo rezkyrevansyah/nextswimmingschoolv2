@@ -3,11 +3,9 @@ import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
 import { NoTranslate } from "@/components/ui/NoTranslate";
 import { fmtIDR } from "@/lib/utils";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import type { FinancialHook } from "./index";
 
 export default function Payroll({ hook }: { hook: FinancialHook }) {
-  const { t, tNode } = useLocale();
   const {
     payrollTotalTax, payrollTotalHarusTransfer, payrollUnpaidCount, payrollTotalSudahTransfer, payrollPaidCount,
     payrollTotalGajiPokokDanHonor, payrollTotalReimburse,
@@ -28,16 +26,16 @@ export default function Payroll({ hook }: { hook: FinancialHook }) {
       {/* Header & Subtitle */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h3 className="font-display font-bold text-lg text-ink">{t("owner.financial.payrollHeading")}</h3>
+          <h3 className="font-display font-bold text-lg text-ink">{"Payroll & Payout Center (Coach & Staff)"}</h3>
           <p className="text-xs text-ink-mute mt-0.5">
-            {t("owner.financial.payrollSub")}
+            {"Track every coach teaching-fee transfer, staff base salary & allowance, and operational reimbursement claim in one place."}
           </p>
         </div>
         {payrollTotalTax > 0 && (
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-warn-50 border border-warn-200 text-xs text-warn-800 shrink-0">
-            <span className="font-bold">{t("owner.financial.payrollTaxWithheldBadge")}</span>
+            <span className="font-bold">{"Income Tax (PPh 21) Withheld:"}</span>
             <span className="font-mono font-extrabold">{fmtIDR(payrollTotalTax)}</span>
-            <span className="text-[10px] text-warn-600">{t("owner.financial.payrollTaxWithheldNote")}</span>
+            <span className="text-[10px] text-warn-600">{"(Held for the state treasury)"}</span>
           </div>
         )}
       </div>
@@ -50,7 +48,7 @@ export default function Payroll({ hook }: { hook: FinancialHook }) {
             <div className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-warn-500 animate-pulse" />
               <span className="text-[10px] font-bold uppercase tracking-wider text-warn-800">
-                {t("owner.financial.payrollCardUnpaidLabel")}
+                {"Must Be Transferred (Unpaid)"}
               </span>
             </div>
             <span className="w-8 h-8 rounded-lg bg-warn-50 text-warn-700 border border-warn-200 flex items-center justify-center shrink-0">
@@ -62,7 +60,7 @@ export default function Payroll({ hook }: { hook: FinancialHook }) {
               {fmtIDR(payrollTotalHarusTransfer)}
             </div>
             <div className="text-xs text-ink-mute mt-1 flex items-center gap-1">
-              {t("owner.financial.payrollCardUnpaidSub", { count: payrollUnpaidCount })}
+              {`${payrollUnpaidCount} recipients awaiting transfer`}
             </div>
           </div>
         </div>
@@ -73,7 +71,7 @@ export default function Payroll({ hook }: { hook: FinancialHook }) {
             <div className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-ok-500" />
               <span className="text-[10px] font-bold uppercase tracking-wider text-ink-faint">
-                {t("owner.financial.payrollCardPaidLabel")}
+                {"Already Transferred (Paid)"}
               </span>
             </div>
             <span className="w-8 h-8 rounded-lg bg-ok-50 text-ok-600 border border-ok-200 flex items-center justify-center shrink-0">
@@ -85,7 +83,7 @@ export default function Payroll({ hook }: { hook: FinancialHook }) {
               {fmtIDR(payrollTotalSudahTransfer)}
             </div>
             <div className="text-xs text-ink-mute mt-1 flex items-center gap-1">
-              {t("owner.financial.payrollCardPaidSub", { count: payrollPaidCount })}
+              {`${payrollPaidCount} transfers completed`}
             </div>
           </div>
         </div>
@@ -94,7 +92,7 @@ export default function Payroll({ hook }: { hook: FinancialHook }) {
         <div className="bg-paper border border-line rounded-2xl p-4.5 shadow-xs flex flex-col justify-between space-y-3 hover:border-ocean-300 hover:shadow-card transition-all">
           <div className="flex items-center justify-between gap-2">
             <span className="text-[10px] font-bold uppercase tracking-wider text-ink-faint">
-              {t("owner.financial.payrollCardGrossLabel")}
+              {"Base Salary & Honor Burden"}
             </span>
             <span className="w-8 h-8 rounded-lg bg-ocean-50 text-ocean-700 border border-ocean-200 flex items-center justify-center shrink-0">
               <Icon name="invoice" className="w-4 h-4" />
@@ -105,7 +103,7 @@ export default function Payroll({ hook }: { hook: FinancialHook }) {
               {fmtIDR(payrollTotalGajiPokokDanHonor)}
             </div>
             <div className="text-xs text-ink-mute mt-1">
-              {t("owner.financial.payrollCardGrossSub")}
+              {"Coach teaching honor & staff base salary"}
             </div>
           </div>
         </div>
@@ -114,7 +112,7 @@ export default function Payroll({ hook }: { hook: FinancialHook }) {
         <div className="bg-paper border border-line rounded-2xl p-4.5 shadow-xs flex flex-col justify-between space-y-3 hover:border-purple-300 hover:shadow-card transition-all">
           <div className="flex items-center justify-between gap-2">
             <span className="text-[10px] font-bold uppercase tracking-wider text-ink-faint">
-              {t("owner.financial.payrollCardReimburseLabel")}
+              {"Total Reimbursement Claims"}
             </span>
             <span className="w-8 h-8 rounded-lg bg-purple-50 text-purple-700 border border-purple-200 flex items-center justify-center shrink-0">
               <Icon name="card" className="w-4 h-4" />
@@ -125,7 +123,7 @@ export default function Payroll({ hook }: { hook: FinancialHook }) {
               {fmtIDR(payrollTotalReimburse)}
             </div>
             <div className="text-xs text-ink-mute mt-1">
-              {t("owner.financial.payrollCardReimburseSub")}
+              {"Approved operational & transport claims"}
             </div>
           </div>
         </div>
@@ -137,13 +135,13 @@ export default function Payroll({ hook }: { hook: FinancialHook }) {
         <div className="p-4 border-b border-line space-y-3 bg-paper-tint/30">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-display font-bold text-sm text-ink">{t("owner.financial.payrollListTitle")}</span>
+              <span className="font-display font-bold text-sm text-ink">{"Payout & Salary List"}</span>
               <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-ocean-50 text-ocean-700 border border-ocean-200">
-                {t("owner.financial.payrollRecipientCount", { count: filteredPayrollItems.length })}
+                {`${filteredPayrollItems.length} Recipients`}
               </span>
               {payrollTotalLoanDeduction > 0 && (
                 <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-purple-50 text-purple-700 border border-purple-200">
-                  {t("owner.financial.payrollLoanDeductionBadge", { amount: fmtIDR(payrollTotalLoanDeduction) })}
+                  {`Cash Advance Deduction: -${fmtIDR(payrollTotalLoanDeduction)}`}
                 </span>
               )}
             </div>
@@ -160,7 +158,7 @@ export default function Payroll({ hook }: { hook: FinancialHook }) {
                 }}
                 disabled={loadingDetailedInvoices || loadingStaff}
               >
-                {t("owner.financial.payrollRefreshBtn")}
+                {"Refresh Data"}
               </Btn>
             </div>
           </div>
@@ -170,14 +168,14 @@ export default function Payroll({ hook }: { hook: FinancialHook }) {
             {/* Branch Filter */}
             <div>
               <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-faint mb-1">
-                {t("owner.financial.payrollFilterBranch")}
+                {"Center / Branch"}
               </label>
               <select
                 value={payrollBranchFilter}
                 onChange={e => setPayrollBranchFilter(e.target.value)}
                 className="w-full text-xs rounded-xl border border-line px-2.5 py-1.5 bg-white font-medium text-ink focus:outline-none focus:ring-2 focus:ring-wave-400"
               >
-                <option value="all">{t("owner.financial.allBranches")}</option>
+                <option value="all">{"All Centers"}</option>
                 {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
             </div>
@@ -185,44 +183,44 @@ export default function Payroll({ hook }: { hook: FinancialHook }) {
             {/* Recipient Filter */}
             <div>
               <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-faint mb-1">
-                {t("owner.financial.payrollFilterRecipient")}
+                {"Recipient Category"}
               </label>
               <select
                 value={payrollRecipientFilter}
                 onChange={e => setPayrollRecipientFilter(e.target.value as "all" | "coach" | "staff")}
                 className="w-full text-xs rounded-xl border border-line px-2.5 py-1.5 bg-white font-medium text-ink focus:outline-none focus:ring-2 focus:ring-wave-400"
               >
-                <option value="all">{t("owner.financial.payrollRecipientAllOption")}</option>
-                <option value="coach">{t("owner.financial.payrollRecipientCoachOnlyOption")}</option>
-                <option value="staff">{t("owner.financial.payrollRecipientStaffOnlyOption")}</option>
+                <option value="all">{"All (Coach & Staff)"}</option>
+                <option value="coach">{"Coach Only"}</option>
+                <option value="staff">{"Staff Only"}</option>
               </select>
             </div>
 
             {/* Status Filter */}
             <div>
               <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-faint mb-1">
-                {t("owner.financial.payrollFilterStatus")}
+                {"Payment Status"}
               </label>
               <select
                 value={payrollStatusFilter}
                 onChange={e => setPayrollStatusFilter(e.target.value as "all" | "unpaid" | "paid")}
                 className="w-full text-xs rounded-xl border border-line px-2.5 py-1.5 bg-white font-medium text-ink focus:outline-none focus:ring-2 focus:ring-wave-400"
               >
-                <option value="all">{t("owner.financial.allStatus")}</option>
-                <option value="unpaid">{t("owner.financial.payrollStatusUnpaidOption")}</option>
-                <option value="paid">{t("owner.financial.payrollStatusPaidOption")}</option>
+                <option value="all">{"All Statuses"}</option>
+                <option value="unpaid">{"Unpaid (Ready to Pay)"}</option>
+                <option value="paid">{"Paid (Transferred)"}</option>
               </select>
             </div>
 
             {/* Search Text */}
             <div>
               <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-faint mb-1">
-                {t("owner.financial.payrollFilterSearch")}
+                {"Search"}
               </label>
               <input
                 value={payrollSearch}
                 onChange={e => setPayrollSearch(e.target.value)}
-                placeholder={t("owner.financial.payrollSearchPlaceholder")}
+                placeholder={"Name, bank, account no..."}
                 className="w-full px-2.5 py-1.5 text-xs rounded-xl border border-line bg-white text-ink placeholder:text-ink-mute focus:outline-none focus:ring-2 focus:ring-wave-400"
               />
             </div>
@@ -232,25 +230,25 @@ export default function Payroll({ hook }: { hook: FinancialHook }) {
         {/* Table */}
         {loadingDetailedInvoices || loadingStaff ? (
           <div className="p-12 text-center text-ink-mute text-sm">
-            {t("owner.financial.payrollLoadingTable")}
+            {"Loading coach & staff payroll and payment data..."}
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-line bg-paper-tint text-[11px] uppercase tracking-wider text-ink-faint font-bold">
-                  <th className="text-left py-3.5 px-4">{t("owner.financial.payrollColRecipient")}</th>
-                  <th className="text-left py-3.5 px-4">{t("owner.financial.payrollColDescPeriod")}</th>
-                  <th className="text-left py-3.5 px-4">{t("owner.financial.payrollColBankDest")}</th>
-                  <th className="text-right py-3.5 px-4">{t("owner.financial.colGross")}</th>
-                  <th className="text-right py-3.5 px-4">{t("owner.financial.colTax")}</th>
-                  <th className="text-right py-3.5 px-4 text-purple-700">{t("owner.financial.payrollColLoanDeduction")}</th>
-                  <th className="text-right py-3.5 px-4">{t("owner.financial.colOtherDeductions")}</th>
+                  <th className="text-left py-3.5 px-4">{"Recipient & Center"}</th>
+                  <th className="text-left py-3.5 px-4">{"Description & Period"}</th>
+                  <th className="text-left py-3.5 px-4">{"Destination Bank Account"}</th>
+                  <th className="text-right py-3.5 px-4">{"Gross"}</th>
+                  <th className="text-right py-3.5 px-4">{"Tax (PPh 21)"}</th>
+                  <th className="text-right py-3.5 px-4 text-purple-700">{"Loan Deduction"}</th>
+                  <th className="text-right py-3.5 px-4">{"Other Deductions"}</th>
                   <th className="text-right py-3.5 px-4 text-ocean-900 font-extrabold bg-ocean-50/50">
-                    {t("owner.financial.colNetTransferred")}
+                    {"Real Transfer (Net)"}
                   </th>
-                  <th className="text-center py-3.5 px-4">{t("owner.financial.colStatus")}</th>
-                  <th className="text-right py-3.5 px-4">{t("owner.financial.colAction")}</th>
+                  <th className="text-center py-3.5 px-4">{"Status"}</th>
+                  <th className="text-right py-3.5 px-4">{"Action"}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
@@ -296,9 +294,9 @@ export default function Payroll({ hook }: { hook: FinancialHook }) {
                               {item.bankAccount}
                             </span>
                             <button
-                              onClick={() => copyToClipboard(item.bankAccount!, tNode("owner.financial.payrollCopyAccountLabel", { name: item.recipientName }))}
+                              onClick={() => copyToClipboard(item.bankAccount!, (<><NoTranslate>{item.recipientName}</NoTranslate>{"'s account"}</>))}
                               className="p-1 rounded hover:bg-paper-tint text-ocean-700 hover:text-ocean-900 transition-colors"
-                              title={t("owner.financial.payrollCopyAccountTitle")}
+                              title={"Copy Account Number"}
                             >
                               <Icon name="copy" className="w-3.5 h-3.5" />
                             </button>
@@ -308,7 +306,7 @@ export default function Payroll({ hook }: { hook: FinancialHook }) {
                           </div>
                         </div>
                       ) : (
-                        <span className="text-xs text-ink-mute italic">{t("owner.financial.payrollNoBankAccount")}</span>
+                        <span className="text-xs text-ink-mute italic">{"No bank account yet"}</span>
                       )}
                     </td>
 
@@ -362,7 +360,7 @@ export default function Payroll({ hook }: { hook: FinancialHook }) {
                           ? "bg-ocean-50 text-ocean-700 border border-ocean-200"
                           : "bg-warn-50 text-warn-700 border border-warn-200"
                       }`}>
-                        {item.isPaid ? t("owner.financial.payrollStatusPaidBadge") : item.status === "approved" ? t("owner.financial.payrollStatusReadyBadge") : t("owner.financial.payrollStatusPendingBadge")}
+                        {item.isPaid ? "Paid" : item.status === "approved" ? "Ready to Pay" : "Pending"}
                       </span>
                     </td>
 
@@ -389,7 +387,7 @@ export default function Payroll({ hook }: { hook: FinancialHook }) {
                           }}
                           className="px-2.5 py-1 text-xs font-semibold text-ocean-700 hover:text-ocean-900 bg-ocean-50 hover:bg-ocean-100 rounded-lg border border-ocean-200/60 transition-colors"
                         >
-                          {t("owner.financial.payrollDetailBtn")}
+                          {"Details"}
                         </button>
                         {!item.isPaid && (
                           <Btn
@@ -406,7 +404,7 @@ export default function Payroll({ hook }: { hook: FinancialHook }) {
                                   .update({ status: "paid" })
                                   .eq("id", rId);
                                 if (!error) {
-                                  toast.success(t("owner.financial.payrollReimburseMarkedPaid"));
+                                  toast.success("Reimbursement claim marked as Paid");
                                   loadStaffReimbursements();
                                 }
                               } else {
@@ -426,7 +424,7 @@ export default function Payroll({ hook }: { hook: FinancialHook }) {
                             disabled={markingPaidId === item.rawInvoice?.id || markingStaffSalaryId === item.rawSalary?.id}
                             className="bg-ok-600 hover:bg-ok-700 text-white font-semibold"
                           >
-                            {t("owner.financial.payrollMarkPaidBtn")}
+                            {"Mark as Paid"}
                           </Btn>
                         )}
                       </div>
@@ -438,8 +436,8 @@ export default function Payroll({ hook }: { hook: FinancialHook }) {
                     <td colSpan={10} className="py-12 text-center text-ink-mute">
                       <div className="flex flex-col items-center justify-center space-y-1">
                         <Icon name="users" className="w-8 h-8 text-ink-faint" />
-                        <span className="font-semibold text-sm text-ink">{t("owner.financial.payrollEmptyTitle")}</span>
-                        <span className="text-xs text-ink-mute">{t("owner.financial.payrollEmptyBody")}</span>
+                        <span className="font-semibold text-sm text-ink">{"No matching payroll data"}</span>
+                        <span className="text-xs text-ink-mute">{"Try adjusting the month, center, or search filters."}</span>
                       </div>
                     </td>
                   </tr>

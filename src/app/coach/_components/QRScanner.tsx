@@ -3,7 +3,6 @@ import { useState, useRef, useEffect } from "react";
 import Icon from "@/components/ui/Icon";
 import { Card } from "@/components/ui/Card";
 import { useToast } from "@/components/providers/ToastProvider";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import { createClient } from "@/utils/supabase/client";
 import {
   minutesAfterStart,
@@ -19,7 +18,6 @@ export default function QRScanner({ coachId, classes, onClose }: {
 }) {
   const toast = useToast();
   const supabase = createClient();
-  const { t } = useLocale();
   const divId = "qr-reader-coach";
   const [lastScanned, setLastScanned] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
@@ -36,7 +34,7 @@ export default function QRScanner({ coachId, classes, onClose }: {
       .single();
 
     if (mErr || !member) {
-      toast.error(t("coach.qrScanner.qrNotRecognizedTitle"), t("coach.qrScanner.memberNotFoundBody"));
+      toast.error("QR not recognized", "Student not found");
       setTimeout(() => setLastScanned(null), 2000);
       return;
     }
@@ -54,7 +52,7 @@ export default function QRScanner({ coachId, classes, onClose }: {
     // Block suspended members
     const today = new Date().toISOString().split("T")[0];
     if (typedMember.status === "suspended" || (typedMember.suspend_until && typedMember.suspend_until >= today)) {
-      toast.error(t("coach.qrScanner.memberSuspendedTitle", { name }), t("coach.qrScanner.memberSuspendedBody"));
+      toast.error(`${name} is suspended`, "Student cannot be marked present while suspended");
       setTimeout(() => setLastScanned(null), 2500);
       return;
     }
@@ -74,7 +72,7 @@ export default function QRScanner({ coachId, classes, onClose }: {
     const matchedClass = candidates.find(c => (c.schedule_days ?? []).includes(todayName)) ?? candidates[0];
 
     if (!matchedClass) {
-      toast.error(t("coach.qrScanner.memberNotInClassTitle", { name }), t("coach.qrScanner.memberNotInClassBody"));
+      toast.error(`${name} isn't in any of your classes`, "This student isn't enrolled in a class you teach — attendance wasn't recorded");
       setTimeout(() => setLastScanned(null), 2500);
       return;
     }
@@ -96,7 +94,7 @@ export default function QRScanner({ coachId, classes, onClose }: {
         })
         .single();
       if (recordErr) {
-        toast.error(t("coach.qrScanner.attendanceFailedTitle", { name }), t("coach.absen.recordAttendanceFailedRetry"));
+        toast.error(`Failed to mark attendance for ${name}`, "Failed to record attendance — nothing was saved, sessions left is unaffected. Please try again.");
         setTimeout(() => setLastScanned(null), 2500);
         return;
       }
@@ -105,20 +103,20 @@ export default function QRScanner({ coachId, classes, onClose }: {
         out_bill_sessions_used: number | null; out_bill_sessions_total: number | null; out_already_recorded: boolean;
       };
       if (out_already_recorded) {
-        toast.error(t("coach.absen.sessionAlreadyRecorded"));
+        toast.error("This session on this date is already recorded");
         setTimeout(() => setLastScanned(null), 2500);
         return;
       }
       if (out_bill_id && out_bill_sessions_total != null && out_bill_sessions_used != null && (out_bill_sessions_total - out_bill_sessions_used) <= 1) {
         await supabase.from("notifications").insert({
           user_id: typedMember.id,
-          title: t("coach.absen.sessionsAlmostUpTitle"),
-          body: t("coach.absen.sessionsAlmostUpBody", { remaining: out_bill_sessions_total - out_bill_sessions_used }),
+          title: "Sessions almost up",
+          body: `You have ${out_bill_sessions_total - out_bill_sessions_used} session(s) left in your package. Contact admin to renew your package.`,
           icon: "warning",
           kind: "warn",
         });
       }
-      toast.success(t("coach.qrScanner.memberPresentTitle", { name }), t("coach.absen.remainingSessions", { count: out_remaining_sessions ?? 0 }));
+      toast.success(`✓ ${name} present`, `Remaining sessions: ${out_remaining_sessions ?? 0}`);
       setTimeout(() => setLastScanned(null), 2500);
       return;
     }
@@ -133,11 +131,11 @@ export default function QRScanner({ coachId, classes, onClose }: {
     }, { onConflict: MEMBER_ATTENDANCE_CONFLICT });
 
     if (error) {
-      toast.error(t("coach.qrScanner.attendanceFailedTitle", { name }), error.message);
+      toast.error(`Failed to mark attendance for ${name}`, error.message);
     } else if (memberStatus === "telat") {
-      toast.error(t("coach.qrScanner.memberLateTitle", { name }), t("coach.qrScanner.memberLateBody", { minutes: memberLateMin }));
+      toast.error(`${name} present — Late`, `${memberLateMin} minutes after class started`);
     } else {
-      toast.success(t("coach.qrScanner.memberPresentTitle", { name }), t("coach.qrScanner.attendanceRecordedBody"));
+      toast.success(`✓ ${name} present`, "Attendance recorded");
     }
 
     // Allow scanning again after 2.5s
@@ -164,7 +162,7 @@ export default function QRScanner({ coachId, classes, onClose }: {
         );
         setScanning(true);
       } catch {
-        toast.error(t("coach.qrScanner.cameraAccessFailedTitle"), t("coach.qrScanner.cameraAccessFailedBody"));
+        toast.error("Cannot access camera", "Allow camera access in the browser");
       }
     }
 
@@ -181,15 +179,15 @@ export default function QRScanner({ coachId, classes, onClose }: {
   return (
     <div className="max-w-sm mx-auto space-y-4">
       <button onClick={onClose} className="text-sm text-ink-mute hover:text-ocean-600 font-semibold inline-flex items-center gap-1">
-        <Icon name="arrowL" className="w-4 h-4" /> {t("coach.qrScanner.backBtn")}
+        <Icon name="arrowL" className="w-4 h-4" /> {"Back"}
       </button>
       <Card className="text-center">
-        <div className="font-display font-bold text-lg text-ink">{t("coach.qrScanner.title")}</div>
-        <p className="text-xs text-ink-mute mt-1 mb-4">{t("coach.qrScanner.hint")}</p>
+        <div className="font-display font-bold text-lg text-ink">{"Scan Student QR"}</div>
+        <p className="text-xs text-ink-mute mt-1 mb-4">{"Point the camera at the student's QR card"}</p>
         <div id={divId} className="rounded-xl overflow-hidden bg-black" />
-        {!scanning && <p className="text-xs text-ink-mute mt-3 animate-pulse">{t("coach.qrScanner.startingCamera")}</p>}
+        {!scanning && <p className="text-xs text-ink-mute mt-3 animate-pulse">{"Starting camera…"}</p>}
         {lastScanned && (
-          <div className="mt-3 text-xs text-ok-600 font-semibold animate-pulse">{t("coach.qrScanner.processingScan")}</div>
+          <div className="mt-3 text-xs text-ok-600 font-semibold animate-pulse">{"Processing scan…"}</div>
         )}
       </Card>
     </div>

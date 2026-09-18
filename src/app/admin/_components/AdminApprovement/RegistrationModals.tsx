@@ -7,6 +7,7 @@ import Status from "@/components/ui/Status";
 import Avatar from "@/components/ui/Avatar";
 import Modal from "@/components/ui/Modal";
 import DatePicker from "@/components/ui/DatePicker";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 import { calcAge } from "../../_utils";
 import { fmtDate, fmtDateLong, waLink } from "@/lib/utils";
 import type { useApprovementData } from "./useApprovementData";
@@ -15,7 +16,7 @@ type ApprovementDataHook = ReturnType<typeof useApprovementData>;
 
 export default function RegistrationModals({ hook }: { hook: ApprovementDataHook }) {
   const {
-    t, genderLabel,
+    genderLabel,
     detailReg, setDetailReg, openEditReg, deleteReg, rejectReg, approvingId, openApproveReg,
     editReg, setEditReg, editRegForm, setEditRegForm, savingEdit, saveEditReg,
     rejectRegTarget, setRejectRegTarget, regRejectReason, setRegRejectReason, rejectingReg, confirmRejectReg,
@@ -25,47 +26,47 @@ export default function RegistrationModals({ hook }: { hook: ApprovementDataHook
   return (
     <>
       {/* ── Detail Registrasi Modal ─────────────────────────────────────────── */}
-      <Modal open={!!detailReg} onClose={() => setDetailReg(null)} title={t("admin.approvement.detailRegModalTitle")} size="sm"
+      <Modal open={!!detailReg} onClose={() => setDetailReg(null)} title={"Registration Detail"} size="sm"
         footer={
           <div className="flex gap-2 w-full flex-wrap">
-            <Btn variant="ghost" icon="edit" onClick={() => detailReg && openEditReg(detailReg)}>{t("common.actions.edit")}</Btn>
-            <Btn variant="ghost" className="text-danger-500" onClick={() => detailReg && deleteReg(detailReg)}>{t("common.actions.delete")}</Btn>
-            <Btn variant="ghost" className="text-danger-500" onClick={() => detailReg && rejectReg(detailReg)}>{t("common.actions.reject")}</Btn>
+            <Btn variant="ghost" icon="edit" onClick={() => detailReg && openEditReg(detailReg)}>{"Edit"}</Btn>
+            <Btn variant="ghost" className="text-danger-500" onClick={() => detailReg && deleteReg(detailReg)}>{"Delete"}</Btn>
+            <Btn variant="ghost" className="text-danger-500" onClick={() => detailReg && rejectReg(detailReg)}>{"Reject"}</Btn>
             <div className="flex-1" />
             {detailReg && (
-              <a href={waLink(t("admin.approvement.welcomeWaMessage", { name: detailReg.full_name }), detailReg.phone_owner === "parent" ? detailReg.parent_phone : detailReg.phone)} target="_blank" rel="noreferrer">
-                <Btn variant="wa" icon="whatsapp">{t("admin.approvement.chatWaBtn")}</Btn>
+              <a href={waLink(`Hi ${detailReg.full_name}, thank you for registering at Next Swimming School.`, detailReg.phone_owner === "parent" ? detailReg.parent_phone : detailReg.phone)} target="_blank" rel="noreferrer">
+                <Btn variant="wa" icon="whatsapp">{"Chat WA"}</Btn>
               </a>
             )}
             <Btn variant="primary" icon="check" disabled={!!approvingId} onClick={() => detailReg && openApproveReg(detailReg)}>
-              {approvingId ? t("admin.approvement.processingBtn") : t("common.actions.approve")}
+              {approvingId ? "Processing…" : "Approve"}
             </Btn>
           </div>
         }>
         {detailReg && (() => {
           const age = detailReg.birth_date ? calcAge(detailReg.birth_date) : null;
-          const rows: [string, string | null | undefined][] = [
-            [t("admin.approvement.rowFullName"), detailReg.full_name],
-            [t("admin.approvement.rowEmail"), detailReg.email ?? "—"],
-            [t("admin.approvement.rowBirthDate"), detailReg.birth_date ? `${fmtDate(detailReg.birth_date)}${age ? ` (${t("admin.approvement.yearsSuffix", { n: age })})` : ""}` : "—"],
-            [t("admin.approvement.rowGender"), genderLabel(detailReg.gender) ?? "—"],
-            [t("admin.approvement.rowPhone"), detailReg.phone ?? "—"],
-            [t("admin.approvement.rowPhoneOwner"), detailReg.phone_owner === "parent" ? t("admin.approvement.phoneOwnerParent") : t("admin.approvement.phoneOwnerSelf")],
+          const rows: [string, React.ReactNode][] = [
+            ["Full name", <NoTranslate key="full_name">{detailReg.full_name}</NoTranslate>],
+            ["Email", detailReg.email ? <NoTranslate key="email">{detailReg.email}</NoTranslate> : "—"],
+            ["Date of birth", detailReg.birth_date ? `${fmtDate(detailReg.birth_date)}${age ? ` (${`${age} y`})` : ""}` : "—"],
+            ["Gender", genderLabel(detailReg.gender) ?? "—"],
+            ["Phone number", <NoTranslate key="phone">{detailReg.phone ?? "—"}</NoTranslate>],
+            ["Phone owner", detailReg.phone_owner === "parent" ? "Parent / guardian" : "Self"],
             ...(detailReg.phone_owner === "parent" ? [
-              [t("admin.approvement.rowParentName"), detailReg.parent_name ?? "—"] as [string, string],
-              [t("admin.approvement.rowParentPhone"), detailReg.parent_phone ?? "—"] as [string, string],
+              ["Parent's name", <NoTranslate key="parent_name">{detailReg.parent_name ?? "—"}</NoTranslate>] as [string, React.ReactNode],
+              ["Parent's phone number", <NoTranslate key="parent_phone">{detailReg.parent_phone ?? "—"}</NoTranslate>] as [string, React.ReactNode],
             ] : []),
-            [t("admin.approvement.rowAddress"), detailReg.address ?? "—"],
-            [t("admin.approvement.rowHealthNotes"), detailReg.health_notes ?? "—"],
-            [t("admin.approvement.rowRegDate"), fmtDateLong(detailReg.created_at)],
+            ["Address", <NoTranslate key="address">{detailReg.address ?? "—"}</NoTranslate>],
+            ["Health notes", <NoTranslate key="health_notes">{detailReg.health_notes ?? "—"}</NoTranslate>],
+            ["Registration date", fmtDateLong(detailReg.created_at)],
           ];
           return (
             <div className="space-y-3">
               <div className="flex items-center gap-3 pb-3 border-b border-line">
                 <Avatar name={detailReg.full_name} size={48} />
                 <div>
-                  <div className="font-display font-bold text-ink">{detailReg.full_name}</div>
-                  <Status kind="pending" className="mt-1">{t("admin.approvement.waitingReviewStatus")}</Status>
+                  <div className="font-display font-bold text-ink"><NoTranslate>{detailReg.full_name}</NoTranslate></div>
+                  <Status kind="pending" className="mt-1">{"Awaiting review"}</Status>
                 </div>
               </div>
               <div className="divide-y divide-line">
@@ -82,64 +83,64 @@ export default function RegistrationModals({ hook }: { hook: ApprovementDataHook
       </Modal>
 
       {/* ── Tolak Registrasi ──────────────────────────────────────────────── */}
-      <Modal open={!!rejectRegTarget} onClose={() => setRejectRegTarget(null)} title={t("admin.approvement.rejectRegModalTitle")} size="sm"
-        footer={<><Btn variant="ghost" onClick={() => setRejectRegTarget(null)}>{t("common.actions.cancel")}</Btn><Btn variant="danger" onClick={confirmRejectReg} disabled={rejectingReg}>{rejectingReg ? t("admin.approvement.rejectingBtn") : t("admin.approvement.rejectRegBtn")}</Btn></>}>
+      <Modal open={!!rejectRegTarget} onClose={() => setRejectRegTarget(null)} title={"Reject Registration"} size="sm"
+        footer={<><Btn variant="ghost" onClick={() => setRejectRegTarget(null)}>{"Cancel"}</Btn><Btn variant="danger" onClick={confirmRejectReg} disabled={rejectingReg}>{rejectingReg ? "Rejecting…" : "Reject Registration"}</Btn></>}>
         <div className="space-y-4">
           {rejectRegTarget && (
             <div className="p-3 rounded-xl bg-paper-tint border border-line text-sm">
-              <div className="font-semibold text-ink">{rejectRegTarget.full_name}</div>
-              <div className="text-ink-mute">{rejectRegTarget.phone ?? "—"}</div>
+              <div className="font-semibold text-ink"><NoTranslate>{rejectRegTarget.full_name}</NoTranslate></div>
+              <div className="text-ink-mute"><NoTranslate>{rejectRegTarget.phone ?? "—"}</NoTranslate></div>
             </div>
           )}
-          <Field label={t("admin.approvement.fieldRejectReason")} required>
-            <Textarea rows={3} value={regRejectReason} onChange={e => setRegRejectReason(e.target.value)} placeholder={t("admin.approvement.regRejectReasonPlaceholder")} />
+          <Field label={"Rejection reason"} required>
+            <Textarea rows={3} value={regRejectReason} onChange={e => setRegRejectReason(e.target.value)} placeholder={"E.g. Incomplete data, WhatsApp number inactive."} />
           </Field>
         </div>
       </Modal>
 
       {/* ── Edit Registrasi ───────────────────────────────────────────────── */}
-      <Modal open={!!editReg} onClose={() => setEditReg(null)} title={t("admin.approvement.editRegModalTitle")} size="sm"
-        footer={<><Btn variant="ghost" onClick={() => setEditReg(null)}>{t("common.actions.cancel")}</Btn><Btn variant="primary" onClick={saveEditReg} disabled={savingEdit}>{savingEdit ? t("common.actions.saving") : t("common.actions.save")}</Btn></>}>
+      <Modal open={!!editReg} onClose={() => setEditReg(null)} title={"Edit Registration Data"} size="sm"
+        footer={<><Btn variant="ghost" onClick={() => setEditReg(null)}>{"Cancel"}</Btn><Btn variant="primary" onClick={saveEditReg} disabled={savingEdit}>{savingEdit ? "Saving…" : "Save"}</Btn></>}>
         <div className="space-y-4">
-          <Field label={t("admin.approvement.rowFullName")} required><Input value={editRegForm.full_name ?? ""} onChange={e => setEditRegForm(f => ({ ...f, full_name: e.target.value }))} /></Field>
-          <Field label={t("admin.approvement.rowEmail")} required hint={t("admin.approvement.emailLoginHint")}><Input type="email" placeholder="nama@email.com" value={editRegForm.email ?? ""} onChange={e => setEditRegForm(f => ({ ...f, email: e.target.value }))} /></Field>
+          <Field label={"Full name"} required><Input value={editRegForm.full_name ?? ""} onChange={e => setEditRegForm(f => ({ ...f, full_name: e.target.value }))} /></Field>
+          <Field label={"Email"} required hint={"Will be used as the login account"}><Input type="email" placeholder="nama@email.com" value={editRegForm.email ?? ""} onChange={e => setEditRegForm(f => ({ ...f, email: e.target.value }))} /></Field>
           <div className="grid sm:grid-cols-2 gap-4">
-            <Field label={t("admin.approvement.rowBirthDate")}><DatePicker value={editRegForm.birth_date ?? ""} onChange={v => setEditRegForm(f => ({ ...f, birth_date: v }))} /></Field>
-            <Field label={t("admin.approvement.rowGender")}>
+            <Field label={"Date of birth"}><DatePicker value={editRegForm.birth_date ?? ""} onChange={v => setEditRegForm(f => ({ ...f, birth_date: v }))} /></Field>
+            <Field label={"Gender"}>
               <Select value={editRegForm.gender ?? ""} onChange={e => setEditRegForm(f => ({ ...f, gender: e.target.value }))}>
                 <option value="">—</option>
-                <option value="male">{t("admin.approvement.genderMale")}</option>
-                <option value="female">{t("admin.approvement.genderFemale")}</option>
+                <option value="male">{"Male"}</option>
+                <option value="female">{"Female"}</option>
               </Select>
             </Field>
           </div>
-          <Field label={t("admin.approvement.rowPhone")}><Input value={editRegForm.phone ?? ""} onChange={e => setEditRegForm(f => ({ ...f, phone: e.target.value }))} /></Field>
-          <Field label={t("admin.approvement.rowPhoneOwner")}>
+          <Field label={"Phone number"}><Input value={editRegForm.phone ?? ""} onChange={e => setEditRegForm(f => ({ ...f, phone: e.target.value }))} /></Field>
+          <Field label={"Phone owner"}>
             <Select value={editRegForm.phone_owner ?? "self"} onChange={e => setEditRegForm(f => ({ ...f, phone_owner: e.target.value }))}>
-              <option value="self">{t("admin.approvement.phoneOwnerSelf")}</option>
-              <option value="parent">{t("admin.approvement.phoneOwnerParent")}</option>
+              <option value="self">{"Self"}</option>
+              <option value="parent">{"Parent / guardian"}</option>
             </Select>
           </Field>
           {editRegForm.phone_owner === "parent" && <>
-            <Field label={t("admin.approvement.rowParentName")}><Input value={editRegForm.parent_name ?? ""} onChange={e => setEditRegForm(f => ({ ...f, parent_name: e.target.value }))} /></Field>
-            <Field label={t("admin.approvement.rowParentPhone")}><Input value={editRegForm.parent_phone ?? ""} onChange={e => setEditRegForm(f => ({ ...f, parent_phone: e.target.value }))} /></Field>
+            <Field label={"Parent's name"}><Input value={editRegForm.parent_name ?? ""} onChange={e => setEditRegForm(f => ({ ...f, parent_name: e.target.value }))} /></Field>
+            <Field label={"Parent's phone number"}><Input value={editRegForm.parent_phone ?? ""} onChange={e => setEditRegForm(f => ({ ...f, parent_phone: e.target.value }))} /></Field>
           </>}
-          <Field label={t("admin.approvement.rowAddress")}><Textarea rows={2} value={editRegForm.address ?? ""} onChange={e => setEditRegForm(f => ({ ...f, address: e.target.value }))} /></Field>
-          <Field label={t("admin.approvement.fieldHealthNotes")}><Input value={editRegForm.health_notes ?? ""} onChange={e => setEditRegForm(f => ({ ...f, health_notes: e.target.value }))} /></Field>
+          <Field label={"Address"}><Textarea rows={2} value={editRegForm.address ?? ""} onChange={e => setEditRegForm(f => ({ ...f, address: e.target.value }))} /></Field>
+          <Field label={"Health notes / allergies"}><Input value={editRegForm.health_notes ?? ""} onChange={e => setEditRegForm(f => ({ ...f, health_notes: e.target.value }))} /></Field>
         </div>
       </Modal>
 
       {/* ── Approve + Bukti Transfer ──────────────────────────────────────── */}
-      <Modal open={!!approveTarget} onClose={() => setApproveTarget(null)} title={t("admin.approvement.approveRegModalTitle")} size="sm"
-        footer={<><Btn variant="ghost" onClick={() => setApproveTarget(null)}>{t("common.actions.cancel")}</Btn><Btn variant="primary" icon="check" onClick={confirmApproveReg} disabled={!!approvingId}>{approvingId ? t("admin.approvement.processingBtn") : t("admin.approvement.approveCreateAccountBtn")}</Btn></>}>
+      <Modal open={!!approveTarget} onClose={() => setApproveTarget(null)} title={"Approve Registration"} size="sm"
+        footer={<><Btn variant="ghost" onClick={() => setApproveTarget(null)}>{"Cancel"}</Btn><Btn variant="primary" icon="check" onClick={confirmApproveReg} disabled={!!approvingId}>{approvingId ? "Processing…" : "Approve & Create Account"}</Btn></>}>
         {approveTarget && (
           <div className="space-y-4">
             <Card className="!p-3 bg-paper-tint">
-              <div className="font-semibold text-ink text-sm">{approveTarget.full_name}</div>
-              <div className="text-xs text-ink-mute mt-0.5">{approveTarget.phone ?? "—"}</div>
+              <div className="font-semibold text-ink text-sm"><NoTranslate>{approveTarget.full_name}</NoTranslate></div>
+              <div className="text-xs text-ink-mute mt-0.5"><NoTranslate>{approveTarget.phone ?? "—"}</NoTranslate></div>
             </Card>
             <div>
-              <span className="text-[13px] font-semibold text-ink-soft mb-1.5 block">{t("admin.approvement.proofOfTransferLabel")}</span>
+              <span className="text-[13px] font-semibold text-ink-soft mb-1.5 block">{"Proof of transfer"}</span>
               <div className={`flex items-center gap-3 w-full px-3.5 py-3 rounded-xl border-2 border-dashed transition-colors ${proofFile ? "border-ocean-400 bg-ocean-50" : "border-line hover:border-wave-300 hover:bg-paper-tint"}`}>
                 <input ref={proofInputRef} type="file" accept="image/*,application/pdf" className="sr-only" onChange={e => setProofFile(e.target.files?.[0] ?? null)} />
                 <button type="button" onClick={() => proofInputRef.current?.click()}
@@ -154,8 +155,8 @@ export default function RegistrationModals({ hook }: { hook: ApprovementDataHook
                     </>
                   ) : (
                     <>
-                      <div className="text-sm font-semibold text-ink-soft">{t("admin.approvement.clickToUploadGeneric")}</div>
-                      <div className="text-xs text-ink-faint">{t("admin.approvement.fileTypeOptionalHint")}</div>
+                      <div className="text-sm font-semibold text-ink-soft">{"Click to upload"}</div>
+                      <div className="text-xs text-ink-faint">{"JPG, PNG, or PDF · Optional"}</div>
                     </>
                   )}
                 </div>
@@ -166,10 +167,10 @@ export default function RegistrationModals({ hook }: { hook: ApprovementDataHook
                   </button>
                 )}
               </div>
-              <span className="text-xs text-ink-faint mt-1 block">{t("admin.approvement.uploadProofHint")}</span>
+              <span className="text-xs text-ink-faint mt-1 block">{"Upload proof of transfer before approving. Optional if not yet available."}</span>
             </div>
             <div className="bg-ocean-50 border border-ocean-100 rounded-xl p-3 text-xs text-ocean-800">
-              {t("admin.approvement.autoAccountNotice")}
+              {"The student account will be created automatically with a temporary password. Complete the data & send the credential via WhatsApp from the Student menu."}
             </div>
           </div>
         )}

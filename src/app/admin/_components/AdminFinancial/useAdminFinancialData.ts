@@ -5,7 +5,6 @@ import { fmtIDR } from "@/lib/utils";
 import { logActivity } from "@/lib/activityLog";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import type { FinancialRow, ManualTxnRow, IncomeRow, ManualTxnCategory, FinTab } from "./_types";
 
 const PAGE_SIZE = 25;
@@ -14,7 +13,6 @@ export function useAdminFinancialData({ branchId, userId, userName }: { branchId
   const supabase = createClient();
   const toast = useToast();
   const confirm = useConfirm();
-  const { t } = useLocale();
   const [tab, setTab] = useState<FinTab>("income");
 
   const [bills, setBills] = useState<FinancialRow[]>([]);
@@ -130,9 +128,9 @@ export function useAdminFinancialData({ branchId, userId, userName }: { branchId
   const thisMonthTotal = thisMonthPaid.reduce((a, b) => a + (b.total ?? 0), 0) + thisMonthManual.reduce((a, t) => a + t.amount, 0);
   const totalExpenseManual = manualExpense.reduce((a, t) => a + t.amount, 0);
 
-  const typeLabel = (ty: string) => ({ monthly: t("admin.pembayaran.typeMonthly"), session_pack: t("admin.pembayaran.typeSessionPack"), custom: t("admin.pembayaran.typeCustom"), package: t("admin.financial.typePackage") }[ty] ?? ty);
+  const typeLabel = (ty: string) => ({ monthly: "Monthly", session_pack: "Session Pack", custom: "Custom", package: "Package" }[ty] ?? ty);
   const statusKind = (s: string): "paid" | "unpaid" | "school_covered" | "pending" => ({ paid: "paid", unpaid: "unpaid", partial: "pending", school_covered: "school_covered", free: "paid" }[s] as "paid" | "unpaid" | "school_covered" | "pending" ?? "unpaid");
-  const statusLabel = (s: string) => ({ paid: t("admin.pembayaran.statusPaid"), unpaid: t("admin.pembayaran.statusUnpaid"), partial: t("admin.pembayaran.statusPartial"), school_covered: t("admin.pembayaran.statusSchoolCovered"), free: t("admin.pembayaran.statusFree") }[s] ?? s);
+  const statusLabel = (s: string) => ({ paid: "Paid", unpaid: "Unpaid", partial: "Partial", school_covered: "School", free: "Free" }[s] ?? s);
 
   // ── Manual transaction CRUD ──────────────────────────────────────────────────
   const [showTxnModal, setShowTxnModal] = useState<{ kind: "income" | "expense"; edit: ManualTxnRow | null } | null>(null);
@@ -158,10 +156,10 @@ export function useAdminFinancialData({ branchId, userId, userName }: { branchId
 
   const saveTxn = async () => {
     if (!showTxnModal) return;
-    if (!txnForm.description.trim()) return toast.error(t("admin.financial.descriptionRequired"));
+    if (!txnForm.description.trim()) return toast.error("Description is required");
     const amount = Number(txnForm.amount || 0);
-    if (!amount || amount <= 0) return toast.error(t("admin.financial.invalidAmount"));
-    if (txnForm.isReimburse && !txnForm.proofUrl.trim()) return toast.error(t("admin.financial.proofLinkRequired"));
+    if (!amount || amount <= 0) return toast.error("Enter a valid amount");
+    if (txnForm.isReimburse && !txnForm.proofUrl.trim()) return toast.error("Enter a proof link for the reimbursable expense");
     const category = txnForm.category === "Lainnya" ? (txnForm.categoryOther.trim() || "Lainnya") : txnForm.category;
 
     setSavingTxn(true);
@@ -175,15 +173,12 @@ export function useAdminFinancialData({ branchId, userId, userName }: { branchId
       ? await supabase.from("manual_transactions").update({ ...payload, updated_at: new Date().toISOString() }).eq("id", showTxnModal.edit!.id)
       : await supabase.from("manual_transactions").insert({ ...payload, created_by: userId, created_by_role: "admin" });
     setSavingTxn(false);
-    if (error) return toast.error(isEdit ? t("admin.financial.txnSaveFailed") : t("admin.financial.txnAddFailed"), error.message);
-    toast.success(isEdit ? t("admin.financial.txnUpdatedToast") : t("admin.financial.txnAddedToast"));
+    if (error) return toast.error(isEdit ? "Failed to save" : "Failed to add", error.message);
+    toast.success(isEdit ? "Transaction updated" : "Transaction added");
     logActivity(supabase, {
       userId, userRole: "admin", userName, branchId, entityType: "manual_transactions",
       entityId: showTxnModal.edit?.id ?? "new", action: isEdit ? "update" : "create",
-      label: t(isEdit ? "admin.financial.activityTxnUpdated2" : "admin.financial.activityTxnAdded2", {
-        kind: t(showTxnModal.kind === "income" ? "admin.financial.kindIncome" : "admin.financial.kindExpense"),
-        description: txnForm.description.trim(), amount: fmtIDR(amount),
-      }),
+      label: (isEdit ? `${(showTxnModal.kind === "income" ? "Income" : "Expense")} manual "${txnForm.description.trim()}" (${fmtIDR(amount)}) updated` : `${(showTxnModal.kind === "income" ? "Income" : "Expense")} manual "${txnForm.description.trim()}" (${fmtIDR(amount)}) added`),
       meta: { amount, category },
     });
     setShowTxnModal(null);
@@ -191,17 +186,14 @@ export function useAdminFinancialData({ branchId, userId, userName }: { branchId
   };
 
   const deleteTxn = async (row: ManualTxnRow) => {
-    const ok = await confirm({ title: t("admin.financial.deleteConfirmTitle2"), body: t("admin.financial.deleteConfirmBody2", { description: row.description, amount: fmtIDR(row.amount) }), confirmLabel: t("common.actions.delete"), danger: true });
+    const ok = await confirm({ title: "Delete manual transaction?", body: `"${row.description}" (${fmtIDR(row.amount)}) will be permanently deleted.`, confirmLabel: "Delete", danger: true });
     if (!ok) return;
     const { error } = await supabase.from("manual_transactions").delete().eq("id", row.id);
-    if (error) return toast.error(t("admin.financial.deleteFailedGeneric"), error.message);
-    toast.success(t("admin.financial.txnDeletedToast"));
+    if (error) return toast.error("Failed to delete", error.message);
+    toast.success("Transaction deleted");
     logActivity(supabase, {
       userId, userRole: "admin", userName, branchId, entityType: "manual_transactions",
-      entityId: row.id, action: "delete", label: t("admin.financial.activityTxnDeleted2", {
-        kind: t(row.kind === "income" ? "admin.financial.kindIncome" : "admin.financial.kindExpense"),
-        description: row.description, amount: fmtIDR(row.amount),
-      }),
+      entityId: row.id, action: "delete", label: `${(row.kind === "income" ? "Income" : "Expense")} manual "${row.description}" (${fmtIDR(row.amount)}) deleted`,
     });
     setManualTxns(prev => prev.filter(t => t.id !== row.id));
   };

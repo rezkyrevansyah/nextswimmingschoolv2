@@ -2,14 +2,12 @@
 import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import Btn from "@/components/ui/Btn";
 import { Field, Input, Textarea } from "@/components/ui/FormFields";
 import { revalidate, getYouTubeEmbedUrl } from "./_utils";
 
 export default function VideoTab() {
-  const { t } = useLocale();
   const toast = useToast();
   const supabase = createClient();
   const [loading, setLoading] = useState(true);
@@ -58,9 +56,9 @@ export default function VideoTab() {
       })
       .eq("id", 1);
     setSaving(false);
-    if (error) return toast.error(t("owner.landingCms.video.saveFailed"), error.message);
+    if (error) return toast.error("Failed to save", error.message);
     await revalidate();
-    toast.success(t("owner.landingCms.video.saved"));
+    toast.success("Profile video settings saved");
   };
 
   const embedPreviewUrl = getYouTubeEmbedUrl(form.youtube_video_url);
@@ -68,21 +66,21 @@ export default function VideoTab() {
   return (
     <Card>
       <div className="flex items-center justify-between">
-        <SectionTitle sub={t("owner.landingCms.video.sectionSub")}>
-          {t("owner.landingCms.video.sectionTitle")}
+        <SectionTitle sub={"Configure the YouTube profile video shown on the landing page"}>
+          {"Profile Video"}
         </SectionTitle>
         <Btn variant="primary" size="sm" onClick={save} disabled={loading || saving}>
-          {saving ? t("common.actions.saving") : t("common.actions.save")}
+          {saving ? "Saving…" : "Save"}
         </Btn>
       </div>
 
       {loading ? (
-        <div className="py-10 text-center text-ink-mute text-sm">{t("owner.landingCms.loading")}</div>
+        <div className="py-10 text-center text-ink-mute text-sm">{"Loading…"}</div>
       ) : (
         <div className="mt-4 space-y-5">
           <Field
-            label={t("owner.landingCms.video.fieldVideoUrl1")}
-            hint={t("owner.landingCms.video.fieldVideoUrl1Hint")}
+            label={"Video URL 1"}
+            hint={"Main YouTube video shown on the landing page"}
           >
             <Input
               type="url"
@@ -92,7 +90,7 @@ export default function VideoTab() {
             />
           </Field>
 
-          <Field label={t("owner.landingCms.video.fieldVideoUrl2")} hint={t("owner.landingCms.video.fieldVideoUrl2Hint")}>
+          <Field label={"Video URL 2 (optional)"} hint={"Second video, shown as an alternate/additional option"}>
             <Input
               type="url"
               value={form.youtube_video_url_2}
@@ -101,7 +99,7 @@ export default function VideoTab() {
             />
           </Field>
 
-          <Field label={t("owner.landingCms.video.fieldVideoUrl3")} hint={t("owner.landingCms.video.fieldVideoUrl3Hint")}>
+          <Field label={"Video URL 3 (optional)"} hint={"Third video, shown as an alternate/additional option"}>
             <Input
               type="url"
               value={form.youtube_video_url_3}
@@ -110,20 +108,20 @@ export default function VideoTab() {
             />
           </Field>
 
-          <Field label={t("owner.landingCms.video.fieldSectionTitle")} hint={t("owner.landingCms.video.fieldSectionTitleHint")}>
+          <Field label={"Section Title"} hint={"Heading shown above the video on the landing page"}>
             <Input
               value={form.youtube_section_title}
               onChange={(e) => setForm({ ...form, youtube_section_title: e.target.value })}
-              placeholder={t("owner.landingCms.video.sectionTitlePlaceholder")}
+              placeholder={"E.g. See Us in Action"}
             />
           </Field>
 
-          <Field label={t("owner.landingCms.video.fieldSectionSubtitle")}>
+          <Field label={"Section Subtitle"}>
             <Textarea
               rows={2}
               value={form.youtube_section_subtitle}
               onChange={(e) => setForm({ ...form, youtube_section_subtitle: e.target.value })}
-              placeholder={t("owner.landingCms.video.sectionSubtitlePlaceholder")}
+              placeholder={"E.g. A glimpse into our swimming programs"}
             />
           </Field>
 

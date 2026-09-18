@@ -6,7 +6,6 @@ import { Field, Input, Select } from "@/components/ui/FormFields";
 import { Card } from "@/components/ui/Card";
 import DatePicker from "@/components/ui/DatePicker";
 import { useToast } from "@/components/providers/ToastProvider";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import { createClient } from "@/utils/supabase/client";
 import type { StaffProfile } from "../_types";
 
@@ -19,7 +18,6 @@ export default function StaffProfileGate({
   onComplete: (updated: Partial<StaffProfile>) => void;
   onLogout: () => void;
 }) {
-  const { t } = useLocale();
   const toast = useToast();
   const supabase = createClient();
   const [form, setForm] = useState({
@@ -37,7 +35,7 @@ export default function StaffProfileGate({
       !form.phone.trim() || !form.gender || !form.birth_date ||
       !form.bank_name.trim() || !form.bank_account.trim() || !form.bank_holder.trim()
     ) {
-      return toast.error(t("staff.profileGate.allFieldsRequired"));
+      return toast.error("All fields are required to continue");
     }
     setSaving(true);
     const payload = {
@@ -51,7 +49,7 @@ export default function StaffProfileGate({
     };
     const { error } = await supabase.from("profiles").update(payload).eq("id", profile.id);
     setSaving(false);
-    if (error) return toast.error(t("staff.profileGate.saveFailed"), error.message);
+    if (error) return toast.error("Failed to save", error.message);
     onComplete(payload);
   };
 
@@ -60,63 +58,63 @@ export default function StaffProfileGate({
       <Logo size={48} withWord />
       <div className="w-full max-w-md mt-8 space-y-5">
         <div className="text-center space-y-1">
-          <h1 className="font-display font-bold text-2xl text-ink">{t("staff.profileGate.title")}</h1>
-          <p className="text-sm text-ink-mute">{t("staff.profileGate.subtitle")}</p>
+          <h1 className="font-display font-bold text-2xl text-ink">{"Complete Your Profile"}</h1>
+          <p className="text-sm text-ink-mute">{"Fill in the fields below to unlock the staff panel."}</p>
         </div>
         <Card className="space-y-4">
-          <Field label={t("staff.profileGate.fieldPhone")} required>
+          <Field label={"WhatsApp / Mobile Number"} required>
             <Input
               type="tel"
               value={form.phone}
               onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
-              placeholder={t("staff.profileGate.fieldPhonePlaceholder")}
+              placeholder={"0812xxxxxxxx"}
               className="font-mono"
             />
           </Field>
           <div className="grid sm:grid-cols-2 gap-3">
-            <Field label={t("staff.profileGate.fieldGender")} required>
+            <Field label={"Gender"} required>
               <Select value={form.gender} onChange={e => setForm(f => ({ ...f, gender: e.target.value }))}>
-                <option value="">{t("staff.profileGate.selectEllipsis")}</option>
-                <option value="male">{t("staff.profileGate.genderMale")}</option>
-                <option value="female">{t("staff.profileGate.genderFemale")}</option>
+                <option value="">{"Select…"}</option>
+                <option value="male">{"Male"}</option>
+                <option value="female">{"Female"}</option>
               </Select>
             </Field>
-            <Field label={t("staff.profileGate.fieldBirthDate")} required>
+            <Field label={"Date of Birth"} required>
               <DatePicker value={form.birth_date} onChange={v => setForm(f => ({ ...f, birth_date: v }))} />
             </Field>
           </div>
           <div className="pt-3 border-t border-line space-y-3">
             <div className="text-xs font-bold uppercase tracking-widest text-ink-faint">
-              {t("staff.profileGate.bankSectionTitle")}
+              {"Bank Account"}
             </div>
-            <Field label={t("staff.profileGate.fieldBankName")} required>
+            <Field label={"Bank Name"} required>
               <Input
                 value={form.bank_name}
                 onChange={e => setForm(f => ({ ...f, bank_name: e.target.value }))}
-                placeholder={t("staff.profileGate.fieldBankNamePlaceholder")}
+                placeholder={"BCA / Mandiri / BSI"}
               />
             </Field>
-            <Field label={t("staff.profileGate.fieldBankAccount")} required>
+            <Field label={"Account Number"} required>
               <Input
                 value={form.bank_account}
                 onChange={e => setForm(f => ({ ...f, bank_account: e.target.value }))}
-                placeholder={t("staff.profileGate.fieldBankAccountPlaceholder")}
+                placeholder={"1234567890"}
                 className="font-mono"
               />
             </Field>
-            <Field label={t("staff.profileGate.fieldBankHolder")} required>
+            <Field label={"Account Holder (Owner Name)"} required>
               <Input
                 value={form.bank_holder}
                 onChange={e => setForm(f => ({ ...f, bank_holder: e.target.value }))}
-                placeholder={t("staff.profileGate.fieldBankHolderPlaceholder")}
+                placeholder={"Name printed on bank book"}
               />
             </Field>
           </div>
           <Btn variant="primary" className="w-full" disabled={saving} onClick={handleSave}>
-            {saving ? t("staff.profileGate.saving") : t("staff.profileGate.saveAndContinue")}
+            {saving ? "Saving…" : "Save & Continue"}
           </Btn>
           <button onClick={onLogout} className="text-xs text-ink-mute hover:text-danger-600 transition-colors w-full text-center">
-            {t("staff.profileGate.logoutBtn")}
+            {"Log out"}
           </button>
         </Card>
       </div>

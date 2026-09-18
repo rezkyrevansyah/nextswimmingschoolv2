@@ -3,7 +3,7 @@ import { useState, type Dispatch, type SetStateAction } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
-import { useLocale } from "@/components/providers/LocaleProvider";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 import { printPayslip as printPayslipUtil } from "@/lib/printPayslip";
 import { logActivity } from "@/lib/activityLog";
 import {
@@ -38,7 +38,6 @@ export function usePayslipLifecycle({
   setPayslips: Dispatch<SetStateAction<OwnerPayslipRow[]>>;
   setCoachInvoices: Dispatch<SetStateAction<CoachInvoiceRow[]>>;
 }) {
-  const { t, tNode } = useLocale();
   const supabase = createClient();
   const toast = useToast();
   const confirm = useConfirm();
@@ -86,7 +85,7 @@ export function usePayslipLifecycle({
     setSavingEdit(false);
     if ("error" in result) return toast.error(result.error);
 
-    toast.success(t("owner.payslip.updated"));
+    toast.success("Payslip updated successfully");
     logActivity(supabase, {
       userId,
       userRole: "owner",
@@ -106,9 +105,9 @@ export function usePayslipLifecycle({
 
   const publishPayslip = async (p: OwnerPayslipRow) => {
     const ok = await confirm({
-      title: t("owner.payslip.publishConfirmTitle"),
-      body: tNode("owner.payslip.publishConfirmBody", { coach: p.coach?.full_name ?? "recipient", period: p.period_label }),
-      confirmLabel: t("owner.payslip.publishConfirmLabel"),
+      title: "Publish Payslip?",
+      body: (<><NoTranslate>{p.coach?.full_name ?? "recipient"}</NoTranslate>{"'s payslip for period "}<NoTranslate>{p.period_label}</NoTranslate>{" will be published and visible to the coach."}</>),
+      confirmLabel: "Publish",
     });
     if (!ok) return;
 
@@ -150,8 +149,8 @@ export function usePayslipLifecycle({
     }
     setPublishingId(null);
 
-    if (error) return toast.error(t("owner.payslip.publishFailed"), error.message);
-    toast.success(t("owner.payslip.published"));
+    if (error) return toast.error("Failed to publish", error.message);
+    toast.success("Payslip published");
     logActivity(supabase, {
       userId,
       userRole: "owner",
@@ -161,7 +160,7 @@ export function usePayslipLifecycle({
       entityId: p.id,
       entityLabel: p.coach?.full_name ?? undefined,
       action: "publish",
-      label: t("owner.payslip.activityPublished", { coach: p.coach?.full_name ?? "recipient", period: p.period_label }),
+      label: `${p.coach?.full_name ?? "recipient"}'s payslip for period ${p.period_label} published`,
       meta: { net_amount: p.net_amount },
     });
     setPayslips((prev) =>
@@ -171,17 +170,17 @@ export function usePayslipLifecycle({
 
   const deletePayslip = async (p: OwnerPayslipRow) => {
     const ok = await confirm({
-      title: t("owner.payslip.deleteConfirmTitle"),
-      body: t("owner.payslip.deleteConfirmBody"),
-      confirmLabel: t("owner.payslip.deleteConfirmLabel"),
+      title: "Delete Payslip?",
+      body: "This draft payslip will be deleted, including any loan installments already recorded on it (they will be recalculated when a new slip is created).",
+      confirmLabel: "Delete",
       danger: true,
     });
     if (!ok) return;
 
     const cascadeError = await deletePayslipCascade(supabase, p.id);
-    if (cascadeError) return toast.error(t("owner.payslip.deleteFailed"), cascadeError.error);
+    if (cascadeError) return toast.error("Failed to delete", cascadeError.error);
 
-    toast.success(t("owner.payslip.deleted"));
+    toast.success("Payslip deleted");
     logActivity(supabase, {
       userId,
       userRole: "owner",
@@ -191,7 +190,7 @@ export function usePayslipLifecycle({
       entityId: p.id,
       entityLabel: p.coach?.full_name ?? undefined,
       action: "delete",
-      label: t("owner.payslip.activityDeleted", { coach: p.coach?.full_name ?? "recipient", period: p.period_label }),
+      label: `Draft payslip for ${p.coach?.full_name ?? "recipient"} period ${p.period_label} deleted`,
     });
     setPayslips((prev) => prev.filter((s) => s.id !== p.id));
   };

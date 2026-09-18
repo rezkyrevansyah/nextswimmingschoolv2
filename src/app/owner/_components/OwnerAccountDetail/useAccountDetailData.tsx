@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
-import { useLocale } from "@/components/providers/LocaleProvider";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 import { createClient } from "@/utils/supabase/client";
 import { downloadSingleQRCard } from "@/lib/qrCardGenerator";
 import type { AccountMemberData, Props } from "./_types";
@@ -10,17 +10,16 @@ import type { AccountMemberData, Props } from "./_types";
 export function useAccountDetailData({ account, branches, open, onClose, onRefresh }: Props) {
   const toast = useToast();
   const confirm = useConfirm();
-  const { t, tNode } = useLocale();
   const supabase = createClient();
 
   const ROLE_LABELS: Record<string, string> = {
-    owner: t("owner.accounts.roleOwner"),
-    admin: t("owner.accounts.roleAdmin"),
-    manager_center: t("owner.accounts.roleManagerCenter"),
-    coach: t("owner.accounts.roleCoach"),
-    member: t("owner.accounts.roleMember"),
-    school: t("owner.accounts.roleSchool"),
-    staff: t("owner.accounts.roleStaff"),
+    owner: "Owner",
+    admin: "Branch Admin",
+    manager_center: "Manager Center",
+    coach: "Coach",
+    member: "Student",
+    school: "School Partner",
+    staff: "Branch Staff",
   };
 
   const [editing, setEditing] = useState(false);
@@ -126,7 +125,7 @@ export function useAccountDetailData({ account, branches, open, onClose, onRefre
 
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
-    toast.success(t("owner.accountDetail.copiedToast", { label }), text);
+    toast.success(`${label} copied!`, text);
   };
 
   const openEdit = () => {
@@ -159,7 +158,7 @@ export function useAccountDetailData({ account, branches, open, onClose, onRefre
 
   const saveEdit = async () => {
     if (!account) return;
-    if (!form.full_name.trim()) return toast.error(t("owner.accountDetail.fullNameRequired"));
+    if (!form.full_name.trim()) return toast.error("Full name is required");
 
     setSaving(true);
 
@@ -225,9 +224,9 @@ export function useAccountDetailData({ account, branches, open, onClose, onRefre
 
     setSaving(false);
     const json = (await res.json()) as { error?: string };
-    if (!res.ok) return toast.error(t("owner.accountDetail.saveFailed"), json.error);
+    if (!res.ok) return toast.error("Failed to save", json.error);
 
-    toast.success(t("owner.accountDetail.profileUpdated"));
+    toast.success("Profile updated successfully");
     setEditing(false);
     onRefresh();
   };
@@ -238,11 +237,11 @@ export function useAccountDetailData({ account, branches, open, onClose, onRefre
     const action = isCurrentlyBanned ? "unban" : "ban";
     const confirmed = await confirm({
       title: isCurrentlyBanned
-        ? tNode("owner.accountDetail.reactivateConfirmTitle", { name: account.full_name })
-        : tNode("owner.accountDetail.deactivateConfirmTitle", { name: account.full_name }),
+        ? (<>{"Reactivate "}<NoTranslate>{account.full_name}</NoTranslate>{"'s account?"}</>)
+        : (<>{"Deactivate "}<NoTranslate>{account.full_name}</NoTranslate>{"'s account?"}</>),
       body: isCurrentlyBanned
-        ? t("owner.accountDetail.reactivateConfirmBody")
-        : t("owner.accountDetail.deactivateConfirmBody"),
+        ? "This account will be reactivated. The user will be able to log in as usual."
+        : "This account will be blocked from the system. The user will not be able to log in until reactivated.",
       danger: !isCurrentlyBanned,
     });
     if (!confirmed) return;
@@ -254,9 +253,9 @@ export function useAccountDetailData({ account, branches, open, onClose, onRefre
     });
     setBanning(false);
     const json = (await res.json()) as { error?: string };
-    if (!res.ok) return toast.error(t("owner.accountDetail.banToggleFailed"), json.error);
+    if (!res.ok) return toast.error("Failed to change account status", json.error);
     toast.success(
-      isCurrentlyBanned ? t("owner.accountDetail.reactivatedToast") : t("owner.accountDetail.deactivatedToast")
+      isCurrentlyBanned ? "Account reactivated successfully" : "Account deactivated successfully"
     );
     onRefresh();
     onClose();
@@ -264,7 +263,7 @@ export function useAccountDetailData({ account, branches, open, onClose, onRefre
 
   const handleResetPassword = async () => {
     if (!account || !newPassword.trim()) return;
-    if (newPassword.length < 6) return toast.error(t("owner.accountDetail.pwdMinLength"));
+    if (newPassword.length < 6) return toast.error("Password must be at least 6 characters");
     setResettingPwd(true);
     const res = await fetch(`/api/admin/users/${account.id}`, {
       method: "PATCH",
@@ -273,10 +272,10 @@ export function useAccountDetailData({ account, branches, open, onClose, onRefre
     });
     setResettingPwd(false);
     const json = (await res.json()) as { error?: string };
-    if (!res.ok) return toast.error(t("owner.accountDetail.resetPasswordFailed"), json.error);
+    if (!res.ok) return toast.error("Failed to reset password", json.error);
     toast.success(
-      t("owner.accountDetail.passwordResetToast"),
-      tNode("owner.accountDetail.passwordResetSub", { name: account.full_name })
+      "Password reset successfully",
+      (<>{"A new password has been set for "}<NoTranslate>{account.full_name}</NoTranslate>{"."}</>)
     );
     setNewPassword("");
     setShowPwdReset(false);
@@ -285,15 +284,15 @@ export function useAccountDetailData({ account, branches, open, onClose, onRefre
   const handleDelete = async () => {
     if (!account) return;
     const confirmed = await confirm({
-      title: tNode("owner.accountDetail.deleteConfirmTitle", { name: account.full_name }),
-      body: t("owner.accountDetail.deleteConfirmBody"),
+      title: (<>{"Delete "}<NoTranslate>{account.full_name}</NoTranslate>{"'s account?"}</>),
+      body: "This account will be permanently deleted along with all its data. This action cannot be undone.",
       danger: true,
     });
     if (!confirmed) return;
     const res = await fetch(`/api/admin/users/${account.id}`, { method: "DELETE" });
     const json = (await res.json()) as { error?: string };
-    if (!res.ok) return toast.error(t("owner.accountDetail.deleteFailed"), json.error);
-    toast.success(t("owner.accountDetail.deletedToast"));
+    if (!res.ok) return toast.error("Failed to delete account", json.error);
+    toast.success("Account deleted successfully");
     onRefresh();
     onClose();
   };
@@ -318,10 +317,10 @@ export function useAccountDetailData({ account, branches, open, onClose, onRefre
         },
         qrValue
       );
-      toast.success(t("owner.accountDetail.qrCardDownloaded"));
+      toast.success("QR Card downloaded successfully!");
     } catch (err) {
       console.error(err);
-      toast.error(t("owner.accountDetail.qrCardDownloadFailed"));
+      toast.error("Failed to download QR card");
     }
     setDownloadingQr(false);
   };
@@ -336,7 +335,7 @@ export function useAccountDetailData({ account, branches, open, onClose, onRefre
   };
 
   return {
-    t, tNode, branches, ROLE_LABELS, account, open, onClose,
+    branches, ROLE_LABELS, account, open, onClose,
     editing, setEditing, saving, banning, resettingPwd, newPassword, setNewPassword,
     showPwdReset, setShowPwdReset, showNewPwd, setShowNewPwd,
     coachClasses, certifications, memberData, schools, downloadingQr,

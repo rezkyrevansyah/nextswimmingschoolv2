@@ -4,7 +4,7 @@ import Btn from "@/components/ui/Btn";
 import { Textarea } from "@/components/ui/FormFields";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import Avatar from "@/components/ui/Avatar";
-import { useLocale } from "@/components/providers/LocaleProvider";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 import { fmtDate } from "@/lib/utils";
 import { useMemberRaporData } from "./useMemberRaporData";
 import RaporDetailModal from "./RaporDetailModal";
@@ -13,7 +13,6 @@ export default function MemberRapor({ memberId, memberName, branchId, avatarUrl,
   memberId: string; memberName: string; branchId: string;
   avatarUrl?: string | null; memberNo?: string | null; birthDate?: string | null; location?: string;
 }) {
-  const { t, tArray } = useLocale();
   const hook = useMemberRaporData({ memberId, branchId });
   const {
     raporTab, setRaporTab, entries, competitionsHistory,
@@ -23,13 +22,13 @@ export default function MemberRapor({ memberId, memberName, branchId, avatarUrl,
   // Separate open-period entries from closed-period (history)
   const openEntries = entries.filter((e) => e.period_is_open);
   const historyEntries = entries.filter((e) => !e.period_is_open);
-  const ratingLabels = tArray("member.rapor.ratingLabels");
+  const ratingLabels = ["", "Poor", "Fair", "Good", "Very Good", "Excellent"];
 
   return (
     <div className="space-y-5">
       {/* Sub-tab toggle */}
       <div className="flex gap-1 bg-paper-tint border border-line rounded-xl p-1 w-fit">
-        {([{ id: "rapor", label: t("member.rapor.tabRapor") }, { id: "review", label: t("member.rapor.tabReview") }] as const).map(tab => (
+        {([{ id: "rapor", label: "Report Card" }, { id: "review", label: "Coach Review" }] as const).map(tab => (
           <button key={tab.id} onClick={() => setRaporTab(tab.id)}
             className={`px-3.5 py-2 rounded-lg text-sm font-semibold transition-colors ${raporTab === tab.id ? "bg-white text-ocean-700 shadow-card" : "text-ink-soft hover:bg-white/60"}`}>
             {tab.label}
@@ -48,11 +47,11 @@ export default function MemberRapor({ memberId, memberName, branchId, avatarUrl,
               <div className="relative flex items-center gap-3">
                 <span className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center"><Icon name="book" className="w-7 h-7" /></span>
                 <div>
-                  <div className="text-wave-200 text-[10px] uppercase tracking-widest font-bold">{t("member.rapor.activePeriod", { period: entry.period })}</div>
-                  <div className="font-display font-bold text-xl mt-0.5">{entry.class_name}</div>
-                  <div className="text-white/80 text-xs mt-0.5">{entry.coach_name}</div>
+                  <div className="text-wave-200 text-[10px] uppercase tracking-widest font-bold">{(<>{"Active report card · "}<NoTranslate>{entry.period}</NoTranslate></>)}</div>
+                  <div className="font-display font-bold text-xl mt-0.5"><NoTranslate>{entry.class_name}</NoTranslate></div>
+                  <div className="text-white/80 text-xs mt-0.5"><NoTranslate>{entry.coach_name}</NoTranslate></div>
                 </div>
-                <Btn variant="accent" size="sm" className="ml-auto" onClick={() => openRapor(entry)}>{t("member.rapor.openBtn")}</Btn>
+                <Btn variant="accent" size="sm" className="ml-auto" onClick={() => openRapor(entry)}>{"Open"}</Btn>
               </div>
             </div>
           ))}
@@ -60,11 +59,11 @@ export default function MemberRapor({ memberId, memberName, branchId, avatarUrl,
       )}
 
       {openEntries.length === 0 && entries.length === 0 && (
-        <div className="text-center py-12 text-ink-mute text-sm">{t("member.rapor.emptyRapor")}</div>
+        <div className="text-center py-12 text-ink-mute text-sm">{"No report cards available yet."}</div>
       )}
 
       {openEntries.length === 0 && entries.length > 0 && (
-        <div className="rounded-xl border border-line bg-paper-tint p-4 text-sm text-ink-mute text-center">{t("member.rapor.noActivePeriod")}</div>
+        <div className="rounded-xl border border-line bg-paper-tint p-4 text-sm text-ink-mute text-center">{"No report card period is currently active."}</div>
       )}
 
       {/* Competitions & Achievements Showcase */}
@@ -82,19 +81,19 @@ export default function MemberRapor({ memberId, memberName, branchId, avatarUrl,
                 item.award === "gold" ? "🥇 Medali Emas" :
                 item.award === "silver" ? "🥈 Medali Perak" :
                 item.award === "bronze" ? "🥉 Medali Perunggu" :
-                item.award === "custom" && item.custom_award_label ? `🏆 ${item.custom_award_label}` :
+                item.award === "custom" && item.custom_award_label ? <>🏆 <NoTranslate>{item.custom_award_label}</NoTranslate></> :
                 item.rank ? `Juara ${item.rank}` : "🏊 Peserta";
 
               return (
                 <Card key={item.id} className="!p-4 bg-white hover:border-ocean-300 transition-colors">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-sm">
                     <div>
-                      <div className="font-bold text-ocean-900 text-base">{compName}</div>
+                      <div className="font-bold text-ocean-900 text-base"><NoTranslate>{compName}</NoTranslate></div>
                       <div className="text-xs text-ink-mute mt-0.5">
-                        📅 {compDate} {compLoc ? `· 📍 ${compLoc}` : ""}
+                        📅 {compDate} {compLoc ? <>· 📍 <NoTranslate>{compLoc}</NoTranslate></> : ""}
                       </div>
                       <div className="mt-1 font-semibold text-ocean-700 text-xs">
-                        {item.category} {item.age_group ? `(${item.age_group})` : ""}
+                        <NoTranslate>{item.category}</NoTranslate> {item.age_group ? <>(<NoTranslate>{item.age_group}</NoTranslate>)</> : ""}
                       </div>
                     </div>
                     <div className="flex sm:flex-col items-start sm:items-end justify-between gap-1 shrink-0">
@@ -128,17 +127,17 @@ export default function MemberRapor({ memberId, memberName, branchId, avatarUrl,
       {/* History rapor (closed periods) */}
       {historyEntries.length > 0 && (
         <>
-          <SectionTitle sub={t("member.rapor.historySub")}>{t("member.rapor.historyTitle")}</SectionTitle>
+          <SectionTitle sub={"Ended periods"}>{"Report Card History"}</SectionTitle>
           <div className="space-y-2.5">
             {historyEntries.map((r) => (
               <Card key={r.id} className="!p-3">
                 <div className="flex items-center gap-3">
                   <span className="w-10 h-10 rounded-xl bg-paper-tint text-ink-soft flex items-center justify-center"><Icon name="book" className="w-4 h-4" /></span>
                   <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-ink text-sm">{r.period}</div>
-                    <div className="text-xs text-ink-mute">{r.coach_name} · {r.class_name}</div>
+                    <div className="font-semibold text-ink text-sm"><NoTranslate>{r.period}</NoTranslate></div>
+                    <div className="text-xs text-ink-mute"><NoTranslate>{r.coach_name} · {r.class_name}</NoTranslate></div>
                   </div>
-                  <Btn variant="ghost" size="sm" onClick={() => openRapor(r)}>{t("member.rapor.openBtn")}</Btn>
+                  <Btn variant="ghost" size="sm" onClick={() => openRapor(r)}>{"Open"}</Btn>
                 </div>
               </Card>
             ))}
@@ -151,17 +150,17 @@ export default function MemberRapor({ memberId, memberName, branchId, avatarUrl,
       {raporTab === "review" && (
         <>
           {entries.length === 0 ? (
-            <div className="text-center py-12 text-ink-mute text-sm">{t("member.rapor.emptyReview")}</div>
+            <div className="text-center py-12 text-ink-mute text-sm">{"No report cards available for review yet."}</div>
           ) : (
             <div className="space-y-4">
               {entries.map(entry => (
                 <Card key={entry.id} className="space-y-4">
                   <div>
-                    <div className="font-display font-bold text-ink">{entry.class_name}</div>
-                    <div className="text-xs text-ink-mute mt-0.5">{entry.period}{!entry.period_is_open && t("member.rapor.periodEnded")}</div>
+                    <div className="font-display font-bold text-ink"><NoTranslate>{entry.class_name}</NoTranslate></div>
+                    <div className="text-xs text-ink-mute mt-0.5"><NoTranslate>{entry.period}</NoTranslate>{!entry.period_is_open && " · period ended"}</div>
                   </div>
                   {entry.coachReviews.length === 0 ? (
-                    <p className="text-xs text-ink-faint italic">{t("member.rapor.noCoachesInClass")}</p>
+                    <p className="text-xs text-ink-faint italic">{"No coaches registered in this class."}</p>
                   ) : (
                     <div className="space-y-3">
                       {entry.coachReviews.map(slot => {
@@ -172,8 +171,8 @@ export default function MemberRapor({ memberId, memberName, branchId, avatarUrl,
                           <div key={slot.coach_id} className="border-t border-line pt-3 first:border-t-0 first:pt-0">
                             <div className="flex items-center gap-2 mb-2">
                               <Avatar name={slot.coach_name} size={28} />
-                              <span className="font-semibold text-sm text-ink">{slot.coach_name}</span>
-                              {slot.role === "head" && <span className="px-1.5 py-0.5 rounded-full bg-ocean-700 text-white text-[10px] font-bold uppercase tracking-wide">{t("member.rapor.headBadge")}</span>}
+                              <span className="font-semibold text-sm text-ink"><NoTranslate>{slot.coach_name}</NoTranslate></span>
+                              {slot.role === "head" && <span className="px-1.5 py-0.5 rounded-full bg-ocean-700 text-white text-[10px] font-bold uppercase tracking-wide">{"Head"}</span>}
                             </div>
                             {entry.period_is_open ? (
                               <div className="bg-wave-50 border border-wave-100 rounded-2xl p-4">
@@ -186,13 +185,13 @@ export default function MemberRapor({ memberId, memberName, branchId, avatarUrl,
                                   <span className="ml-2 text-sm font-semibold text-ink-soft">{ratingLabels[draft.stars]}</span>
                                 </div>
                                 <div className="relative">
-                                  <Textarea rows={2} maxLength={300} className="pb-5" placeholder={t("member.rapor.reviewPlaceholder")} value={draft.text} onChange={(e) => setDraft(entry, slot, { text: e.target.value })} />
+                                  <Textarea rows={2} maxLength={300} className="pb-5" placeholder={"E.g. Coach is very patient and teaching methods are fun for the kids."} value={draft.text} onChange={(e) => setDraft(entry, slot, { text: e.target.value })} />
                                   <span className={`absolute bottom-2 right-3 text-[10px] font-mono tabular-nums pointer-events-none ${300 - draft.text.length <= 20 ? "text-danger-500 font-bold" : "text-ink-faint"}`}>
                                     {draft.text.length}/300
                                   </span>
                                 </div>
                                 <Btn variant="primary" size="sm" className="mt-3" disabled={isSaving} onClick={() => saveReview(entry, slot)}>
-                                  {isSaving ? t("common.actions.saving") : slot.review_id ? t("member.rapor.updateReviewBtn") : t("member.rapor.saveReviewBtn")}
+                                  {isSaving ? "Saving…" : slot.review_id ? "Update review" : "Save review"}
                                 </Btn>
                               </div>
                             ) : (
@@ -205,10 +204,10 @@ export default function MemberRapor({ memberId, memberName, branchId, avatarUrl,
                                       ))}
                                       <span className="ml-2 text-xs font-semibold text-ink-soft">{ratingLabels[slot.review_stars]}</span>
                                     </div>
-                                    {slot.review_message && <p className="text-sm text-ink-soft">{slot.review_message}</p>}
+                                    {slot.review_message && <p className="text-sm text-ink-soft"><NoTranslate>{slot.review_message}</NoTranslate></p>}
                                   </>
                                 ) : (
-                                  <p className="text-sm text-ink-mute">{t("member.rapor.periodEndedNoReview")}</p>
+                                  <p className="text-sm text-ink-mute">{"Period has ended — no review submitted."}</p>
                                 )}
                               </div>
                             )}

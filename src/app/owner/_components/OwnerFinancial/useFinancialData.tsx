@@ -5,7 +5,7 @@ import { logActivity } from "@/lib/activityLog";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
-import { useLocale } from "@/components/providers/LocaleProvider";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 import type { Branch, Invoice } from "../../_types";
 import type {
   OwnerFinancialBill, OwnerFinancialExpense, ManualTxnRow, FinancialPayslipItem,
@@ -14,7 +14,6 @@ import type {
 import { startOfMonthISO, endOfMonthISO, monthISO } from "./_utils";
 
 export function useFinancialData({ branches, userId, userName }: { branches: Branch[]; userId: string; userName: string }) {
-  const { t, tNode } = useLocale();
   const supabase = createClient();
   const toast = useToast();
   const confirm = useConfirm();
@@ -171,14 +170,14 @@ export function useFinancialData({ branches, userId, userName }: { branches: Bra
 
   const copyToClipboard = (text: string, label: ReactNode) => {
     navigator.clipboard.writeText(text);
-    toast.success(tNode("owner.financial.copiedToast", { label }), text);
+    toast.success((<><NoTranslate>{label}</NoTranslate>{" copied!"}</>), text);
   };
 
   const markInvoicePaid = async (inv: Invoice) => {
     const ok = await confirm({
-      title: t("owner.financial.confirmMarkInvoicePaidTitle"),
-      body: tNode("owner.financial.confirmMarkInvoicePaidBody", { number: inv.invoice_number, amount: fmtIDR(inv.total_amount), coach: inv.coach?.full_name ?? "" }),
-      confirmLabel: t("owner.financial.confirmMarkPaidLabel"),
+      title: "Confirm Coach Invoice Payment",
+      body: (<>{"Mark invoice "}<NoTranslate>{inv.invoice_number}</NoTranslate>{" ("}<NoTranslate>{fmtIDR(inv.total_amount)}</NoTranslate>{") for "}<NoTranslate>{inv.coach?.full_name ?? ""}</NoTranslate>{" as Paid?"}</>),
+      confirmLabel: "Yes, Mark as Paid",
     });
     if (!ok) return;
     setMarkingPaidId(inv.id);
@@ -188,8 +187,8 @@ export function useFinancialData({ branches, userId, userName }: { branches: Bra
       .update({ status: "paid", paid_at: now })
       .eq("id", inv.id);
     setMarkingPaidId(null);
-    if (error) return toast.error(t("owner.financial.markInvoicePaidFailed"), error.message);
-    toast.success(t("owner.financial.markInvoicePaidSuccess"));
+    if (error) return toast.error("Failed to update invoice status", error.message);
+    toast.success("Invoice marked as Paid successfully!");
     loadDetailedInvoices();
   };
 
@@ -220,17 +219,17 @@ export function useFinancialData({ branches, userId, userName }: { branches: Bra
       : await supabase.from("staff_salaries").insert(payload);
 
     setSavingSalary(false);
-    if (error) return toast.error(t("owner.financial.saveStaffSalaryFailed"), error.message);
-    toast.success(t("owner.financial.saveStaffSalarySuccess"));
+    if (error) return toast.error("Failed to save staff salary", error.message);
+    toast.success("Staff salary saved successfully");
     setEditSalaryModal(null);
     loadStaffPayroll();
   };
 
   const markStaffSalaryPaid = async (sal: StaffSalaryRow, staffName: string) => {
     const ok = await confirm({
-      title: t("owner.financial.confirmMarkSalaryPaidTitle"),
-      body: tNode("owner.financial.confirmMarkSalaryPaidBody", { period: sal.period_month, amount: fmtIDR(sal.total_salary), name: staffName }),
-      confirmLabel: t("owner.financial.confirmMarkPaidLabel"),
+      title: "Confirm Staff Salary Payment",
+      body: (<>{"Mark salary for period "}<NoTranslate>{sal.period_month}</NoTranslate>{" ("}<NoTranslate>{fmtIDR(sal.total_salary)}</NoTranslate>{") for "}<NoTranslate>{staffName}</NoTranslate>{" as Paid?"}</>),
+      confirmLabel: "Yes, Mark as Paid",
     });
     if (!ok) return;
     setMarkingStaffSalaryId(sal.id);
@@ -240,8 +239,8 @@ export function useFinancialData({ branches, userId, userName }: { branches: Bra
       .update({ status: "paid", paid_at: now })
       .eq("id", sal.id);
     setMarkingStaffSalaryId(null);
-    if (error) return toast.error(t("owner.financial.markSalaryPaidFailed"), error.message);
-    toast.success(t("owner.financial.markSalaryPaidSuccess"));
+    if (error) return toast.error("Failed to update staff salary status", error.message);
+    toast.success("Staff salary marked as Paid successfully!");
     loadStaffPayroll();
   };
 
@@ -249,34 +248,34 @@ export function useFinancialData({ branches, userId, userName }: { branches: Bra
     setProcessingReimburseId(id);
     const { error } = await supabase.from("staff_reimbursements").update({ status: "approved", approved_at: new Date().toISOString() }).eq("id", id);
     setProcessingReimburseId(null);
-    if (error) return toast.error(t("owner.financial.approveReimburseFailed"), error.message);
-    toast.success(t("owner.financial.approveReimburseSuccess"));
+    if (error) return toast.error("Failed to approve reimbursement", error.message);
+    toast.success("Reimbursement approved");
     loadStaffReimbursements();
   };
 
   const rejectReimburse = async (id: string) => {
-    const reason = window.prompt(t("owner.financial.rejectReasonPrompt"));
+    const reason = window.prompt("Rejection reason:");
     if (reason == null) return;
     setProcessingReimburseId(id);
     const { error } = await supabase.from("staff_reimbursements").update({ status: "rejected", rejected_at: new Date().toISOString(), rejection_reason: reason || null }).eq("id", id);
     setProcessingReimburseId(null);
-    if (error) return toast.error(t("owner.financial.rejectReimburseFailed"), error.message);
-    toast.success(t("owner.financial.rejectReimburseSuccess"));
+    if (error) return toast.error("Failed to reject reimbursement", error.message);
+    toast.success("Reimbursement rejected");
     loadStaffReimbursements();
   };
 
   const markReimbursePaid = async (id: string, amount: number) => {
     const ok = await confirm({
-      title: t("owner.financial.confirmMarkReimbursePaidTitle"),
-      body: t("owner.financial.confirmMarkReimbursePaidBody", { amount: fmtIDR(amount) }),
-      confirmLabel: t("owner.financial.confirmMarkPaidLabel"),
+      title: "Confirm Reimbursement Payment",
+      body: `Mark reimbursement (${fmtIDR(amount)}) as Paid?`,
+      confirmLabel: "Yes, Mark as Paid",
     });
     if (!ok) return;
     setProcessingReimburseId(id);
     const { error } = await supabase.from("staff_reimbursements").update({ status: "paid", paid_at: new Date().toISOString() }).eq("id", id);
     setProcessingReimburseId(null);
-    if (error) return toast.error(t("owner.financial.markReimbursePaidFailed"), error.message);
-    toast.success(t("owner.financial.markReimbursePaidSuccess"));
+    if (error) return toast.error("Failed to update reimbursement status", error.message);
+    toast.success("Reimbursement marked as Paid!");
     loadStaffReimbursements();
   };
 
@@ -366,11 +365,11 @@ export function useFinancialData({ branches, userId, userName }: { branches: Bra
 
   const saveTxn = async () => {
     if (!showTxnModal) return;
-    if (!txnForm.branch_id) return toast.error(t("owner.financial.branchRequired"));
-    if (!txnForm.description.trim()) return toast.error(t("owner.financial.descriptionRequired"));
+    if (!txnForm.branch_id) return toast.error("Select a center first");
+    if (!txnForm.description.trim()) return toast.error("Description is required");
     const amount = Number(txnForm.amount || 0);
-    if (!amount || amount <= 0) return toast.error(t("owner.financial.invalidAmount"));
-    if (txnForm.isReimburse && !txnForm.proofUrl.trim()) return toast.error(t("owner.financial.proofRequired"));
+    if (!amount || amount <= 0) return toast.error("Enter a valid amount");
+    if (txnForm.isReimburse && !txnForm.proofUrl.trim()) return toast.error("Enter a proof link for the reimbursable expense");
     const category = txnForm.category === "Lainnya" ? (txnForm.categoryOther.trim() || "Lainnya") : txnForm.category;
 
     setSavingTxn(true);
@@ -384,15 +383,12 @@ export function useFinancialData({ branches, userId, userName }: { branches: Bra
       ? await supabase.from("manual_transactions").update({ ...payload, updated_at: new Date().toISOString() }).eq("id", showTxnModal.edit!.id)
       : await supabase.from("manual_transactions").insert({ ...payload, created_by: userId, created_by_role: "owner" });
     setSavingTxn(false);
-    if (error) return toast.error(isEdit ? t("owner.financial.saveFailed") : t("owner.financial.addFailed"), error.message);
-    toast.success(isEdit ? t("owner.financial.txnUpdated") : t("owner.financial.txnAdded"));
+    if (error) return toast.error(isEdit ? "Failed to save" : "Failed to add", error.message);
+    toast.success(isEdit ? "Transaction updated" : "Transaction added");
     logActivity(supabase, {
       userId, userRole: "owner", userName, branchId: txnForm.branch_id, entityType: "manual_transactions",
       entityId: showTxnModal.edit?.id ?? "new", action: isEdit ? "update" : "create",
-      label: t(isEdit ? "owner.financial.activityTxnUpdated" : "owner.financial.activityTxnAdded", {
-        kind: t(showTxnModal.kind === "income" ? "owner.financial.txnKindIncome" : "owner.financial.txnKindExpense"),
-        description: txnForm.description.trim(), amount: fmtIDR(amount),
-      }),
+      label: (isEdit ? `${(showTxnModal.kind === "income" ? "Income" : "Expense")} manual "${txnForm.description.trim()}" (${fmtIDR(amount)}) updated` : `${(showTxnModal.kind === "income" ? "Income" : "Expense")} manual "${txnForm.description.trim()}" (${fmtIDR(amount)}) added`),
       meta: { amount, category },
     });
     setShowTxnModal(null);
@@ -400,17 +396,14 @@ export function useFinancialData({ branches, userId, userName }: { branches: Bra
   };
 
   const deleteTxn = async (row: ManualTxnRow) => {
-    const ok = await confirm({ title: t("owner.financial.deleteConfirmTitle"), body: tNode("owner.financial.deleteConfirmBody", { description: row.description, amount: fmtIDR(row.amount) }), confirmLabel: t("common.actions.delete"), danger: true });
+    const ok = await confirm({ title: "Delete manual transaction?", body: (<>{"\""}<NoTranslate>{row.description}</NoTranslate>{"\" ("}<NoTranslate>{fmtIDR(row.amount)}</NoTranslate>{") will be permanently deleted."}</>), confirmLabel: "Delete", danger: true });
     if (!ok) return;
     const { error } = await supabase.from("manual_transactions").delete().eq("id", row.id);
-    if (error) return toast.error(t("owner.financial.txnDeleteFailed"), error.message);
-    toast.success(t("owner.financial.txnDeleted"));
+    if (error) return toast.error("Failed to delete", error.message);
+    toast.success("Transaction deleted");
     logActivity(supabase, {
       userId, userRole: "owner", userName, branchId: row.branch_id, entityType: "manual_transactions",
-      entityId: row.id, action: "delete", label: t("owner.financial.activityTxnDeleted", {
-        kind: t(row.kind === "income" ? "owner.financial.txnKindIncome" : "owner.financial.txnKindExpense"),
-        description: row.description, amount: fmtIDR(row.amount),
-      }),
+      entityId: row.id, action: "delete", label: `${(row.kind === "income" ? "Income" : "Expense")} manual "${row.description}" (${fmtIDR(row.amount)}) deleted`,
     });
     setManualTxns(prev => prev.filter(t => t.id !== row.id));
   };

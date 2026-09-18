@@ -4,13 +4,12 @@ import Logo from "@/components/ui/Logo";
 import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
 import Avatar from "@/components/ui/Avatar";
-import LanguageSwitcher from "@/components/ui/LanguageSwitcher";
+import { GoogleLanguageSwitcher } from "@/components/GoogleTranslate";
 import { Card } from "@/components/ui/Card";
 import Bell from "@/components/layout/Bell";
 import BetaFeedback, { BETA_FEEDBACK_ENABLED } from "@/components/layout/BetaFeedback";
 import { waLink } from "@/lib/utils";
-import { useLocale } from "@/components/providers/LocaleProvider";
-
+import { NoTranslate } from "@/components/ui/NoTranslate";
 import { useSchoolRaporData } from "./_components/useSchoolRaporData";
 import { useSchoolRaporExport } from "./_components/useSchoolRaporExport";
 import type { SchoolRaporHook } from "./_components/schoolRaporHook";
@@ -19,7 +18,6 @@ import SchoolRaporTable from "./_components/SchoolRaporTable";
 import SchoolRaporDetailModal from "./_components/SchoolRaporDetailModal";
 
 export default function SchoolPage() {
-  const { t } = useLocale();
   const data = useSchoolRaporData();
   const exportHook = useSchoolRaporExport(data);
   const hook: SchoolRaporHook = { ...data, ...exportHook };
@@ -37,19 +35,19 @@ export default function SchoolPage() {
         <div className="max-w-6xl mx-auto px-4 lg:px-7 h-16 flex items-center gap-3">
           <Link href="/"><Logo size={32} /></Link>
           <div className="min-w-0 flex-1">
-            <h1 className="font-display font-bold text-base text-ink leading-tight truncate">{t("school.shell.brandTitle")}</h1>
-            <p className="text-xs text-ink-mute truncate">{schoolName}</p>
+            <h1 className="font-display font-bold text-base text-ink leading-tight truncate">{"School Panel"}</h1>
+            <p className="text-xs text-ink-mute truncate"><NoTranslate>{schoolName}</NoTranslate></p>
           </div>
-          <LanguageSwitcher />
+          <GoogleLanguageSwitcher variant="pill" />
           <Bell userId={userId} />
           <Avatar name={schoolName} size={36} />
           <button
             onClick={logout}
             className="inline-flex items-center gap-1.5 text-sm font-semibold text-ink-mute hover:text-danger-600 px-3 py-2 rounded-lg transition"
-            title={t("school.shell.logoutBtn")}
+            title={"Logout"}
           >
             <Icon name="logout" className="w-4 h-4" />
-            <span className="hidden sm:inline">{t("school.shell.logoutBtn")}</span>
+            <span className="hidden sm:inline">{"Logout"}</span>
           </button>
         </div>
       </header>
@@ -62,10 +60,10 @@ export default function SchoolPage() {
           <div className="relative grid lg:grid-cols-3 gap-5">
             <div className="lg:col-span-2">
               <div className="text-wave-200 text-[11px] uppercase tracking-widest font-bold flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-wave-300 animate-pulse" /> {t("school.rapor.activePeriodLabel", { period: "" })}
+                <span className="w-1.5 h-1.5 rounded-full bg-wave-300 animate-pulse" /> {`Active Period: ${""}`}
               </div>
               <h2 className="font-display font-extrabold text-2xl sm:text-3xl mt-1.5">
-                {activePeriod?.label ?? t("school.rapor.noActivePeriodLabel")}
+                {activePeriod?.label ? <NoTranslate>{activePeriod.label}</NoTranslate> : "No Active Report Card Period"}
               </h2>
               {activePeriod && (
                 <p className="text-white/70 mt-1.5 text-sm max-w-lg">
@@ -80,7 +78,7 @@ export default function SchoolPage() {
                     className="inline-flex items-center gap-2 bg-white/15 hover:bg-white/25 backdrop-blur border border-white/20 text-white text-sm font-semibold px-4 py-2 rounded-xl transition disabled:opacity-60"
                   >
                     <Icon name="download" className="w-4 h-4" />
-                    {bulkDownloading ? bulkDownloadingLabel : `${t("school.rapor.downloadAllZipBtn")} (${totalDone})`}
+                    {bulkDownloading ? bulkDownloadingLabel : `${"Download All (ZIP)"} (${totalDone})`}
                   </button>
                   {(search || activeFilterCount > 0) && filteredSorted.filter(s => s.is_filled).length > 0 && filteredSorted.length < students.length && (
                     <button
@@ -89,7 +87,7 @@ export default function SchoolPage() {
                       className="inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 backdrop-blur border border-white/15 text-white/90 text-sm font-semibold px-4 py-2 rounded-xl transition disabled:opacity-60"
                     >
                       <Icon name="download" className="w-4 h-4" />
-                      {bulkDownloading ? bulkDownloadingLabel : `${t("school.rapor.downloadPdfBtn")} (${filteredSorted.filter(s => s.is_filled).length})`}
+                      {bulkDownloading ? bulkDownloadingLabel : `${"PDF"} (${filteredSorted.filter(s => s.is_filled).length})`}
                     </button>
                   )}
                 </div>
@@ -97,15 +95,15 @@ export default function SchoolPage() {
             </div>
             <div className="grid grid-cols-3 lg:grid-cols-1 gap-3">
               <div className="bg-white/10 backdrop-blur ring-1 ring-white/15 rounded-xl p-3.5">
-                <div className="text-[10px] uppercase tracking-widest font-bold text-wave-200">{t("school.absensi.colStudent")}</div>
+                <div className="text-[10px] uppercase tracking-widest font-bold text-wave-200">{"Student"}</div>
                 <div className="font-display font-bold text-2xl mt-0.5">{students.length}</div>
               </div>
               <div className="bg-white/10 backdrop-blur ring-1 ring-white/15 rounded-xl p-3.5">
-                <div className="text-[10px] uppercase tracking-widest font-bold text-wave-200">{t("school.rapor.statusComplete")}</div>
+                <div className="text-[10px] uppercase tracking-widest font-bold text-wave-200">{"Complete"}</div>
                 <div className="font-display font-bold text-2xl mt-0.5 text-ok-300">{totalDone}</div>
               </div>
               <div className="bg-white/10 backdrop-blur ring-1 ring-white/15 rounded-xl p-3.5">
-                <div className="text-[10px] uppercase tracking-widest font-bold text-wave-200">{t("school.rapor.statusIncomplete")}</div>
+                <div className="text-[10px] uppercase tracking-widest font-bold text-wave-200">{"Incomplete"}</div>
                 <div className="font-display font-bold text-2xl mt-0.5 text-warn-300">{totalPending}</div>
               </div>
             </div>
@@ -119,14 +117,14 @@ export default function SchoolPage() {
             onClick={() => setTab("rapor")}
             className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm font-semibold transition-all ${tab === "rapor" ? "bg-ocean-50 shadow-xs text-ocean-700 font-bold" : "text-ink-mute hover:text-ink"}`}
           >
-            {t("school.tabs.rapor")}
+            {"Student Report Cards"}
           </button>
           <button
             type="button"
             onClick={() => setTab("absensi")}
             className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm font-semibold transition-all ${tab === "absensi" ? "bg-ocean-50 shadow-xs text-ocean-700 font-bold" : "text-ink-mute hover:text-ink"}`}
           >
-            {t("school.tabs.absensi")}
+            {"Student Attendance"}
           </button>
         </div>
 
@@ -149,9 +147,9 @@ export default function SchoolPage() {
               <Icon name="info" className="w-5 h-5" />
             </span>
             <div>
-              <div className="font-display font-bold text-ink">{t("school.shell.brandTitle")}</div>
+              <div className="font-display font-bold text-ink">{"School Panel"}</div>
               <p className="text-sm text-ink-soft mt-1 leading-relaxed">
-                {t("school.rapor.sub", { school: schoolName })}
+                {(<>{"Review official report cards and swimming evaluation results for "}<NoTranslate>{schoolName}</NoTranslate>{"."}</>)}
               </p>
               <a
                 href={adminWaPhone
@@ -161,7 +159,7 @@ export default function SchoolPage() {
                 rel="noreferrer"
                 className="mt-3 inline-flex"
               >
-                <Btn variant="wa" size="sm" icon="whatsapp">{t("school.shell.contactAdminBtn")}</Btn>
+                <Btn variant="wa" size="sm" icon="whatsapp">{"Contact Admin WhatsApp"}</Btn>
               </a>
             </div>
           </div>

@@ -5,7 +5,6 @@ import BorderGlowCard from "@/components/BorderGlowCard";
 import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
 import { cn } from "@/lib/utils";
-import { useLocale } from "@/components/providers/LocaleProvider";
 
 interface ProgramItem {
   id: string;
@@ -16,8 +15,6 @@ interface ProgramItem {
 }
 
 export default function Programs({ programs }: { programs: ProgramItem[] }) {
-  const { t } = useLocale();
-
   if (programs.length === 0) return null;
 
   return (
@@ -25,12 +22,12 @@ export default function Programs({ programs }: { programs: ProgramItem[] }) {
       <div className="mx-auto max-w-6xl px-6">
         <div className="text-center max-w-2xl mx-auto">
           <p className="text-xs font-semibold tracking-wide uppercase text-wave-600">
-            {t("landing.programs.label")}
+            {"Our Programs"}
           </p>
           <h2 className="mt-2 font-display font-extrabold text-3xl sm:text-4xl text-ink">
-            {t("landing.programs.headline")}
+            {"Find the right class for every swimmer."}
           </h2>
-          <p className="mt-3 text-ink-mute">{t("landing.programs.subtitle")}</p>
+          <p className="mt-3 text-ink-mute">{"From first splash to competitive stroke — structured programs for every age and goal."}</p>
         </div>
 
         <div className="mt-12 grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -58,7 +55,7 @@ export default function Programs({ programs }: { programs: ProgramItem[] }) {
                     p.class_type === "private" ? "bg-wave-50 text-wave-700" : "bg-ocean-50 text-ocean-700"
                   )}
                 >
-                  {p.class_type === "private" ? t("landing.programs.private") : t("landing.programs.regular")}
+                  {p.class_type === "private" ? "Private Class" : "Group Class"}
                 </span>
                 <h3 className="mt-3 font-display font-bold text-lg text-ink">{p.name}</h3>
                 {p.description && (
@@ -70,8 +67,8 @@ export default function Programs({ programs }: { programs: ProgramItem[] }) {
         </div>
 
         <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4 text-center sm:text-left">
-          <p className="text-sm text-ink-mute">{t("landing.programs.ctaText")}</p>
-          <Btn variant="primary" size="md" href="/register">{t("landing.programs.ctaButton")}</Btn>
+          <p className="text-sm text-ink-mute">{"Found a class that fits? Reserve your spot today."}</p>
+          <Btn variant="primary" size="md" href="/register">{"Register Now"}</Btn>
         </div>
       </div>
     </section>

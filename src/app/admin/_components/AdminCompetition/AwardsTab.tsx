@@ -1,11 +1,12 @@
 "use client";
 import Icon from "@/components/ui/Icon";
 import Avatar from "@/components/ui/Avatar";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 import type { AdminCompetitionHook } from "./_hook";
 
 export default function AwardsTab({ hook }: { hook: AdminCompetitionHook }) {
   const {
-    t, branchId, MEMBER_TYPE_LABELS,
+    branchId, MEMBER_TYPE_LABELS,
     pickerSearch, setPickerSearch, pickerTypeFilter, setPickerTypeFilter,
     pickerBranchFilter, setPickerBranchFilter, pickerBranchOptions,
     pickerPaginatedMembers, pickerFilteredMembers, pickerTotalPages, pickerSafePage, setPickerPage,
@@ -20,7 +21,7 @@ export default function AwardsTab({ hook }: { hook: AdminCompetitionHook }) {
           <Icon name="search" className="w-4 h-4 text-ink-faint absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input
             type="text"
-            placeholder={t("admin.competition.searchMemberPlaceholder")}
+            placeholder={"Search name or student number..."}
             value={pickerSearch}
             onChange={e => setPickerSearch(e.target.value)}
             className="w-full h-10 pl-9 pr-3 text-sm bg-paper border border-line rounded-xl text-ink placeholder:text-ink-faint focus:outline-none focus:border-ocean-500 transition-colors"
@@ -31,7 +32,7 @@ export default function AwardsTab({ hook }: { hook: AdminCompetitionHook }) {
           onChange={e => setPickerTypeFilter(e.target.value as typeof pickerTypeFilter)}
           className="h-10 text-sm border border-line rounded-xl px-3 bg-paper text-ink-soft outline-none focus:border-ocean-500 transition-colors"
         >
-          <option value="all">{t("admin.competition.allMemberTypes")}</option>
+          <option value="all">{"All student types"}</option>
           <option value="reguler">{MEMBER_TYPE_LABELS.reguler}</option>
           <option value="private">{MEMBER_TYPE_LABELS.private}</option>
           <option value="school_affiliate">{MEMBER_TYPE_LABELS.school_affiliate}</option>
@@ -42,8 +43,8 @@ export default function AwardsTab({ hook }: { hook: AdminCompetitionHook }) {
             onChange={e => setPickerBranchFilter(e.target.value)}
             className="h-10 text-sm border border-line rounded-xl px-3 bg-paper text-ink-soft outline-none focus:border-ocean-500 transition-colors"
           >
-            <option value="all">{t("admin.competition.allBranches")}</option>
-            {pickerBranchOptions.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+            <option value="all">{"All centers"}</option>
+            {pickerBranchOptions.map(b => <option key={b.id} value={b.id} translate="no">{b.name}</option>)}
           </select>
         )}
       </div>
@@ -54,10 +55,10 @@ export default function AwardsTab({ hook }: { hook: AdminCompetitionHook }) {
           <table className="w-full text-sm">
             <thead className="h-9 bg-paper-deep border-b border-line text-left text-[10px] uppercase font-bold text-ink-faint tracking-wider">
               <tr>
-                <th className="py-2 px-5">{t("admin.competition.colName")}</th>
+                <th className="py-2 px-5">{"Name"}</th>
                 <th className="py-2 px-5">No. Anggota</th>
                 <th className="py-2 px-5">Tipe</th>
-                {!branchId && <th className="py-2 px-5">{t("admin.competition.colBranch")}</th>}
+                {!branchId && <th className="py-2 px-5">{"Center"}</th>}
                 <th className="py-2 px-5 text-right">Aksi</th>
               </tr>
             </thead>
@@ -72,13 +73,13 @@ export default function AwardsTab({ hook }: { hook: AdminCompetitionHook }) {
                     <div className="flex items-center gap-3">
                       <Avatar name={m.full_name} size={32} />
                       <div>
-                        <div className="font-semibold text-sm text-ink">{m.full_name}</div>
+                        <div className="font-semibold text-sm text-ink"><NoTranslate>{m.full_name}</NoTranslate></div>
                       </div>
                     </div>
                   </td>
-                  <td className="py-3 px-5 text-ink-mute font-mono text-xs">{m.member_no ?? "—"}</td>
+                  <td className="py-3 px-5 text-ink-mute font-mono text-xs"><NoTranslate>{m.member_no ?? "—"}</NoTranslate></td>
                   <td className="py-3 px-5 text-ink-soft text-sm">{MEMBER_TYPE_LABELS[m.type] ?? m.type}</td>
-                  {!branchId && <td className="py-3 px-5 text-ink-soft text-sm">{m.branch_name || "—"}</td>}
+                  {!branchId && <td className="py-3 px-5 text-ink-soft text-sm"><NoTranslate>{m.branch_name || "—"}</NoTranslate></td>}
                   <td className="py-3 px-5 text-right">
                     <button
                       type="button"
@@ -93,7 +94,7 @@ export default function AwardsTab({ hook }: { hook: AdminCompetitionHook }) {
               {pickerPaginatedMembers.length === 0 && (
                 <tr>
                   <td colSpan={branchId ? 4 : 5} className="text-center py-12 text-ink-mute text-sm">
-                    {t("admin.competition.noMemberMatchFilter")}
+                    {"No students match this filter."}
                   </td>
                 </tr>
               )}

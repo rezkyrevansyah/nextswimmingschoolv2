@@ -3,6 +3,7 @@ import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
 import { Card } from "@/components/ui/Card";
 import Avatar from "@/components/ui/Avatar";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 import { calcAge } from "../../_utils";
 import { fmtDate, waLink } from "@/lib/utils";
 import { fmtMonthYear } from "./_utils";
@@ -12,7 +13,7 @@ type ApprovementDataHook = ReturnType<typeof useApprovementData>;
 
 export default function ApprovementListCard({ hook }: { hook: ApprovementDataHook }) {
   const {
-    t, monthsLong, genderLabel,
+    monthsLong, genderLabel,
     registrations, certs, loading,
     tab, setTab, search, setSearch, genderFilter, setGenderFilter, load,
     approvingId, openApproveReg, setDetailReg, setDetailCert, setRejectCertTarget, setCertRejectReason, approveCert,
@@ -29,7 +30,7 @@ export default function ApprovementListCard({ hook }: { hook: ApprovementDataHoo
           return (
             <button key={tb} type="button" onClick={() => setTab(tb)}
               className={`relative flex items-center gap-2 px-4 py-3.5 text-sm font-semibold transition-colors ${isActive ? "text-ocean-700" : "text-ink-mute hover:text-ink-soft"}`}>
-              {tb === "reg" ? t("admin.approvement.tabRegistration") : t("admin.approvement.tabCertification")}
+              {tb === "reg" ? "New Registrations" : "Certification"}
               {count > 0 && (
                 <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${isActive ? "bg-danger-500 text-white" : "bg-danger-100 text-danger-600"}`}>
                   {count}
@@ -50,7 +51,7 @@ export default function ApprovementListCard({ hook }: { hook: ApprovementDataHoo
             name="approvement_search"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder={tab === "reg" ? t("admin.approvement.searchRegPlaceholder") : t("admin.approvement.searchCertPlaceholder")}
+            placeholder={tab === "reg" ? "Search name, email, phone…" : "Search name, certificate, issuer…"}
             className="w-full pl-9 pr-3 py-2 text-sm bg-paper-tint border border-line rounded-lg text-ink placeholder:text-ink-faint focus:outline-none focus:border-ocean-400 focus:ring-2 focus:ring-ocean-500/20 transition-all"
             autoComplete="off"
             data-lpignore="true"
@@ -69,16 +70,16 @@ export default function ApprovementListCard({ hook }: { hook: ApprovementDataHoo
             value={genderFilter}
             onChange={e => setGenderFilter(e.target.value)}
             className="text-sm border border-line rounded-lg px-3 py-2 bg-white text-ink focus:outline-none focus:border-ocean-400 focus:ring-2 focus:ring-ocean-500/20 transition-all">
-            <option value="">{t("admin.approvement.allGenders")}</option>
-            <option value="male">{t("admin.approvement.genderMale")}</option>
-            <option value="female">{t("admin.approvement.genderFemale")}</option>
+            <option value="">{"All genders"}</option>
+            <option value="male">{"Male"}</option>
+            <option value="female">{"Female"}</option>
           </select>
         )}
 
         <button type="button" onClick={load}
           className="flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-ink-mute border border-line rounded-lg hover:bg-paper-tint hover:text-ink transition-all">
           <Icon name="refresh" className="w-4 h-4" />
-          <span className="hidden sm:inline">{t("admin.approvement.refreshBtn")}</span>
+          <span className="hidden sm:inline">{"Refresh"}</span>
         </button>
       </div>
 
@@ -86,26 +87,26 @@ export default function ApprovementListCard({ hook }: { hook: ApprovementDataHoo
       {tab === "reg" && (
         <>
           {loading ? (
-            <div className="py-16 text-center text-ink-mute text-sm">{t("admin.approvement.loadingData")}</div>
+            <div className="py-16 text-center text-ink-mute text-sm">{"Loading data…"}</div>
           ) : filteredRegs.length === 0 ? (
             <div className="py-16 flex flex-col items-center gap-3 text-center">
               <span className="w-12 h-12 rounded-full bg-paper-tint flex items-center justify-center">
                 <Icon name="users" className="w-6 h-6 text-ink-faint" />
               </span>
               <div>
-                <div className="font-semibold text-ink-soft text-sm">{search || genderFilter ? t("admin.approvement.noResultsFound") : t("admin.approvement.noNewRegistrations")}</div>
-                <div className="text-xs text-ink-faint mt-0.5">{search || genderFilter ? t("admin.approvement.tryDifferentFilter") : t("admin.approvement.regFromPageHint")}</div>
+                <div className="font-semibold text-ink-soft text-sm">{search || genderFilter ? "No results found" : "No new registrations"}</div>
+                <div className="text-xs text-ink-faint mt-0.5">{search || genderFilter ? "Try a different filter or search term" : "Registrations from the /register page will appear here"}</div>
               </div>
             </div>
           ) : (
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left border-b border-line">
-                  <th className="px-4 py-3 text-xs font-bold text-ink-mute uppercase tracking-wide">{t("admin.approvement.colApplicant")}</th>
-                  <th className="px-4 py-3 text-xs font-bold text-ink-mute uppercase tracking-wide hidden sm:table-cell">{t("admin.approvement.colEmail")}</th>
-                  <th className="px-4 py-3 text-xs font-bold text-ink-mute uppercase tracking-wide hidden md:table-cell">{t("admin.approvement.colGender")}</th>
-                  <th className="px-4 py-3 text-xs font-bold text-ink-mute uppercase tracking-wide hidden lg:table-cell">{t("admin.approvement.colRegDate")}</th>
-                  <th className="px-4 py-3 text-xs font-bold text-ink-mute uppercase tracking-wide text-right">{t("admin.approvement.colActions")}</th>
+                  <th className="px-4 py-3 text-xs font-bold text-ink-mute uppercase tracking-wide">{"Applicant"}</th>
+                  <th className="px-4 py-3 text-xs font-bold text-ink-mute uppercase tracking-wide hidden sm:table-cell">{"Email"}</th>
+                  <th className="px-4 py-3 text-xs font-bold text-ink-mute uppercase tracking-wide hidden md:table-cell">{"Gender"}</th>
+                  <th className="px-4 py-3 text-xs font-bold text-ink-mute uppercase tracking-wide hidden lg:table-cell">{"Registration Date"}</th>
+                  <th className="px-4 py-3 text-xs font-bold text-ink-mute uppercase tracking-wide text-right">{"Actions"}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
@@ -120,13 +121,13 @@ export default function ApprovementListCard({ hook }: { hook: ApprovementDataHoo
                         <div className="flex items-center gap-3">
                           <Avatar name={r.full_name} size={36} />
                           <div className="min-w-0">
-                            <div className="font-semibold text-ink truncate">{r.full_name}</div>
-                            <div className="text-xs text-ink-mute">{r.phone ?? "—"}{age ? ` · ${t("admin.approvement.yearsSuffix", { n: age })}` : ""}</div>
+                            <div className="font-semibold text-ink truncate"><NoTranslate>{r.full_name}</NoTranslate></div>
+                            <div className="text-xs text-ink-mute"><NoTranslate>{r.phone ?? "—"}</NoTranslate>{age ? ` · ${`${age} y`}` : ""}</div>
                           </div>
                         </div>
                       </td>
                       <td className="px-4 py-3 hidden sm:table-cell">
-                        <span className="text-ink-soft truncate max-w-[180px] block">{r.email ?? <span className="text-danger-400 font-medium">{t("admin.approvement.notFilledYet")}</span>}</span>
+                        <span className="text-ink-soft truncate max-w-[180px] block">{r.email ? <NoTranslate>{r.email}</NoTranslate> : <span className="text-danger-400 font-medium">{"Not filled yet"}</span>}</span>
                       </td>
                       <td className="px-4 py-3 hidden md:table-cell">
                         <span className="text-ink-soft">
@@ -138,11 +139,11 @@ export default function ApprovementListCard({ hook }: { hook: ApprovementDataHoo
                       </td>
                       <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                         <div className="flex items-center gap-1.5 justify-end">
-                          <a href={waLink(t("admin.approvement.welcomeWaMessage", { name: r.full_name }), contactPhone)} target="_blank" rel="noreferrer">
+                          <a href={waLink(`Hi ${r.full_name}, thank you for registering at Next Swimming School.`, contactPhone)} target="_blank" rel="noreferrer">
                             <Btn variant="wa" size="sm" icon="whatsapp" />
                           </a>
                           <Btn variant="primary" size="sm" icon="check" disabled={approvingId === r.id} onClick={() => openApproveReg(r)}>
-                            {approvingId === r.id ? "…" : t("common.actions.approve")}
+                            {approvingId === r.id ? "…" : "Approve"}
                           </Btn>
                         </div>
                       </td>
@@ -159,26 +160,26 @@ export default function ApprovementListCard({ hook }: { hook: ApprovementDataHoo
       {tab === "cert" && (
         <>
           {loading ? (
-            <div className="py-16 text-center text-ink-mute text-sm">{t("admin.approvement.loadingData")}</div>
+            <div className="py-16 text-center text-ink-mute text-sm">{"Loading data…"}</div>
           ) : filteredCerts.length === 0 ? (
             <div className="py-16 flex flex-col items-center gap-3 text-center">
               <span className="w-12 h-12 rounded-full bg-paper-tint flex items-center justify-center">
                 <Icon name="shield" className="w-6 h-6 text-ink-faint" />
               </span>
               <div>
-                <div className="font-semibold text-ink-soft text-sm">{search ? t("admin.approvement.noResultsFound") : t("admin.approvement.noPendingCert")}</div>
-                <div className="text-xs text-ink-faint mt-0.5">{search ? t("admin.approvement.tryDifferentSearch") : t("admin.approvement.certFromCoachHint")}</div>
+                <div className="font-semibold text-ink-soft text-sm">{search ? "No results found" : "No pending certifications"}</div>
+                <div className="text-xs text-ink-faint mt-0.5">{search ? "Try a different search term" : "Certifications submitted by coaches will appear here"}</div>
               </div>
             </div>
           ) : (
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left border-b border-line">
-                  <th className="px-4 py-3 text-xs font-bold text-ink-mute uppercase tracking-wide">{t("admin.approvement.colCoach")}</th>
-                  <th className="px-4 py-3 text-xs font-bold text-ink-mute uppercase tracking-wide">{t("admin.approvement.colCertificate")}</th>
-                  <th className="px-4 py-3 text-xs font-bold text-ink-mute uppercase tracking-wide hidden sm:table-cell">{t("admin.approvement.colIssuer")}</th>
-                  <th className="px-4 py-3 text-xs font-bold text-ink-mute uppercase tracking-wide hidden md:table-cell">{t("admin.approvement.colValidUntil")}</th>
-                  <th className="px-4 py-3 text-xs font-bold text-ink-mute uppercase tracking-wide text-right">{t("admin.approvement.colActions")}</th>
+                  <th className="px-4 py-3 text-xs font-bold text-ink-mute uppercase tracking-wide">{"Coach"}</th>
+                  <th className="px-4 py-3 text-xs font-bold text-ink-mute uppercase tracking-wide">{"Certificate"}</th>
+                  <th className="px-4 py-3 text-xs font-bold text-ink-mute uppercase tracking-wide hidden sm:table-cell">{"Issuer"}</th>
+                  <th className="px-4 py-3 text-xs font-bold text-ink-mute uppercase tracking-wide hidden md:table-cell">{"Valid Until"}</th>
+                  <th className="px-4 py-3 text-xs font-bold text-ink-mute uppercase tracking-wide text-right">{"Actions"}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
@@ -189,14 +190,14 @@ export default function ApprovementListCard({ hook }: { hook: ApprovementDataHoo
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
                         <Avatar name={c.profile?.full_name ?? "?"} size={36} />
-                        <span className="font-semibold text-ink truncate">{c.profile?.full_name ?? "—"}</span>
+                        <span className="font-semibold text-ink truncate"><NoTranslate>{c.profile?.full_name ?? "—"}</NoTranslate></span>
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <span className="font-medium text-ink truncate max-w-[200px] block">{c.title ?? c.name}</span>
+                      <span className="font-medium text-ink truncate max-w-[200px] block"><NoTranslate>{c.title ?? c.name}</NoTranslate></span>
                     </td>
                     <td className="px-4 py-3 hidden sm:table-cell">
-                      <span className="text-ink-soft">{c.issuer ?? <span className="text-ink-faint">—</span>}</span>
+                      <span className="text-ink-soft">{c.issuer ? <NoTranslate>{c.issuer}</NoTranslate> : <span className="text-ink-faint">—</span>}</span>
                     </td>
                     <td className="px-4 py-3 hidden md:table-cell">
                       {c.no_expiry ? (
@@ -204,7 +205,7 @@ export default function ApprovementListCard({ hook }: { hook: ApprovementDataHoo
                           <span className="w-3.5 h-3.5 rounded-full bg-ok-100 flex items-center justify-center shrink-0">
                             <Icon name="check" className="w-2 h-2 text-ok-600" strokeWidth={3} />
                           </span>
-                          {t("admin.approvement.lifetimeLabel")}
+                          {"Lifetime"}
                         </span>
                       ) : (
                         <span className="text-ink-mute text-xs">
@@ -214,8 +215,8 @@ export default function ApprovementListCard({ hook }: { hook: ApprovementDataHoo
                     </td>
                     <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                       <div className="flex items-center gap-1.5 justify-end">
-                        <Btn variant="ghost" size="sm" className="text-danger-500" onClick={() => { setRejectCertTarget(c); setCertRejectReason(""); }}>{t("common.actions.reject")}</Btn>
-                        <Btn variant="primary" size="sm" icon="check" onClick={() => approveCert(c.id)}>{t("common.actions.approve")}</Btn>
+                        <Btn variant="ghost" size="sm" className="text-danger-500" onClick={() => { setRejectCertTarget(c); setCertRejectReason(""); }}>{"Reject"}</Btn>
+                        <Btn variant="primary" size="sm" icon="check" onClick={() => approveCert(c.id)}>{"Approve"}</Btn>
                       </div>
                     </td>
                   </tr>
@@ -230,7 +231,7 @@ export default function ApprovementListCard({ hook }: { hook: ApprovementDataHoo
       {totalPages > 1 && (
         <div className="px-4 py-3 border-t border-line flex items-center justify-between gap-4">
           <span className="text-xs text-ink-mute">
-            {t("admin.approvement.itemsPageLabel", { count: activeList.length, page: safePage + 1, total: totalPages })}
+            {`${activeList.length} items · page ${safePage + 1} of ${totalPages}`}
           </span>
           <div className="flex items-center gap-1">
             <button type="button" disabled={safePage === 0} onClick={() => setPage(0)}

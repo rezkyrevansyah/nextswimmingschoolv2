@@ -1,9 +1,9 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, createElement, Fragment } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
-import { useLocale } from "@/components/providers/LocaleProvider";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 import { parseUserApiError } from "../../_utils";
 import type { CoachProfile } from "../../_types";
 import { EMPTY_FORM, type PrivateStudentRow } from "./_types";
@@ -16,8 +16,6 @@ export function useMemberPrivateData({ branchId, branches, onBranchesChange }: {
   const supabase = createClient();
   const toast = useToast();
   const confirm = useConfirm();
-  const { t } = useLocale();
-
   const [students, setStudents] = useState<PrivateStudentRow[]>([]);
   const [coaches, setCoaches] = useState<CoachProfile[]>([]);
   const [loading, setLoading] = useState(false);
@@ -57,7 +55,7 @@ export function useMemberPrivateData({ branchId, branches, onBranchesChange }: {
       .eq("type", "private");
     if (!branches && branchId) query = query.eq("branch_id", branchId);
     const { data, error } = await query.order("created_at", { ascending: false });
-    if (error) { setLoading(false); return toast.error(t("admin.memberPrivate.loadFailed"), error.message); }
+    if (error) { setLoading(false); return toast.error("Failed to load private students", error.message); }
 
     const rows: PrivateStudentRow[] = ((data ?? []) as unknown as Array<Omit<PrivateStudentRow, "class"> & { member_classes?: { class: PrivateStudentRow["class"] }[] }>).map(m => ({
       ...m,
@@ -65,7 +63,7 @@ export function useMemberPrivateData({ branchId, branches, onBranchesChange }: {
     }));
     setStudents(rows);
     setLoading(false);
-  }, [branchId, branches, supabase, toast, t]);
+  }, [branchId, branches, supabase, toast]);
 
   /* eslint-disable react-hooks/set-state-in-effect -- async data loader */
   useEffect(() => {
@@ -154,24 +152,24 @@ export function useMemberPrivateData({ branchId, branches, onBranchesChange }: {
     setCoachMutating(true);
     const { error } = await supabase.from("class_coaches").insert({ class_id: classId, coach_id: coachId, role: "assistant" });
     setCoachMutating(false);
-    if (error) return toast.error(t("admin.classes.addCoachFailed"), error.message);
+    if (error) return toast.error("Failed to add coach", error.message);
     const coach = coaches.find(c => c.id === coachId);
     const current = editTarget?.class?.class_coaches ?? [];
     patchEditCoaches([...current, { coach_id: coachId, role: "assistant", profile: coach ? { id: coach.id, full_name: coach.full_name } : null }]);
     setAddCoachId("");
-    toast.success(t("admin.classes.coachAddedToast"));
+    toast.success("Coach added to class");
   };
 
   const removeStudentCoach = async (classId: string, coachId: string) => {
-    const ok = await confirm({ title: t("admin.classes.removeCoachConfirmTitle"), body: t("admin.classes.removeCoachConfirmBody"), danger: true });
+    const ok = await confirm({ title: "Remove coach from class?", body: "The coach will stop handling this class.", danger: true });
     if (!ok) return;
     setCoachMutating(true);
     const { error } = await supabase.from("class_coaches").delete().eq("class_id", classId).eq("coach_id", coachId);
     setCoachMutating(false);
-    if (error) return toast.error(t("admin.classes.removeCoachFailed"), error.message);
+    if (error) return toast.error("Failed to remove coach", error.message);
     const current = editTarget?.class?.class_coaches ?? [];
     patchEditCoaches(current.filter(cc => cc.coach_id !== coachId));
-    toast.success(t("admin.classes.coachRemovedToast"));
+    toast.success("Coach removed from class");
   };
 
   const setStudentCoachRole = async (classId: string, coachId: string, role: "head" | "assistant") => {
@@ -181,7 +179,7 @@ export function useMemberPrivateData({ branchId, branches, onBranchesChange }: {
       await supabase.from("class_coaches").update({ role: "assistant" }).eq("class_id", classId).neq("coach_id", coachId);
     }
     setCoachMutating(false);
-    if (error) return toast.error(t("admin.classes.changeRoleFailed"), error.message);
+    if (error) return toast.error("Failed to change coach role", error.message);
     const current = editTarget?.class?.class_coaches ?? [];
     patchEditCoaches(current.map(cc => role === "head"
       ? { ...cc, role: cc.coach_id === coachId ? "head" : "assistant" }
@@ -189,11 +187,11 @@ export function useMemberPrivateData({ branchId, branches, onBranchesChange }: {
   };
 
   const saveStudent = async () => {
-    if (!form.full_name.trim()) return toast.error(t("admin.members.fullNameRequired2"));
-    if (form.schedule_days.length === 0) return toast.error(t("admin.memberPrivate.scheduleDaysRequired"));
-    if (!form.time_start || !form.time_end) return toast.error(t("admin.memberPrivate.timeRequired"));
+    if (!form.full_name.trim()) return toast.error("Full name is required");
+    if (form.schedule_days.length === 0) return toast.error("Select at least one day");
+    if (!form.time_start || !form.time_end) return toast.error("Start and end time are required");
     if (form.location_type === "external" && !form.external_location_name.trim()) {
-      return toast.error(t("admin.classes.externalLocationNameRequired"));
+      return toast.error("The external location name (e.g. apartment/pool name) is required for external private classes.");
     }
 
     setSaving(true);
@@ -218,7 +216,7 @@ export function useMemberPrivateData({ branchId, branches, onBranchesChange }: {
           custom_location_lat: extLat,
           custom_location_lng: extLng,
         }).eq("id", editTarget.class.id);
-        if (classErr) { setSaving(false); return toast.error(t("admin.memberPrivate.saveClassFailed"), classErr.message); }
+        if (classErr) { setSaving(false); return toast.error("Failed to save schedule/location", classErr.message); }
       }
 
       const res = await fetch(`/api/admin/users/${editTarget.profile_id}`, {
@@ -238,12 +236,12 @@ export function useMemberPrivateData({ branchId, branches, onBranchesChange }: {
       });
       setSaving(false);
       const json = await res.json() as { error?: string; code?: string };
-      if (!res.ok) { const [errT, errS] = parseUserApiError(json, t); return toast.error(errT, errS); }
-      toast.success(t("admin.memberPrivate.studentUpdatedToast"));
+      if (!res.ok) { const [errT, errS] = parseUserApiError(json); return toast.error(errT, errS); }
+      toast.success("Student updated");
     } else {
-      if (!form.email || !form.password) return (setSaving(false), toast.error(t("admin.coaches.nameEmailPasswordRequired")));
+      if (!form.email || !form.password) return (setSaving(false), toast.error("Name, email, and password are required"));
       const targetBranchId = form.target_branch_id || branchId;
-      if (!targetBranchId) { setSaving(false); return toast.error(t("admin.memberPrivate.fieldTargetBranchRequired")); }
+      if (!targetBranchId) { setSaving(false); return toast.error("Select which center this student belongs to"); }
 
       // 1. Create the backing private class row first.
       const { data: newClass, error: classErr } = await supabase.from("classes").insert({
@@ -264,7 +262,7 @@ export function useMemberPrivateData({ branchId, branches, onBranchesChange }: {
         custom_location_lat: extLat,
         custom_location_lng: extLng,
       }).select("id").single();
-      if (classErr || !newClass) { setSaving(false); return toast.error(t("admin.memberPrivate.saveClassFailed"), classErr?.message); }
+      if (classErr || !newClass) { setSaving(false); return toast.error("Failed to save schedule/location", classErr?.message); }
 
       // 2. Create the member, linked to that class (existing route already
       // handles the members insert + member_classes link + capacity check).
@@ -286,7 +284,7 @@ export function useMemberPrivateData({ branchId, branches, onBranchesChange }: {
         // Roll back the orphaned class row since member creation failed.
         await supabase.from("classes").delete().eq("id", newClass.id);
         setSaving(false);
-        const [errT, errS] = parseUserApiError(json, t);
+        const [errT, errS] = parseUserApiError(json);
         return toast.error(errT, errS);
       }
 
@@ -309,7 +307,7 @@ export function useMemberPrivateData({ branchId, branches, onBranchesChange }: {
         await supabase.from("bills").insert({
           member_id: json.user_id, branch_id: targetBranchId,
           class_id: newClass.id,
-          period_label: t("admin.members.fallbackBillPeriodLabel", { count: sessionCount }),
+          period_label: `Add ${sessionCount} sessions`,
           type: "session_pack" as "monthly",
           sessions_total: sessionCount,
           sessions_used: 0,
@@ -321,7 +319,7 @@ export function useMemberPrivateData({ branchId, branches, onBranchesChange }: {
       }
 
       setSaving(false);
-      toast.success(t("admin.memberPrivate.studentCreatedToast"));
+      toast.success("Private student created");
     }
     setOpenForm(false);
     load();
@@ -335,14 +333,14 @@ export function useMemberPrivateData({ branchId, branches, onBranchesChange }: {
   const doAddSesi = async () => {
     if (!addSesiTarget) return;
     const jumlah = Number(addSesiForm.jumlah);
-    if (!jumlah || jumlah < 1) return toast.error(t("admin.members.invalidSessionCount"));
+    if (!jumlah || jumlah < 1) return toast.error("Invalid session count");
     setSavingAddSesi(true);
     const newTotal = (addSesiTarget.total_sessions ?? 0) + jumlah;
     const newRemaining = (addSesiTarget.remaining_sessions ?? 0) + jumlah;
     const { error } = await supabase.from("members")
       .update({ total_sessions: newTotal, remaining_sessions: newRemaining })
       .eq("id", addSesiTarget.id);
-    if (error) { setSavingAddSesi(false); return toast.error(t("admin.members.addSessionFailed"), error.message); }
+    if (error) { setSavingAddSesi(false); return toast.error("Failed to add session", error.message); }
 
     if (addSesiForm.generate_bill) {
       const price = Number(addSesiForm.price) || 0;
@@ -350,7 +348,7 @@ export function useMemberPrivateData({ branchId, branches, onBranchesChange }: {
         await supabase.from("bills").insert({
           member_id: addSesiTarget.id, branch_id: addSesiTarget.branch_id,
           class_id: addSesiTarget.class?.id ?? null,
-          period_label: t("admin.members.fallbackBillPeriodLabel", { count: jumlah }),
+          period_label: `Add ${jumlah} sessions`,
           type: "session_pack" as "monthly",
           sessions_total: jumlah,
           sessions_used: 0,
@@ -363,24 +361,24 @@ export function useMemberPrivateData({ branchId, branches, onBranchesChange }: {
     }
 
     setSavingAddSesi(false);
-    toast.success(t("admin.members.sessionsAddedToast", { count: jumlah }));
+    toast.success(`${jumlah} sessions added`);
     setAddSesiTarget(null);
     load();
   };
 
   const deleteStudent = async (row: PrivateStudentRow) => {
     const yes = await confirm({
-      title: t("admin.memberPrivate.deleteConfirmTitle"),
-      body: t("admin.memberPrivate.deleteConfirmBody"),
+      title: "Delete this private student?",
+      body: "This permanently deletes the student's account and their private class slot. This cannot be undone.",
       danger: true,
     });
     if (!yes) return;
     const res = await fetch(`/api/admin/users/${row.profile_id}`, { method: "DELETE" });
     const json = await res.json() as { error?: string };
-    if (!res.ok) return toast.error(t("admin.memberPrivate.deleteFailed"), json.error);
+    if (!res.ok) return toast.error("Failed to delete", json.error);
     // Clean up the now-orphaned private class row (1:1 — nothing else can use it).
     if (row.class) await supabase.from("classes").delete().eq("id", row.class.id);
-    toast.success(t("admin.memberPrivate.deletedToast"));
+    toast.success("Student deleted");
     load();
   };
 
@@ -388,15 +386,16 @@ export function useMemberPrivateData({ branchId, branches, onBranchesChange }: {
     const cls = row.class;
     if (!cls) return "—";
     const days = (cls.schedule_days ?? []).join(", ") || "—";
+    const daysNode = createElement(NoTranslate, null, days);
     const time = cls.time_start && cls.time_end ? `${cls.time_start.slice(0, 5)}-${cls.time_end.slice(0, 5)}` : "";
-    return time ? `${days} · ${time}` : days;
+    return time ? createElement(Fragment, null, daysNode, ` · ${time}`) : daysNode;
   };
 
   const locationSummary = (row: PrivateStudentRow) => {
     const cls = row.class;
     if (!cls) return "—";
-    if (cls.location_type === "external") return cls.external_location_name || t("admin.memberPrivate.externalLocation");
-    return t("admin.memberPrivate.branchLocation");
+    if (cls.location_type === "external") return cls.external_location_name ? createElement(NoTranslate, null, cls.external_location_name) : "Somewhere else";
+    return "This center's pool";
   };
 
   const coachName = (row: PrivateStudentRow) => {
@@ -404,11 +403,11 @@ export function useMemberPrivateData({ branchId, branches, onBranchesChange }: {
     const head = list.find(cc => cc.role === "head") ?? list[0];
     if (!head?.profile) return "—";
     const extra = list.length - 1;
-    return extra > 0 ? t("admin.memberPrivate.coachNamePlusMore", { name: head.profile.full_name, count: extra }) : head.profile.full_name;
+    return extra > 0 ? (<><NoTranslate>{head.profile.full_name}</NoTranslate>{" +"}<NoTranslate>{extra}</NoTranslate></>) : createElement(NoTranslate, null, head.profile.full_name);
   };
 
   return {
-    t, branchId, branches, branchName,
+    branchId, branches, branchName,
     students, coaches, loading, search, setSearch,
     openForm, setOpenForm, editTarget, form, setForm, saving, detailTarget, setDetailTarget,
     newHeadCoachId, setNewHeadCoachId, newAssistantCoachIds, setNewAssistantCoachIds,

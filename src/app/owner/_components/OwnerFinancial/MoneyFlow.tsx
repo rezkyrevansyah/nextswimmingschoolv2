@@ -1,11 +1,9 @@
 "use client";
 import { Stat } from "@/components/ui/Card";
 import { fmtIDR } from "@/lib/utils";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import type { FinancialHook } from "./index";
 
 export default function MoneyFlow({ hook }: { hook: FinancialHook }) {
-  const { t } = useLocale();
   const { loadingBills, loadingExpenses, moneyFlowData } = hook;
 
   const mfMax = Math.max(1, ...moneyFlowData.map(m => Math.max(m.income, m.expense)));
@@ -13,25 +11,25 @@ export default function MoneyFlow({ hook }: { hook: FinancialHook }) {
   return (
     <div className="space-y-4">
       <div className="grid sm:grid-cols-3 gap-4">
-        <Stat label={t("owner.financial.moneyFlowTotalIncome")} value={fmtIDR(moneyFlowData.reduce((s, m) => s + m.income, 0))} icon="invoice" tone="ok" />
-        <Stat label={t("owner.financial.moneyFlowTotalExpenses")} value={fmtIDR(moneyFlowData.reduce((s, m) => s + m.expense, 0))} icon="wallet" tone="warn" />
-        <Stat label={t("owner.financial.moneyFlowTotalNet")} value={fmtIDR(moneyFlowData.reduce((s, m) => s + m.net, 0))} icon="chart" tone="ocean" />
+        <Stat label={"Total Income (12 mo)"} value={fmtIDR(moneyFlowData.reduce((s, m) => s + m.income, 0))} icon="invoice" tone="ok" />
+        <Stat label={"Total Expenses (12 mo)"} value={fmtIDR(moneyFlowData.reduce((s, m) => s + m.expense, 0))} icon="wallet" tone="warn" />
+        <Stat label={"Net (12 mo)"} value={fmtIDR(moneyFlowData.reduce((s, m) => s + m.net, 0))} icon="chart" tone="ocean" />
       </div>
 
       <div className="bg-paper border border-line rounded-2xl overflow-hidden shadow-xs">
         {loadingBills || loadingExpenses ? (
-          <div className="p-10 text-center text-ink-mute text-sm">{t("owner.financial.loading")}</div>
+          <div className="p-10 text-center text-ink-mute text-sm">{"Loading data…"}</div>
         ) : moneyFlowData.length === 0 ? (
-          <div className="p-10 text-center text-ink-mute text-sm">{t("owner.financial.moneyFlowEmpty")}</div>
+          <div className="p-10 text-center text-ink-mute text-sm">{"No transaction data yet."}</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="h-9 border-b border-line bg-paper-deep text-[10px] uppercase font-bold text-ink-faint tracking-wider">
-                  <th className="text-left px-4 py-2">{t("owner.financial.colMonth")}</th>
-                  <th className="text-right px-4 py-2">{t("owner.financial.colIncome")}</th>
-                  <th className="text-right px-4 py-2">{t("owner.financial.colExpenses")}</th>
-                  <th className="text-right px-4 py-2">{t("owner.financial.colNet")}</th>
+                  <th className="text-left px-4 py-2">{"Month"}</th>
+                  <th className="text-right px-4 py-2">{"Income"}</th>
+                  <th className="text-right px-4 py-2">{"Expenses"}</th>
+                  <th className="text-right px-4 py-2">{"Net"}</th>
                   <th className="px-4 py-2 w-40"></th>
                 </tr>
               </thead>

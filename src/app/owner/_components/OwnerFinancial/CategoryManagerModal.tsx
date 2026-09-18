@@ -3,7 +3,6 @@ import { useState } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import Modal from "@/components/ui/Modal";
 import Btn from "@/components/ui/Btn";
 import Icon from "@/components/ui/Icon";
@@ -18,7 +17,6 @@ export default function CategoryManagerModal({ kind, categories, manualTxns, onC
   onClose: () => void;
   onChanged: () => void;
 }) {
-  const { t } = useLocale();
   const supabase = createClient();
   const toast = useToast();
   const confirm = useConfirm();
@@ -34,7 +32,7 @@ export default function CategoryManagerModal({ kind, categories, manualTxns, onC
     const { error } = await supabase.from("manual_transaction_categories")
       .insert({ kind, name, sort_order: categories.length + 1 });
     setSaving(false);
-    if (error) return toast.error(t("owner.financial.categorySaveFailed"), error.message);
+    if (error) return toast.error("Failed to save category", error.message);
     setNewName("");
     onChanged();
   };
@@ -47,7 +45,7 @@ export default function CategoryManagerModal({ kind, categories, manualTxns, onC
     setSaving(true);
     const { error } = await supabase.from("manual_transaction_categories").update({ name }).eq("id", editId);
     setSaving(false);
-    if (error) return toast.error(t("owner.financial.categorySaveFailed"), error.message);
+    if (error) return toast.error("Failed to save category", error.message);
     setEditId(null);
     onChanged();
   };
@@ -55,25 +53,25 @@ export default function CategoryManagerModal({ kind, categories, manualTxns, onC
   const del = async (c: ManualTxnCategory) => {
     const usageCount = manualTxns.filter(t => t.kind === c.kind && t.category === c.name).length;
     if (usageCount > 0) {
-      toast.error(t("owner.financial.categoryInUseTitle"), t("owner.financial.categoryInUseBody", { count: usageCount }));
+      toast.error("Category still in use", `This category is used by ${usageCount} transaction(s) and cannot be deleted.`);
       return;
     }
-    const ok = await confirm({ title: t("owner.financial.categoryDeleteConfirmTitle"), body: c.name, danger: true });
+    const ok = await confirm({ title: "Delete this category?", body: c.name, danger: true });
     if (!ok) return;
     const { error } = await supabase.from("manual_transaction_categories").delete().eq("id", c.id);
-    if (error) return toast.error(t("owner.financial.categoryDeleteFailed"), error.message);
+    if (error) return toast.error("Failed to delete category", error.message);
     onChanged();
   };
 
   return (
     <Modal open={!!kind} onClose={onClose}
-      title={kind === "income" ? t("owner.financial.manageCategoriesIncomeTitle") : t("owner.financial.manageCategoriesExpenseTitle")}
-      size="sm" footer={<Btn variant="ghost" onClick={onClose}>{t("common.actions.close")}</Btn>}>
+      title={kind === "income" ? "Manage Income Categories" : "Manage Expense Categories"}
+      size="sm" footer={<Btn variant="ghost" onClick={onClose}>{"Close"}</Btn>}>
       <div className="space-y-3">
         <div className="flex gap-2">
-          <Input value={newName} onChange={e => setNewName(e.target.value)} placeholder={t("owner.financial.categoryNamePlaceholder")}
+          <Input value={newName} onChange={e => setNewName(e.target.value)} placeholder={"E.g.: Sponsorship"}
             onKeyDown={e => { if (e.key === "Enter") add(); }} />
-          <Btn variant="primary" size="sm" disabled={!newName.trim() || saving} onClick={add}>{t("common.actions.add")}</Btn>
+          <Btn variant="primary" size="sm" disabled={!newName.trim() || saving} onClick={add}>{"Add"}</Btn>
         </div>
         <div className="space-y-1.5">
           {categories.map(c => (
@@ -94,7 +92,7 @@ export default function CategoryManagerModal({ kind, categories, manualTxns, onC
               )}
             </div>
           ))}
-          {categories.length === 0 && <div className="py-6 text-center text-ink-mute text-sm">{t("owner.financial.categoryEmpty")}</div>}
+          {categories.length === 0 && <div className="py-6 text-center text-ink-mute text-sm">{"No categories yet"}</div>}
         </div>
       </div>
     </Modal>

@@ -3,12 +3,11 @@ import { useState, useEffect } from "react";
 import Icon from "@/components/ui/Icon";
 import { Card } from "@/components/ui/Card";
 import Status from "@/components/ui/Status";
-import { useLocale } from "@/components/providers/LocaleProvider";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 import { isMemberPresentLike, memberDbToUi, memberStatusKind, memberStatusIcon } from "@/lib/attendance";
 import { createClient } from "@/utils/supabase/client";
 
 export default function MemberAbsensi({ memberId, onSwitchToLeave }: { memberId: string; onSwitchToLeave?: () => void }) {
-  const { t, tArray } = useLocale();
   const supabase = createClient();
   const now = new Date();
   const [filterMonth, setFilterMonth] = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`);
@@ -54,15 +53,15 @@ export default function MemberAbsensi({ memberId, onSwitchToLeave }: { memberId:
     absent: rows.filter((r) => memberDbToUi(r.status) === "absent").length,
   };
 
-  const monthNames = tArray("common.months.short");
+  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
   const getStatusText = (status: string) => {
     const ui = memberDbToUi(status);
-    if (ui === "present") return t("member.attendance.statusPresent");
-    if (ui === "late") return t("member.attendance.statusLate");
-    if (ui === "absent") return t("member.attendance.statusAbsent");
-    if (ui === "izin") return t("member.attendance.statusExcused");
-    return t("member.attendance.statusSick");
+    if (ui === "present") return "Present";
+    if (ui === "late") return "Late";
+    if (ui === "absent") return "Absent";
+    if (ui === "izin") return "Leave";
+    return "Sick";
   };
 
   return (
@@ -73,14 +72,14 @@ export default function MemberAbsensi({ memberId, onSwitchToLeave }: { memberId:
             type="button"
             className="flex-1 py-2 text-xs font-bold rounded-lg bg-ocean-50 text-ocean-700 shadow-2xs text-center"
           >
-            {t("member.nav.attendance")}
+            {"Attendance"}
           </button>
           <button
             type="button"
             onClick={onSwitchToLeave}
             className="flex-1 py-2 text-xs font-semibold rounded-lg text-ink-mute hover:text-ink text-center transition"
           >
-            {t("member.nav.leave")}
+            {"Leave"}
           </button>
         </div>
       )}
@@ -97,12 +96,12 @@ export default function MemberAbsensi({ memberId, onSwitchToLeave }: { memberId:
           onChange={(e) => setFilterClass(e.target.value)}
           className="flex-1 px-3 py-2 rounded-xl border border-line bg-white text-sm text-ink focus:outline-none focus:ring-2 focus:ring-ocean-300"
         >
-          <option value="all">{t("member.attendance.allClasses")}</option>
-          {myClasses.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          <option value="all">{"All Classes"}</option>
+          {myClasses.map((c) => <option key={c.id} value={c.id} translate="no">{c.name}</option>)}
         </select>
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-        {[[t("member.attendance.present"), stats.present, "ok"], [t("member.attendance.excused"), stats.excused, "warn"], [t("member.attendance.sick"), stats.sick, "warn"], [t("member.attendance.absent"), stats.absent, "danger"]].map(([l, v, t]) => (
+        {[["Present", stats.present, "ok"], ["Leave", stats.excused, "warn"], ["Sick", stats.sick, "warn"], ["Absent", stats.absent, "danger"]].map(([l, v, t]) => (
           <Card key={l as string} className="!p-3 text-center">
             <div className={`font-display font-extrabold text-2xl text-${t}-500`}>{v}</div>
             <div className="text-[10px] uppercase tracking-widest font-bold text-ink-mute">{l}</div>
@@ -120,8 +119,8 @@ export default function MemberAbsensi({ memberId, onSwitchToLeave }: { memberId:
                   <Icon name={memberStatusIcon(r.status)} className="w-4 h-4" strokeWidth={2.5} />
                 </span>
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-semibold text-ink">{r.class_name}</div>
-                  <div className="text-xs text-ink-mute font-mono">{dateStr} · {r.time}{r.notes ? ` · ${r.notes}` : ""}</div>
+                  <div className="text-sm font-semibold text-ink"><NoTranslate>{r.class_name}</NoTranslate></div>
+                  <div className="text-xs text-ink-mute font-mono">{dateStr} · {r.time}{r.notes ? <> · <NoTranslate>{r.notes}</NoTranslate></> : ""}</div>
                 </div>
                 <Status kind={memberStatusKind(r.status)}>
                   {getStatusText(r.status)}
@@ -129,7 +128,7 @@ export default function MemberAbsensi({ memberId, onSwitchToLeave }: { memberId:
               </div>
             );
           })}
-          {rows.length === 0 && <div className="px-5 py-8 text-center text-sm text-ink-mute">{t("member.attendance.empty")}</div>}
+          {rows.length === 0 && <div className="px-5 py-8 text-center text-sm text-ink-mute">{"No attendance records yet."}</div>}
         </div>
       </Card>
     </div>

@@ -1,5 +1,4 @@
 "use client";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import PhotoLightbox from "@/components/ui/PhotoLightbox";
 import { useCompetitionData } from "./useCompetitionData";
 import { useParticipationData } from "./useParticipationData";
@@ -12,7 +11,6 @@ import CompetitionDetailModal from "./CompetitionDetailModal";
 import ParticipantFormModal from "./ParticipantFormModal";
 
 export default function AdminCompetition({ branchId }: { branchId: string }) {
-  const { t } = useLocale();
   const comp = useCompetitionData(branchId);
   const part = useParticipationData({
     branchId,
@@ -30,15 +28,15 @@ export default function AdminCompetition({ branchId }: { branchId: string }) {
       {/* ── Summary Stats matching pen.dev qgz4S ── */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-paper border border-line rounded-2xl p-5 space-y-1.5 shadow-xs">
-          <div className="text-[10px] uppercase font-bold text-ink-faint tracking-wider">{t("admin.competition.statTotalCompetitions")}</div>
+          <div className="text-[10px] uppercase font-bold text-ink-faint tracking-wider">{"Total Competitions"}</div>
           <div className="text-2xl font-extrabold font-display text-ocean-600">{totalComps}</div>
         </div>
         <div className="bg-paper border border-line rounded-2xl p-5 space-y-1.5 shadow-xs">
-          <div className="text-[10px] uppercase font-bold text-ink-faint tracking-wider">{t("admin.competition.statTotalParticipations")}</div>
+          <div className="text-[10px] uppercase font-bold text-ink-faint tracking-wider">{"Total Participations"}</div>
           <div className="text-2xl font-extrabold font-display text-wave-600">{totalParticipations}</div>
         </div>
         <div className="bg-paper border border-line rounded-2xl p-5 space-y-1.5 shadow-xs">
-          <div className="text-[10px] uppercase font-bold text-ink-faint tracking-wider">{t("admin.competition.statTotalMedals")}</div>
+          <div className="text-[10px] uppercase font-bold text-ink-faint tracking-wider">{"Total Medals / Achievements"}</div>
           <div className="text-2xl font-extrabold font-display text-ok-600">{totalMedals}</div>
         </div>
       </div>
@@ -54,7 +52,7 @@ export default function AdminCompetition({ branchId }: { branchId: string }) {
               : "bg-paper border border-line text-ink-soft hover:bg-paper-tint hover:text-ink"
           }`}
         >
-          {t("admin.competition.tabAwards")}
+          {"Participant Awards"}
         </button>
         <button
           type="button"
@@ -65,7 +63,7 @@ export default function AdminCompetition({ branchId }: { branchId: string }) {
               : "bg-paper border border-line text-ink-soft hover:bg-paper-tint hover:text-ink"
           }`}
         >
-          {t("admin.competition.tabCompetitions")}
+          {"Competitions"}
         </button>
       </div>
 
@@ -101,7 +99,7 @@ export default function AdminCompetition({ branchId }: { branchId: string }) {
       {lightboxUrl && (
         <PhotoLightbox
           src={lightboxUrl}
-          name={t("admin.competition.certificateProofName")}
+          name={"Certificate / Competition Proof"}
           onClose={() => setLightboxUrl(null)}
         />
       )}

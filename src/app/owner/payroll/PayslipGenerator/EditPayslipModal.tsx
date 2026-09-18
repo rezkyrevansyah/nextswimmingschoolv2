@@ -4,11 +4,9 @@ import Btn from "@/components/ui/Btn";
 import Modal from "@/components/ui/Modal";
 import { Field, Input, Textarea } from "@/components/ui/FormFields";
 import { NoTranslate } from "@/components/ui/NoTranslate";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import type { PayslipHook } from "./index";
 
 export default function EditPayslipModal({ hook }: { hook: PayslipHook }) {
-  const { t } = useLocale();
   const {
     editSlip, setEditSlip, editPeriod, setEditPeriod, editGross, setEditGross,
     editNotes, setEditNotes, editDeductions, setEditDeductions, savingEdit, handleSaveEdit,
@@ -18,15 +16,15 @@ export default function EditPayslipModal({ hook }: { hook: PayslipHook }) {
     <Modal
       open={!!editSlip}
       onClose={() => setEditSlip(null)}
-      title={t("owner.payslip.editModalTitle")}
+      title={"Edit Draft Payslip"}
       size="md"
       footer={
         <div className="flex gap-2 justify-end w-full">
           <Btn variant="ghost" onClick={() => setEditSlip(null)}>
-            {t("common.actions.cancel")}
+            {"Cancel"}
           </Btn>
           <Btn variant="primary" onClick={handleSaveEdit} disabled={savingEdit}>
-            {savingEdit ? t("common.actions.saving") : t("common.actions.save")}
+            {savingEdit ? "Saving…" : "Save"}
           </Btn>
         </div>
       }
@@ -38,11 +36,11 @@ export default function EditPayslipModal({ hook }: { hook: PayslipHook }) {
             <span className="text-ink-mute"><NoTranslate>{editSlip.branch?.name ?? "—"}</NoTranslate></span>
           </div>
 
-          <Field label={t("owner.payslip.fieldPeriod")} required>
+          <Field label={"Period"} required>
             <Input value={editPeriod} onChange={(e) => setEditPeriod(e.target.value)} />
           </Field>
 
-          <Field label={t("owner.payslip.fieldGrossSalary")} required>
+          <Field label={"Gross Salary (Rp)"} required>
             <Input
               type="number"
               inputMode="numeric"
@@ -55,7 +53,7 @@ export default function EditPayslipModal({ hook }: { hook: PayslipHook }) {
 
           {/* Deductions Editor */}
           <div className="space-y-2">
-            <div className="text-xs font-semibold text-ink-faint uppercase tracking-wider">{t("owner.payslip.deductionHeader")}</div>
+            <div className="text-xs font-semibold text-ink-faint uppercase tracking-wider">{"Deductions"}</div>
             {editDeductions.map((d, idx) => (
               <div key={d.id || idx} className="flex items-center gap-2">
                 <Input
@@ -65,7 +63,7 @@ export default function EditPayslipModal({ hook }: { hook: PayslipHook }) {
                     next[idx].label = e.target.value;
                     setEditDeductions(next);
                   }}
-                  placeholder={t("owner.payslip.deductionNamePlaceholder")}
+                  placeholder={"Deduction name"}
                   className="text-xs"
                 />
                 <div className="w-36">
@@ -95,14 +93,14 @@ export default function EditPayslipModal({ hook }: { hook: PayslipHook }) {
               size="sm"
               icon="plus"
               onClick={() =>
-                setEditDeductions([...editDeductions, { id: `temp-${Date.now()}`, label: t("owner.payslip.otherDeductionsLabel"), amount: 0, type: "other" }])
+                setEditDeductions([...editDeductions, { id: `temp-${Date.now()}`, label: "Other Deduction", amount: 0, type: "other" }])
               }
             >
-              {t("owner.payslip.addDeductionRowBtn")}
+              {"Add Deduction"}
             </Btn>
           </div>
 
-          <Field label={t("owner.payslip.fieldNotes")}>
+          <Field label={"Notes (optional)"}>
             <Textarea value={editNotes} onChange={(e) => setEditNotes(e.target.value)} rows={2} />
           </Field>
         </div>

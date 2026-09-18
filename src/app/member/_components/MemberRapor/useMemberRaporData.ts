@@ -1,14 +1,12 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
 import { useToast } from "@/components/providers/ToastProvider";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import { createClient } from "@/utils/supabase/client";
 import type { PrintBestTime, PrintCriterion } from "@/lib/printRapor";
 import { resolveRaporSigner, type SchoolForSignerConfig } from "@/lib/rapor";
 import type { CoachReviewSlot, RaporEntryFull } from "./_types";
 
 export function useMemberRaporData({ memberId, branchId }: { memberId: string; branchId: string }) {
-  const { t } = useLocale();
   const supabase = createClient();
   const toast = useToast();
   const [raporTab, setRaporTab] = useState<"rapor" | "review">("rapor");
@@ -164,7 +162,7 @@ export function useMemberRaporData({ memberId, branchId }: { memberId: string; b
 
   const saveReview = async (entry: RaporEntryFull, slot: CoachReviewSlot) => {
     const { data: periodCheck } = await supabase.from("rapor_periods").select("is_open").eq("id", entry.period_id).single();
-    if (!periodCheck?.is_open) return toast.error(t("member.rapor.toastPeriodClosedTitle"), t("member.rapor.toastPeriodClosedBody"));
+    if (!periodCheck?.is_open) return toast.error("Report card period has closed", "Reviews cannot be edited after the period has ended.");
     const draft = getDraft(entry, slot);
     const key = draftKey(entry.id, slot.coach_id);
     setSavingSlot(key);

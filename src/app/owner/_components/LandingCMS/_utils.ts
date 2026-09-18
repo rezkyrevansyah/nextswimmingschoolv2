@@ -1,16 +1,16 @@
 import type { Tab } from "./_types";
 
-export function buildTabs(t: (key: string) => string): { id: Tab; label: string; icon: string }[] {
+export function buildTabs(): { id: Tab; label: string; icon: string }[] {
   return [
-    { id: "programs",     label: t("owner.landingCms.tabPrograms"),     icon: "book"   },
-    { id: "coaches",      label: t("owner.landingCms.tabCoaches"),      icon: "swim"   },
-    { id: "video",        label: t("owner.landingCms.tabVideo"),        icon: "video"  },
-    { id: "whynext",      label: t("owner.landingCms.tabWhyNext"),      icon: "shield" },
-    { id: "testimonials", label: t("owner.landingCms.tabTestimonials"), icon: "users"  },
-    { id: "partners",     label: t("owner.landingCms.tabPartners"),     icon: "link"   },
-    { id: "branches",     label: t("owner.landingCms.tabBranches"),     icon: "pin"    },
-    { id: "faq",          label: t("owner.landingCms.tabFaq"),          icon: "info"   },
-    { id: "footer",       label: t("owner.landingCms.tabFooter"),       icon: "grid"   },
+    { id: "programs",     label: "Program",         icon: "book"   },
+    { id: "coaches",      label: "Coach",           icon: "swim"   },
+    { id: "video",        label: "Profile Video",   icon: "video"  },
+    { id: "whynext",      label: "Why Next",        icon: "shield" },
+    { id: "testimonials", label: "Testimonials",    icon: "users"  },
+    { id: "partners",     label: "Partner",         icon: "link"   },
+    { id: "branches",     label: "Centers",         icon: "pin"    },
+    { id: "faq",          label: "FAQ",             icon: "info"   },
+    { id: "footer",       label: "Footer",          icon: "grid"   },
   ];
 }
 

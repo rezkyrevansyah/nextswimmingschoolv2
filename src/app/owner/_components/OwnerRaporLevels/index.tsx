@@ -2,14 +2,12 @@
 import Icon from "@/components/ui/Icon";
 import { Switch } from "@/components/ui/FormFields";
 import { NoTranslate } from "@/components/ui/NoTranslate";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import { useOwnerRaporLevels } from "./useOwnerRaporLevels";
 import CriteriaModal from "./CriteriaModal";
 import BestTimesModal from "./BestTimesModal";
 import ClassScopeModal from "./ClassScopeModal";
 
 export default function OwnerRaporLevels() {
-  const { t } = useLocale();
   const hook = useOwnerRaporLevels();
   const {
     levels, selectedLevel, setSelectedLevel, loading, newName, setNewName, creating, renaming, setRenaming, reordering,
@@ -32,9 +30,9 @@ export default function OwnerRaporLevels() {
           </div>
 
           {loading ? (
-            <div className="py-10 text-center text-ink-mute text-sm">{t("owner.raporLevels.loading")}</div>
+            <div className="py-10 text-center text-ink-mute text-sm">{"Loading…"}</div>
           ) : levels.length === 0 ? (
-            <div className="py-10 text-center text-ink-mute text-sm">{t("owner.raporLevels.empty")}</div>
+            <div className="py-10 text-center text-ink-mute text-sm">{"No levels yet. Add your first level above."}</div>
           ) : (
             <div className="space-y-1.5">
               {levels.map((lvl, i) => {
@@ -91,7 +89,7 @@ export default function OwnerRaporLevels() {
                 type="text"
                 value={newName}
                 onChange={e => setNewName(e.target.value)}
-                placeholder={t("owner.raporLevels.namePlaceholder")}
+                placeholder={"E.g. Level A"}
                 className="h-9 px-3 text-xs rounded-xl border border-line bg-paper text-ink flex-1 focus:outline-hidden focus:border-ocean-500"
               />
               <button
@@ -125,7 +123,7 @@ export default function OwnerRaporLevels() {
                   type="button"
                   onClick={() => setRenaming({ id: selectedLevel.id, name: selectedLevel.name })}
                   className="w-8 h-8 rounded-lg border border-line bg-paper hover:bg-paper-tint text-ink-mute hover:text-ink flex items-center justify-center transition-colors cursor-pointer"
-                  title={t("owner.raporLevels.renameTitle")}
+                  title={"Rename"}
                 >
                   <Icon name="edit" className="w-4 h-4" />
                 </button>
@@ -133,7 +131,7 @@ export default function OwnerRaporLevels() {
                   type="button"
                   onClick={() => deleteLevel(selectedLevel)}
                   className="w-8 h-8 rounded-lg border border-line bg-paper hover:bg-rose-50 text-ink-mute hover:text-rose-600 flex items-center justify-center transition-colors cursor-pointer"
-                  title={t("owner.raporLevels.deleteTitle")}
+                  title={"Delete"}
                 >
                   <Icon name="trash" className="w-4 h-4" />
                 </button>
@@ -153,14 +151,14 @@ export default function OwnerRaporLevels() {
                   onClick={saveRename}
                   className="h-9 px-3 rounded-lg bg-ocean-600 hover:bg-ocean-700 text-white text-xs font-semibold cursor-pointer"
                 >
-                  {t("owner.raporLevels.saveBtn")}
+                  {"Save"}
                 </button>
                 <button
                   type="button"
                   onClick={() => setRenaming(null)}
                   className="h-9 px-3 rounded-lg border border-line bg-paper hover:bg-paper-tint text-ink-soft text-xs font-semibold cursor-pointer"
                 >
-                  {t("owner.raporLevels.cancelBtn")}
+                  {"Cancel"}
                 </button>
               </div>
             )}
@@ -182,7 +180,7 @@ export default function OwnerRaporLevels() {
               </div>
 
               {loadingCriteria ? (
-                <div className="py-6 text-center text-ink-mute text-sm">{t("owner.raporLevels.criteriaLoading")}</div>
+                <div className="py-6 text-center text-ink-mute text-sm">{"Loading…"}</div>
               ) : criteria.length === 0 ? (
                 <div className="space-y-2.5">
                   <div className="h-[130px] rounded-xl border border-line bg-paper-deep flex flex-col items-center justify-center gap-1.5 text-center p-4">
@@ -215,7 +213,7 @@ export default function OwnerRaporLevels() {
                           onClick={() => duplicateCriterion(cr)}
                           disabled={savingCriterion}
                           className="w-7 h-7 rounded-md border border-line bg-paper hover:bg-ocean-50 text-ink-mute hover:text-ocean-700 flex items-center justify-center transition-colors cursor-pointer"
-                          title={t("owner.raporLevels.duplicateTitle")}
+                          title={"Duplicate"}
                         >
                           <Icon name="copy" className="w-3.5 h-3.5" />
                         </button>
@@ -226,7 +224,7 @@ export default function OwnerRaporLevels() {
                             setEditingCriterion({ id: cr.id, label: cr.label, kind: cr.kind, options: cr.options ?? [] });
                           }}
                           className="w-7 h-7 rounded-md border border-line bg-paper hover:bg-paper-tint text-ink-mute hover:text-ink flex items-center justify-center transition-colors cursor-pointer"
-                          title={t("owner.raporLevels.editTitle")}
+                          title={"Edit"}
                         >
                           <Icon name="edit" className="w-3.5 h-3.5" />
                         </button>
@@ -234,7 +232,7 @@ export default function OwnerRaporLevels() {
                           type="button"
                           onClick={() => deleteCriterion(cr.id)}
                           className="w-7 h-7 rounded-md border border-line bg-paper hover:bg-rose-50 text-ink-mute hover:text-rose-600 flex items-center justify-center transition-colors cursor-pointer"
-                          title={t("owner.raporLevels.deleteTitle")}
+                          title={"Delete"}
                         >
                           <Icon name="trash" className="w-3.5 h-3.5" />
                         </button>
@@ -262,7 +260,7 @@ export default function OwnerRaporLevels() {
               </div>
 
               {loadingBestTimes ? (
-                <div className="py-6 text-center text-ink-mute text-sm">{t("owner.raporLevels.criteriaLoading")}</div>
+                <div className="py-6 text-center text-ink-mute text-sm">{"Loading…"}</div>
               ) : distances.length === 0 || strokes.length === 0 ? (
                 <div className="p-4 rounded-xl border border-line bg-paper-deep text-xs text-ink-mute flex items-center justify-between gap-3">
                   <span>Distances: {distances.length} · Strokes: {strokes.length}. Configure distances &amp; strokes to record standard target times.</span>

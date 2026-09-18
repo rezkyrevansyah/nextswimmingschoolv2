@@ -3,7 +3,6 @@ import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import Modal from "@/components/ui/Modal";
 import Btn from "@/components/ui/Btn";
@@ -14,7 +13,6 @@ import { revalidate } from "./_utils";
 import { WHY_NEXT_ICONS, type WhyNextItem } from "./_types";
 
 export default function WhyNextTab() {
-  const { t } = useLocale();
   const toast = useToast();
   const confirm = useConfirm();
   const supabase = createClient();
@@ -48,32 +46,32 @@ export default function WhyNextTab() {
         if (error) throw new Error(error.message);
       }
     } catch (e) {
-      toast.error(t("owner.landingCms.whyNext.saveFailed"), (e as Error).message);
+      toast.error("Failed to save", (e as Error).message);
       setSaving(false);
       return;
     }
     await revalidate();
-    toast.success(t("owner.landingCms.whyNext.saved"));
+    toast.success("Why Next point saved");
     setSaving(false);
     setShowModal(false);
     load();
   };
 
   const del = async (w: WhyNextItem) => {
-    const yes = await confirm({ title: t("owner.landingCms.whyNext.deleteConfirmTitle"), body: w.title || t("owner.landingCms.whyNext.deleteConfirmBody"), danger: true });
+    const yes = await confirm({ title: "Delete this point?", body: w.title || "This point will be removed from the landing page.", danger: true });
     if (!yes) return;
     const { error } = await supabase.from("landing_why_next").delete().eq("id", w.id);
-    if (error) return toast.error(t("owner.landingCms.whyNext.deleteFailed"), error.message);
+    if (error) return toast.error("Failed to delete", error.message);
     await revalidate();
-    toast.success(t("owner.landingCms.whyNext.deleted"));
+    toast.success("Point deleted");
     load();
   };
 
   return (
     <Card>
       <div className="flex items-center justify-between">
-        <SectionTitle sub={t("owner.landingCms.whyNext.sectionSub")}>{t("owner.landingCms.whyNext.sectionTitle")}</SectionTitle>
-        <Btn variant="soft" size="sm" icon="plus" onClick={openAdd}>{t("owner.landingCms.add")}</Btn>
+        <SectionTitle sub={"Highlight points shown in the Why Next section"}>{"Why Next"}</SectionTitle>
+        <Btn variant="soft" size="sm" icon="plus" onClick={openAdd}>{"Add"}</Btn>
       </div>
       <div className="mt-4 grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {items.map((w) => (
@@ -83,7 +81,7 @@ export default function WhyNextTab() {
                 <Icon name={w.icon} className="w-4.5 h-4.5 text-ocean-600" />
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-bold text-ink truncate">{w.title ? <NoTranslate>{w.title}</NoTranslate> : t("owner.landingCms.whyNext.noTitle")}</div>
+                <div className="text-sm font-bold text-ink truncate">{w.title ? <NoTranslate>{w.title}</NoTranslate> : "Untitled"}</div>
                 {w.description && <div className="text-xs text-ink-mute line-clamp-2 mt-0.5"><NoTranslate>{w.description}</NoTranslate></div>}
               </div>
               <button onClick={() => openEdit(w)} className="w-7 h-7 rounded-lg border border-line bg-white flex items-center justify-center hover:bg-paper-deep shrink-0"><Icon name="edit" className="w-3.5 h-3.5 text-ink-mute" /></button>
@@ -91,20 +89,20 @@ export default function WhyNextTab() {
             </div>
           </div>
         ))}
-        {items.length === 0 && <div className="py-8 text-center text-ink-mute text-sm sm:col-span-2 lg:col-span-3">{t("owner.landingCms.whyNext.empty")}</div>}
+        {items.length === 0 && <div className="py-8 text-center text-ink-mute text-sm sm:col-span-2 lg:col-span-3">{"No points yet."}</div>}
       </div>
 
-      <Modal open={showModal} onClose={() => setShowModal(false)} title={editItem ? t("owner.landingCms.whyNext.editModalTitle") : t("owner.landingCms.whyNext.addModalTitle")} size="sm"
-        footer={<><Btn variant="ghost" onClick={() => setShowModal(false)}>{t("common.actions.cancel")}</Btn><Btn variant="primary" onClick={save} disabled={saving || !form.title.trim()}>{saving ? t("common.actions.saving") : t("common.actions.save")}</Btn></>}>
+      <Modal open={showModal} onClose={() => setShowModal(false)} title={editItem ? "Edit Point" : "Add Point"} size="sm"
+        footer={<><Btn variant="ghost" onClick={() => setShowModal(false)}>{"Cancel"}</Btn><Btn variant="primary" onClick={save} disabled={saving || !form.title.trim()}>{saving ? "Saving…" : "Save"}</Btn></>}>
         <div className="space-y-3">
-          <Field label={t("owner.landingCms.whyNext.fieldIcon")}>
+          <Field label={"Icon"}>
             <Select value={form.icon} onChange={(e) => setForm({ ...form, icon: e.target.value })}>
               {WHY_NEXT_ICONS.map((ic) => <option key={ic} value={ic}>{ic}</option>)}
             </Select>
           </Field>
-          <Field label={t("owner.landingCms.whyNext.fieldTitle")}><Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder={t("owner.landingCms.whyNext.fieldTitlePlaceholder")} /></Field>
-          <Field label={t("owner.landingCms.whyNext.fieldDescription")}><Textarea rows={3} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder={t("owner.landingCms.whyNext.fieldDescriptionPlaceholder")} /></Field>
-          <Field label={t("owner.landingCms.whyNext.fieldOrder")}><Input type="number" value={String(form.sort_order)} onChange={(e) => setForm({ ...form, sort_order: Number(e.target.value) })} /></Field>
+          <Field label={"Title"}><Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder={"Certified Coaches"} /></Field>
+          <Field label={"Short description (optional)"}><Textarea rows={3} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder={"Every coach holds a verified certification before teaching."} /></Field>
+          <Field label={"Order"}><Input type="number" value={String(form.sort_order)} onChange={(e) => setForm({ ...form, sort_order: Number(e.target.value) })} /></Field>
         </div>
       </Modal>
     </Card>

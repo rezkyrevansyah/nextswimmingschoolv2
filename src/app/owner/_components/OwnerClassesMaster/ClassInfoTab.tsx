@@ -7,7 +7,7 @@ import { fmtIDR } from "@/lib/utils";
 import type { OwnerClassesMasterHook } from "./_hook";
 
 export default function ClassInfoTab({ hook }: { hook: OwnerClassesMasterHook }) {
-  const { t, dayLabels, detailClass } = hook;
+  const { dayLabels, detailClass } = hook;
   if (!detailClass) return null;
 
   return (
@@ -26,7 +26,7 @@ export default function ClassInfoTab({ hook }: { hook: OwnerClassesMasterHook })
       <div className="grid sm:grid-cols-2 gap-4">
         <div className="space-y-1">
           <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">
-            {t("owner.classes.infoBranch")}
+            {"Center"}
           </div>
           <div className="font-semibold text-ink text-sm">
             {(detailClass.branch as { name: string } | null | undefined)?.name ?? "—"}
@@ -35,18 +35,18 @@ export default function ClassInfoTab({ hook }: { hook: OwnerClassesMasterHook })
 
         <div className="space-y-1">
           <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">
-            {t("owner.classes.infoStatus")}
+            {"Status"}
           </div>
           <div>
             <Status kind={detailClass.status === "active" ? "active" : "archived"}>
-              {detailClass.status === "active" ? t("common.status.active") : t("owner.classes.filterStatusArchived")}
+              {detailClass.status === "active" ? "Active" : "Archived"}
             </Status>
           </div>
         </div>
 
         <div className="space-y-1">
           <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">
-            {t("owner.classes.infoSchedule")}
+            {"Schedule"}
           </div>
           <div className="text-xs text-ink">
             {(detailClass.schedule_days ?? []).map((d) => dayLabels[d] ?? d).join(", ")}{" "}
@@ -61,16 +61,16 @@ export default function ClassInfoTab({ hook }: { hook: OwnerClassesMasterHook })
 
         <div className="space-y-1">
           <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">
-            {t("owner.classes.infoCapacity")}
+            {"Capacity"}
           </div>
           <div className="text-xs font-mono font-bold text-ink">
-            {detailClass.enrolled}/{detailClass.capacity} {t("owner.classes.infoCapacityParticipants")}
+            {detailClass.enrolled}/{detailClass.capacity} {"participants"}
           </div>
         </div>
 
         <div className="space-y-1">
           <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">
-            {t("owner.classes.infoMonthlyPrice")}
+            {"Monthly Price"}
           </div>
           <div className="text-xs font-bold text-ocean-700">
             {detailClass.price_monthly != null
@@ -84,7 +84,7 @@ export default function ClassInfoTab({ hook }: { hook: OwnerClassesMasterHook })
         {detailClass.location_type === "external" && (
           <div className="space-y-1 sm:col-span-2">
             <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">
-              {t("owner.classes.infoLocation")}
+              {"Location"}
             </div>
             <div className="text-xs text-ink">
               🏡 <NoTranslate>{detailClass.external_location_name || "—"}</NoTranslate> (<NoTranslate>{detailClass.external_location_address || "—"}</NoTranslate>)
@@ -105,7 +105,7 @@ export default function ClassInfoTab({ hook }: { hook: OwnerClassesMasterHook })
         {(detailClass.coach_spreadsheets ?? []).length > 0 && (
           <div className="space-y-2 sm:col-span-2">
             <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">
-              {t("owner.classes.infoSpreadsheetProgram")}
+              {"Program Spreadsheet"}
             </div>
             <div className="space-y-1.5">
               {detailClass.coach_spreadsheets!.map((s) => (
@@ -119,7 +119,7 @@ export default function ClassInfoTab({ hook }: { hook: OwnerClassesMasterHook })
                     className="text-xs font-bold text-ocean-600 hover:underline inline-flex items-center gap-1"
                   >
                     <Icon name="link" className="w-3 h-3" />
-                    {t("owner.classes.infoOpenLink")}
+                    {"Open"}
                   </a>
                 </div>
               ))}
@@ -131,7 +131,7 @@ export default function ClassInfoTab({ hook }: { hook: OwnerClassesMasterHook })
       {detailClass.goals && (
         <div className="border-t border-line pt-3">
           <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-1">
-            {t("owner.classes.goalsLabel")}
+            {"Goals"}
           </div>
           <p className="text-xs text-ink-soft leading-relaxed"><NoTranslate as="span">{detailClass.goals}</NoTranslate></p>
         </div>
@@ -140,7 +140,7 @@ export default function ClassInfoTab({ hook }: { hook: OwnerClassesMasterHook })
       {detailClass.description && (
         <div className="border-t border-line pt-3">
           <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-1">
-            {t("owner.classes.descriptionLabel")}
+            {"Description"}
           </div>
           <p className="text-xs text-ink-soft leading-relaxed"><NoTranslate as="span">{detailClass.description}</NoTranslate></p>
         </div>

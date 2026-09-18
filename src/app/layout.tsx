@@ -3,7 +3,6 @@ import { Plus_Jakarta_Sans, Inter } from "next/font/google";
 import "./globals.css";
 import { ToastProvider } from "@/components/providers/ToastProvider";
 import { ConfirmProvider } from "@/components/providers/ConfirmProvider";
-import { LocaleProvider } from "@/components/providers/LocaleProvider";
 
 // Used on every route (including the public landing page), so these stay in
 // the root layout. JetBrains Mono is only needed by the authenticated
@@ -61,11 +60,9 @@ export default function RootLayout({
       className={`${plusJakartaSans.variable} ${inter.variable}`}
     >
       <body className="min-h-screen bg-paper-tint antialiased">
-        <LocaleProvider>
-          <ToastProvider>
-            <ConfirmProvider>{children}</ConfirmProvider>
-          </ToastProvider>
-        </LocaleProvider>
+        <ToastProvider>
+          <ConfirmProvider>{children}</ConfirmProvider>
+        </ToastProvider>
       </body>
     </html>
   );

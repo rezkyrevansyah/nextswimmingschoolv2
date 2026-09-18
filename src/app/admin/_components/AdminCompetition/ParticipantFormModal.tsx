@@ -3,6 +3,7 @@ import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
 import { Field, Input, Select, Textarea } from "@/components/ui/FormFields";
 import Modal from "@/components/ui/Modal";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 import { fmtDate } from "@/lib/utils";
 import CompetitionDocUploader from "./CompetitionDocUploader";
 import type { AdminCompetitionHook } from "./_hook";
@@ -13,7 +14,7 @@ export default function ParticipantFormModal({ hook, onNewCompRequested, onEditC
   onEditCompRequested: (compId: string) => void;
 }) {
   const {
-    t, activeTab, competitions, selectedComp,
+    activeTab, competitions, selectedComp,
     openPartForm, setOpenPartForm, editPart, partForm, setPartForm, savingPart, handleSaveParticipant,
     awardMemberId, awardMemberSearch, memberSearch, setMemberSearch, filteredMembers,
     coachesList, formEffectiveMemberId, formEffectiveCompId, getDoc, mergeDocs, handleViewDoc,
@@ -25,14 +26,14 @@ export default function ParticipantFormModal({ hook, onNewCompRequested, onEditC
     <Modal
       open={openPartForm}
       onClose={() => setOpenPartForm(false)}
-      title={editPart ? t("admin.competition.editResultModalTitle") : t("admin.competition.addResultModalTitle")}
+      title={editPart ? "Edit Student Result" : "Add Student Result"}
     >
       <form onSubmit={handleSaveParticipant} className="space-y-4">
         {/* Competition selector — shown only when opened from awards tab (no selectedComp).
             Includes inline Lomba CRUD (create/edit) so the admin never has to leave this
             popup just to register an event that doesn't exist yet or fix a typo in one. */}
         {!selectedComp && !editPart && (
-          <Field label={t("admin.competition.fieldCompetition")} required>
+          <Field label={"Competition"} required>
             <div className="flex items-center gap-2">
               <Select
                 value={partForm.competition_id}
@@ -40,7 +41,7 @@ export default function ParticipantFormModal({ hook, onNewCompRequested, onEditC
                 required
                 className="flex-1"
               >
-                <option value="">{t("admin.competition.selectCompOption")}</option>
+                <option value="">{"-- Select competition --"}</option>
                 {competitions.map(c => {
                   // Native <select> option-list popups size themselves to the widest
                   // option and aren't clipped by the modal's bounds — a long competition
@@ -48,7 +49,7 @@ export default function ParticipantFormModal({ hook, onNewCompRequested, onEditC
                   // the name so the combined label stays short enough to fit.
                   const shortName = c.name.length > 45 ? `${c.name.slice(0, 45)}…` : c.name;
                   return (
-                    <option key={c.id} value={c.id} title={c.name}>
+                    <option key={c.id} value={c.id} title={c.name} translate="no">
                       {shortName} — {c.start_date ? fmtDate(c.start_date) : ""}
                     </option>
                   );
@@ -56,7 +57,7 @@ export default function ParticipantFormModal({ hook, onNewCompRequested, onEditC
               </Select>
               <button
                 type="button"
-                title={t("admin.competition.addNewEventTitle")}
+                title={"Add new event"}
                 onClick={onNewCompRequested}
                 className="shrink-0 w-9 h-9 rounded-lg border border-line hover:bg-paper-tint text-ink-mute hover:text-ocean-600 flex items-center justify-center transition-colors"
               >
@@ -65,7 +66,7 @@ export default function ParticipantFormModal({ hook, onNewCompRequested, onEditC
               {partForm.competition_id && (
                 <button
                   type="button"
-                  title={t("admin.competition.editThisEventTitle")}
+                  title={"Edit this event"}
                   onClick={() => onEditCompRequested(partForm.competition_id)}
                   className="shrink-0 w-9 h-9 rounded-lg border border-line hover:bg-paper-tint text-ink-mute hover:text-ocean-600 flex items-center justify-center transition-colors"
                 >
@@ -76,17 +77,19 @@ export default function ParticipantFormModal({ hook, onNewCompRequested, onEditC
           </Field>
         )}
 
-        <Field label={t("admin.competition.selectMemberField")} required>
+        <Field label={"Select Student"} required>
           {(editPart || (activeTab === "awards" && awardMemberId && !editPart && partForm.member_id === awardMemberId)) ? (
             <div className="p-2.5 bg-paper-tint rounded-lg font-bold text-ink-strong">
-              {editPart
-                ? (editPart.member?.profile as { full_name: string } | null)?.full_name
-                : awardMemberSearch}
+              <NoTranslate>
+                {editPart
+                  ? (editPart.member?.profile as { full_name: string } | null)?.full_name
+                  : awardMemberSearch}
+              </NoTranslate>
             </div>
           ) : (
             <div className="space-y-2">
               <Input
-                placeholder={t("admin.competition.searchMemberInline")}
+                placeholder={"Type to search student..."}
                 value={memberSearch}
                 onChange={e => setMemberSearch(e.target.value)}
               />
@@ -95,9 +98,9 @@ export default function ParticipantFormModal({ hook, onNewCompRequested, onEditC
                 onChange={e => setPartForm(prev => ({ ...prev, member_id: e.target.value }))}
                 required
               >
-                <option value="">{t("admin.competition.selectMemberOption")}</option>
+                <option value="">{"-- Select Student --"}</option>
                 {filteredMembers.map(m => (
-                  <option key={m.id} value={m.id}>
+                  <option key={m.id} value={m.id} translate="no">
                     {m.full_name} ({m.branch_name || "Center"})
                   </option>
                 ))}
@@ -107,7 +110,7 @@ export default function ParticipantFormModal({ hook, onNewCompRequested, onEditC
         </Field>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <Field label={t("admin.competition.fieldCategoryEvent")} required hint={t("admin.competition.fieldCategoryEventHint")}>
+          <Field label={"Event / Category"} required hint={"E.g. 50m Freestyle / 100m Breaststroke"}>
             <Input
               value={partForm.category}
               onChange={e => setPartForm(prev => ({ ...prev, category: e.target.value }))}
@@ -115,7 +118,7 @@ export default function ParticipantFormModal({ hook, onNewCompRequested, onEditC
               required
             />
           </Field>
-          <Field label={t("admin.competition.fieldAgeGroup")} hint={t("admin.competition.fieldAgeGroupHint")}>
+          <Field label={"Age Group (KU)"} hint={"E.g.: KU-4 (11-12 yo) / Open"}>
             <Input
               value={partForm.age_group}
               onChange={e => setPartForm(prev => ({ ...prev, age_group: e.target.value }))}
@@ -125,14 +128,14 @@ export default function ParticipantFormModal({ hook, onNewCompRequested, onEditC
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <Field label={t("admin.competition.fieldStroke")} hint={t("admin.competition.fieldStrokeHint")}>
+          <Field label={"Stroke"} hint={"E.g.: Freestyle, Breaststroke, Backstroke, Butterfly, Medley"}>
             <Input
               value={partForm.stroke}
               onChange={e => setPartForm(prev => ({ ...prev, stroke: e.target.value }))}
-              placeholder={t("admin.competition.fieldStrokePlaceholder")}
+              placeholder={"Freestyle"}
             />
           </Field>
-          <Field label={t("admin.competition.fieldDistance")} hint={t("admin.competition.fieldDistanceHint")}>
+          <Field label={"Distance (meters)"} hint={"E.g.: 25, 50, 100"}>
             <Input
               type="number" min={0} inputMode="numeric"
               value={partForm.distance_meters}
@@ -143,14 +146,14 @@ export default function ParticipantFormModal({ hook, onNewCompRequested, onEditC
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <Field label={t("admin.competition.fieldResultTime")} hint={t("admin.competition.fieldResultTimeHint")}>
+          <Field label={"Result Time"} hint={"E.g.: 32.41 or 1:12.20"}>
             <Input
               value={partForm.time_raw}
               onChange={e => setPartForm(prev => ({ ...prev, time_raw: e.target.value }))}
               placeholder="32.41"
             />
           </Field>
-          <Field label={t("admin.competition.fieldRank")} hint={t("admin.competition.fieldRankHint")}>
+          <Field label={"Rank / Place"} hint={"E.g.: 1, 2, 3"}>
             <Input
               type="number"
               min={1}
@@ -159,43 +162,43 @@ export default function ParticipantFormModal({ hook, onNewCompRequested, onEditC
               placeholder="1"
             />
           </Field>
-          <Field label={t("admin.competition.fieldResultStatus")}>
+          <Field label={"Result Status"}>
             <Select value={partForm.result_status} onChange={e => setPartForm(prev => ({ ...prev, result_status: e.target.value }))}>
-              <option value="finished">{t("admin.competition.statusFinished")}</option>
-              <option value="finalist">{t("admin.competition.statusFinalist")}</option>
-              <option value="dq">{t("admin.competition.statusDq")}</option>
-              <option value="dns">{t("admin.competition.statusDns")}</option>
-              <option value="dnf">{t("admin.competition.statusDnf")}</option>
+              <option value="finished">{"Finished"}</option>
+              <option value="finalist">{"Finalist"}</option>
+              <option value="dq">{"Disqualified (DQ)"}</option>
+              <option value="dns">{"Did Not Start (DNS)"}</option>
+              <option value="dnf">{"Did Not Finish (DNF)"}</option>
             </Select>
           </Field>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <Field label={t("admin.competition.fieldAwardMedal")}>
+          <Field label={"Award / Medal"}>
             <Select value={partForm.award} onChange={e => setPartForm(prev => ({ ...prev, award: e.target.value }))}>
-              <option value="participant">{t("admin.competition.awardOptionParticipant")}</option>
-              <option value="gold">{t("admin.competition.awardOptionGold")}</option>
-              <option value="silver">{t("admin.competition.awardOptionSilver")}</option>
-              <option value="bronze">{t("admin.competition.awardOptionBronze")}</option>
-              <option value="fourth_place">{t("admin.competition.awardOptionFourthPlace")}</option>
-              <option value="finalist">{t("admin.competition.awardOptionFinalist")}</option>
-              <option value="custom">{t("admin.competition.awardOptionCustom")}</option>
+              <option value="participant">{"🏊 Participant"}</option>
+              <option value="gold">{"🥇 Gold Medal"}</option>
+              <option value="silver">{"🥈 Silver Medal"}</option>
+              <option value="bronze">{"🥉 Bronze Medal"}</option>
+              <option value="fourth_place">{"🏅 4th Place"}</option>
+              <option value="finalist">{"⭐ Finalist"}</option>
+              <option value="custom">{"🏆 Special Award"}</option>
             </Select>
           </Field>
           {partForm.award === "custom" && (
-            <Field label={t("admin.competition.fieldCustomAward")}>
+            <Field label={"Special Award Name"}>
               <Input
                 value={partForm.custom_award_label}
                 onChange={e => setPartForm(prev => ({ ...prev, custom_award_label: e.target.value }))}
-                placeholder={t("admin.competition.fieldCustomAwardPlaceholder")}
+                placeholder={"E.g.: Best Swimmer"}
               />
             </Field>
           )}
-          <Field label={t("admin.competition.fieldCoach")}>
+          <Field label={"Accompanying Coach (Optional)"}>
             <Select value={partForm.coach_id} onChange={e => setPartForm(prev => ({ ...prev, coach_id: e.target.value }))}>
-              <option value="">{t("admin.competition.fieldCoachNone")}</option>
+              <option value="">{"-- None / To be determined --"}</option>
               {coachesList.map(c => (
-                <option key={c.id} value={c.id}>
+                <option key={c.id} value={c.id} translate="no">
                   {c.full_name}
                 </option>
               ))}
@@ -213,12 +216,12 @@ export default function ParticipantFormModal({ hook, onNewCompRequested, onEditC
           />
         )}
 
-        <Field label={t("admin.competition.fieldAdditionalNotes")}>
+        <Field label={"Additional Notes (Optional)"}>
           <Textarea
             rows={2}
             value={partForm.notes}
             onChange={e => setPartForm(prev => ({ ...prev, notes: e.target.value }))}
-            placeholder={t("admin.competition.fieldAdditionalNotesPlaceholder")}
+            placeholder={"Notes on personal best, wind, pool conditions, etc."}
           />
         </Field>
 
@@ -228,11 +231,11 @@ export default function ParticipantFormModal({ hook, onNewCompRequested, onEditC
           </Btn>
           {!editPart && (
             <Btn variant="outline" type="submit" name="intent" value="keepOpen" disabled={savingPart}>
-              {savingPart ? t("admin.competition.savingBtn") : t("admin.competition.saveAndAddAnotherBtn")}
+              {savingPart ? "Saving..." : "Save & Add Another"}
             </Btn>
           )}
           <Btn variant="primary" type="submit" name="intent" value="close" disabled={savingPart}>
-            {savingPart ? t("admin.competition.savingBtn") : t("admin.competition.saveResultBtn")}
+            {savingPart ? "Saving..." : "Save Result"}
           </Btn>
         </div>
       </form>

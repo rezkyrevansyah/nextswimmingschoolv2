@@ -3,11 +3,10 @@ import { useState, useCallback, useEffect } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
-import { useLocale } from "@/components/providers/LocaleProvider";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 import type { RaporLevel, ClassOption, LevelCriterion, LevelDistanceRow, LevelStrokeRow, BestTimeTargetRow } from "./_types";
 
 export function useOwnerRaporLevels() {
-  const { t, tNode } = useLocale();
   const supabase = createClient();
   const toast = useToast();
   const confirm = useConfirm();
@@ -54,7 +53,7 @@ export function useOwnerRaporLevels() {
   const setAllClasses = async (value: boolean) => {
     if (!classScopeLevel) return;
     const { error } = await supabase.from("rapor_levels").update({ all_classes: value }).eq("id", classScopeLevel.id);
-    if (error) return toast.error(t("owner.raporLevels.saveFailed"), error.message);
+    if (error) return toast.error("Failed to save", error.message);
     setClassScopeLevel(prev => prev ? { ...prev, all_classes: value } : prev);
     setLevels(prev => prev.map(l => l.id === classScopeLevel.id ? { ...l, all_classes: value } : l));
   };
@@ -72,39 +71,39 @@ export function useOwnerRaporLevels() {
   };
 
   const addLevel = async () => {
-    if (!newName.trim()) return toast.error(t("owner.raporLevels.nameRequired"));
+    if (!newName.trim()) return toast.error("Level name is required");
     setCreating(true);
     const { error } = await supabase.from("rapor_levels").insert({
       name: newName.trim(), sort_order: levels.length, active: true,
     });
     setCreating(false);
-    if (error) return toast.error(t("owner.raporLevels.addFailed"), error.message);
-    toast.success(t("owner.raporLevels.added"));
+    if (error) return toast.error("Failed to add level", error.message);
+    toast.success("Level added");
     setNewName("");
     load();
   };
 
   const saveRename = async () => {
-    if (!renaming || !renaming.name.trim()) return toast.error(t("owner.raporLevels.nameRequired"));
+    if (!renaming || !renaming.name.trim()) return toast.error("Level name is required");
     const { error } = await supabase.from("rapor_levels").update({ name: renaming.name.trim() }).eq("id", renaming.id);
-    if (error) return toast.error(t("owner.raporLevels.saveFailed"), error.message);
-    toast.success(t("owner.raporLevels.renamed"));
+    if (error) return toast.error("Failed to save", error.message);
+    toast.success("Level updated");
     setRenaming(null);
     load();
   };
 
   const toggleActive = async (lvl: RaporLevel) => {
     const { error } = await supabase.from("rapor_levels").update({ active: !lvl.active }).eq("id", lvl.id);
-    if (error) return toast.error(t("owner.raporLevels.statusFailed"), error.message);
+    if (error) return toast.error("Failed to change status", error.message);
     setLevels(prev => prev.map(l => l.id === lvl.id ? { ...l, active: !l.active } : l));
   };
 
   const deleteLevel = async (lvl: RaporLevel) => {
-    const yes = await confirm({ body: tNode("owner.raporLevels.deleteConfirmBody", { name: lvl.name }) });
+    const yes = await confirm({ body: (<>{"Delete level \""}<NoTranslate>{lvl.name}</NoTranslate>{"\"? Criteria and the time table for this level will also be deleted. Reports already filled in with this level won't be affected."}</>) });
     if (!yes) return;
     const { error } = await supabase.from("rapor_levels").delete().eq("id", lvl.id);
-    if (error) return toast.error(t("owner.raporLevels.deleteFailed"), error.message);
-    toast.success(t("owner.raporLevels.deleted"));
+    if (error) return toast.error("Failed to delete level", error.message);
+    toast.success("Level deleted");
     load();
   };
 
@@ -131,10 +130,10 @@ export function useOwnerRaporLevels() {
   const [bulkKind, setBulkKind] = useState("score_10");
   const [applyingBulk, setApplyingBulk] = useState(false);
   const kindLabel: Record<string, string> = {
-    score_10: t("owner.raporLevels.kindLabel.score_10"),
-    score_100: t("owner.raporLevels.kindLabel.score_100"),
-    choice: t("owner.raporLevels.kindLabel.choice"),
-    text: t("owner.raporLevels.kindLabel.text"),
+    score_10: "Score 1–10",
+    score_100: "Score 1–100",
+    choice: "Multiple choice",
+    text: "Free text",
   };
 
   const loadCriteria = useCallback(async (levelId: string) => {
@@ -152,7 +151,7 @@ export function useOwnerRaporLevels() {
   };
 
   const addCriterion = async () => {
-    if (!criteriaLevel || !criterionForm.label) return toast.error(t("owner.raporLevels.labelRequired"));
+    if (!criteriaLevel || !criterionForm.label) return toast.error("Label is required");
     setSavingCriterion(true);
     const opts = criterionForm.kind === "choice" ? criterionForm.options.filter(Boolean) : null;
     const { error } = await supabase.from("rapor_level_criteria").insert({
@@ -160,28 +159,28 @@ export function useOwnerRaporLevels() {
       options: opts, sort_order: criteria.length,
     });
     setSavingCriterion(false);
-    if (error) return toast.error(t("owner.raporLevels.criterionSaveFailed"), error.message);
-    toast.success(t("owner.raporLevels.criterionAdded"));
+    if (error) return toast.error("Failed to save", error.message);
+    toast.success("Criterion added");
     setCriterionForm({ label: "", kind: "score_10", options: [] });
     loadCriteria(criteriaLevel.id);
   };
 
   const deleteCriterion = async (id: string) => {
-    const yes = await confirm({ body: t("owner.raporLevels.criterionDeleteConfirmBody") });
+    const yes = await confirm({ body: "Delete this criterion? Reports already filled in won't be affected." });
     if (!yes) return;
     await supabase.from("rapor_level_criteria").delete().eq("id", id);
     setCriteria(prev => prev.filter(c => c.id !== id));
-    toast.success(t("owner.raporLevels.criterionDeleted"));
+    toast.success("Criterion deleted");
   };
 
   const updateCriterion = async () => {
-    if (!editingCriterion || !editingCriterion.label) return toast.error(t("owner.raporLevels.labelRequired"));
+    if (!editingCriterion || !editingCriterion.label) return toast.error("Label is required");
     const opts = editingCriterion.kind === "choice" ? editingCriterion.options.filter(Boolean) : null;
     const { error } = await supabase.from("rapor_level_criteria").update({ label: editingCriterion.label, kind: editingCriterion.kind, options: opts }).eq("id", editingCriterion.id);
-    if (error) return toast.error(t("owner.raporLevels.criterionSaveFailed"), error.message);
+    if (error) return toast.error("Failed to save", error.message);
     setCriteria(prev => prev.map(c => c.id === editingCriterion.id ? { ...c, label: editingCriterion.label, kind: editingCriterion.kind, options: opts } : c));
     setEditingCriterion(null);
-    toast.success(t("owner.raporLevels.criterionUpdated"));
+    toast.success("Criterion updated");
   };
 
   const duplicateCriterion = async (cr: LevelCriterion) => {
@@ -192,21 +191,21 @@ export function useOwnerRaporLevels() {
       options: cr.options ?? [], sort_order: criteria.length,
     });
     setSavingCriterion(false);
-    if (error) return toast.error(t("owner.raporLevels.duplicateFailed"), error.message);
-    toast.success(t("owner.raporLevels.criterionDuplicated"));
+    if (error) return toast.error("Failed to duplicate", error.message);
+    toast.success("Criterion duplicated");
     loadCriteria(criteriaLevel.id);
   };
 
   const applyBulkKind = async () => {
     if (!criteriaLevel || criteria.length === 0) return;
-    const yes = await confirm({ body: t("owner.raporLevels.bulkConfirmBody", { count: criteria.length, kind: kindLabel[bulkKind] }) });
+    const yes = await confirm({ body: `Change all ${criteria.length} criteria to type "${kindLabel[bulkKind]}"? Multiple-choice options will be removed unless the selected type is multiple choice.` });
     if (!yes) return;
     setApplyingBulk(true);
     const opts = bulkKind === "choice" ? ["Sangat Baik", "Baik", "Cukup", "Perlu Latihan"] : null;
     await Promise.all(criteria.map(cr => supabase.from("rapor_level_criteria").update({ kind: bulkKind, options: opts }).eq("id", cr.id)));
     setApplyingBulk(false);
     loadCriteria(criteriaLevel.id);
-    toast.success(t("owner.raporLevels.bulkUpdated"));
+    toast.success("All criteria updated");
   };
 
   // ── Personal Best Time matrix (distances x strokes x per-cell target) ───────
@@ -261,56 +260,56 @@ export function useOwnerRaporLevels() {
     const lvl = bestTimeLevel || selectedLevel;
     if (!lvl) return;
     const distance = parseInt(newDistance);
-    if (!newDistance.trim() || isNaN(distance) || distance <= 0) return toast.error(t("owner.raporLevels.distanceRequired"));
+    if (!newDistance.trim() || isNaN(distance) || distance <= 0) return toast.error("Enter a valid distance");
     setAddingDistance(true);
     const { error } = await supabase.from("rapor_level_distances").insert({
       level_id: lvl.id, distance, sort_order: distances.length,
     });
     setAddingDistance(false);
     if (error) {
-      if (error.code === "23505") return toast.error(t("owner.raporLevels.distanceDuplicate"));
-      return toast.error(t("owner.raporLevels.addRowFailed"), error.message);
+      if (error.code === "23505") return toast.error("This distance already exists for this level");
+      return toast.error("Failed to add", error.message);
     }
-    toast.success(t("owner.raporLevels.rowAdded"));
+    toast.success("Added");
     setNewDistance("");
     loadBestTimeMatrix(lvl.id);
   };
 
   const deleteDistance = async (id: string) => {
     const lvl = bestTimeLevel || selectedLevel;
-    const yes = await confirm({ body: t("owner.raporLevels.deleteDistanceConfirmBody") });
+    const yes = await confirm({ body: "Delete this distance? Its target times will be removed too." });
     if (!yes) return;
     await supabase.from("rapor_level_distances").delete().eq("id", id);
     if (lvl) loadBestTimeMatrix(lvl.id);
-    toast.success(t("owner.raporLevels.rowDeleted"));
+    toast.success("Deleted");
   };
 
   const addStroke = async () => {
     const lvl = bestTimeLevel || selectedLevel;
     if (!lvl) return;
     const name = newStroke.trim();
-    if (!name) return toast.error(t("owner.raporLevels.strokeRequired"));
+    if (!name) return toast.error("Enter a stroke name");
     setAddingStroke(true);
     const { error } = await supabase.from("rapor_level_strokes").insert({
       level_id: lvl.id, name, sort_order: strokes.length,
     });
     setAddingStroke(false);
     if (error) {
-      if (error.code === "23505") return toast.error(t("owner.raporLevels.strokeDuplicate"));
-      return toast.error(t("owner.raporLevels.addRowFailed"), error.message);
+      if (error.code === "23505") return toast.error("This stroke already exists for this level");
+      return toast.error("Failed to add", error.message);
     }
-    toast.success(t("owner.raporLevels.rowAdded"));
+    toast.success("Added");
     setNewStroke("");
     loadBestTimeMatrix(lvl.id);
   };
 
   const deleteStroke = async (id: string) => {
     const lvl = bestTimeLevel || selectedLevel;
-    const yes = await confirm({ body: t("owner.raporLevels.deleteStrokeConfirmBody") });
+    const yes = await confirm({ body: "Delete this stroke? Its target times will be removed too." });
     if (!yes) return;
     await supabase.from("rapor_level_strokes").delete().eq("id", id);
     if (lvl) loadBestTimeMatrix(lvl.id);
-    toast.success(t("owner.raporLevels.rowDeleted"));
+    toast.success("Deleted");
   };
 
   const saveTargetCell = async (strokeId: string, distanceId: string, rawValue: string) => {

@@ -3,7 +3,6 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import { parseSwimTime } from "@/lib/utils";
 import type { ParticipationRow, CompetitionDocumentRow, MemberOption } from "./_types";
 
@@ -18,8 +17,6 @@ export function useParticipationData({
   const supabase = createClient();
   const toast = useToast();
   const confirm = useConfirm();
-  const { t } = useLocale();
-
   const [participations, setParticipations] = useState<ParticipationRow[]>([]);
   const [loadingParts, setLoadingParts] = useState(false);
 
@@ -102,7 +99,7 @@ export function useParticipationData({
       .eq("member_id", memberId)
       .order("created_at", { ascending: false });
     setMemberParticipationsLoading(false);
-    if (error) { toast.error(t("admin.competition.loadAwardsFailed", { error: error.message })); return; }
+    if (error) { toast.error(`Failed to load awards: ${error.message}`); return; }
     setMemberParticipations((data as unknown as ParticipationRow[]) ?? []);
 
     const { data: docs } = await supabase
@@ -132,7 +129,7 @@ export function useParticipationData({
       .order("created_at", { ascending: false });
 
     if (error) {
-      toast.error(t("admin.competition.loadParticipantsFailed", { error: error.message }));
+      toast.error(`Failed to load participants: ${error.message}`);
     } else {
       setParticipations((data as unknown as ParticipationRow[]) ?? []);
     }
@@ -220,11 +217,11 @@ export function useParticipationData({
     const keepOpenForNext = submitter?.value === "keepOpen";
     const effectiveCompId = selectedComp?.id ?? partForm.competition_id;
     if (!effectiveCompId) {
-      toast.error(t("admin.competition.selectCompRequired"));
+      toast.error("Please select a competition first.");
       return;
     }
     if (!partForm.member_id || !partForm.category.trim()) {
-      toast.error(t("admin.competition.memberCategoryRequired"));
+      toast.error("Student and event category are required.");
       return;
     }
 
@@ -253,12 +250,12 @@ export function useParticipationData({
         .eq("id", editPart.id);
 
       if (error) {
-        toast.error(t("admin.competition.updateParticipantFailed", { error: error.message }));
+        toast.error(`Failed to update participant result: ${error.message}`);
         setSavingPart(false);
         return;
       }
 
-      toast.success(t("admin.competition.participantUpdated"));
+      toast.success("Participant result updated successfully.");
       setOpenPartForm(false);
       if (selectedComp) loadParticipations(selectedComp.id);
       if (awardMemberId) loadMemberParticipations(awardMemberId);
@@ -288,12 +285,12 @@ export function useParticipationData({
         });
 
       if (error) {
-        toast.error(t("admin.competition.addParticipantFailed", { error: error.message }));
+        toast.error(`Failed to add participant: ${error.message}`);
         setSavingPart(false);
         return;
       }
 
-      toast.success(t("admin.competition.participantAdded"));
+      toast.success("Competition participant added successfully.");
       if (keepOpenForNext) {
         // Member, lomba, coach, and age group stay locked — only the per-category fields reset —
         // so entering the next category win for the same member+lomba needs no re-navigation.
@@ -324,9 +321,9 @@ export function useParticipationData({
 
   const handleRemoveParticipant = async (p: ParticipationRow) => {
     const ok = await confirm({
-      title: t("admin.competition.deleteParticipantConfirmTitle"),
-      body: `${t("admin.competition.deleteParticipantConfirmBody", { name: (p.member?.profile as any)?.full_name ?? "Student", category: p.category })} ${t("admin.competition.deleteParticipantConfirmNote")}`,
-      confirmLabel: t("admin.competition.deleteParticipantConfirmLabel"),
+      title: "Remove Participant from Competition?",
+      body: `${`Remove participation of ${(p.member?.profile as any)?.full_name ?? "Student"} in event ${p.category}?`} ${"(The student's account will NOT be deleted)"}`,
+      confirmLabel: "Remove Participant",
       danger: true,
     });
 
@@ -334,9 +331,9 @@ export function useParticipationData({
 
     const { error } = await supabase.from("competition_participations").delete().eq("id", p.id);
     if (error) {
-      toast.error(t("admin.competition.deleteParticipantFailed", { error: error.message }));
+      toast.error(`Failed to remove participant: ${error.message}`);
     } else {
-      toast.success(t("admin.competition.participantDeleted"));
+      toast.success("Participant removed from competition successfully.");
       if (selectedComp) loadParticipations(selectedComp.id);
       if (awardMemberId) loadMemberParticipations(awardMemberId);
       loadCompetitions();

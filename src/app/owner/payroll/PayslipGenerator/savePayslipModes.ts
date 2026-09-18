@@ -15,7 +15,6 @@ type Toast = ReturnType<typeof useToast>;
 interface SaveCommon {
   supabase: Supabase;
   toast: Toast;
-  t: (key: string, vars?: Record<string, string | number>) => string;
   userId: string;
   userName: string;
   branches: Branch[];
@@ -39,10 +38,7 @@ function buildLoanDeductions(ctx: SaveCommon): DeductionInput[] {
     if (amount <= 0) continue;
     deductions.push({
       type: "loan",
-      label: ctx.t("owner.payslip.loanInstallmentDeductionLabel", {
-        number: c.next.installmentNumber,
-        total: c.loan.tenor_months,
-      }),
+      label: `Loan Installment (${c.next.installmentNumber}/${c.loan.tenor_months})`,
       amount,
       loan_id: c.loan.id,
       installment_number: c.next.installmentNumber,
@@ -56,14 +52,14 @@ export async function saveFromInvoice(
   ctx: SaveCommon,
   extra: { invoicesEligible: CoachInvoiceRow[]; genInvoiceId: string; genTaxOverride: string | null }
 ): Promise<boolean> {
-  const { supabase, toast, t, branches, genPeriod, genNotes, effectiveTaxForMode, otherDeductionAmount, currentGross, userId, userName } = ctx;
+  const { supabase, toast, branches, genPeriod, genNotes, effectiveTaxForMode, otherDeductionAmount, currentGross, userId, userName } = ctx;
   if (!extra.genInvoiceId) {
-    toast.error(t("owner.payslip.selectInvoiceRequired"));
+    toast.error("Please select an invoice first");
     return false;
   }
   const inv = extra.invoicesEligible.find((e) => e.id === extra.genInvoiceId);
   if (!inv || !inv.coach?.id) {
-    toast.error(t("owner.payslip.invoiceNotFound"));
+    toast.error("Invoice not found");
     return false;
   }
 
@@ -71,7 +67,7 @@ export async function saveFromInvoice(
   if (effectiveTaxForMode > 0) {
     deductions.push({
       type: "tax",
-      label: t("owner.payslip.incomeTaxDeductionLabel"),
+      label: "Tax",
       amount: effectiveTaxForMode,
       meta: { overridden: extra.genTaxOverride != null },
     });
@@ -80,7 +76,7 @@ export async function saveFromInvoice(
   if (otherDeductionAmount > 0) {
     deductions.push({
       type: "other",
-      label: t("owner.payslip.otherDeductionDeductionLabel"),
+      label: "Other Deduction",
       amount: otherDeductionAmount,
     });
   }
@@ -102,11 +98,11 @@ export async function saveFromInvoice(
   });
 
   if ("error" in result) {
-    toast.error(t("owner.payslip.saveFailed"), result.error);
+    toast.error("Failed to save", result.error);
     return false;
   }
 
-  toast.success(t("owner.payslip.generated"));
+  toast.success("Payslip generated successfully (draft)");
   logActivity(supabase, {
     userId,
     userRole: "owner",
@@ -115,7 +111,7 @@ export async function saveFromInvoice(
     entityId: inv.coach.id,
     entityLabel: inv.coach.full_name,
     action: "create",
-    label: t("owner.payslip.activityGenerated", { coach: inv.coach.full_name, period: genPeriod.trim() }),
+    label: `Payslip for ${inv.coach.full_name} period ${genPeriod.trim()} generated (draft)`,
   });
   return true;
 }
@@ -124,13 +120,13 @@ export async function saveManualCoach(
   ctx: SaveCommon,
   extra: { coachList: ProfileOption[]; manualCoachId: string; manualCoachBranchId: string; manualCoachTaxOverride: string | null }
 ): Promise<boolean> {
-  const { supabase, toast, t, branches, genPeriod, genNotes, manualDescription, effectiveTaxForMode, otherDeductionAmount, currentGross, userId, userName } = ctx;
+  const { supabase, toast, branches, genPeriod, genNotes, manualDescription, effectiveTaxForMode, otherDeductionAmount, currentGross, userId, userName } = ctx;
   if (!extra.manualCoachId) {
-    toast.error(t("owner.payslip.selectCoachRequired"));
+    toast.error("Please select a coach first");
     return false;
   }
   if (currentGross <= 0) {
-    toast.error(t("owner.payslip.grossRequired"));
+    toast.error("Gross or base salary must be entered");
     return false;
   }
 
@@ -159,7 +155,7 @@ export async function saveManualCoach(
     .single();
 
   if (invError || !invRow) {
-    toast.error(t("owner.payslip.invoiceCreateFailed"), invError?.message);
+    toast.error("Failed to create invoice record", invError?.message);
     return false;
   }
 
@@ -181,7 +177,7 @@ export async function saveManualCoach(
   if (effectiveTaxForMode > 0) {
     deductions.push({
       type: "tax",
-      label: t("owner.payslip.incomeTaxDeductionLabel"),
+      label: "Tax",
       amount: effectiveTaxForMode,
       meta: { overridden: extra.manualCoachTaxOverride != null },
     });
@@ -190,7 +186,7 @@ export async function saveManualCoach(
   if (otherDeductionAmount > 0) {
     deductions.push({
       type: "other",
-      label: t("owner.payslip.otherDeductionDeductionLabel"),
+      label: "Other Deduction",
       amount: otherDeductionAmount,
     });
   }
@@ -207,11 +203,11 @@ export async function saveManualCoach(
   });
 
   if ("error" in result) {
-    toast.error(t("owner.payslip.saveFailed"), result.error);
+    toast.error("Failed to save", result.error);
     return false;
   }
 
-  toast.success(t("owner.payslip.generated"));
+  toast.success("Payslip generated successfully (draft)");
   logActivity(supabase, {
     userId,
     userRole: "owner",
@@ -238,9 +234,9 @@ export async function saveManualStaff(
     manualStaffTaxOverride: string | null;
   }
 ): Promise<boolean> {
-  const { supabase, toast, t, branches, genPeriod, genNotes, manualDescription, effectiveTaxForMode, currentGross, includedLoanTotal, userId, userName } = ctx;
+  const { supabase, toast, branches, genPeriod, genNotes, manualDescription, effectiveTaxForMode, currentGross, includedLoanTotal, userId, userName } = ctx;
   if (!extra.manualStaffId) {
-    toast.error(t("owner.payslip.selectStaffRequired"));
+    toast.error("Please select a staff member first");
     return false;
   }
   const staff = extra.staffList.find((s) => s.id === extra.manualStaffId);
@@ -252,7 +248,7 @@ export async function saveManualStaff(
   const totalSalary = baseSalary + allowances + reimburse - deductionsVal;
 
   if (baseSalary <= 0 && totalSalary <= 0) {
-    toast.error(t("owner.payslip.grossRequired"));
+    toast.error("Gross or base salary must be entered");
     return false;
   }
 
@@ -294,7 +290,7 @@ export async function saveManualStaff(
   if (effectiveTaxForMode > 0) {
     deductions.push({
       type: "tax",
-      label: t("owner.payslip.incomeTaxDeductionLabel"),
+      label: "Tax",
       amount: effectiveTaxForMode,
       meta: { overridden: extra.manualStaffTaxOverride != null },
     });
@@ -303,7 +299,7 @@ export async function saveManualStaff(
   if (deductionsVal > 0) {
     deductions.push({
       type: "other",
-      label: t("owner.payslip.otherDeductionDeductionLabel"),
+      label: "Other Deduction",
       amount: deductionsVal,
     });
   }
@@ -320,11 +316,11 @@ export async function saveManualStaff(
   });
 
   if ("error" in result) {
-    toast.error(t("owner.payslip.saveFailed"), result.error);
+    toast.error("Failed to save", result.error);
     return false;
   }
 
-  toast.success(t("owner.payslip.generated") + " & " + t("owner.payslip.staffSalarySyncSuccess"));
+  toast.success("Payslip generated successfully (draft)" + " & " + "Staff salary synchronized to staff portal");
   logActivity(supabase, {
     userId,
     userRole: "owner",

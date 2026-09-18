@@ -3,24 +3,23 @@ import Btn from "@/components/ui/Btn";
 import Modal from "@/components/ui/Modal";
 import { Card } from "@/components/ui/Card";
 import Avatar from "@/components/ui/Avatar";
-import { useLocale } from "@/components/providers/LocaleProvider";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 import { downloadRaporPdf, printSingleRaporPopup, fmtSwimTime, type PrintCriterion } from "@/lib/printRapor";
 import { resolveRaporSigner, buildSchoolRaporSignatures } from "@/lib/rapor";
 import type { useCoachRaporData } from "./useCoachRaporData";
 
 export default function ViewRaporModal({ hook, coachName, branchName }: { hook: ReturnType<typeof useCoachRaporData>; coachName: string; branchName: string }) {
-  const { t } = useLocale();
   const { viewing, setViewing, viewBestTimes, setViewBestTimes, period, signatureUrl, ownerSettings } = hook;
 
   return (
     <Modal
       open={!!viewing}
       onClose={() => { setViewing(null); setViewBestTimes([]); }}
-      title={t("coach.rapor.modalTitle", { name: viewing?.member?.profile?.full_name ?? "" })}
+      title={(<>{"Report Card — "}<NoTranslate>{viewing?.member?.profile?.full_name ?? ""}</NoTranslate></>)}
       size="lg"
       footer={
         <>
-          <Btn variant="ghost" onClick={() => { setViewing(null); setViewBestTimes([]); }}>{t("common.actions.close")}</Btn>
+          <Btn variant="ghost" onClick={() => { setViewing(null); setViewBestTimes([]); }}>{"Close"}</Btn>
           {viewing && period && (() => {
             const vScores = (viewing as unknown as { scores?: Record<string, number | string> }).scores ?? {};
             const vNotes  = (viewing as unknown as { notes?: string | null }).notes ?? null;
@@ -57,11 +56,11 @@ export default function ViewRaporModal({ hook, coachName, branchName }: { hook: 
             return (<>
               <Btn variant="outline" size="sm" icon="printer"
                 onClick={() => printSingleRaporPopup(raporData)}>
-                {t("coach.rapor.printBtn")}
+                {"Print"}
               </Btn>
               <Btn variant="primary" size="sm" icon="download"
                 onClick={() => void downloadRaporPdf(raporData)}>
-                {t("coach.rapor.downloadPdfBtn")}
+                {"Download PDF"}
               </Btn>
             </>);
           })()}
@@ -82,8 +81,8 @@ export default function ViewRaporModal({ hook, coachName, branchName }: { hook: 
               <div className="flex items-center gap-3">
                 <Avatar name={viewing.member?.profile?.full_name ?? "?"} src={viewing.member?.profile?.avatar_url ?? undefined} size={42} />
                 <div>
-                  <div className="font-semibold text-ink">{viewing.member?.profile?.full_name}</div>
-                  <div className="text-xs text-ink-mute">{viewing.class?.name} · {period?.label}</div>
+                  <div className="font-semibold text-ink"><NoTranslate>{viewing.member?.profile?.full_name}</NoTranslate></div>
+                  <div className="text-xs text-ink-mute"><NoTranslate>{viewing.class?.name}</NoTranslate> · <NoTranslate>{period?.label}</NoTranslate></div>
                 </div>
               </div>
             </Card>
@@ -91,8 +90,8 @@ export default function ViewRaporModal({ hook, coachName, branchName }: { hook: 
             {/* Level */}
             {viewing.level && (
               <div className="flex items-center gap-2 text-sm">
-                <span className="font-semibold text-ink-soft">{t("coach.rapor.levelLabel")}</span>
-                <span className="font-semibold text-ink">{viewing.level}</span>
+                <span className="font-semibold text-ink-soft">{"Level:"}</span>
+                <span className="font-semibold text-ink"><NoTranslate>{viewing.level}</NoTranslate></span>
               </div>
             )}
 
@@ -110,7 +109,7 @@ export default function ViewRaporModal({ hook, coachName, branchName }: { hook: 
                 return (
                   <div key={key}>
                     <div className="flex justify-between text-sm">
-                      <span className="font-semibold text-ink capitalize">{label}</span>
+                      <span className="font-semibold text-ink capitalize"><NoTranslate>{label}</NoTranslate></span>
                       {numVal !== null && <span className="font-mono font-bold text-ocean-700">{numVal}/{max}</span>}
                     </div>
                     {numVal !== null && (
@@ -121,40 +120,40 @@ export default function ViewRaporModal({ hook, coachName, branchName }: { hook: 
                         />
                       </div>
                     )}
-                    {strVal && <p className="text-sm text-ink-soft bg-paper-tint px-3 py-1.5 rounded-lg mt-1">{strVal}</p>}
+                    {strVal && <p className="text-sm text-ink-soft bg-paper-tint px-3 py-1.5 rounded-lg mt-1"><NoTranslate>{strVal}</NoTranslate></p>}
                   </div>
                 );
               })}
               {Object.keys(vScores).length === 0 && (
-                <p className="text-sm text-ink-mute italic">{t("coach.rapor.noScoresYet")}</p>
+                <p className="text-sm text-ink-mute italic">{"No scores yet."}</p>
               )}
             </div>
 
             {/* Notes */}
             {vNotes && (
               <div>
-                <div className="font-semibold text-ink text-sm mb-1">{t("coach.rapor.notesLabel")}</div>
-                <p className="text-sm text-ink-soft bg-paper-tint p-3 rounded-xl leading-relaxed">{vNotes}</p>
+                <div className="font-semibold text-ink text-sm mb-1">{"Coach notes"}</div>
+                <p className="text-sm text-ink-soft bg-paper-tint p-3 rounded-xl leading-relaxed"><NoTranslate>{vNotes}</NoTranslate></p>
               </div>
             )}
 
             {/* Personal Best Times */}
             {viewBestTimes.length > 0 && (
               <div>
-                <div className="font-semibold text-ink text-sm mb-2">{t("coach.bestTime.sectionTitle")}</div>
+                <div className="font-semibold text-ink text-sm mb-2">{"Personal Best Time"}</div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm border-collapse">
                     <thead>
                       <tr className="bg-ocean-600 text-white">
-                        <th className="text-left px-3 py-2 font-semibold rounded-tl-lg">{t("coach.rapor.strokeColHeader")}</th>
-                        <th className="text-center px-3 py-2 font-semibold">{t("coach.rapor.distanceColHeader")}</th>
-                        <th className="text-center px-3 py-2 font-semibold rounded-tr-lg">{t("coach.rapor.timeColHeader")}</th>
+                        <th className="text-left px-3 py-2 font-semibold rounded-tl-lg">{"Stroke"}</th>
+                        <th className="text-center px-3 py-2 font-semibold">{"Distance"}</th>
+                        <th className="text-center px-3 py-2 font-semibold rounded-tr-lg">{"Time"}</th>
                       </tr>
                     </thead>
                     <tbody>
                       {viewBestTimes.map((bt, i) => (
                         <tr key={i} className={i % 2 === 0 ? "bg-paper" : "bg-paper-tint"}>
-                          <td className="px-3 py-2 font-medium text-ink uppercase">{bt.stroke}</td>
+                          <td className="px-3 py-2 font-medium text-ink uppercase"><NoTranslate>{bt.stroke}</NoTranslate></td>
                           <td className="px-3 py-2 text-center text-ink-soft">{bt.distance}m</td>
                           <td className="px-3 py-2 text-center font-mono text-ink">{fmtSwimTime(bt.time_seconds)}</td>
                         </tr>
@@ -169,13 +168,13 @@ export default function ViewRaporModal({ hook, coachName, branchName }: { hook: 
             {(viewing.personality || viewing.motivation || viewing.learning_achievements) && (
               <div className="space-y-2 pt-2 border-t border-line">
                 {[
-                  { label: t("coach.rapor.fieldPersonality"), value: viewing.personality },
-                  { label: t("coach.rapor.motivationViewLabel"), value: viewing.motivation },
-                  { label: t("coach.rapor.learningAchievementsViewLabel"), value: viewing.learning_achievements },
+                  { label: "Personality", value: viewing.personality },
+                  { label: "Learning motivation", value: viewing.motivation },
+                  { label: "Learning achievements", value: viewing.learning_achievements },
                 ].filter(x => x.value).map(x => (
                   <div key={x.label} className="flex items-baseline gap-2 text-sm">
                     <span className="text-ink-mute min-w-[148px] shrink-0">{x.label}</span>
-                    <span className="text-ink font-medium">{x.value}</span>
+                    <span className="text-ink font-medium"><NoTranslate>{x.value}</NoTranslate></span>
                   </div>
                 ))}
               </div>

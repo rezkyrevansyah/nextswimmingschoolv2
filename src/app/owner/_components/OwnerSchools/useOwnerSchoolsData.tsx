@@ -3,14 +3,13 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import { useUpload } from "@/hooks/useUpload";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 import type { School, SchoolSignature } from "./_types";
 
 export function useOwnerSchoolsData() {
   const toast = useToast();
   const confirm = useConfirm();
-  const { t, tNode } = useLocale();
   const supabase = createClient();
   const { upload, uploading } = useUpload();
   const logoInputRef = useRef<HTMLInputElement>(null);
@@ -84,14 +83,14 @@ export function useOwnerSchoolsData() {
     try {
       const url = await upload.schoolLogo(file, school.id);
       if (url) {
-        toast.success(t("owner.schools.logoUpdated"));
+        toast.success("School logo updated");
         setSchools(prev => prev.map(s => s.id === school.id ? { ...s, logo_url: url } : s));
         if (selectedSchool?.id === school.id) {
           setSelectedSchool(prev => prev ? { ...prev, logo_url: url } : null);
         }
       }
     } catch (err) {
-      toast.error(t("owner.schools.uploadLogoFailed"), err instanceof Error ? err.message : undefined);
+      toast.error("Failed to upload logo", err instanceof Error ? err.message : undefined);
     } finally {
       if (e.target) e.target.value = "";
     }
@@ -109,11 +108,11 @@ export function useOwnerSchoolsData() {
         head_sig_title: configForm.head_sig_title || "HEAD OF NEXT SWIMMING",
       }).eq("id", selectedSchool.id);
       if (error) throw error;
-      toast.success(t("owner.schools.configSaved"));
+      toast.success("Signature configuration updated");
       setSchools(prev => prev.map(s => s.id === selectedSchool.id ? { ...s, ...configForm } : s));
       setSelectedSchool(prev => prev ? { ...prev, ...configForm } : null);
     } catch (err) {
-      toast.error(t("owner.schools.saveConfigFailed"), err instanceof Error ? err.message : undefined);
+      toast.error("Failed to save configuration", err instanceof Error ? err.message : undefined);
     } finally {
       setConfigSaving(false);
     }
@@ -121,8 +120,8 @@ export function useOwnerSchoolsData() {
 
   const saveSignature = async () => {
     if (!selectedSchool) return;
-    if (!sigForm.name || !sigForm.title) return toast.error(t("owner.schools.nameTitleRequired"));
-    if (!sigForm.id && !sigFile) return toast.error(t("owner.schools.sigFileRequired"));
+    if (!sigForm.name || !sigForm.title) return toast.error("Signer name and title are required");
+    if (!sigForm.id && !sigFile) return toast.error("Signature image is required for new signatures");
 
     setSigSaving(true);
     try {
@@ -136,7 +135,7 @@ export function useOwnerSchoolsData() {
         if (sigFile) {
           await upload.schoolSignature(sigFile, selectedSchool.id, sigForm.id);
         }
-        toast.success(t("owner.schools.sigSaved"));
+        toast.success("Signature saved successfully");
       } else {
         // Insert new
         const { data: inserted, error } = await supabase.from("school_signatures")
@@ -152,12 +151,12 @@ export function useOwnerSchoolsData() {
         if (sigFile) {
           await upload.schoolSignature(sigFile, selectedSchool.id, inserted.id);
         }
-        toast.success(t("owner.schools.sigSaved"));
+        toast.success("Signature saved successfully");
       }
       setShowSigModal(false);
       loadSignatures(selectedSchool.id);
     } catch (err) {
-      toast.error(t("owner.schools.saveSigFailed"), err instanceof Error ? err.message : undefined);
+      toast.error("Failed to save signature", err instanceof Error ? err.message : undefined);
     } finally {
       setSigSaving(false);
     }
@@ -168,16 +167,16 @@ export function useOwnerSchoolsData() {
     const { error } = await supabase.from("school_signatures")
       .update({ is_active: nextState })
       .eq("id", sig.id);
-    if (error) return toast.error(t("owner.schools.saveSigFailed"), error.message);
+    if (error) return toast.error("Failed to save signature", error.message);
     setSignatures(prev => prev.map(s => s.id === sig.id ? { ...s, is_active: nextState } : s));
   };
 
   const deleteSignature = async (sig: SchoolSignature) => {
-    const yes = await confirm({ title: tNode("owner.schools.deleteSigConfirm", { name: sig.name }), danger: true });
+    const yes = await confirm({ title: (<>{"Delete signature for \""}<NoTranslate>{sig.name}</NoTranslate>{"\"?"}</>), danger: true });
     if (!yes) return;
     const { error } = await supabase.from("school_signatures").delete().eq("id", sig.id);
-    if (error) return toast.error(t("owner.schools.deleteSigFailed"), error.message);
-    toast.success(t("owner.schools.sigDeleted"));
+    if (error) return toast.error("Failed to delete signature", error.message);
+    toast.success("Signature deleted");
     if (selectedSchool) loadSignatures(selectedSchool.id);
   };
 

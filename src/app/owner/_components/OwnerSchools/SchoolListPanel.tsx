@@ -1,6 +1,5 @@
 "use client";
 import Image from "next/image";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import Icon from "@/components/ui/Icon";
 import { NoTranslate } from "@/components/ui/NoTranslate";
 import type { useOwnerSchoolsData } from "./useOwnerSchoolsData";
@@ -8,7 +7,6 @@ import type { useOwnerSchoolsData } from "./useOwnerSchoolsData";
 type OwnerSchoolsDataHook = ReturnType<typeof useOwnerSchoolsData>;
 
 export default function SchoolListPanel({ hook }: { hook: OwnerSchoolsDataHook }) {
-  const { t } = useLocale();
   const { schools, loading, selectedSchool, setSelectedSchool } = hook;
 
   return (
@@ -19,9 +17,9 @@ export default function SchoolListPanel({ hook }: { hook: OwnerSchoolsDataHook }
       </div>
 
       {loading ? (
-        <div className="text-center py-10 text-ink-mute text-sm">{t("common.actions.saving")}</div>
+        <div className="text-center py-10 text-ink-mute text-sm">{"Saving…"}</div>
       ) : schools.length === 0 ? (
-        <div className="text-center py-10 text-ink-mute text-sm">{t("owner.schools.noSchools")}</div>
+        <div className="text-center py-10 text-ink-mute text-sm">{"No partner schools registered yet."}</div>
       ) : (
         <div className="space-y-1.5">
           {schools.map(school => {

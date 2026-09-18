@@ -4,11 +4,9 @@ import Icon from "@/components/ui/Icon";
 import { NoTranslate } from "@/components/ui/NoTranslate";
 import { fmtIDR } from "@/lib/utils";
 import { createClient } from "@/utils/supabase/client";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import type { Branch, Invoice } from "../_types";
 
 export default function OwnerDashboard({ branches, onSelectTab }: { branches: Branch[]; onSelectTab?: (tab: string) => void }) {
-  const { t } = useLocale();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const supabase = createClient();
 
@@ -55,7 +53,7 @@ export default function OwnerDashboard({ branches, onSelectTab }: { branches: Br
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-5">
         <div className="bg-white rounded-2xl border border-line p-5 shadow-card flex flex-col gap-2 transition hover:border-line-strong">
           <span className="text-[10px] font-bold uppercase tracking-wider text-ink-faint">
-            {t("owner.dashboard.statMembers")}
+            {"Active students"}
           </span>
           <span className="font-display font-extrabold text-3xl lg:text-[32px] text-ocean-600 leading-tight">
             {totalMembers}
@@ -64,7 +62,7 @@ export default function OwnerDashboard({ branches, onSelectTab }: { branches: Br
 
         <div className="bg-white rounded-2xl border border-line p-5 shadow-card flex flex-col gap-2 transition hover:border-line-strong">
           <span className="text-[10px] font-bold uppercase tracking-wider text-ink-faint">
-            {t("owner.dashboard.statCoaches")}
+            {"Active coaches"}
           </span>
           <span className="font-display font-extrabold text-3xl lg:text-[32px] text-wave-600 leading-tight">
             {totalCoaches}
@@ -73,7 +71,7 @@ export default function OwnerDashboard({ branches, onSelectTab }: { branches: Br
 
         <div className="bg-white rounded-2xl border border-line p-5 shadow-card flex flex-col gap-2 transition hover:border-line-strong">
           <span className="text-[10px] font-bold uppercase tracking-wider text-ink-faint">
-            {t("owner.dashboard.statClasses")}
+            {"Active classes"}
           </span>
           <span className="font-display font-extrabold text-3xl lg:text-[32px] text-ok-600 leading-tight">
             {totalClasses}
@@ -82,7 +80,7 @@ export default function OwnerDashboard({ branches, onSelectTab }: { branches: Br
 
         <div className="bg-white rounded-2xl border border-line p-5 shadow-card flex flex-col gap-2 transition hover:border-line-strong">
           <span className="text-[10px] font-bold uppercase tracking-wider text-ink-faint">
-            {t("owner.dashboard.statInvoicesPending")}
+            {"Pending invoices"}
           </span>
           <span className="font-display font-extrabold text-3xl lg:text-[32px] text-warn-600 leading-tight">
             {invoices.length}
@@ -163,7 +161,7 @@ export default function OwnerDashboard({ branches, onSelectTab }: { branches: Br
                 <div className="w-10 h-10 rounded-full bg-ok-50 text-ok-600 flex items-center justify-center">
                   <Icon name="check" className="w-5 h-5" />
                 </div>
-                <p className="text-sm font-semibold text-ink">{t("owner.dashboard.allNormal")}</p>
+                <p className="text-sm font-semibold text-ink">{"All systems running normally."}</p>
                 <p className="text-xs text-ink-mute">No coach honor invoices awaiting review at this time.</p>
               </div>
             ) : (

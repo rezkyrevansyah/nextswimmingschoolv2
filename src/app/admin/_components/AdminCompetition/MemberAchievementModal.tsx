@@ -2,12 +2,13 @@
 import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
 import Modal from "@/components/ui/Modal";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 import { fmtDate } from "@/lib/utils";
 import type { AdminCompetitionHook } from "./_hook";
 
 export default function MemberAchievementModal({ hook }: { hook: AdminCompetitionHook }) {
   const {
-    t, AWARD_LABELS,
+    AWARD_LABELS,
     awardMemberId, setAwardMemberId, awardMemberSearch, setAwardMemberSearch, setMemberParticipations,
     memberParticipations, memberParticipationsLoading, openAddParticipant, openDuplicateParticipant,
     openEditParticipant, handleRemoveParticipant, getDoc, handleViewDoc,
@@ -19,24 +20,24 @@ export default function MemberAchievementModal({ hook }: { hook: AdminCompetitio
     <Modal
       open={!!awardMemberId}
       onClose={() => { setAwardMemberId(""); setAwardMemberSearch(""); setMemberParticipations([]); }}
-      title={awardMemberSearch || t("admin.competition.memberAchievementsFallbackTitle")}
+      title={awardMemberSearch ? <NoTranslate>{awardMemberSearch}</NoTranslate> : "Student Achievements"}
       size="xl"
     >
       <div className="space-y-4">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div>
-            <div className="font-bold text-ink-strong">{t("admin.competition.achievementHistoryTitle")}</div>
-            <p className="text-xs text-ink-mute">{t("admin.competition.achievementHistorySub", { count: memberParticipations.length })}</p>
+            <div className="font-bold text-ink-strong">{"Achievement History"}</div>
+            <p className="text-xs text-ink-mute">{`${memberParticipations.length} entries · all competitions`}</p>
           </div>
           <Btn variant="primary" size="sm" icon="plus" onClick={() => openAddParticipant(awardMemberId)}>
-            {t("admin.competition.addAwardBtn")}
+            {"Add Award"}
           </Btn>
         </div>
         {memberParticipationsLoading ? (
-          <div className="py-8 text-center text-ink-mute text-sm">{t("admin.competition.loadingData")}</div>
+          <div className="py-8 text-center text-ink-mute text-sm">{"Loading data..."}</div>
         ) : memberParticipations.length === 0 ? (
           <div className="py-8 text-center text-ink-mute text-sm border border-dashed border-line rounded-xl">
-            {t("admin.competition.noAwardsYet")}
+            {"No awards for this participant yet. Click Add Award above."}
           </div>
         ) : (
           <div className="overflow-x-auto border border-line rounded-2xl">
@@ -44,7 +45,7 @@ export default function MemberAchievementModal({ hook }: { hook: AdminCompetitio
               <thead>
                 <tr className="border-b border-line bg-paper-tint text-left text-[11px] font-bold uppercase tracking-wider text-ink-faint">
                   <th className="py-3 px-4 min-w-[200px]">Perlombaan</th>
-                  <th className="py-3 px-4 min-w-[140px]">{t("admin.competition.colCategory")}</th>
+                  <th className="py-3 px-4 min-w-[140px]">{"Category"}</th>
                   <th className="py-3 px-4 w-32 whitespace-nowrap">Waktu</th>
                   <th className="py-3 px-4 text-center w-24 whitespace-nowrap">Peringkat</th>
                   <th className="py-3 px-4 text-center w-36 whitespace-nowrap">Penghargaan</th>
@@ -59,12 +60,12 @@ export default function MemberAchievementModal({ hook }: { hook: AdminCompetitio
                   return (
                     <tr key={p.id} className="hover:bg-paper-tint/60 transition-colors">
                       <td className="py-3 px-4 min-w-[200px]">
-                        <div className="font-bold text-ink-strong line-clamp-1">{comp?.name ?? "—"}</div>
+                        <div className="font-bold text-ink-strong line-clamp-1"><NoTranslate>{comp?.name ?? "—"}</NoTranslate></div>
                         {comp?.start_date && <div className="text-xs text-ink-mute mt-0.5">{fmtDate(comp.start_date)}</div>}
                       </td>
                       <td className="py-3 px-4 min-w-[140px]">
-                        <div className="font-medium text-ink">{p.category}</div>
-                        {p.age_group && <div className="text-xs text-ink-mute">{p.age_group}</div>}
+                        <div className="font-medium text-ink"><NoTranslate>{p.category}</NoTranslate></div>
+                        {p.age_group && <div className="text-xs text-ink-mute"><NoTranslate>{p.age_group}</NoTranslate></div>}
                       </td>
                       <td className="py-3 px-4 font-mono text-ocean-700 font-bold whitespace-nowrap">
                         {p.time_formatted || (p.time_seconds ? `${p.time_seconds}s` : "—")}
@@ -72,7 +73,7 @@ export default function MemberAchievementModal({ hook }: { hook: AdminCompetitio
                       <td className="py-3 px-4 text-center font-bold whitespace-nowrap">{p.rank ? `#${p.rank}` : "—"}</td>
                       <td className="py-3 px-4 text-center whitespace-nowrap">
                         <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${awardInfo.style}`}>
-                          {awardInfo.icon} {p.award === "custom" && p.custom_award_label ? p.custom_award_label : awardInfo.label}
+                          {awardInfo.icon} {p.award === "custom" && p.custom_award_label ? <NoTranslate>{p.custom_award_label}</NoTranslate> : awardInfo.label}
                         </span>
                       </td>
                       <td className="py-3 px-4 text-center whitespace-nowrap">
@@ -96,7 +97,7 @@ export default function MemberAchievementModal({ hook }: { hook: AdminCompetitio
                           <button
                             type="button"
                             onClick={() => openDuplicateParticipant(p)}
-                            title={t("admin.competition.duplicateEntryTitle")}
+                            title={"Duplicate as new entry"}
                             className="w-7 h-7 rounded-lg hover:bg-ocean-50 text-ink-mute hover:text-ocean-600 flex items-center justify-center transition-colors"
                           >
                             <Icon name="copy" className="w-3.5 h-3.5" />
@@ -104,7 +105,7 @@ export default function MemberAchievementModal({ hook }: { hook: AdminCompetitio
                           <button
                             type="button"
                             onClick={() => openEditParticipant(p)}
-                            title={t("admin.competition.editTitle")}
+                            title={"Edit"}
                             className="w-7 h-7 rounded-lg hover:bg-paper-deep text-ink-mute hover:text-ocean-600 flex items-center justify-center transition-colors"
                           >
                             <Icon name="edit" className="w-3.5 h-3.5" />
@@ -112,7 +113,7 @@ export default function MemberAchievementModal({ hook }: { hook: AdminCompetitio
                           <button
                             type="button"
                             onClick={() => handleRemoveParticipant(p)}
-                            title={t("admin.competition.deleteBtn")}
+                            title={"Delete"}
                             className="w-7 h-7 rounded-lg hover:bg-danger-50 text-ink-mute hover:text-danger-500 flex items-center justify-center transition-colors"
                           >
                             <Icon name="trash" className="w-3.5 h-3.5" />

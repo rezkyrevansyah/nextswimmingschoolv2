@@ -10,14 +10,14 @@ import type { AdminMemberHook } from "./_hook";
 
 export default function CreateMemberModal({ hook }: { hook: AdminMemberHook }) {
   const {
-    t, openCreate, setOpenCreate, form, setForm, saving, createMember,
+    openCreate, setOpenCreate, form, setForm, saving, createMember,
     createAvatarPreview, setCreateAvatarFile, setCreateAvatarPreview,
     schoolsList, classes, showCreatePwd, setShowCreatePwd,
   } = hook;
 
   return (
-    <Modal open={openCreate} onClose={() => setOpenCreate(false)} title={t("admin.members.addMemberModalTitle")} size="lg"
-      footer={<><Btn variant="ghost" onClick={() => setOpenCreate(false)}>{t("common.actions.cancel")}</Btn><Btn variant="primary" onClick={createMember} disabled={saving}>{saving ? t("common.actions.saving") : t("admin.members.saveAndSendWaBtn")}</Btn></>}>
+    <Modal open={openCreate} onClose={() => setOpenCreate(false)} title={"Add New Student"} size="lg"
+      footer={<><Btn variant="ghost" onClick={() => setOpenCreate(false)}>{"Cancel"}</Btn><Btn variant="primary" onClick={createMember} disabled={saving}>{saving ? "Saving…" : "Save & send WA"}</Btn></>}>
       <div className="grid sm:grid-cols-2 gap-4">
         {/* Avatar picker */}
         <div className="sm:col-span-2 flex flex-col items-center gap-2">
@@ -37,69 +37,69 @@ export default function CreateMemberModal({ hook }: { hook: AdminMemberHook }) {
               setCreateAvatarPreview(f ? URL.createObjectURL(f) : null);
             }} />
           </label>
-          <p className="text-xs text-ink-faint">{t("admin.coaches.profilePhotoOptionalHint")}</p>
+          <p className="text-xs text-ink-faint">{"Profile photo (optional)"}</p>
         </div>
-        <Field label={t("admin.coaches.fieldFullName2")} required><Input value={form.full_name} onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))} /></Field>
-        <Field label={t("admin.members.rowBirthDateFull")}><DatePicker value={form.birth_date} onChange={v => setForm(f => ({ ...f, birth_date: v }))} /></Field>
-        <Field label={t("admin.coaches.rowGender2")}>
+        <Field label={"Full name"} required><Input value={form.full_name} onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))} /></Field>
+        <Field label={"Date of birth"}><DatePicker value={form.birth_date} onChange={v => setForm(f => ({ ...f, birth_date: v }))} /></Field>
+        <Field label={"Gender"}>
           <Select value={form.gender} onChange={e => setForm(f => ({ ...f, gender: e.target.value }))}>
-            <option value="">{t("admin.members.selectDashPlaceholder")}</option>
-            <option value="male">{t("admin.approvement.genderMale")}</option>
-            <option value="female">{t("admin.approvement.genderFemale")}</option>
+            <option value="">{"— select —"}</option>
+            <option value="male">{"Male"}</option>
+            <option value="female">{"Female"}</option>
           </Select>
         </Field>
-        <Field label={t("admin.members.fieldMemberType")} required hint={t("admin.members.addPrivateElsewhereHint")}>
+        <Field label={"Student type"} required hint={"Want to add a private student? Use Excel import (see Import Excel), or the Private Students menu for full schedule/coach/location control."}>
           <Select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}>
-            <option value="reguler">{t("admin.members.typeRegularFull")}</option><option value="school_affiliate">{t("admin.members.typeAffiliateFull")}</option>
+            <option value="reguler">{"Regular"}</option><option value="school_affiliate">{"School Affiliate"}</option>
           </Select>
         </Field>
         {form.type === "school_affiliate" && (
           <>
-            <Field label={t("admin.members.fieldSchoolAffiliate")}>
+            <Field label={"Affiliated school"}>
               <Select value={form.school_id} onChange={e => setForm(f => ({ ...f, school_id: e.target.value }))}>
-                <option value="">{t("admin.members.selectSchoolPlaceholder")}</option>
+                <option value="">{"— select school —"}</option>
                 {schoolsList.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
               </Select>
             </Field>
-            <Field label={t("admin.members.fieldSchoolGrade")} hint={t("admin.members.fieldSchoolGradeHint")}>
+            <Field label={"School Grade"} hint={"The child's grade/class at their day school, e.g. \"Kelas 5 SD\" — separate from the swim class"}>
               <Input
                 value={form.school_grade}
                 onChange={e => setForm(f => ({ ...f, school_grade: e.target.value }))}
-                placeholder={t("admin.members.fieldSchoolGradePlaceholder")}
+                placeholder={"e.g. Kelas 5 SD"}
               />
             </Field>
           </>
         )}
-        <Field label={t("admin.members.fieldAssignClass")} hint={form.type === "private" ? t("admin.members.privateClassesOnlyHint") : t("admin.members.regularClassesOnlyHint")}>
+        <Field label={"Assign class"} hint={form.type === "private" ? "Private classes only" : "Regular classes only"}>
           <Select value={form.class_id} onChange={e => setForm(f => ({ ...f, class_id: e.target.value }))}>
-            <option value="">{t("admin.members.dashSelectClassPlaceholder")}</option>
+            <option value="">{"— select class —"}</option>
             {classes.filter(c => c.class_type === form.type || (form.type === "school_affiliate" && c.class_type === "reguler")).map(c => <option key={c.id} value={c.id}>{c.name} ({c.enrolled}/{c.capacity})</option>)}
           </Select>
         </Field>
         {form.type === "private" && (
-          <Field label={t("admin.members.fieldSessionCount2")} required hint={t("admin.members.pricePerSessionHintPrefix", { price: classes.find(c => c.id === form.class_id)?.price_per_session ? fmtIDR(classes.find(c => c.id === form.class_id)!.price_per_session!) : "—" })}>
+          <Field label={"Number of sessions"} required hint={`Price/session: ${classes.find(c => c.id === form.class_id)?.price_per_session ? fmtIDR(classes.find(c => c.id === form.class_id)!.price_per_session!) : "—"}`}>
             <Input type="number" min="1" value={form.jumlah_sesi} onChange={e => setForm(f => ({ ...f, jumlah_sesi: e.target.value }))} placeholder="Mis. 8" />
           </Field>
         )}
-        <Field label={t("admin.members.fieldMemberPhone")}>
+        <Field label={"Student phone / WA"}>
           <Input type="tel" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} />
         </Field>
-        <Field label={t("admin.members.fieldContactOwner")}>
+        <Field label={"Contact owner"}>
           <Select value={form.phone_owner} onChange={e => setForm(f => ({ ...f, phone_owner: e.target.value }))}>
-            <option value="self">{t("admin.members.ownedByMemberOpt")}</option>
-            <option value="parent">{t("admin.members.ownedByParentOpt")}</option>
+            <option value="self">{"Owned by the student"}</option>
+            <option value="parent">{"Owned by parent / guardian"}</option>
           </Select>
         </Field>
         {form.phone_owner === "parent" && (
           <>
-            <Field label={t("admin.members.fieldParentName2")}><Input value={form.parent_name} onChange={e => setForm(f => ({ ...f, parent_name: e.target.value }))} /></Field>
-            <Field label={t("admin.members.fieldParentPhone2")}><Input type="tel" value={form.parent_phone} onChange={e => setForm(f => ({ ...f, parent_phone: e.target.value }))} /></Field>
+            <Field label={"Parent / guardian name"}><Input value={form.parent_name} onChange={e => setForm(f => ({ ...f, parent_name: e.target.value }))} /></Field>
+            <Field label={"Parent / guardian phone"}><Input type="tel" value={form.parent_phone} onChange={e => setForm(f => ({ ...f, parent_phone: e.target.value }))} /></Field>
           </>
         )}
-        <Field label={t("admin.coaches.fieldAddress2")} className="sm:col-span-2"><Textarea rows={2} value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} placeholder={t("admin.coaches.addressPlaceholder")} /></Field>
-        <Field label={t("admin.members.fieldHealthNotes3")} className="sm:col-span-2" hint={t("admin.members.healthNotesHint")}><Textarea rows={2} value={form.health_notes} onChange={e => setForm(f => ({ ...f, health_notes: e.target.value }))} /></Field>
-        <Field label={t("admin.schoolPanel.loginEmailLabel")} required><Input type="email" autoComplete="off" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} /></Field>
-        <Field label={t("admin.members.fieldPassword")} required hint={t("admin.coaches.minCharsHint")}>
+        <Field label={"Address"} className="sm:col-span-2"><Textarea rows={2} value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} placeholder={"E.g. Jl. Anggrek No. 12, Bekasi"} /></Field>
+        <Field label={"Health notes"} className="sm:col-span-2" hint={"Allergies, special conditions, etc."}><Textarea rows={2} value={form.health_notes} onChange={e => setForm(f => ({ ...f, health_notes: e.target.value }))} /></Field>
+        <Field label={"Login email"} required><Input type="email" autoComplete="off" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} /></Field>
+        <Field label={"Password"} required hint={"Minimum 6 characters"}>
           <div className="relative">
             <Input type={showCreatePwd ? "text" : "password"} autoComplete="new-password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder="••••••••" className="pr-10" />
             <button type="button" tabIndex={-1} onClick={() => setShowCreatePwd(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-mute hover:text-ink transition-colors">

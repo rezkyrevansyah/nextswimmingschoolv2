@@ -2,7 +2,6 @@
 
 import dynamic from "next/dynamic";
 import { useRef } from "react";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import { useInViewport } from "@/hooks/useInViewport";
 
 const CircularGallery = dynamic(() => import("@/components/CircularGallery"), { ssr: false });
@@ -14,7 +13,6 @@ interface CoachItem {
 }
 
 export default function Coaches({ coaches }: { coaches: CoachItem[] }) {
-  const { t } = useLocale();
   const withPhoto = coaches.filter((c) => c.photo_url);
   const galleryRef = useRef<HTMLDivElement>(null);
   // Delay fetching/mounting the WebGL gallery chunk until the user is
@@ -28,12 +26,12 @@ export default function Coaches({ coaches }: { coaches: CoachItem[] }) {
     <section id="coaches" className="relative py-16 sm:py-24 bg-gradient-to-b from-ocean-700 to-ocean-900 overflow-hidden">
       <div className="mx-auto max-w-6xl px-6 text-center">
         <p className="text-xs font-semibold tracking-wide uppercase text-wave-200">
-          {t("landing.coaches.label")}
+          {"Our Coaches"}
         </p>
         <h2 className="mt-2 font-display font-extrabold text-3xl sm:text-4xl text-white">
-          {t("landing.coaches.headline")}
+          {"Meet the team behind every stroke."}
         </h2>
-        <p className="mt-3 text-white/70">{t("landing.coaches.subtitle")}</p>
+        <p className="mt-3 text-white/70">{"Certified, experienced, and genuinely invested in every swimmer's progress."}</p>
       </div>
       <div ref={galleryRef} className="mt-12 h-[400px] sm:h-[500px]">
         {isNear && (

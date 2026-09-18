@@ -4,7 +4,6 @@ import Image from "next/image";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import Btn from "@/components/ui/Btn";
 import Icon from "@/components/ui/Icon";
@@ -24,7 +23,6 @@ export default function OwnerMasterData() {
   const supabase = createClient();
   const toast = useToast();
   const confirm = useConfirm();
-  const { t, tNode } = useLocale();
   const { upload, uploading } = useUpload();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -85,7 +83,7 @@ export default function OwnerMasterData() {
   // Save Head Info
   const handleSaveHeadInfo = async () => {
     if (!headName.trim()) {
-      return toast.error(t("owner.masterData.fieldHeadName"));
+      return toast.error("Head Name");
     }
     setSavingOwner(true);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -101,9 +99,9 @@ export default function OwnerMasterData() {
 
     setSavingOwner(false);
     if (error) {
-      toast.error(t("owner.masterData.saveHeadFailed"), error.message);
+      toast.error("Failed to save Head of NEXT profile", error.message);
     } else {
-      toast.success(t("owner.masterData.headProfileSaved"));
+      toast.success("Head of NEXT profile updated");
     }
   };
 
@@ -114,10 +112,10 @@ export default function OwnerMasterData() {
     try {
       const url = await upload.ownerSignature(file);
       setSignatureUrl(url);
-      toast.success(t("owner.masterData.headProfileSaved"));
+      toast.success("Head of NEXT profile updated");
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Upload error";
-      toast.error(t("owner.masterData.saveHeadFailed"), message);
+      toast.error("Failed to save Head of NEXT profile", message);
     } finally {
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
@@ -126,8 +124,8 @@ export default function OwnerMasterData() {
   // Remove Signature
   const handleRemoveSignature = async () => {
     const ok = await confirm({
-      title: t("common.actions.delete"),
-      body: t("owner.masterData.headSectionSub"),
+      title: "Delete",
+      body: "Profile & official digital signature used on report cards and certificates.",
       danger: true,
     });
     if (!ok) return;
@@ -143,7 +141,7 @@ export default function OwnerMasterData() {
         head_signature_url: null,
         updated_at: new Date().toISOString(),
       } as any);
-    toast.success(t("owner.masterData.headProfileSaved"));
+    toast.success("Head of NEXT profile updated");
   };
 
   // Add Category
@@ -159,10 +157,10 @@ export default function OwnerMasterData() {
     });
     setAddingCat(false);
     if (error) {
-      toast.error(t("owner.masterData.addCategoryFailed"), error.message);
+      toast.error("Failed to add category", error.message);
     } else {
       setNewCatName("");
-      toast.success(t("owner.masterData.categoryAdded"));
+      toast.success("Category added");
       loadCategories();
     }
   };
@@ -178,10 +176,10 @@ export default function OwnerMasterData() {
       .eq("id", editCatId);
     setSavingEdit(false);
     if (error) {
-      toast.error(t("owner.masterData.updateCategoryFailed"), error.message);
+      toast.error("Failed to update category", error.message);
     } else {
       setEditCatId(null);
-      toast.success(t("owner.masterData.categoryUpdated"));
+      toast.success("Category updated");
       loadCategories();
     }
   };
@@ -189,8 +187,8 @@ export default function OwnerMasterData() {
   // Delete Category
   const handleDeleteCategory = async (cat: Category) => {
     const ok = await confirm({
-      title: tNode("owner.masterData.deleteCategoryConfirm", { name: cat.name }),
-      body: t("common.actions.delete"),
+      title: (<>{"Delete category \""}<NoTranslate>{cat.name}</NoTranslate>{"\"?"}</>),
+      body: "Delete",
       danger: true,
     });
     if (!ok) return;
@@ -201,9 +199,9 @@ export default function OwnerMasterData() {
       .eq("id", cat.id);
 
     if (error) {
-      toast.error(t("owner.masterData.deleteCategoryFailed"), error.message);
+      toast.error("Failed to delete category", error.message);
     } else {
-      toast.success(t("owner.masterData.categoryDeleted"));
+      toast.success("Category deleted");
       loadCategories();
     }
   };
@@ -240,7 +238,7 @@ export default function OwnerMasterData() {
                       : "text-ink-soft hover:bg-white/60"
                   )}
                 >
-                  <span>{t("owner.masterData.tabIncome")}</span>
+                  <span>{"Income Categories"}</span>
                   <span className={cn("text-[11px] font-mono", activeCatTab === "income" ? "text-white/80" : "text-ink-mute")}>
                     {categories.filter(c => c.kind === "income").length}
                   </span>
@@ -255,7 +253,7 @@ export default function OwnerMasterData() {
                       : "text-ink-soft hover:bg-white/60"
                   )}
                 >
-                  <span>{t("owner.masterData.tabExpense")}</span>
+                  <span>{"Expense Categories"}</span>
                   <span className={cn("text-[11px] font-mono", activeCatTab === "expense" ? "text-white/80" : "text-ink-mute")}>
                     {categories.filter(c => c.kind === "expense").length}
                   </span>
@@ -268,7 +266,7 @@ export default function OwnerMasterData() {
                   type="text"
                   value={newCatName}
                   onChange={(e) => setNewCatName(e.target.value)}
-                  placeholder={t("owner.masterData.addCategoryPlaceholder")}
+                  placeholder={"New category name (e.g. Pool Equipment, Rental Income)…"}
                   onKeyDown={(e) => { if (e.key === "Enter") handleAddCategory(); }}
                   className="flex-1 h-11 px-3.5 rounded-xl border border-line bg-paper text-sm text-ink outline-none focus:border-ocean-500 transition placeholder:text-ink-faint"
                 />
@@ -279,7 +277,7 @@ export default function OwnerMasterData() {
                   className="h-11 px-4 rounded-xl bg-ocean-600 hover:bg-ocean-700 disabled:opacity-50 text-white text-sm font-semibold flex items-center gap-1.5 transition shadow-xs cursor-pointer shrink-0"
                 >
                   <Icon name="plus" className="w-4 h-4" />
-                  <span>{addingCat ? t("common.actions.saving") : t("common.actions.add")}</span>
+                  <span>{addingCat ? "Saving…" : "Add"}</span>
                 </button>
               </div>
 
@@ -289,7 +287,7 @@ export default function OwnerMasterData() {
                   <div className="py-12 text-center text-ink-mute text-sm animate-pulse">Loading categories...</div>
                 ) : filteredCategories.length === 0 ? (
                   <div className="py-12 text-center text-ink-mute text-sm">
-                    {t("owner.masterData.noCategories")}
+                    {"No categories defined for this transaction type yet."}
                   </div>
                 ) : (
                   filteredCategories.map((c) => (
@@ -311,14 +309,14 @@ export default function OwnerMasterData() {
                             onClick={handleSaveEditCat}
                             disabled={savingEdit}
                             className="w-7 h-7 rounded-lg border border-line bg-white flex items-center justify-center hover:bg-paper-deep shrink-0 text-ok-600 cursor-pointer"
-                            title={t("common.actions.save")}
+                            title={"Save"}
                           >
                             <Icon name="check" className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => setEditCatId(null)}
                             className="w-7 h-7 rounded-lg border border-line bg-white flex items-center justify-center hover:bg-paper-deep shrink-0 text-ink-mute cursor-pointer"
-                            title={t("common.actions.cancel")}
+                            title={"Cancel"}
                           >
                             <Icon name="x" className="w-4 h-4" />
                           </button>
@@ -331,14 +329,14 @@ export default function OwnerMasterData() {
                           <button
                             onClick={() => { setEditCatId(c.id); setEditCatName(c.name); }}
                             className="w-7 h-7 rounded-lg text-ink-mute hover:text-ink hover:bg-white flex items-center justify-center transition cursor-pointer"
-                            title={t("common.actions.edit")}
+                            title={"Edit"}
                           >
                             <Icon name="edit" className="w-3.5 h-3.5" />
                           </button>
                           <button
                             onClick={() => handleDeleteCategory(c)}
                             className="w-7 h-7 rounded-lg text-danger-500 hover:bg-danger-50 flex items-center justify-center transition cursor-pointer"
-                            title={t("common.actions.delete")}
+                            title={"Delete"}
                           >
                             <Icon name="trash" className="w-3.5 h-3.5" />
                           </button>
@@ -371,7 +369,7 @@ export default function OwnerMasterData() {
               <div className="p-5 space-y-4">
                 <div>
                   <label className="block text-xs font-semibold text-ink-soft mb-1.5">
-                    {t("owner.masterData.fieldHeadName")}
+                    {"Head Name"}
                   </label>
                   <input
                     type="text"
@@ -384,7 +382,7 @@ export default function OwnerMasterData() {
 
                 <div>
                   <label className="block text-xs font-semibold text-ink-soft mb-1.5">
-                    {t("owner.masterData.fieldHeadTitle")}
+                    {"Official Title"}
                   </label>
                   <input
                     type="text"
@@ -397,7 +395,7 @@ export default function OwnerMasterData() {
 
                 <div>
                   <label className="block text-xs font-semibold text-ink-soft mb-1.5">
-                    {t("owner.masterData.headSigSection")}
+                    {"Digital Signature Image"}
                   </label>
                   <input
                     type="file"
@@ -426,7 +424,7 @@ export default function OwnerMasterData() {
                           className="px-3 h-8 rounded-lg border border-line bg-white hover:bg-paper-deep text-xs font-semibold text-ink transition cursor-pointer flex items-center gap-1.5"
                         >
                           <Icon name="edit" className="w-3.5 h-3.5 text-ink-mute" />
-                          <span>{uploading ? t("common.actions.saving") : t("owner.masterData.changeHeadSig")}</span>
+                          <span>{uploading ? "Saving…" : "Change Signature Image"}</span>
                         </button>
                         <button
                           type="button"
@@ -434,7 +432,7 @@ export default function OwnerMasterData() {
                           className="px-3 h-8 rounded-lg text-danger-500 hover:bg-danger-50 text-xs font-semibold transition cursor-pointer flex items-center gap-1.5"
                         >
                           <Icon name="trash" className="w-3.5 h-3.5" />
-                          <span>{t("common.actions.delete")}</span>
+                          <span>{"Delete"}</span>
                         </button>
                       </div>
                     </div>
@@ -447,9 +445,9 @@ export default function OwnerMasterData() {
                         <Icon name="upload" className="w-5 h-5" />
                       </div>
                       <p className="text-sm font-semibold text-ink">
-                        {uploading ? t("common.actions.saving") : t("owner.masterData.uploadHeadSig")}
+                        {uploading ? "Saving…" : "Upload Signature Image"}
                       </p>
-                      <p className="text-xs text-ink-mute mt-1">{t("owner.masterData.headSigRecommend")}</p>
+                      <p className="text-xs text-ink-mute mt-1">{"Transparent PNG or SVG format is highly recommended"}</p>
                     </div>
                   )}
                 </div>
@@ -462,7 +460,7 @@ export default function OwnerMasterData() {
                     className="w-full h-11 rounded-xl bg-ocean-600 hover:bg-ocean-700 disabled:opacity-50 text-white text-sm font-semibold flex items-center justify-center gap-2 transition shadow-xs cursor-pointer"
                   >
                     <Icon name="check" className="w-4 h-4 text-white" />
-                    <span>{savingOwner ? t("owner.masterData.savingHeadBtn") : t("owner.masterData.saveHeadBtn")}</span>
+                    <span>{savingOwner ? "Saving…" : "Save Head of NEXT Profile"}</span>
                   </button>
                 </div>
               </div>

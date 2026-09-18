@@ -6,10 +6,8 @@ import Btn from "@/components/ui/Btn";
 import TextType from "@/components/TextType";
 import DotField from "@/components/DotField";
 import { waLink } from "@/lib/utils";
-import { useLocale } from "@/components/providers/LocaleProvider";
 
 export default function Hero({ waPhone, waMessage }: { waPhone: string | null; waMessage: string | null }) {
-  const { t } = useLocale();
   const contentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -46,7 +44,7 @@ export default function Hero({ waPhone, waMessage }: { waPhone: string | null; w
           className="mt-6 font-display font-extrabold leading-tight text-ink text-4xl sm:text-5xl lg:text-6xl min-h-[2.4em] sm:min-h-[2.2em] flex items-center justify-center"
         >
           <TextType
-            text={t("landing.hero.greeting")}
+            text={"Welcome to Next Swimming School"}
             as="span"
             className="text-ocean-600"
             typingSpeed={65}
@@ -60,15 +58,15 @@ export default function Hero({ waPhone, waMessage }: { waPhone: string | null; w
         </h1>
 
         <p data-hero-reveal className="mt-5 text-base sm:text-lg text-ink-mute">
-          {t("landing.hero.subtitle")}
+          {"Building confident, capable swimmers one stroke at a time."}
         </p>
 
         <div data-hero-reveal className="mt-8 flex items-center justify-center gap-3">
           <Btn variant="primary" size="lg" href={waLink(waMessage ?? "", waPhone)} target="_blank" rel="noreferrer">
-            {t("landing.hero.cta")}
+            {"Contact Us"}
           </Btn>
           <Btn variant="outline" size="lg" href="#programs">
-            {t("landing.nav.groups.programs.label")}
+            {"Programs"}
           </Btn>
         </div>
       </div>

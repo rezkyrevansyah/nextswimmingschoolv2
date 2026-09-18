@@ -2,7 +2,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import type { AccountProfile } from "../OwnerAccountDetail";
 import {
   downloadBulkQRZip,
@@ -12,7 +11,6 @@ import {
 import { EMPTY_FORM, type RoleFilter } from "./_types";
 
 export function useAccountsMasterData(branches: { id: string; name: string }[]) {
-  const { t } = useLocale();
   const toast = useToast();
   const supabase = createClient();
 
@@ -76,13 +74,13 @@ export function useAccountsMasterData(branches: { id: string; name: string }[]) 
 
   const roleLabel = (role: string) =>
     ({
-      owner: t("owner.accounts.roleOwner"),
-      admin: t("owner.accounts.roleAdmin"),
-      manager_center: t("owner.accounts.roleManagerCenter"),
-      coach: t("owner.accounts.roleCoach"),
-      member: t("owner.accounts.roleMember"),
-      school: t("owner.accounts.roleSchool"),
-      staff: t("owner.accounts.roleStaff"),
+      owner: "Owner",
+      admin: "Branch Admin",
+      manager_center: "Manager Center",
+      coach: "Coach",
+      member: "Student",
+      school: "School Partner",
+      staff: "Branch Staff",
     })[role] ?? role;
   const KNOWN_ROLES = ["owner", "admin", "manager_center", "coach", "member", "school", "staff"];
   const isKnownRole = (role: string) => KNOWN_ROLES.includes(role);
@@ -153,7 +151,7 @@ export function useAccountsMasterData(branches: { id: string; name: string }[]) 
   // ── Batch Downloads ─────────────────────────────────────────────────────────
   const handleDownloadSelectedZip = async () => {
     const selectedAccounts = accounts.filter((a) => selectedQRIds.has(a.id)).map(toQRCardAccount);
-    if (selectedAccounts.length === 0) return toast.error(t("owner.accounts.selectMinOneDownload"));
+    if (selectedAccounts.length === 0) return toast.error("Select at least 1 account to download.");
 
     setGeneratingQR(true);
     setQrProgress({ current: 0, total: selectedAccounts.length });
@@ -163,12 +161,12 @@ export function useAccountsMasterData(branches: { id: string; name: string }[]) 
       await downloadBulkQRZip(selectedAccounts, zipName, (curr, tot) => {
         setQrProgress({ current: curr, total: tot });
       });
-      toast.success(t("owner.accounts.downloadZipSuccess"), t("owner.accounts.downloadZipSuccessSub", { count: selectedAccounts.length }));
+      toast.success("ZIP downloaded successfully!", `${selectedAccounts.length} QR code files saved.`);
       setQrSelectMode(false);
       setSelectedQRIds(new Set());
     } catch (err) {
       console.error(err);
-      toast.error(t("owner.accounts.zipCreateFailed"));
+      toast.error("Failed to create ZIP file");
     }
 
     setGeneratingQR(false);
@@ -177,13 +175,13 @@ export function useAccountsMasterData(branches: { id: string; name: string }[]) 
 
   const handlePrintSelectedSheet = async () => {
     const selectedAccounts = accounts.filter((a) => selectedQRIds.has(a.id)).map(toQRCardAccount);
-    if (selectedAccounts.length === 0) return toast.error(t("owner.accounts.selectMinOnePrint"));
+    if (selectedAccounts.length === 0) return toast.error("Select at least 1 account to print.");
 
     try {
       await printQRCardSheet(selectedAccounts);
     } catch (err) {
       console.error(err);
-      toast.error(t("owner.accounts.printWindowOpenFailed"));
+      toast.error("Failed to open print window");
     }
   };
 
@@ -194,7 +192,7 @@ export function useAccountsMasterData(branches: { id: string; name: string }[]) 
     if (quickBranch !== "all") target = target.filter((a) => a.branch_id === quickBranch);
 
     if (target.length === 0) {
-      return toast.error(t("owner.accounts.noAccountsMatchFilter"));
+      return toast.error("No accounts match the selected filters.");
     }
 
     const cardAccounts = target.map(toQRCardAccount);
@@ -218,10 +216,10 @@ export function useAccountsMasterData(branches: { id: string; name: string }[]) 
       await downloadBulkQRZip(cardAccounts, zipName, (curr, tot) => {
         setQrProgress({ current: curr, total: tot });
       });
-      toast.success(t("owner.accounts.downloadZipSuccess"), t("owner.accounts.downloadZipSuccessSub", { count: cardAccounts.length }));
+      toast.success("ZIP downloaded successfully!", `${cardAccounts.length} QR code files saved.`);
     } catch (err) {
       console.error(err);
-      toast.error(t("owner.accounts.zipCreateFailed"));
+      toast.error("Failed to create ZIP file");
     }
 
     setGeneratingQR(false);
@@ -240,7 +238,7 @@ export function useAccountsMasterData(branches: { id: string; name: string }[]) 
 
   const saveNewAccount = async () => {
     if (!form.full_name || !form.email || !form.password || !form.branch_id) {
-      return toast.error(t("owner.accounts.allFieldsRequired"));
+      return toast.error("All required fields must be filled in");
     }
     setSaving(true);
     const effectiveStaffPassword = sameStaffPassword ? form.password : staffPassword;
@@ -278,12 +276,12 @@ export function useAccountsMasterData(branches: { id: string; name: string }[]) 
     const json = (await res.json()) as { error?: string; code?: string; user_id?: string; staff_warning?: string };
     if (!res.ok) {
       const isEmailTaken = json.code === "EMAIL_TAKEN";
-      toast.error(isEmailTaken ? t("owner.accounts.emailTaken") : t("owner.accounts.createFailed"), json.error);
+      toast.error(isEmailTaken ? "Email already registered" : "Failed to create account", json.error);
       setSaving(false);
       return;
     }
     if (json.staff_warning) {
-      toast.error(t("owner.accounts.attentionTitle"), json.staff_warning);
+      toast.error("Attention", json.staff_warning);
     }
     if (form.role === "school" && json.user_id) {
       await supabase.from("schools").insert({
@@ -294,7 +292,7 @@ export function useAccountsMasterData(branches: { id: string; name: string }[]) 
       });
     }
     setSaving(false);
-    toast.success(t("owner.accounts.created"), t("owner.accounts.createdSub"));
+    toast.success("Account created", "The account is active immediately");
     setShowAdd(false);
     load();
   };
@@ -303,7 +301,7 @@ export function useAccountsMasterData(branches: { id: string; name: string }[]) 
     filtered.length > 0 && filtered.every((a) => selectedQRIds.has(a.id));
 
   return {
-    t, branches,
+    branches,
     accounts, loading, roleFilter, setRoleFilter, branchFilter, setBranchFilter, search, setSearch,
     showArchived, setShowArchived, schools,
     selected, setSelected, showAdd, setShowAdd, form, setForm, saving,

@@ -4,7 +4,7 @@ import { createClient } from "@/utils/supabase/client";
 import { useUpload } from "@/hooks/useUpload";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
-import { useLocale } from "@/components/providers/LocaleProvider";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 import type { Database, Json } from "@/types/database";
 import { EMPTY_CLASS_FORM, type ClassRow, type CoachProfile, type ScheduleSlot } from "./_types";
 
@@ -13,17 +13,16 @@ export function useClassesListData(branches: { id: string; name: string }[]) {
   const { upload } = useUpload();
   const toast = useToast();
   const confirm = useConfirm();
-  const { t, tNode, locale } = useLocale();
-  const localeTag = locale === "id" ? "id-ID" : "en-US";
+  const localeTag = "en-US";
 
   const dayLabels: Record<string, string> = {
-    Senin: t("admin.classes.dayMon"),
-    Selasa: t("admin.classes.dayTue"),
-    Rabu: t("admin.classes.dayWed"),
-    Kamis: t("admin.classes.dayThu"),
-    Jumat: t("admin.classes.dayFri"),
-    Sabtu: t("admin.classes.daySat"),
-    Minggu: t("admin.classes.daySun"),
+    Senin: "Monday",
+    Selasa: "Tuesday",
+    Rabu: "Wednesday",
+    Kamis: "Thursday",
+    Jumat: "Friday",
+    Sabtu: "Saturday",
+    Minggu: "Sunday",
   };
 
   const [classes, setClasses] = useState<ClassRow[]>([]);
@@ -70,9 +69,9 @@ export function useClassesListData(branches: { id: string; name: string }[]) {
 
     const { data, error } = await q;
     if (data) setClasses(data as unknown as ClassRow[]);
-    if (error) toast.error(t("owner.classes.loading"), error.message);
+    if (error) toast.error("Loading classes data…", error.message);
     setLoading(false);
-  }, [supabase, statusFilter, branchFilter, toast, t]);
+  }, [supabase, statusFilter, branchFilter, toast]);
 
   useEffect(() => {
     load();
@@ -198,14 +197,14 @@ export function useClassesListData(branches: { id: string; name: string }[]) {
   };
 
   const saveClass = async () => {
-    if (!form.branch_id) return toast.error(t("owner.classes.fieldBranchPlaceholder"));
-    if (!form.name.trim()) return toast.error(t("owner.classes.classNameRequired"));
-    if (!isPrivate && form.schedule_days.length === 0) return toast.error(t("owner.classes.scheduleDaysRequired"));
+    if (!form.branch_id) return toast.error("Select Center…");
+    if (!form.name.trim()) return toast.error("Class name is required");
+    if (!isPrivate && form.schedule_days.length === 0) return toast.error("Session days are required for regular classes");
     if (isPrivate && form.location_type === "external" && !form.external_location_name.trim()) {
-      return toast.error(t("owner.classes.externalLocationNameRequired"));
+      return toast.error("The external location name (e.g. apartment/pool name) is required for external private classes.");
     }
     if (!isPrivate && (!Number(form.capacity) || Number(form.capacity) <= 0)) {
-      return toast.error(t("owner.classes.capacityRequired"));
+      return toast.error("Capacity must be greater than 0");
     }
 
     setSaving(true);
@@ -226,7 +225,7 @@ export function useClassesListData(branches: { id: string; name: string }[]) {
         try {
           nextPhotoUrl = await upload.classPhoto(photoFile, editTarget.id);
         } catch (err) {
-          toast.error(t("owner.classes.saveFailed"), (err as Error).message);
+          toast.error("Failed to save class", (err as Error).message);
         }
       } else if (!photoPreview && editTarget.photo_url) {
         nextPhotoUrl = null;
@@ -255,8 +254,8 @@ export function useClassesListData(branches: { id: string; name: string }[]) {
 
       const { error } = await supabase.from("classes").update(updatePayload).eq("id", editTarget.id);
       setSaving(false);
-      if (error) return toast.error(t("owner.classes.saveFailed"), error.message);
-      toast.success(t("owner.classes.updated"));
+      if (error) return toast.error("Failed to save class", error.message);
+      toast.success("Class updated successfully");
     } else {
       const insertPayload: Database["public"]["Tables"]["classes"]["Insert"] = {
         branch_id: form.branch_id,
@@ -283,14 +282,14 @@ export function useClassesListData(branches: { id: string; name: string }[]) {
       const { data: newClass, error } = await supabase.from("classes").insert(insertPayload).select("id").single();
       if (error) {
         setSaving(false);
-        return toast.error(t("owner.classes.saveFailed"), error.message);
+        return toast.error("Failed to save class", error.message);
       }
 
       if (photoFile && newClass?.id) {
         try {
           await upload.classPhoto(photoFile, newClass.id);
         } catch (photoErr) {
-          toast.error(t("owner.classes.uploadPhotoFailed"), (photoErr as Error).message);
+          toast.error("Failed to upload class photo", (photoErr as Error).message);
         }
       }
 
@@ -309,7 +308,7 @@ export function useClassesListData(branches: { id: string; name: string }[]) {
       }
 
       setSaving(false);
-      toast.success(t("owner.classes.created"));
+      toast.success("Class created successfully");
     }
 
     setOpenForm(false);
@@ -318,43 +317,43 @@ export function useClassesListData(branches: { id: string; name: string }[]) {
 
   const archiveClass = async (c: ClassRow) => {
     const yes = await confirm({
-      title: t("owner.classes.archiveConfirmTitle"),
-      body: tNode("owner.classes.archiveConfirmBody", { name: c.name }),
+      title: "Archive Class?",
+      body: (<>{"Class \""}<NoTranslate>{c.name}</NoTranslate>{"\" will be archived and hidden from schedules."}</>),
     });
     if (!yes) return;
     const { error } = await supabase.from("classes").update({ status: "archived" }).eq("id", c.id);
-    if (error) return toast.error(t("owner.classes.saveFailed"), error.message);
-    toast.success(t("owner.classes.archived"));
+    if (error) return toast.error("Failed to save class", error.message);
+    toast.success("Class archived successfully");
     load();
   };
 
   const restoreClass = async (c: ClassRow) => {
     const yes = await confirm({
-      title: t("owner.classes.restoreConfirmTitle"),
-      body: tNode("owner.classes.restoreConfirmBody", { name: c.name }),
+      title: "Restore Class?",
+      body: (<>{"Class \""}<NoTranslate>{c.name}</NoTranslate>{"\" will be reactivated."}</>),
     });
     if (!yes) return;
     const { error } = await supabase.from("classes").update({ status: "active" }).eq("id", c.id);
-    if (error) return toast.error(t("owner.classes.saveFailed"), error.message);
-    toast.success(t("owner.classes.restored"));
+    if (error) return toast.error("Failed to save class", error.message);
+    toast.success("Class restored successfully");
     load();
   };
 
   const deleteClass = async (c: ClassRow) => {
     const yes = await confirm({
-      title: t("owner.classes.deleteConfirmTitle"),
-      body: tNode("owner.classes.deleteConfirmBody", { name: c.name }),
+      title: "Delete Class?",
+      body: (<>{"Are you sure you want to permanently delete class \""}<NoTranslate>{c.name}</NoTranslate>{"\"? This action cannot be undone."}</>),
       danger: true,
     });
     if (!yes) return;
     const { error } = await supabase.from("classes").delete().eq("id", c.id);
-    if (error) return toast.error(t("owner.classes.saveFailed"), error.message);
-    toast.success(t("owner.classes.deleted"));
+    if (error) return toast.error("Failed to save class", error.message);
+    toast.success("Class deleted successfully");
     load();
   };
 
   return {
-    t, tNode, localeTag, branches, dayLabels,
+    localeTag, branches, dayLabels,
     classes, setClasses, allCoaches, loading,
     statusFilter, setStatusFilter, branchFilter, setBranchFilter, coachFilter, setCoachFilter, search, setSearch,
     openForm, setOpenForm, editTarget, form, setForm, saving, fileInputRef, photoFile, photoPreview,

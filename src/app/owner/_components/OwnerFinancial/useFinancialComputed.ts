@@ -1,6 +1,5 @@
 "use client";
 import { useState, useEffect, useMemo } from "react";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import { parsePeriodToMonth } from "../../_utils";
 import type { UnifiedExpenseItem, IncomeRow } from "./_types";
 import type { useFinancialData } from "./useFinancialData";
@@ -8,7 +7,6 @@ import type { useFinancialData } from "./useFinancialData";
 type Data = ReturnType<typeof useFinancialData>;
 
 export function useFinancialComputed(data: Data) {
-  const { t } = useLocale();
   const {
     bills, manualTxns, payslips, detailedInvoices, allStaffSalaries, staffReimbursements, inFinancialRange,
     incomeStatus, incomeBranch, incomeType, incomeMethod, incomeSearch, incomeSortBy, incomeSortDir, incomePage, setIncomePage, PAGE_SIZE,
@@ -62,7 +60,7 @@ export function useFinancialComputed(data: Data) {
         id: p.id,
         sourceType: isStaff ? "staff_payslip" : "coach_payslip",
         categoryKey: isStaff ? "staff_salary" : "coach_salary",
-        categoryLabel: isStaff ? t("owner.financial.catStaffSalary") : t("owner.financial.catCoachSalary"),
+        categoryLabel: isStaff ? "Staff Salary" : "Coach Honor",
         branchId: p.branch_id,
         branchName: p.branch?.name ?? "—",
         receiverId: p.coach_id,
@@ -106,7 +104,7 @@ export function useFinancialComputed(data: Data) {
         id: inv.id,
         sourceType: "coach_invoice",
         categoryKey: isStaff ? "staff_salary" : "coach_salary",
-        categoryLabel: isStaff ? t("owner.financial.catStaffSalary") : t("owner.financial.catCoachSalary"),
+        categoryLabel: isStaff ? "Staff Salary" : "Coach Honor",
         branchId: inv.branch_id ?? "",
         branchName: inv.branch?.name ?? "—",
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -145,7 +143,7 @@ export function useFinancialComputed(data: Data) {
         id: sal.id,
         sourceType: "staff_salary",
         categoryKey: "staff_salary",
-        categoryLabel: t("owner.financial.catStaffSalary"),
+        categoryLabel: "Staff Salary",
         branchId: sal.branch_id,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         branchName: (sal as any).branch?.name ?? (data.branches.find(b => b.id === sal.branch_id)?.name ?? "—"),
@@ -182,7 +180,7 @@ export function useFinancialComputed(data: Data) {
         id: r.id,
         sourceType: "staff_reimburse",
         categoryKey: "reimburse",
-        categoryLabel: t("owner.financial.catReimburse"),
+        categoryLabel: "Reimburse",
         branchId: r.branch_id,
         branchName: "—",
         receiverId: r.profile_id,
@@ -209,7 +207,7 @@ export function useFinancialComputed(data: Data) {
         id: m.id,
         sourceType: "manual",
         categoryKey: m.is_reimburse ? "reimburse" : "manual",
-        categoryLabel: m.category ?? (m.is_reimburse ? t("owner.financial.catReimburse") : t("owner.financial.catManualExpense")),
+        categoryLabel: m.category ?? (m.is_reimburse ? "Reimburse" : "Operations"),
         branchId: m.branch_id,
         branchName: m.branch?.name ?? "—",
         receiverId: null,
@@ -231,7 +229,7 @@ export function useFinancialComputed(data: Data) {
     });
 
     return list.sort((a, b) => (a.date < b.date ? 1 : -1));
-  }, [payslips, detailedInvoices, allStaffSalaries, staffReimbursements, manualExpense, t, data.branches]);
+  }, [payslips, detailedInvoices, allStaffSalaries, staffReimbursements, manualExpense, data.branches]);
 
   // All-time paid expenses — feeds the trend charts below. Headline totals use
   // rangedPaidExpenses instead.

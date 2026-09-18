@@ -1,16 +1,15 @@
 "use client";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import Btn from "@/components/ui/Btn";
 import { Card } from "@/components/ui/Card";
 import Status from "@/components/ui/Status";
 import Avatar from "@/components/ui/Avatar";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 import { waLink } from "@/lib/utils";
 import type { useCoachList } from "./useCoachList";
 
 type CoachListHook = ReturnType<typeof useCoachList>;
 
 export default function CoachTable({ hook, onSelect }: { hook: CoachListHook; onSelect: (c: ReturnType<typeof useCoachList>["pagedCoaches"][number]) => void }) {
-  const { t } = useLocale();
   const {
     loading, isSuspended, isArchived, coachStatus, visibleCoaches, showArchived,
     pagedCoaches, totalPages, safePage, setPage,
@@ -19,17 +18,17 @@ export default function CoachTable({ hook, onSelect }: { hook: CoachListHook; on
   return (
     <Card padded={false}>
       {loading ? (
-        <div className="p-10 text-center text-ink-mute">{t("admin.coaches.loadingData")}</div>
+        <div className="p-10 text-center text-ink-mute">{"Loading data…"}</div>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-[11px] uppercase tracking-widest text-ink-faint font-bold border-b border-line">
-                <th className="text-left py-3 px-5 font-bold">{t("admin.coaches.colCoach")}</th>
-                <th className="text-left py-3 font-bold hidden sm:table-cell">{t("admin.coaches.colEmail")}</th>
-                <th className="text-left py-3 font-bold">{t("admin.coaches.colStatus")}</th>
-                <th className="text-left py-3 font-bold hidden md:table-cell">{t("admin.coaches.colPhone")}</th>
-                <th className="text-left py-3 font-bold hidden md:table-cell">{t("admin.coaches.colClasses")}</th>
+                <th className="text-left py-3 px-5 font-bold">{"Coach"}</th>
+                <th className="text-left py-3 font-bold hidden sm:table-cell">{"Email"}</th>
+                <th className="text-left py-3 font-bold">{"Status"}</th>
+                <th className="text-left py-3 font-bold hidden md:table-cell">{"Phone"}</th>
+                <th className="text-left py-3 font-bold hidden md:table-cell">{"Classes"}</th>
                 <th className="py-3 px-5" />
               </tr>
             </thead>
@@ -44,32 +43,32 @@ export default function CoachTable({ hook, onSelect }: { hook: CoachListHook; on
                       <div className="flex items-center gap-3">
                         <Avatar name={c.full_name} src={c.avatar_url ?? undefined} size={36} />
                         <div className="min-w-0">
-                          <div className="font-semibold text-ink truncate">{c.full_name}</div>
-                          {c.nick_name && <div className="text-xs text-ink-faint truncate">{c.nick_name}</div>}
+                          <div className="font-semibold text-ink truncate"><NoTranslate>{c.full_name}</NoTranslate></div>
+                          {c.nick_name && <div className="text-xs text-ink-faint truncate"><NoTranslate>{c.nick_name}</NoTranslate></div>}
                         </div>
                       </div>
                     </td>
                     <td className="text-xs text-ink-soft hidden sm:table-cell">
-                      {c.email ?? <span className="text-ink-faint">—</span>}
+                      {c.email ? <NoTranslate>{c.email}</NoTranslate> : <span className="text-ink-faint">—</span>}
                     </td>
                     <td>
                       <Status kind={coachStatus(c) as "active" | "suspended" | "archived"}>
-                        {archived ? t("admin.coaches.statusArchived") : suspended ? t("admin.coaches.statusSuspend") : t("admin.coaches.statusActive")}
+                        {archived ? "Archived" : suspended ? "Suspend" : "Active"}
                       </Status>
                     </td>
                     <td className="text-sm text-ink-soft hidden md:table-cell">
-                      {c.phone ?? <span className="text-ink-faint">—</span>}
+                      {c.phone ? <NoTranslate>{c.phone}</NoTranslate> : <span className="text-ink-faint">—</span>}
                     </td>
                     <td className="hidden md:table-cell">
                       {assignedClasses.length > 0
-                        ? <span className="text-xs font-semibold bg-ocean-50 text-ocean-700 px-2 py-0.5 rounded-full">{t("admin.coaches.classesCountBadge", { count: assignedClasses.length })}</span>
+                        ? <span className="text-xs font-semibold bg-ocean-50 text-ocean-700 px-2 py-0.5 rounded-full">{`${assignedClasses.length} classes`}</span>
                         : <span className="text-xs text-ink-faint">—</span>}
                     </td>
                     <td className="px-5" onClick={e => e.stopPropagation()}>
                       <div className="flex items-center gap-1 justify-end">
-                        <Btn variant="ghost" size="sm" icon="eye" onClick={() => onSelect(c)}>{t("admin.coaches.detailBtn")}</Btn>
+                        <Btn variant="ghost" size="sm" icon="eye" onClick={() => onSelect(c)}>{"Detail"}</Btn>
                         {!archived && c.phone && (
-                          <a href={waLink(t("admin.coaches.welcomeWaMessage2", { name: c.full_name }), c.phone)} target="_blank" rel="noreferrer">
+                          <a href={waLink(`Hi ${c.full_name}, I'm from Next Swimming School admin.`, c.phone)} target="_blank" rel="noreferrer">
                             <Btn variant="ghost" size="sm" icon="whatsapp" className="text-ok-600">WA</Btn>
                           </a>
                         )}
@@ -80,7 +79,7 @@ export default function CoachTable({ hook, onSelect }: { hook: CoachListHook; on
               })}
               {visibleCoaches.length === 0 && (
                 <tr><td colSpan={6} className="py-10 text-center text-ink-mute">
-                  {showArchived ? t("admin.coaches.noArchivedCoaches") : t("admin.coaches.noCoachesYet")}
+                  {showArchived ? "No archived coaches." : "No coaches at this center yet."}
                 </td></tr>
               )}
             </tbody>
@@ -91,7 +90,7 @@ export default function CoachTable({ hook, onSelect }: { hook: CoachListHook; on
       {!loading && totalPages > 1 && (
         <div className="px-5 py-3.5 border-t border-line flex items-center justify-between flex-wrap gap-3">
           <span className="text-xs text-ink-mute tabular-nums">
-            {t("admin.coaches.coachCountPageLabel", { count: visibleCoaches.length, page: safePage + 1, total: totalPages })}
+            {`${visibleCoaches.length} coach · page ${safePage + 1} of ${totalPages}`}
           </span>
           <div className="flex items-center gap-1">
             <button type="button" disabled={safePage === 0} onClick={() => setPage(0)}

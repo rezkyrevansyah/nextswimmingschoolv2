@@ -1,7 +1,6 @@
 "use client";
 import { useState, useEffect, useMemo } from "react";
 import { useToast } from "@/components/providers/ToastProvider";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import { createClient } from "@/utils/supabase/client";
 import { useUpload } from "@/hooks/useUpload";
 import { countTextStats } from "@/lib/utils";
@@ -11,7 +10,6 @@ import type { BestTimeRow, RaporEntry } from "../../_types";
 import type { Criterion } from "./_types";
 
 export function useCoachRaporData({ coachId, branchId }: { coachId: string; branchId: string; coachName: string; branchName: string }) {
-  const { t } = useLocale();
   const supabase = createClient();
   const toast = useToast();
   const [period, setPeriod] = useState<{ id: string; label: string; date_to: string } | null>(null);
@@ -222,9 +220,9 @@ export function useCoachRaporData({ coachId, branchId }: { coachId: string; bran
     if (!open || !period) return;
     // Check period still open
     const today = new Date().toISOString().split("T")[0];
-    if (period.date_to < today) return toast.error(t("coach.rapor.periodClosedTitle"), t("coach.rapor.periodClosedBody"));
+    if (period.date_to < today) return toast.error("Report card period has ended", "Contact admin to extend the period.");
     const { data: periodCheck } = await supabase.from("rapor_periods").select("is_open").eq("id", period.id).single();
-    if (!periodCheck?.is_open) return toast.error(t("coach.rapor.periodClosedTitle2"), t("coach.rapor.periodClosedBody2"));
+    if (!periodCheck?.is_open) return toast.error("Report card period is closed", "Contact admin to reopen the period.");
     setSaving(true);
     const isNew = !open.locked;
     const { error } = await supabase.from("rapor_entries")
@@ -240,7 +238,7 @@ export function useCoachRaporData({ coachId, branchId }: { coachId: string; bran
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any)
       .eq("id", open.id);
-    if (error) { setSaving(false); return toast.error(t("coach.rapor.saveFailedTitle"), error.message); }
+    if (error) { setSaving(false); return toast.error("Failed to save report card", error.message); }
     // Delete removed best time rows
     for (const id of removedBtIds) {
       await supabase.from("member_best_times").delete().eq("id", id);
@@ -274,13 +272,13 @@ export function useCoachRaporData({ coachId, branchId }: { coachId: string; bran
     if (isNew) {
       await supabase.from("notifications").insert({
         user_id: open.member_id,
-        title: t("coach.rapor.raporAvailableNotifTitle"),
-        body: t("coach.rapor.raporAvailableNotifBody", { period: period.label }),
+        title: "Report card available",
+        body: `Your report card for period "${period.label}" has been filled in by the coach. Open the Report Card menu to see the results.`,
         icon: "book",
         kind: "info",
       });
     }
-    toast.success(t("coach.rapor.raporSavedToast"));
+    toast.success("Report card saved");
     setOpen(null);
     setRemovedBtIds([]);
     setEntries(prev => prev.map(e => e.id === open.id ? {
@@ -317,7 +315,7 @@ export function useCoachRaporData({ coachId, branchId }: { coachId: string; bran
   const paginated    = entries.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
 
   return {
-    t, coachId, branchId,
+    coachId, branchId,
     period, entries, criteria, loading,
     open, setOpen, viewing, setViewing, viewBestTimes, setViewBestTimes,
     scores, setScores, notes, setNotes, personality, setPersonality,

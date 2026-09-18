@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
-import { useLocale } from "@/components/providers/LocaleProvider";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 import { createClient } from "@/utils/supabase/client";
 
 import MemberShell from "./_components/MemberShell";
@@ -17,7 +17,6 @@ import ProfileGate from "./_components/ProfileGate";
 import type { TabId } from "./_types";
 
 export default function MemberPage() {
-  const { t, locale } = useLocale();
   const supabase = createClient();
   const [active, setActive] = useState<TabId>("home");
   const [memberId, setMemberId] = useState("");
@@ -44,21 +43,17 @@ export default function MemberPage() {
     if (!isSuspended || !suspendUntil) { setSuspendCountdown(""); return; }
     const tick = () => {
       const diff = new Date(suspendUntil).getTime() - Date.now();
-      if (diff <= 0) { setSuspendCountdown(t("member.suspend.reactivatingSoon")); return; }
+      if (diff <= 0) { setSuspendCountdown("Reactivating soon…"); return; }
       const days = Math.floor(diff / 86400000);
       const hrs  = Math.floor((diff % 86400000) / 3600000);
       const mins = Math.floor((diff % 3600000) / 60000);
       const secs = Math.floor((diff % 60000) / 1000);
-      const dUnit = locale === "en" ? "d" : "h";
-      const hUnit = locale === "en" ? "h" : "j";
-      const mUnit = "m";
-      const sUnit = locale === "en" ? "s" : "d";
-      setSuspendCountdown(`${days}${dUnit} ${hrs}${hUnit} ${mins}${mUnit} ${secs}${sUnit}`);
+      setSuspendCountdown(`${days}d ${hrs}h ${mins}m ${secs}s`);
     };
     tick();
     const ticker = setInterval(tick, 1000);
     return () => clearInterval(ticker);
-  }, [isSuspended, suspendUntil, locale, t]);
+  }, [isSuspended, suspendUntil]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const SuspendBanner = isSuspended ? (
@@ -68,13 +63,13 @@ export default function MemberPage() {
           <Icon name="warning" className="w-5 h-5" />
         </span>
         <div className="flex-1">
-          <div className="font-display font-bold text-danger-700 text-base">{t("member.suspend.title")}</div>
-          {suspendReason && <p className="text-sm text-danger-600 mt-1">{t("member.suspend.reason", { reason: suspendReason })}</p>}
+          <div className="font-display font-bold text-danger-700 text-base">{"Your account is currently suspended"}</div>
+          {suspendReason && <p className="text-sm text-danger-600 mt-1">{(<>{"Reason: "}<NoTranslate>{suspendReason}</NoTranslate></>)}</p>}
           <div className="mt-2 flex items-center gap-2">
-            <span className="text-xs text-danger-500 font-semibold">{t("member.suspend.reactivationIn")}</span>
+            <span className="text-xs text-danger-500 font-semibold">{"Reactivates in:"}</span>
             <span className="bg-danger-100 text-danger-700 font-mono text-xs font-bold px-2 py-0.5 rounded-lg">{suspendCountdown}</span>
           </div>
-          <p className="text-xs text-danger-500 mt-1">{t("member.suspend.notice")}</p>
+          <p className="text-xs text-danger-500 mt-1">{"All features are inaccessible during suspension. Contact the center admin if you have questions."}</p>
         </div>
       </div>
     </div>
@@ -96,7 +91,7 @@ export default function MemberPage() {
         .single()
         .then(async ({ data: m }) => {
           if (!m) {
-            setInitError(t("member.errors.accountNotFoundMsg"));
+            setInitError("Account data not found in the database. The data may have been reset. Please contact admin to recreate your account.");
             return;
           }
           if (m) {
@@ -157,11 +152,11 @@ export default function MemberPage() {
           <Icon name="warning" className="w-7 h-7" />
         </div>
         <div>
-          <h2 className="font-display font-bold text-xl text-ink">{t("member.errors.notFoundTitle")}</h2>
+          <h2 className="font-display font-bold text-xl text-ink">{"Account Not Found"}</h2>
           <p className="text-sm text-ink-mute mt-2 leading-relaxed">{initError}</p>
         </div>
         <Btn variant="primary" className="w-full" onClick={async () => { await supabase.auth.signOut(); window.location.href = "/login"; }}>
-          {t("member.errors.backToLogin")}
+          {"Back to Login"}
         </Btn>
       </div>
     </div>
@@ -169,7 +164,7 @@ export default function MemberPage() {
 
   return (
     <MemberShell active={active} setActive={setActive} name={memberName} branchName={branchName} userId={userId} avatarUrl={memberAvatarUrl} isSchoolAffiliate={memberType === "school_affiliate"}>
-      {lockChecked ? pages[active] : <div className="p-10 text-center text-ink-mute">{t("member.shell.loading")}</div>}
+      {lockChecked ? pages[active] : <div className="p-10 text-center text-ink-mute">{"Loading…"}</div>}
     </MemberShell>
   );
 }

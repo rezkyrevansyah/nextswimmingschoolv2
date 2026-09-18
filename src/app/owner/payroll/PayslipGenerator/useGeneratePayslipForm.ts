@@ -2,7 +2,6 @@
 import { useState, useMemo } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import {
   resolveTaxSetting,
   calculateTax,
@@ -33,7 +32,6 @@ export function useGeneratePayslipForm({
   loadPayslips: () => void;
   loadInvoices: () => void;
 }) {
-  const { t } = useLocale();
   const supabase = createClient();
   const toast = useToast();
 
@@ -241,7 +239,7 @@ export function useGeneratePayslipForm({
 
   // Attendance check for staff
   const checkStaffAttendance = async () => {
-    if (!manualStaffId) return toast.error(t("owner.payslip.selectStaffRequired"));
+    if (!manualStaffId) return toast.error("Please select a staff member first");
     setLoadingStaffAttendance(true);
     const now = new Date();
     const y = now.getFullYear();
@@ -259,7 +257,7 @@ export function useGeneratePayslipForm({
 
     setLoadingStaffAttendance(false);
     if (error) {
-      toast.error(t("owner.payslip.attendanceCheckFailed"), error.message);
+      toast.error("Failed to check staff attendance", error.message);
       return;
     }
     setStaffPresentDays(count ?? 0);
@@ -315,11 +313,11 @@ export function useGeneratePayslipForm({
 
   // ── SAVE PAYSLIP (Draft) ──────────────────────────────────────────────────────
   const handleSavePayslip = async () => {
-    if (!genPeriod.trim()) return toast.error(t("owner.payslip.periodRequired"));
+    if (!genPeriod.trim()) return toast.error("Period label is empty");
     setSavingSlip(true);
 
     const common = {
-      supabase, toast, t, userId, userName, branches,
+      supabase, toast, userId, userName, branches,
       genPeriod, genNotes, manualDescription,
       effectiveTaxForMode, genLoanCandidates, genLoanIncluded, genLoanAmounts,
       otherDeductionAmount, currentGross, includedLoanTotal,

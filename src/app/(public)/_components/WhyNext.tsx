@@ -2,7 +2,6 @@
 
 import BorderGlowCard from "@/components/BorderGlowCard";
 import Icon from "@/components/ui/Icon";
-import { useLocale } from "@/components/providers/LocaleProvider";
 
 interface WhyNextItem {
   id: string;
@@ -12,8 +11,6 @@ interface WhyNextItem {
 }
 
 export default function WhyNext({ items }: { items: WhyNextItem[] }) {
-  const { t } = useLocale();
-
   if (items.length === 0) return null;
 
   return (
@@ -21,12 +18,12 @@ export default function WhyNext({ items }: { items: WhyNextItem[] }) {
       <div className="mx-auto max-w-6xl px-6">
         <div className="text-center max-w-2xl mx-auto">
           <p className="text-xs font-semibold tracking-wide uppercase text-wave-600">
-            {t("landing.whyNext.label")}
+            {"Why Next"}
           </p>
           <h2 className="mt-2 font-display font-extrabold text-3xl sm:text-4xl text-ink">
-            {t("landing.whyNext.headline")}
+            {"Five reasons families trust us."}
           </h2>
-          <p className="mt-3 text-ink-mute">{t("landing.whyNext.subtitle")}</p>
+          <p className="mt-3 text-ink-mute">{"More than swimming lessons — a complete system built for parents, coaches, and progress you can see."}</p>
         </div>
 
         <div className="mt-12 grid sm:grid-cols-2 lg:grid-cols-3 gap-6">

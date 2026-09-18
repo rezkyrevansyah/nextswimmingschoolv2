@@ -2,7 +2,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import Btn from "@/components/ui/Btn";
 import Icon from "@/components/ui/Icon";
 import { Field, Select, Textarea } from "@/components/ui/FormFields";
@@ -61,9 +60,8 @@ function SelfieThumb({ selfieKey, onOpen }: { selfieKey: string | null; onOpen: 
 export default function OwnerStaffPresensi({ branches }: { branches: Branch[] }) {
   const supabase = createClient();
   const toast = useToast();
-  const { t } = useLocale();
-  const typeLabel = (ty: string) => (ty === "sakit" ? t("owner.staffPresensi.typeSick") : t("owner.staffPresensi.typeLeave"));
-  const statusLabel = (s: string) => ({ pending: t("owner.staffPresensi.statusPending"), approved: t("owner.staffPresensi.statusApproved"), rejected: t("owner.staffPresensi.statusRejected") }[s] ?? s);
+  const typeLabel = (ty: string) => (ty === "sakit" ? "Sick" : "Leave");
+  const statusLabel = (s: string) => ({ pending: "Pending", approved: "Approved", rejected: "Rejected" }[s] ?? s);
 
   const [tab, setTab] = useState<"leave" | "attendance">("leave");
   const [filterBranch, setFilterBranch] = useState("all");
@@ -158,38 +156,38 @@ export default function OwnerStaffPresensi({ branches }: { branches: Branch[] })
     const { error } = await supabase.from("staff_leaves")
       .update({ status: "approved", reviewed_at: new Date().toISOString(), reviewed_by: ownerId })
       .eq("id", leave.id);
-    if (error) return toast.error(t("owner.staffPresensi.updateStatusFailed"), error.message);
+    if (error) return toast.error("Failed to update status", error.message);
     await applyStaffLeaveToAttendances(leave);
     await supabase.from("notifications").insert({
       user_id: leave.staff_id,
-      title: t("owner.staffPresensi.leaveApprovedNotifTitle"),
-      body: t("owner.staffPresensi.leaveApprovedNotifBody", { from: fmtDate(leave.date_from), to: fmtDate(leave.date_to) }),
+      title: "Leave request approved",
+      body: `Your leave request (${fmtDate(leave.date_from)} – ${fmtDate(leave.date_to)}) has been approved.`,
       icon: "check",
       kind: "success",
     });
-    toast.success(t("owner.staffPresensi.leaveApprovedToast"));
+    toast.success("Leave request approved");
     loadLeaves();
     loadAttendances();
   };
 
   const confirmReject = async () => {
     if (!rejectTarget) return;
-    if (!rejectReason.trim()) return toast.error(t("owner.staffPresensi.reasonRequired"));
+    if (!rejectReason.trim()) return toast.error("A rejection reason is required");
     setRejecting(true);
     const ownerId = (await supabase.auth.getUser()).data.user?.id ?? null;
     const { error } = await supabase.from("staff_leaves")
       .update({ status: "rejected", reviewed_at: new Date().toISOString(), reviewed_by: ownerId, reject_reason: rejectReason.trim() })
       .eq("id", rejectTarget.id);
     setRejecting(false);
-    if (error) return toast.error(t("owner.staffPresensi.rejectLeaveFailed"), error.message);
+    if (error) return toast.error("Failed to reject leave request", error.message);
     await supabase.from("notifications").insert({
       user_id: rejectTarget.staff_id,
-      title: t("owner.staffPresensi.leaveRejectedNotifTitle"),
-      body: t("owner.staffPresensi.leaveRejectedNotifBody", { from: fmtDate(rejectTarget.date_from), to: fmtDate(rejectTarget.date_to), reason: rejectReason.trim() }),
+      title: "Leave request rejected",
+      body: `Your leave request (${fmtDate(rejectTarget.date_from)} – ${fmtDate(rejectTarget.date_to)}) was rejected. Reason: ${rejectReason.trim()}`,
       icon: "x",
       kind: "warn",
     });
-    toast.success(t("owner.staffPresensi.leaveRejectedToast"));
+    toast.success("Leave request rejected");
     setRejectTarget(null);
     loadLeaves();
   };
@@ -212,7 +210,7 @@ export default function OwnerStaffPresensi({ branches }: { branches: Branch[] })
       {/* Toolbar & Filter matching pen.dev vYywC */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-2">
-          {([["leave", t("owner.staffPresensi.tabLeave")], ["attendance", t("owner.staffPresensi.tabAttendance")]] as const).map(([id, l]) => (
+          {([["leave", "Leave Requests"], ["attendance", "Attendance"]] as const).map(([id, l]) => (
             <button
               key={id}
               onClick={() => setTab(id)}
@@ -232,7 +230,7 @@ export default function OwnerStaffPresensi({ branches }: { branches: Branch[] })
             onChange={e => setFilterBranch(e.target.value)}
             className="h-10 text-sm border border-line rounded-xl px-3 bg-paper text-ink-soft outline-none focus:border-ocean-500 transition-colors"
           >
-            <option value="all">{t("owner.staffPresensi.allBranchesOpt")}</option>
+            <option value="all">{"All Centers"}</option>
             {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
         </div>
@@ -242,17 +240,17 @@ export default function OwnerStaffPresensi({ branches }: { branches: Branch[] })
       <div className="bg-paper border border-line rounded-2xl overflow-hidden shadow-xs">
         {tab === "leave" ? (
           loadingLeaves ? (
-            <div className="p-12 text-center text-ink-mute text-sm">{t("owner.staffPresensi.loadingData")}</div>
+            <div className="p-12 text-center text-ink-mute text-sm">{"Loading data…"}</div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="h-9 bg-paper-deep border-b border-line text-left text-[10px] uppercase font-bold text-ink-faint tracking-wider">
                   <tr>
-                    <th className="py-2 px-5">{t("owner.staffPresensi.colName")}</th>
-                    <th className="py-2 px-5">{t("owner.staffPresensi.colType")}</th>
-                    <th className="py-2 px-5 hidden sm:table-cell">{t("owner.staffPresensi.colStart")}</th>
-                    <th className="py-2 px-5 hidden sm:table-cell">{t("owner.staffPresensi.colEnd")}</th>
-                    <th className="py-2 px-5">{t("owner.staffPresensi.colStatus")}</th>
+                    <th className="py-2 px-5">{"Name"}</th>
+                    <th className="py-2 px-5">{"Type"}</th>
+                    <th className="py-2 px-5 hidden sm:table-cell">{"Start"}</th>
+                    <th className="py-2 px-5 hidden sm:table-cell">{"End"}</th>
+                    <th className="py-2 px-5">{"Status"}</th>
                     <th className="py-2 px-5 text-right" />
                   </tr>
                 </thead>
@@ -276,10 +274,10 @@ export default function OwnerStaffPresensi({ branches }: { branches: Branch[] })
                         {l.status === "pending" ? (
                           <div className="flex items-center justify-end gap-1.5">
                             <Btn variant="ghost" size="sm" className="text-danger-600 hover:bg-danger-50" onClick={() => decide(l, "rejected")}>
-                              {t("common.actions.reject")}
+                              {"Reject"}
                             </Btn>
                             <Btn variant="soft" size="sm" icon="check" onClick={() => decide(l, "approved")}>
-                              {t("common.actions.approve")}
+                              {"Approve"}
                             </Btn>
                           </div>
                         ) : l.reject_reason ? (
@@ -291,7 +289,7 @@ export default function OwnerStaffPresensi({ branches }: { branches: Branch[] })
                   {leaves.length === 0 && (
                     <tr>
                       <td colSpan={6} className="py-12 text-center text-ink-mute text-sm">
-                        {t("owner.staffPresensi.emptyLeaveRequests")}
+                        {"No leave requests yet"}
                       </td>
                     </tr>
                   )}
@@ -301,24 +299,24 @@ export default function OwnerStaffPresensi({ branches }: { branches: Branch[] })
           )
         ) : (
           loadingAtt ? (
-            <div className="p-12 text-center text-ink-mute text-sm">{t("owner.staffPresensi.loadingData")}</div>
+            <div className="p-12 text-center text-ink-mute text-sm">{"Loading data…"}</div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="h-9 bg-paper-deep border-b border-line text-left text-[10px] uppercase font-bold text-ink-faint tracking-wider">
                   <tr>
-                    <th className="py-2 px-5">{t("owner.staffPresensi.colDate")}</th>
-                    <th className="py-2 px-5">{t("owner.staffPresensi.colName")}</th>
-                    <th className="py-2 px-5 hidden sm:table-cell">{t("owner.staffPresensi.colClockIn")}</th>
-                    <th className="py-2 px-5 hidden sm:table-cell">{t("owner.staffPresensi.colClockOut")}</th>
-                    <th className="py-2 px-5">{t("owner.staffPresensi.colStatus")}</th>
-                    <th className="py-2 px-5 text-center">{t("owner.staffPresensi.colSelfie")}</th>
+                    <th className="py-2 px-5">{"Date"}</th>
+                    <th className="py-2 px-5">{"Name"}</th>
+                    <th className="py-2 px-5 hidden sm:table-cell">{"Clock-in"}</th>
+                    <th className="py-2 px-5 hidden sm:table-cell">{"Clock-out"}</th>
+                    <th className="py-2 px-5">{"Status"}</th>
+                    <th className="py-2 px-5 text-center">{"Selfie"}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line">
                   {paginatedAtt.map(a => {
                     const kind = staffStatusKind(a.status);
-                    const label = kind === "present" ? t("owner.staffPresensi.typePresent") : kind === "excused" ? t("owner.staffPresensi.typeLeave") : kind === "sick" ? t("owner.staffPresensi.typeSick") : t("owner.staffPresensi.typeAbsent");
+                    const label = kind === "present" ? "Present" : kind === "excused" ? "Leave" : kind === "sick" ? "Sick" : "Absent";
                     return (
                       <tr key={a.id} className="hover:bg-paper-tint/60 transition-colors">
                         <td className="py-3 px-5 text-ink-soft text-xs font-mono">{fmtDate(a.attendance_date)}</td>
@@ -333,7 +331,7 @@ export default function OwnerStaffPresensi({ branches }: { branches: Branch[] })
                   {attendances.length === 0 && (
                     <tr>
                       <td colSpan={6} className="py-12 text-center text-ink-mute text-sm">
-                        {t("owner.staffPresensi.emptyAttendance")}
+                        {"No attendance records for this month"}
                       </td>
                     </tr>
                   )}
@@ -346,7 +344,7 @@ export default function OwnerStaffPresensi({ branches }: { branches: Branch[] })
         {!(tab === "leave" ? loadingLeaves : loadingAtt) && totalPages > 1 && (
           <div className="px-5 py-3 border-t border-line flex items-center justify-between flex-wrap gap-3 bg-paper-tint/30 text-xs text-ink-mute">
             <span className="tabular-nums">
-              {t("owner.staffPresensi.itemsPageLabel", { count: tab === "leave" ? leaves.length : attendances.length, page: safePage + 1, total: totalPages })}
+              {`${tab === "leave" ? leaves.length : attendances.length} item · page ${safePage + 1} of ${totalPages}`}
             </span>
             <div className="flex items-center gap-1">
               <button type="button" disabled={safePage === 0} onClick={() => setPage(0)} className="px-2.5 py-1 rounded-lg border border-line bg-paper text-ink-soft disabled:opacity-40 disabled:cursor-not-allowed hover:bg-paper-tint transition">«</button>
@@ -375,22 +373,22 @@ export default function OwnerStaffPresensi({ branches }: { branches: Branch[] })
         )}
       </div>
 
-      <Modal open={!!rejectTarget} onClose={() => setRejectTarget(null)} title={t("owner.staffPresensi.rejectLeaveModalTitle")} size="sm"
-        footer={<><Btn variant="ghost" onClick={() => setRejectTarget(null)}>{t("common.actions.cancel")}</Btn><Btn variant="danger" onClick={confirmReject} disabled={rejecting}>{rejecting ? t("owner.staffPresensi.rejectingBtn") : t("owner.staffPresensi.rejectLeaveBtn")}</Btn></>}>
+      <Modal open={!!rejectTarget} onClose={() => setRejectTarget(null)} title={"Reject Leave Request"} size="sm"
+        footer={<><Btn variant="ghost" onClick={() => setRejectTarget(null)}>{"Cancel"}</Btn><Btn variant="danger" onClick={confirmReject} disabled={rejecting}>{rejecting ? "Rejecting…" : "Reject Request"}</Btn></>}>
         <div className="space-y-4">
           <Card className="!p-3 bg-paper-tint">
             <div className="text-sm font-semibold text-ink">{rejectTarget?.staff?.full_name}</div>
             <div className="text-xs text-ink-mute mt-0.5">{fmtDate(rejectTarget?.date_from ?? "")} – {fmtDate(rejectTarget?.date_to ?? "")} · {typeLabel(rejectTarget?.type ?? "")}</div>
             {rejectTarget?.reason && <div className="text-xs text-ink-soft mt-1">{rejectTarget.reason}</div>}
           </Card>
-          <Field label={t("owner.staffPresensi.fieldRejectReason")} required>
-            <Textarea rows={2} value={rejectReason} onChange={e => setRejectReason(e.target.value)} placeholder={t("owner.staffPresensi.rejectReasonPlaceholder")} />
+          <Field label={"Rejection reason"} required>
+            <Textarea rows={2} value={rejectReason} onChange={e => setRejectReason(e.target.value)} placeholder={"Explain why this request is rejected"} />
           </Field>
         </div>
       </Modal>
 
       {lightboxKey && (
-        <PhotoLightbox src={lightboxUrl} name={t("owner.staffPresensi.colSelfie")} onClose={() => setLightboxKey(null)} />
+        <PhotoLightbox src={lightboxUrl} name={"Selfie"} onClose={() => setLightboxKey(null)} />
       )}
     </div>
   );

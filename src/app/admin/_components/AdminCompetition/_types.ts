@@ -57,24 +57,23 @@ export interface MemberOption {
   member_no: string | null;
 }
 
-// Computed inside the component (needs t()) — see getMemberTypeLabels/getAwardLabels below.
 export interface CoachOption {
   id: string;
   full_name: string;
 }
 
-export const getMemberTypeLabels = (t: (key: string) => string): Record<string, string> => ({
-  reguler: t("admin.competition.memberTypeReguler"),
-  private: t("admin.competition.memberTypePrivate"),
-  school_affiliate: t("admin.competition.memberTypeSchoolAffiliate"),
-});
+export const MEMBER_TYPE_LABELS: Record<string, string> = {
+  reguler: "Regular",
+  private: "Private",
+  school_affiliate: "School Affiliate",
+};
 
-export const getAwardLabels = (t: (key: string) => string): Record<string, { label: string; icon: string; style: string }> => ({
-  gold: { label: t("admin.competition.awardGold"), icon: "🥇", style: "bg-amber-100 text-amber-900 border-amber-300 font-bold" },
-  silver: { label: t("admin.competition.awardSilver"), icon: "🥈", style: "bg-slate-100 text-slate-800 border-slate-300 font-bold" },
-  bronze: { label: t("admin.competition.awardBronze"), icon: "🥉", style: "bg-amber-900/10 text-amber-800 border-amber-800/30 font-bold" },
-  fourth_place: { label: t("admin.competition.awardFourthPlace"), icon: "🏅", style: "bg-blue-50 text-blue-800 border-blue-200" },
-  finalist: { label: t("admin.competition.awardFinalist"), icon: "⭐", style: "bg-indigo-50 text-indigo-700 border-indigo-200" },
-  participant: { label: t("admin.competition.awardParticipant"), icon: "🏊", style: "bg-gray-100 text-gray-700 border-gray-200" },
-  custom: { label: t("admin.competition.awardCustom"), icon: "🏆", style: "bg-purple-50 text-purple-800 border-purple-200 font-bold" },
-});
+export const AWARD_LABELS: Record<string, { label: string; icon: string; style: string }> = {
+  gold: { label: "Gold Medal", icon: "🥇", style: "bg-amber-100 text-amber-900 border-amber-300 font-bold" },
+  silver: { label: "Silver Medal", icon: "🥈", style: "bg-slate-100 text-slate-800 border-slate-300 font-bold" },
+  bronze: { label: "Bronze Medal", icon: "🥉", style: "bg-amber-900/10 text-amber-800 border-amber-800/30 font-bold" },
+  fourth_place: { label: "4th Place", icon: "🏅", style: "bg-blue-50 text-blue-800 border-blue-200" },
+  finalist: { label: "Finalist", icon: "⭐", style: "bg-indigo-50 text-indigo-700 border-indigo-200" },
+  participant: { label: "Participant", icon: "🏊", style: "bg-gray-100 text-gray-700 border-gray-200" },
+  custom: { label: "Special", icon: "🏆", style: "bg-purple-50 text-purple-800 border-purple-200 font-bold" },
+};

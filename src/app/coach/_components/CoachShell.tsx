@@ -4,45 +4,44 @@ import type { User } from "@supabase/supabase-js";
 import Logo from "@/components/ui/Logo";
 import Icon from "@/components/ui/Icon";
 import Avatar from "@/components/ui/Avatar";
-import LanguageSwitcher from "@/components/ui/LanguageSwitcher";
+import { GoogleLanguageSwitcher } from "@/components/GoogleTranslate";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 import MobileNav from "@/components/layout/MobileNav";
 import type { NavItem as MobileNavItem } from "@/components/layout/Sidebar";
 import Bell from "@/components/layout/Bell";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import type { TabId } from "../_types";
 
-function buildNavItems(t: (key: string) => string): MobileNavItem[] {
+function buildNavItems(): MobileNavItem[] {
   return [
-    { id: "home",    label: t("coach.tabs.homeLabel"),    short: t("coach.tabs.homeShort"),    icon: "home"    },
-    { id: "absen",   label: t("coach.tabs.absenLabel"),   short: t("coach.tabs.absenShort"),   icon: "check"   },
-    { id: "kelas",   label: t("coach.tabs.kelasLabel"),   short: t("coach.tabs.kelasShort"),   icon: "swim"    },
-    { id: "invoice", label: t("coach.tabs.invoiceLabel"), short: t("coach.tabs.invoiceShort"), icon: "invoice" },
-    { id: "rapor",   label: t("coach.tabs.raporLabel"),   short: t("coach.tabs.raporShort"),   icon: "book"    },
-    { id: "payslip", label: t("coach.tabs.payslipLabel"), short: t("coach.tabs.payslipShort"), icon: "wallet"  },
-    { id: "profile", label: t("coach.tabs.profileLabel"), short: t("coach.tabs.profileShort"), icon: "user"    },
+    { id: "home",    label: "Home",    short: "Home",    icon: "home"    },
+    { id: "absen",   label: "Attendance",   short: "Attend.",   icon: "check"   },
+    { id: "kelas",   label: "Class",   short: "Class",   icon: "swim"    },
+    { id: "invoice", label: "Invoice", short: "Invoice", icon: "invoice" },
+    { id: "rapor",   label: "Report Card",   short: "Report",   icon: "book"    },
+    { id: "payslip", label: "Payslip", short: "Payslip", icon: "wallet"  },
+    { id: "profile", label: "Profile", short: "Me", icon: "user"    },
   ];
 }
 
 export default function CoachShell({ children, active, onNav, title, sub, user, avatarUrl, branches, activeBranchId, onBranchChange }: {
   children: React.ReactNode;
   active: TabId; onNav: (id: TabId) => void;
-  title: string; sub: string; user: User | null; avatarUrl?: string | null;
+  title: React.ReactNode; sub: string; user: User | null; avatarUrl?: string | null;
   branches?: { branch_id: string; name: string }[];
   activeBranchId?: string;
   onBranchChange?: (branchId: string) => void;
 }) {
-  const { t } = useLocale();
   const [showMoreMenu, setShowMoreMenu] = useState(false);
-  const navItems = useMemo(() => buildNavItems(t), [t]);
+  const navItems = useMemo(() => buildNavItems(), []);
 
   const isMoreActive = ["invoice", "payslip", "profile"].includes(active);
   const mobileNavItems: MobileNavItem[] = useMemo(() => [
-    { id: "home", label: t("coach.tabs.homeLabel"), short: t("coach.tabs.homeShort") || "Home", icon: "home" },
-    { id: "absen", label: t("coach.tabs.absenLabel"), short: t("coach.tabs.absenShort") || "Absen", icon: "check" },
-    { id: "kelas", label: t("coach.tabs.kelasLabel"), short: t("coach.tabs.kelasShort") || "Kelas", icon: "swim" },
-    { id: "rapor", label: t("coach.tabs.raporLabel"), short: t("coach.tabs.raporShort") || "Rapor", icon: "book" },
+    { id: "home", label: "Home", short: "Home", icon: "home" },
+    { id: "absen", label: "Attendance", short: "Attend.", icon: "check" },
+    { id: "kelas", label: "Class", short: "Class", icon: "swim" },
+    { id: "rapor", label: "Report Card", short: "Report", icon: "book" },
     { id: "more", label: "Menu", short: "Menu", icon: "menu" },
-  ], [t]);
+  ], []);
 
   const handleMobileNavSelect = (id: string) => {
     if (id === "more") {
@@ -82,9 +81,9 @@ export default function CoachShell({ children, active, onNav, title, sub, user, 
               </button>
             ))}
           </div>
-          <LanguageSwitcher />
+          <GoogleLanguageSwitcher variant="pill" />
           <Bell userId={user?.id ?? ""} />
-          <button onClick={() => onNav("profile")} title={t("coach.tabs.profileTitleAttr")}>
+          <button onClick={() => onNav("profile")} title={"Profile"}>
             <Avatar name={user?.user_metadata?.full_name ?? "C"} src={avatarUrl ?? undefined} size={36} />
           </button>
         </div>
@@ -101,8 +100,8 @@ export default function CoachShell({ children, active, onNav, title, sub, user, 
               <div className="flex items-center gap-3">
                 <Avatar name={user?.user_metadata?.full_name ?? "Coach"} src={avatarUrl ?? undefined} size={40} />
                 <div>
-                  <div className="font-display font-bold text-sm text-ink">{user?.user_metadata?.full_name ?? "Coach"}</div>
-                  <div className="text-xs text-ink-mute">{user?.email}</div>
+                  <div className="font-display font-bold text-sm text-ink"><NoTranslate>{user?.user_metadata?.full_name ?? "Coach"}</NoTranslate></div>
+                  <div className="text-xs text-ink-mute"><NoTranslate>{user?.email}</NoTranslate></div>
                 </div>
               </div>
               <button onClick={() => setShowMoreMenu(false)} className="w-8 h-8 rounded-full flex items-center justify-center text-ink-mute hover:bg-paper-tint">
@@ -136,7 +135,7 @@ export default function CoachShell({ children, active, onNav, title, sub, user, 
                   <Icon name="invoice" className="w-5 h-5" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="font-bold text-sm">{t("coach.tabs.invoiceLabel")}</div>
+                  <div className="font-bold text-sm">{"Invoice"}</div>
                   <div className="text-xs text-ink-mute">Klaim honor sesi & reimbursement</div>
                 </div>
                 <Icon name="arrowRight" className="w-4 h-4 text-ink-faint" />
@@ -152,7 +151,7 @@ export default function CoachShell({ children, active, onNav, title, sub, user, 
                   <Icon name="wallet" className="w-5 h-5" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="font-bold text-sm">{t("coach.tabs.payslipLabel")}</div>
+                  <div className="font-bold text-sm">{"Payslip"}</div>
                   <div className="text-xs text-ink-mute">Riwayat & slip gaji bulanan</div>
                 </div>
                 <Icon name="arrowRight" className="w-4 h-4 text-ink-faint" />
@@ -168,7 +167,7 @@ export default function CoachShell({ children, active, onNav, title, sub, user, 
                   <Icon name="user" className="w-5 h-5" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="font-bold text-sm">{t("coach.tabs.profileLabel")}</div>
+                  <div className="font-bold text-sm">{"Profile"}</div>
                   <div className="text-xs text-ink-mute">Data pelatih, bio & rekening bank</div>
                 </div>
                 <Icon name="arrowRight" className="w-4 h-4 text-ink-faint" />

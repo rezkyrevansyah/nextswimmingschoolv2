@@ -4,7 +4,6 @@ import { createClient } from "@/utils/supabase/client";
 import { useUpload } from "@/hooks/useUpload";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import type { ScheduleSlot, ClassRow, CoachProfile, ClassPackage, MemberAttendanceRow } from "../../_types";
 import type { Database, Json } from "@/types/database";
 import { isMemberPresentLike } from "@/lib/attendance";
@@ -15,11 +14,10 @@ export function useClassData(branchId: string) {
   const { upload } = useUpload();
   const toast = useToast();
   const confirm = useConfirm();
-  const { t, locale } = useLocale();
-  const localeTag = locale === "id" ? "id-ID" : "en-US";
+  const localeTag = "en-US";
   const dayLabels: Record<string, string> = {
-    Senin: t("admin.classes.dayMon"), Selasa: t("admin.classes.dayTue"), Rabu: t("admin.classes.dayWed"),
-    Kamis: t("admin.classes.dayThu"), Jumat: t("admin.classes.dayFri"), Sabtu: t("admin.classes.daySat"), Minggu: t("admin.classes.daySun"),
+    Senin: "Monday", Selasa: "Tuesday", Rabu: "Wednesday",
+    Kamis: "Thursday", Jumat: "Friday", Sabtu: "Saturday", Minggu: "Sunday",
   };
   const [classes, setClasses] = useState<ClassRow[]>([]);
   const [coaches, setCoaches] = useState<CoachProfile[]>([]);
@@ -80,24 +78,24 @@ export function useClassData(branchId: string) {
     setCoachMutating(true);
     const { error } = await supabase.from("class_coaches").insert({ class_id: classId, coach_id: coachId, role: "assistant" });
     setCoachMutating(false);
-    if (error) return toast.error(t("admin.classes.addCoachFailed"), error.message);
+    if (error) return toast.error("Failed to add coach", error.message);
     const coach = coaches.find(c => c.id === coachId);
     const current = editTarget?.class_coaches ?? [];
     patchClassCoaches(classId, [...current, { coach_id: coachId, role: "assistant", profile: coach ? { id: coach.id, full_name: coach.full_name } : null }]);
     setAddCoachId("");
-    toast.success(t("admin.classes.coachAddedToast"));
+    toast.success("Coach added to class");
   };
 
   const removeClassCoach = async (classId: string, coachId: string) => {
-    const ok = await confirm({ title: t("admin.classes.removeCoachConfirmTitle"), body: t("admin.classes.removeCoachConfirmBody"), danger: true });
+    const ok = await confirm({ title: "Remove coach from class?", body: "The coach will stop handling this class.", danger: true });
     if (!ok) return;
     setCoachMutating(true);
     const { error } = await supabase.from("class_coaches").delete().eq("class_id", classId).eq("coach_id", coachId);
     setCoachMutating(false);
-    if (error) return toast.error(t("admin.classes.removeCoachFailed"), error.message);
+    if (error) return toast.error("Failed to remove coach", error.message);
     const current = editTarget?.class_coaches ?? [];
     patchClassCoaches(classId, current.filter(cc => cc.coach_id !== coachId));
-    toast.success(t("admin.classes.coachRemovedToast"));
+    toast.success("Coach removed from class");
   };
 
   const setClassCoachRole = async (classId: string, coachId: string, role: "head" | "assistant") => {
@@ -110,7 +108,7 @@ export function useClassData(branchId: string) {
       await supabase.from("class_coaches").update({ role: "assistant" }).eq("class_id", classId).neq("coach_id", coachId);
     }
     setCoachMutating(false);
-    if (error) return toast.error(t("admin.classes.changeRoleFailed"), error.message);
+    if (error) return toast.error("Failed to change coach role", error.message);
     const current = editTarget?.class_coaches ?? [];
     patchClassCoaches(classId, current.map(cc => role === "head"
       ? { ...cc, role: cc.coach_id === coachId ? "head" : "assistant" }
@@ -172,13 +170,13 @@ export function useClassData(branchId: string) {
   const isPrivate = form.class_type === "private";
 
   const saveClass = async () => {
-    if (!form.name) return toast.error(t("admin.classes.classNameRequired"));
-    if (!isPrivate && form.schedule_days.length === 0) return toast.error(t("admin.classes.scheduleDaysRequired"));
+    if (!form.name) return toast.error("Class name is required");
+    if (!isPrivate && form.schedule_days.length === 0) return toast.error("Session days are required for regular classes");
     if (isPrivate && form.location_type === "external" && !form.external_location_name.trim()) {
-      return toast.error(t("admin.classes.externalLocationNameRequired"));
+      return toast.error("The external location name (e.g. apartment/pool name) is required for external private classes.");
     }
     if (!isPrivate && (!Number(form.capacity) || Number(form.capacity) <= 0)) {
-      return toast.error(t("admin.classes.capacityRequired"));
+      return toast.error("Capacity must be greater than 0");
     }
     setSaving(true);
     // Build schedule_times — use per-day slots; derive global time_start/time_end from first slot
@@ -199,7 +197,7 @@ export function useClassData(branchId: string) {
         try {
           nextPhotoUrl = await upload.classPhoto(photoFile, editTarget.id);
         } catch (err) {
-          toast.error(t("admin.classes.updateClassFailed"), (err as Error).message);
+          toast.error("Failed to update class", (err as Error).message);
         }
       } else if (!photoPreview && editTarget.photo_url) {
         nextPhotoUrl = null;
@@ -218,8 +216,8 @@ export function useClassData(branchId: string) {
       };
       const { error } = await supabase.from("classes").update(updatePayload).eq("id", editTarget.id);
       setSaving(false);
-      if (error) return toast.error(t("admin.classes.updateClassFailed"), error.message);
-      toast.success(t("admin.classes.classUpdatedToast"));
+      if (error) return toast.error("Failed to update class", error.message);
+      toast.success("Class updated");
     } else {
       const insertPayload: Database["public"]["Tables"]["classes"]["Insert"] = {
         name: form.name, class_type: form.class_type,
@@ -232,7 +230,7 @@ export function useClassData(branchId: string) {
         photo_url: null,
       };
       const { data: newClass, error } = await supabase.from("classes").insert(insertPayload).select("id").single();
-      if (error) { setSaving(false); return toast.error(t("admin.classes.createClassFailed"), error.message); }
+      if (error) { setSaving(false); return toast.error("Failed to create class", error.message); }
 
       // Upload class cover photo if selected
       if (photoFile && newClass?.id) {
@@ -257,7 +255,7 @@ export function useClassData(branchId: string) {
         const { error: coachErr } = await supabase.from("class_coaches").insert(coachRows);
         if (coachErr) {
           setSaving(false);
-          toast.error(`${t("admin.classes.classCreatedToast")} — Coach assignment failed`, coachErr.message);
+          toast.error(`${"Class created"} — Coach assignment failed`, coachErr.message);
           setOpenForm(false);
           load();
           return;
@@ -265,25 +263,25 @@ export function useClassData(branchId: string) {
       }
 
       setSaving(false);
-      toast.success(t("admin.classes.classCreatedToast"));
+      toast.success("Class created");
     }
     setOpenForm(false);
     load();
   };
 
   const archiveClass = async (c: ClassRow) => {
-    const yes = await confirm({ body: t("admin.classes.archiveConfirmBody", { name: c.name }) });
+    const yes = await confirm({ body: `Archive class "${c.name}"?` });
     if (!yes) return;
     await supabase.from("classes").update({ status: "archived" }).eq("id", c.id);
-    toast.success(t("admin.classes.classArchivedToast"));
+    toast.success("Class archived");
     load();
   };
 
   const restoreClass = async (c: ClassRow) => {
-    const yes = await confirm({ body: t("admin.classes.restoreConfirmBody", { name: c.name }) });
+    const yes = await confirm({ body: `Reactivate class "${c.name}"?` });
     if (!yes) return;
     await supabase.from("classes").update({ status: "active" }).eq("id", c.id);
-    toast.success(t("admin.classes.classRestoredToast"));
+    toast.success("Class reactivated");
     load();
   };
 
@@ -309,9 +307,9 @@ export function useClassData(branchId: string) {
   };
 
   const savePackage = async () => {
-    if (!packageClass || !pkgForm.sessions || !pkgForm.price) return toast.error(t("admin.classes.sessionsPriceRequired"));
+    if (!packageClass || !pkgForm.sessions || !pkgForm.price) return toast.error("Number of sessions and price are required");
     setSavingPkg(true);
-    const name = pkgForm.name.trim() || t("admin.classes.defaultPackageName", { sessions: pkgForm.sessions });
+    const name = pkgForm.name.trim() || `${pkgForm.sessions}-Session Package`;
     const { error } = await supabase.from("class_packages").insert({
       class_id: packageClass.id,
       name,
@@ -320,8 +318,8 @@ export function useClassData(branchId: string) {
       sort_order: packages.length,
     });
     setSavingPkg(false);
-    if (error) return toast.error(t("admin.classes.savePackageFailed"), error.message);
-    toast.success(t("admin.classes.packageAddedToast"));
+    if (error) return toast.error("Failed to save package", error.message);
+    toast.success("Package added");
     const { data } = await supabase.from("class_packages").select("id, name, sessions, price, sort_order, active").eq("class_id", packageClass.id).order("sort_order");
     setPackages((data ?? []) as ClassPackage[]);
     setPkgForm({ name: "", sessions: "", price: "" });
@@ -329,11 +327,11 @@ export function useClassData(branchId: string) {
   };
 
   const deletePackage = async (pkgId: string) => {
-    const yes = await confirm({ body: t("admin.classes.deletePackageConfirmBody") });
+    const yes = await confirm({ body: "Delete this package?" });
     if (!yes) return;
     await supabase.from("class_packages").delete().eq("id", pkgId);
     setPackages(p => p.filter(x => x.id !== pkgId));
-    toast.success(t("admin.classes.packageDeletedToast"));
+    toast.success("Package deleted");
     load();
   };
 
@@ -367,7 +365,7 @@ export function useClassData(branchId: string) {
   const visibleClasses = classes.filter(c => showArchived ? c.status === "archived" : c.status !== "archived");
 
   return {
-    t, dayLabels, localeTag,
+    dayLabels, localeTag,
     classes, coaches, saving, showArchived, setShowArchived,
     openForm, setOpenForm, editTarget, form, setForm, fileInputRef, photoFile, photoPreview,
     attClass, setAttClass, attSessions, loadingAtt2, attExpanded, setAttExpanded,

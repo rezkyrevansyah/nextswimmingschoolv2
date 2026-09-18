@@ -5,6 +5,7 @@ import { Field, Input, Textarea, Select } from "@/components/ui/FormFields";
 import Avatar from "@/components/ui/Avatar";
 import TimePicker from "@/components/ui/TimePicker";
 import Modal from "@/components/ui/Modal";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 import { DAY_OPTS } from "./_utils";
 import type { useClassData } from "./useClassData";
 
@@ -12,7 +13,7 @@ type ClassDataHook = ReturnType<typeof useClassData>;
 
 export default function ClassFormModal({ hook }: { hook: ClassDataHook }) {
   const {
-    t, localeTag, dayLabels,
+    localeTag, dayLabels,
     openForm, setOpenForm, editTarget, form, setForm, fileInputRef, photoPreview,
     handlePhotoChange, handleRemovePhoto, isPrivate, saveClass, saving,
     toggleDay, updateSlotTime,
@@ -21,11 +22,11 @@ export default function ClassFormModal({ hook }: { hook: ClassDataHook }) {
   } = hook;
 
   return (
-    <Modal open={openForm} onClose={() => setOpenForm(false)} title={editTarget ? t("admin.classes.editModalTitleEdit", { name: editTarget.name }) : t("admin.classes.addModalTitleAdd")} size="lg"
-      footer={<><Btn variant="ghost" onClick={() => setOpenForm(false)}>{t("common.actions.cancel")}</Btn><Btn variant="primary" onClick={saveClass} disabled={saving}>{saving ? t("common.actions.saving") : editTarget ? t("admin.classes.saveChangesBtn") : t("admin.classes.saveClassBtn")}</Btn></>}>
+    <Modal open={openForm} onClose={() => setOpenForm(false)} title={editTarget ? (<>{"Edit Class — "}<NoTranslate>{editTarget.name}</NoTranslate></>) : "Add New Class"} size="lg"
+      footer={<><Btn variant="ghost" onClick={() => setOpenForm(false)}>{"Cancel"}</Btn><Btn variant="primary" onClick={saveClass} disabled={saving}>{saving ? "Saving…" : editTarget ? "Save changes" : "Save class"}</Btn></>}>
       <div className="space-y-4">
         {/* Optional Class Background / Cover Photo Upload */}
-        <Field label={t("admin.classes.fieldPhoto")} hint={t("admin.classes.photoHint")}>
+        <Field label={"Class Background / Cover Photo (Optional)"} hint={"Format JPG, PNG, WebP, or SVG · Max 5MB"}>
           <input
             ref={fileInputRef}
             type="file"
@@ -48,7 +49,7 @@ export default function ClassFormModal({ hook }: { hook: ClassDataHook }) {
                   icon="edit"
                   onClick={() => fileInputRef.current?.click()}
                 >
-                  {t("admin.classes.changePhotoBtn")}
+                  {"Change Photo"}
                 </Btn>
                 <Btn
                   type="button"
@@ -57,7 +58,7 @@ export default function ClassFormModal({ hook }: { hook: ClassDataHook }) {
                   icon="trash"
                   onClick={handleRemovePhoto}
                 >
-                  {t("admin.classes.removePhotoBtn")}
+                  {"Remove"}
                 </Btn>
               </div>
             </div>
@@ -70,10 +71,10 @@ export default function ClassFormModal({ hook }: { hook: ClassDataHook }) {
                 <Icon name="upload" className="w-5 h-5" />
               </div>
               <p className="text-xs font-bold text-ink group-hover:text-ocean-700 transition-colors">
-                {t("admin.classes.uploadPhotoBtn")}
+                {"Choose Class Photo"}
               </p>
               <p className="text-[11px] text-ink-mute mt-0.5">
-                {t("admin.classes.photoHint")}
+                {"Format JPG, PNG, WebP, or SVG · Max 5MB"}
               </p>
             </div>
           )}
@@ -86,48 +87,48 @@ export default function ClassFormModal({ hook }: { hook: ClassDataHook }) {
         {isPrivate && (
           <div className="bg-wave-50 border border-wave-100 rounded-xl p-3 text-sm text-wave-800 flex gap-2">
             <Icon name="info" className="w-4 h-4 mt-0.5 shrink-0 text-wave-500" />
-            <span>{t("admin.classes.privateNotice")}</span>
+            <span>{"Private classes automatically have capacity 1. Session days are a preference — attendance can be logged anytime by the coach."}</span>
           </div>
         )}
         {isPrivate && (
           <div className="space-y-3 bg-paper-tint/60 border border-line rounded-xl p-3.5">
-            <Field label={t("admin.classes.fieldPrivateLocation")}>
+            <Field label={"Private Session Location"}>
               <div className="flex gap-2">
                 <button
                   type="button"
                   onClick={() => setForm(f => ({ ...f, location_type: "branch" }))}
                   className={`flex-1 p-2.5 rounded-lg border text-left text-xs font-bold transition-colors ${form.location_type === "branch" ? "border-ocean-500 bg-ocean-50 text-ocean-700" : "border-line bg-white text-ink-soft hover:bg-paper-tint"}`}
                 >
-                  {t("admin.classes.locationOptBranch")}
+                  {"📍 Official Branch"}
                 </button>
                 <button
                   type="button"
                   onClick={() => setForm(f => ({ ...f, location_type: "external" }))}
                   className={`flex-1 p-2.5 rounded-lg border text-left text-xs font-bold transition-colors ${form.location_type === "external" ? "border-wave-500 bg-wave-50 text-wave-700" : "border-line bg-white text-ink-soft hover:bg-paper-tint"}`}
                 >
-                  {t("admin.classes.locationOptExternal")}
+                  {"🏡 External Location / Pool"}
                 </button>
               </div>
             </Field>
 
             {form.location_type === "external" && (
               <div className="space-y-3 pt-1">
-                <Field label={t("admin.classes.fieldExternalLocationName")} required hint={t("admin.classes.externalLocationNameHint")}>
+                <Field label={"External Location Name"} required hint={"E.g. Oakwood Pool Apartment, Hilton Hotel, Student's House"}>
                   <Input
                     value={form.external_location_name}
                     onChange={e => setForm(f => ({ ...f, external_location_name: e.target.value }))}
-                    placeholder={t("admin.classes.externalLocationNamePlaceholder")}
+                    placeholder={"Oakwood Pool Apartment"}
                   />
                 </Field>
-                <Field label={t("admin.classes.fieldExternalLocationAddress")}>
+                <Field label={"Full Location Address"}>
                   <Textarea
                     value={form.external_location_address}
                     onChange={e => setForm(f => ({ ...f, external_location_address: e.target.value }))}
-                    placeholder={t("admin.classes.externalLocationAddressPlaceholder")}
+                    placeholder={"Jl. Mega Kuningan Barat No.3, South Jakarta"}
                     rows={2}
                   />
                 </Field>
-                <Field label={t("admin.classes.fieldGoogleMapsLink")}>
+                <Field label={"Google Maps Link (Optional)"}>
                   <Input
                     value={form.google_maps_url}
                     onChange={e => setForm(f => ({ ...f, google_maps_url: e.target.value }))}
@@ -139,11 +140,11 @@ export default function ClassFormModal({ hook }: { hook: ClassDataHook }) {
           </div>
         )}
         <div className="grid sm:grid-cols-2 gap-4">
-          <Field label={t("admin.classes.fieldClassName")} required className="sm:col-span-2"><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder={isPrivate ? t("admin.classes.classNamePlaceholderPrivate") : t("admin.classes.classNamePlaceholderRegular")} /></Field>
+          <Field label={"Class name"} required className="sm:col-span-2"><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder={isPrivate ? "E.g. Private — Coach Salwa" : "E.g. Tadpole — Water Introduction"} /></Field>
           {!isPrivate && (
             <>
-              <Field label={t("admin.classes.fieldCapacity")} required><Input type="number" value={form.capacity} onChange={e => setForm(f => ({ ...f, capacity: e.target.value }))} placeholder="15" min="1" /></Field>
-              <Field label={t("admin.classes.fieldPricePerMonth")} required hint={form.price_monthly ? `Rp ${Number(form.price_monthly).toLocaleString("id-ID")}` : undefined}>
+              <Field label={"Capacity"} required><Input type="number" value={form.capacity} onChange={e => setForm(f => ({ ...f, capacity: e.target.value }))} placeholder="15" min="1" /></Field>
+              <Field label={"Price/month"} required hint={form.price_monthly ? `Rp ${Number(form.price_monthly).toLocaleString("id-ID")}` : undefined}>
                 <Input type="text" inputMode="numeric" value={form.price_monthly ? Number(form.price_monthly).toLocaleString("id-ID") : ""}
                   onChange={e => setForm(f => ({ ...f, price_monthly: e.target.value.replace(/\D/g, "") }))}
                   className="font-mono" placeholder="550.000" />
@@ -151,7 +152,7 @@ export default function ClassFormModal({ hook }: { hook: ClassDataHook }) {
             </>
           )}
           {isPrivate && (
-            <Field label={t("admin.classes.fieldPricePerSession")} hint={form.price_per_session ? `Rp ${Number(form.price_per_session).toLocaleString("id-ID")}` : t("admin.classes.pricePerSessionHint")}>
+            <Field label={"Price per session"} hint={form.price_per_session ? `Rp ${Number(form.price_per_session).toLocaleString("id-ID")}` : "Rp per session"}>
               <Input type="text" inputMode="numeric" value={form.price_per_session ? Number(form.price_per_session).toLocaleString("id-ID") : ""}
                 onChange={e => setForm(f => ({ ...f, price_per_session: e.target.value.replace(/\D/g, "") }))}
                 className="font-mono" placeholder="150.000" />
@@ -161,7 +162,7 @@ export default function ClassFormModal({ hook }: { hook: ClassDataHook }) {
 
         {/* Hari & Jam */}
         <div className="block">
-          <span className="text-[13px] font-semibold text-ink-soft mb-1.5 block">{isPrivate ? t("admin.classes.sessionDaysLabelPref") : t("admin.classes.sessionDaysLabel")}{!isPrivate && <span className="text-danger-500 ml-0.5">*</span>}</span>
+          <span className="text-[13px] font-semibold text-ink-soft mb-1.5 block">{isPrivate ? "Practice day preference" : "Session days"}{!isPrivate && <span className="text-danger-500 ml-0.5">*</span>}</span>
           {/* Day picker */}
           <div className="flex flex-wrap gap-2 mt-1">
             {DAY_OPTS.map(d => (
@@ -177,7 +178,7 @@ export default function ClassFormModal({ hook }: { hook: ClassDataHook }) {
             <div className="mt-3 rounded-xl border border-line overflow-hidden">
               {/* Toggle mode */}
               <div className="flex items-center justify-between px-3 py-2 bg-paper-tint border-b border-line">
-                <span className="text-xs font-semibold text-ink-mute">{t("admin.classes.timeSettingsLabel")}</span>
+                <span className="text-xs font-semibold text-ink-mute">{"Time settings"}</span>
                 <div className="flex rounded-lg border border-line overflow-hidden text-xs font-bold">
                   <button type="button"
                     onClick={() => setForm(f => ({
@@ -194,7 +195,7 @@ export default function ClassFormModal({ hook }: { hook: ClassDataHook }) {
                       })),
                     }))}
                     className={`px-2.5 py-1 transition-colors ${form.same_time_all ? "bg-ocean-700 text-white" : "text-ink-soft hover:bg-paper-deep"}`}>
-                    {t("admin.classes.sameAllDaysBtn")}
+                    {"Same for all days"}
                   </button>
                   <button type="button"
                     onClick={() => setForm(f => ({
@@ -207,7 +208,7 @@ export default function ClassFormModal({ hook }: { hook: ClassDataHook }) {
                       }),
                     }))}
                     className={`px-2.5 py-1 transition-colors ${!form.same_time_all ? "bg-ocean-700 text-white" : "text-ink-soft hover:bg-paper-deep"}`}>
-                    {t("admin.classes.differentPerDayBtn")}
+                    {"Different per day"}
                   </button>
                 </div>
               </div>
@@ -215,7 +216,7 @@ export default function ClassFormModal({ hook }: { hook: ClassDataHook }) {
               {form.same_time_all ? (
                 /* Mode: jam sama untuk semua hari */
                 <div className="px-3 py-3 flex gap-3 items-end flex-wrap">
-                  <Field label={t("admin.classes.fieldStartTime")} className="flex-1 min-w-[120px]">
+                  <Field label={"Start time"} className="flex-1 min-w-[120px]">
                     <TimePicker value={form.time_start}
                       onChange={v => setForm(f => ({
                         ...f,
@@ -223,7 +224,7 @@ export default function ClassFormModal({ hook }: { hook: ClassDataHook }) {
                         schedule_times: f.schedule_times.map(s => ({ ...s, time_start: v })),
                       }))} />
                   </Field>
-                  <Field label={t("admin.classes.fieldEndTime")} className="flex-1 min-w-[120px]">
+                  <Field label={"End time"} className="flex-1 min-w-[120px]">
                     <TimePicker value={form.time_end}
                       onChange={v => setForm(f => ({
                         ...f,
@@ -231,7 +232,7 @@ export default function ClassFormModal({ hook }: { hook: ClassDataHook }) {
                         schedule_times: f.schedule_times.map(s => ({ ...s, time_end: v })),
                       }))} />
                   </Field>
-                  <div className="pb-1 text-xs text-ink-mute self-end">{t("admin.classes.appliesTo", { days: form.schedule_days.map(d => dayLabels[d] ?? d).join(", ") })}</div>
+                  <div className="pb-1 text-xs text-ink-mute self-end">{`Applies to: ${form.schedule_days.map(d => dayLabels[d] ?? d).join(", ")}`}</div>
                 </div>
               ) : (
                 /* Mode: jam berbeda per hari */
@@ -255,25 +256,25 @@ export default function ClassFormModal({ hook }: { hook: ClassDataHook }) {
               )}
             </div>
           )}
-          <span className="text-xs text-ink-faint mt-1 block">{isPrivate ? t("admin.classes.optionalInfoOnly") : t("admin.classes.pickDaysHint")}</span>
+          <span className="text-xs text-ink-faint mt-1 block">{isPrivate ? "Optional — for information only" : "Pick one or more days, then set the time per day"}</span>
         </div>
-        <Field label={t("admin.classes.fieldClassGoals")} hint={t("admin.classes.classGoalsHint")}><Textarea rows={2} value={form.goals} onChange={e => setForm(f => ({ ...f, goals: e.target.value }))} placeholder={t("admin.classes.classGoalsPlaceholder")} /></Field>
-        <Field label={t("admin.classes.fieldClassDescription")} hint={t("admin.classes.classDescriptionHint")}><Textarea rows={3} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder={t("admin.classes.classDescriptionPlaceholder")} /></Field>
+        <Field label={"Class goals"} hint={"Shown on the coach page and student page"}><Textarea rows={2} value={form.goals} onChange={e => setForm(f => ({ ...f, goals: e.target.value }))} placeholder={"E.g. Water introduction, building confidence in water."} /></Field>
+        <Field label={"Class description"} hint={"Optional — shown on the coach page and student page"}><Textarea rows={3} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder={"E.g. This class is designed for children aged 4–6 learning to swim for the first time..."} /></Field>
         {editTarget && coaches.length > 0 && (
           <div>
-            <div className="text-xs font-bold uppercase tracking-widest text-ink-faint mb-2">{t("admin.classes.teachingCoachesLabel")}</div>
+            <div className="text-xs font-bold uppercase tracking-widest text-ink-faint mb-2">{"Teaching coaches"}</div>
             <div className="space-y-1.5">
               {[...(editTarget.class_coaches ?? [])].sort((a, b) => (b.role === "head" ? 1 : 0) - (a.role === "head" ? 1 : 0)).map(cc => cc.profile && (
                 <div key={cc.coach_id} className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-ocean-50 text-xs">
                   <Avatar name={cc.profile.full_name ?? ""} size={22} />
-                  <span className="flex-1 font-semibold text-ocean-700 truncate">{cc.profile.full_name}</span>
+                  <span className="flex-1 font-semibold text-ocean-700 truncate"><NoTranslate>{cc.profile.full_name}</NoTranslate></span>
                   <button type="button" disabled={coachMutating} onClick={() => setClassCoachRole(editTarget.id, cc.coach_id, "head")}
                     className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide transition-colors ${cc.role === "head" ? "bg-ocean-700 text-white" : "bg-white border border-line text-ink-mute"}`}>
-                    {t("admin.classes.headRoleBtn")}
+                    {"Head"}
                   </button>
                   <button type="button" disabled={coachMutating} onClick={() => setClassCoachRole(editTarget.id, cc.coach_id, "assistant")}
                     className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide transition-colors ${cc.role === "assistant" ? "bg-ocean-700 text-white" : "bg-white border border-line text-ink-mute"}`}>
-                    {t("admin.classes.assistantRoleBtn")}
+                    {"Assistant"}
                   </button>
                   <button type="button" disabled={coachMutating} onClick={() => removeClassCoach(editTarget.id, cc.coach_id)}
                     className="p-1 rounded-full text-danger-600 hover:bg-danger-50">
@@ -281,7 +282,7 @@ export default function ClassFormModal({ hook }: { hook: ClassDataHook }) {
                   </button>
                 </div>
               ))}
-              {(editTarget.class_coaches?.length ?? 0) === 0 && <span className="text-xs text-warn-600 font-semibold">{t("admin.classes.noCoachAssigned")}</span>}
+              {(editTarget.class_coaches?.length ?? 0) === 0 && <span className="text-xs text-warn-600 font-semibold">{"No coach assigned yet"}</span>}
             </div>
             {(() => {
               const assignedIds = new Set((editTarget.class_coaches ?? []).map(cc => cc.coach_id));
@@ -291,24 +292,24 @@ export default function ClassFormModal({ hook }: { hook: ClassDataHook }) {
                 <div className="flex items-center gap-2 mt-2">
                   <select value={addCoachId} onChange={e => setAddCoachId(e.target.value)} disabled={coachMutating}
                     className="flex-1 text-xs rounded-lg border border-line px-2 py-1.5 bg-paper-tint">
-                    <option value="">{t("admin.classes.selectCoachToAddPlaceholder")}</option>
-                    {available.map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
+                    <option value="">{"Select coach to add…"}</option>
+                    {available.map(c => <option key={c.id} value={c.id} translate="no">{c.full_name}</option>)}
                   </select>
-                  <Btn variant="soft" size="sm" disabled={!addCoachId || coachMutating} onClick={() => addClassCoach(editTarget.id, addCoachId)}>{t("common.actions.add")}</Btn>
+                  <Btn variant="soft" size="sm" disabled={!addCoachId || coachMutating} onClick={() => addClassCoach(editTarget.id, addCoachId)}>{"Add"}</Btn>
                 </div>
               );
             })()}
-            <p className="text-[11px] text-ink-faint mt-1.5">{t("admin.classes.maxOneHeadHint")}</p>
+            <p className="text-[11px] text-ink-faint mt-1.5">{"Max 1 head per class — setting a new head automatically demotes the previous one."}</p>
           </div>
         )}
         {!editTarget && coaches.length > 0 && (
           <div className="border-t border-line pt-3 space-y-3">
-            <div className="text-xs font-bold uppercase tracking-widest text-ink-faint">{t("admin.classes.teachingCoachesLabel")}</div>
+            <div className="text-xs font-bold uppercase tracking-widest text-ink-faint">{"Teaching coaches"}</div>
             <Field label="Head Coach (Pelatih Utama)" hint="Maksimal 1 head coach per kelas">
               <Select value={newHeadCoachId} onChange={e => setNewHeadCoachId(e.target.value)}>
                 <option value="">-- Pilih Head Coach (Opsional) --</option>
                 {coaches.map(c => (
-                  <option key={c.id} value={c.id}>{c.full_name}</option>
+                  <option key={c.id} value={c.id} translate="no">{c.full_name}</option>
                 ))}
               </Select>
             </Field>
@@ -328,7 +329,7 @@ export default function ClassFormModal({ hook }: { hook: ClassDataHook }) {
                         }}
                         className="rounded border-line-strong text-ocean-600 focus:ring-ocean-500"
                       />
-                      <span className="font-semibold text-ink">{c.full_name}</span>
+                      <span className="font-semibold text-ink"><NoTranslate>{c.full_name}</NoTranslate></span>
                     </label>
                   );
                 })}
@@ -341,11 +342,11 @@ export default function ClassFormModal({ hook }: { hook: ClassDataHook }) {
         )}
         {editTarget && (
           <div className="border-t border-line pt-4 space-y-2">
-            <div className="text-xs font-bold uppercase tracking-widest text-ink-faint">{t("admin.classes.programSpreadsheetLabel")}</div>
+            <div className="text-xs font-bold uppercase tracking-widest text-ink-faint">{"Program Spreadsheet"}</div>
             {(editTarget.coach_spreadsheets ?? []).length === 0 ? (
               <div className="flex items-center gap-2 p-3 rounded-xl bg-warn-50 border border-warn-200 text-sm text-warn-700">
                 <Icon name="warning" className="w-4 h-4 shrink-0 text-warn-500" />
-                {t("admin.classes.noCoachFilledSpreadsheet")}
+                {"No coach has filled in the program spreadsheet yet."}
               </div>
             ) : (
               <div className="space-y-2">
@@ -353,11 +354,11 @@ export default function ClassFormModal({ hook }: { hook: ClassDataHook }) {
                   <div key={s.coach_id} className="flex items-center gap-3 p-3 rounded-xl bg-ok-50 border border-ok-100">
                     <Avatar name={s.coach?.full_name ?? "?"} size={28} />
                     <div className="flex-1 min-w-0">
-                      <div className="text-xs text-ok-700 font-semibold truncate">{s.coach?.full_name ?? s.coach_id}</div>
+                      <div className="text-xs text-ok-700 font-semibold truncate"><NoTranslate>{s.coach?.full_name ?? s.coach_id}</NoTranslate></div>
                       <div className="text-[10px] text-ink-faint font-mono">{new Date(s.updated_at).toLocaleDateString(localeTag)}</div>
                     </div>
                     <a href={s.spreadsheet_url} target="_blank" rel="noreferrer">
-                      <Btn variant="soft" size="sm" icon="link">{t("admin.classes.openBtn")}</Btn>
+                      <Btn variant="soft" size="sm" icon="link">{"Open"}</Btn>
                     </a>
                   </div>
                 ))}

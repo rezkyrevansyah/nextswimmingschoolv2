@@ -7,52 +7,52 @@ import type { useAccountDetailData } from "./useAccountDetailData";
 type AccountDetailDataHook = ReturnType<typeof useAccountDetailData>;
 
 export default function AccountEditForm({ hook }: { hook: AccountDetailDataHook }) {
-  const { t, branches, schools, form, setForm } = hook;
+  const { branches, schools, form, setForm } = hook;
 
   return (
     <div className="space-y-4">
       <div className="grid sm:grid-cols-2 gap-3">
-        <Field label={t("owner.accountDetail.fieldFullName")} required>
+        <Field label={"Full Name"} required>
           <Input value={form.full_name} onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))} />
         </Field>
-        <Field label={t("owner.accountDetail.fieldRole")}>
+        <Field label={"Account Role"}>
           <Select value={form.role} onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}>
-            <option value="owner">{t("owner.accounts.roleOwner")}</option>
-            <option value="admin">{t("owner.accounts.roleAdmin")}</option>
-            <option value="manager_center">{t("owner.accounts.roleManagerCenter")}</option>
-            <option value="coach">{t("owner.accounts.roleCoach")}</option>
-            <option value="member">{t("owner.accounts.roleMember")}</option>
-            <option value="staff">{t("owner.accounts.roleStaff")}</option>
-            <option value="school">{t("owner.accounts.roleSchool")}</option>
+            <option value="owner">{"Owner"}</option>
+            <option value="admin">{"Branch Admin"}</option>
+            <option value="manager_center">{"Manager Center"}</option>
+            <option value="coach">{"Coach"}</option>
+            <option value="member">{"Student"}</option>
+            <option value="staff">{"Branch Staff"}</option>
+            <option value="school">{"School Partner"}</option>
           </Select>
         </Field>
       </div>
 
       <div className="grid sm:grid-cols-2 gap-3">
-        <Field label={t("owner.accountDetail.fieldEmail")}>
+        <Field label={"Email"}>
           <Input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} />
         </Field>
-        <Field label={t("owner.accountDetail.fieldPhone")}>
+        <Field label={"Phone / WhatsApp"}>
           <Input type="tel" value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} placeholder="08xxxxxxxxxx" />
         </Field>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <Field label={t("owner.accountDetail.fieldGender")}>
+        <Field label={"Gender"}>
           <Select value={form.gender} onChange={(e) => setForm((f) => ({ ...f, gender: e.target.value }))}>
-            <option value="">{t("owner.accountDetail.genderSelectPlaceholder")}</option>
-            <option value="male">{t("owner.accountDetail.genderMale")}</option>
-            <option value="female">{t("owner.accountDetail.genderFemale")}</option>
+            <option value="">{"— Select —"}</option>
+            <option value="male">{"Male"}</option>
+            <option value="female">{"Female"}</option>
           </Select>
         </Field>
-        <Field label={t("owner.accountDetail.fieldBirthDate")}>
+        <Field label={"Date of Birth"}>
           <Input type="date" value={form.birth_date} onChange={(e) => setForm((f) => ({ ...f, birth_date: e.target.value }))} />
         </Field>
       </div>
 
-      <Field label={t("owner.accountDetail.fieldBranch")}>
+      <Field label={"Center"}>
         <Select value={form.branch_id} onChange={(e) => setForm((f) => ({ ...f, branch_id: e.target.value }))}>
-          <option value="">{t("owner.accountDetail.branchNone")}</option>
+          <option value="">{"— None —"}</option>
           {branches.map((b) => (
             <option key={b.id} value={b.id} translate="no" className="notranslate">
               {b.name}
@@ -64,21 +64,21 @@ export default function AccountEditForm({ hook }: { hook: AccountDetailDataHook 
       {/* Member Specific Form Inputs */}
       {form.role === "member" && (
         <div className="border border-green-200 bg-green-50/40 rounded-xl p-3.5 space-y-3">
-          <div className="text-xs font-bold text-green-900 uppercase tracking-wider">{t("owner.accountDetail.memberSettingsTitle")}</div>
+          <div className="text-xs font-bold text-green-900 uppercase tracking-wider">{"Student Settings"}</div>
           <div className="grid sm:grid-cols-3 gap-3">
-            <Field label={t("owner.accounts.fieldMemberType")}>
+            <Field label={"Student Type"}>
               <Select value={form.member_type} onChange={(e) => setForm((f) => ({ ...f, member_type: e.target.value }))} disabled={form.member_type === "private"}>
-                <option value="reguler">{t("owner.accounts.memberTypeRegular")}</option>
-                <option value="school_affiliate">{t("owner.accounts.memberTypeSchoolAffiliate")}</option>
-                {form.member_type === "private" && <option value="private">{t("owner.accounts.memberTypePrivate")}</option>}
+                <option value="reguler">{"Regular"}</option>
+                <option value="school_affiliate">{"School-affiliated"}</option>
+                {form.member_type === "private" && <option value="private">{"Private"}</option>}
               </Select>
             </Field>
             {form.member_type !== "private" && (
               <>
-                <Field label={t("owner.accountDetail.fieldTotalSessions")}>
+                <Field label={"Total Sessions"}>
                   <Input type="number" min={0} value={form.total_sessions} onChange={(e) => setForm((f) => ({ ...f, total_sessions: e.target.value }))} />
                 </Field>
-                <Field label={t("owner.accountDetail.fieldRemainingSessions")}>
+                <Field label={"Remaining Sessions"}>
                   <Input type="number" min={0} value={form.remaining_sessions} onChange={(e) => setForm((f) => ({ ...f, remaining_sessions: e.target.value }))} />
                 </Field>
               </>
@@ -87,14 +87,14 @@ export default function AccountEditForm({ hook }: { hook: AccountDetailDataHook 
           {form.member_type === "private" && (
             <div className="flex items-center gap-2 p-3 rounded-xl bg-ocean-50 border border-ocean-100 text-sm text-ocean-800">
               <Icon name="info" className="w-4 h-4 shrink-0 text-ocean-500" />
-              <span>{t("owner.accountDetail.privateManagedElsewhereNotice")}</span>
+              <span>{"Private students are managed from the \"Student Private\" menu — schedule, location, coach, and session count are all edited there, safely, since it's the only place guaranteed to match this student's own class slot."}</span>
             </div>
           )}
           {form.member_type === "school_affiliate" && (
             <div className="grid sm:grid-cols-2 gap-3">
-              <Field label={t("owner.accountDetail.fieldSelectSchool")}>
+              <Field label={"Select School"}>
                 <Select value={form.school_id} onChange={(e) => setForm((f) => ({ ...f, school_id: e.target.value }))}>
-                  <option value="">{t("owner.accountDetail.selectSchoolPlaceholder")}</option>
+                  <option value="">{"— Select School —"}</option>
                   {schools.map((s) => (
                     <option key={s.id} value={s.id} translate="no" className="notranslate">
                       {s.name}
@@ -102,11 +102,11 @@ export default function AccountEditForm({ hook }: { hook: AccountDetailDataHook 
                   ))}
                 </Select>
               </Field>
-              <Field label={t("owner.accounts.fieldSchoolGrade")} hint={t("owner.accounts.fieldSchoolGradeHint")}>
+              <Field label={"School Grade"} hint={"The child's grade/class at their day school, e.g. \"Kelas 5 SD\" — separate from the swim class"}>
                 <Input
                   value={form.school_grade}
                   onChange={(e) => setForm((f) => ({ ...f, school_grade: e.target.value }))}
-                  placeholder={t("owner.accounts.fieldSchoolGradePlaceholder")}
+                  placeholder={"e.g. Kelas 5 SD"}
                 />
               </Field>
             </div>
@@ -114,38 +114,38 @@ export default function AccountEditForm({ hook }: { hook: AccountDetailDataHook 
         </div>
       )}
 
-      <Field label={t("owner.accountDetail.fieldAddress")}>
+      <Field label={"Address"}>
         <Textarea
           value={form.address}
           onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
           rows={2}
-          placeholder={t("owner.accountDetail.addressPlaceholder")}
+          placeholder={"Full address"}
         />
       </Field>
 
       {(form.role === "staff" || form.role === "admin" || form.role === "manager_center") && (
         <Field
-          label={t("owner.accountDetail.fieldCustomRoleLabel")}
-          hint={t("owner.accountDetail.customRoleLabelHint")}
+          label={"Custom Role Label"}
+          hint={"E.g. Freelance Photographer, Guest Trainer, Receptionist"}
         >
           <Input
             value={form.custom_role_label}
             onChange={(e) => setForm((f) => ({ ...f, custom_role_label: e.target.value }))}
-            placeholder={t("owner.accountDetail.customRoleLabelPlaceholder")}
+            placeholder={"Leave blank if none"}
           />
         </Field>
       )}
 
       {form.role === "coach" && (
         <>
-          <Field label={t("owner.accountDetail.fieldSpecialization")}>
+          <Field label={"Specialization"}>
             <Input
               value={form.specialization}
               onChange={(e) => setForm((f) => ({ ...f, specialization: e.target.value }))}
-              placeholder={t("owner.accountDetail.specializationPlaceholder")}
+              placeholder={"E.g. Freestyle Swimming, Butterfly"}
             />
           </Field>
-          <Field label={t("owner.accountDetail.fieldBio")}>
+          <Field label={"Bio / About"}>
             <Textarea
               value={form.bio}
               onChange={(e) => setForm((f) => ({ ...f, bio: e.target.value }))}
@@ -158,28 +158,28 @@ export default function AccountEditForm({ hook }: { hook: AccountDetailDataHook 
       {BANK_ACCOUNT_ROLES.includes(form.role) && (
         <div className="border-t border-line pt-4">
           <p className="text-xs font-bold text-ink-mute uppercase tracking-widest mb-3">
-            {t("owner.accountDetail.bankAccountTitle")}
+            {"Bank Account"}
           </p>
           <div className="grid grid-cols-3 gap-3">
-            <Field label={t("owner.accountDetail.fieldBankName")}>
+            <Field label={"Bank Name"}>
               <Input
                 value={form.bank_name}
                 onChange={(e) => setForm((f) => ({ ...f, bank_name: e.target.value }))}
-                placeholder={t("owner.accountDetail.bankNamePlaceholder")}
+                placeholder={"BCA, BRI, Mandiri..."}
               />
             </Field>
-            <Field label={t("owner.accountDetail.fieldBankAccount")}>
+            <Field label={"Account Number"}>
               <Input
                 value={form.bank_account}
                 onChange={(e) => setForm((f) => ({ ...f, bank_account: e.target.value }))}
-                placeholder={t("owner.accountDetail.bankAccountPlaceholder")}
+                placeholder={"1234567890"}
               />
             </Field>
-            <Field label={t("owner.accountDetail.fieldBankHolder")}>
+            <Field label={"Account Holder Name"}>
               <Input
                 value={form.bank_holder}
                 onChange={(e) => setForm((f) => ({ ...f, bank_holder: e.target.value }))}
-                placeholder={t("owner.accountDetail.bankHolderPlaceholder")}
+                placeholder={"Bank account holder name"}
               />
             </Field>
           </div>

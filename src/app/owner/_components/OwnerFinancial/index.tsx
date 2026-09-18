@@ -1,7 +1,6 @@
 "use client";
 import Icon from "@/components/ui/Icon";
 import { cn } from "@/lib/utils";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import type { Branch } from "../../_types";
 import type { FinancialTab } from "./_types";
 import { useFinancialData } from "./useFinancialData";
@@ -27,7 +26,6 @@ export type FinancialHook =
   ReturnType<typeof useFinancialExport>;
 
 export default function OwnerFinancial({ branches, userId, userName }: { branches: Branch[]; userId: string; userName: string }) {
-  const { t } = useLocale();
   const data = useFinancialData({ branches, userId, userName });
   const computed = useFinancialComputed(data);
   const payroll = usePayrollComputed(data, computed);
@@ -37,19 +35,19 @@ export default function OwnerFinancial({ branches, userId, userName }: { branche
   const { tab, setTab, categoriesByKind, manualTxns, showCategoryManager, setShowCategoryManager, loadCategories } = hook;
 
   const FTABS: { id: FinancialTab; label: string; icon: string }[] = [
-    { id: "overview", label: t("owner.financial.tabOverview"), icon: "grid" },
-    { id: "income", label: t("owner.financial.tabIncome"), icon: "wallet" },
-    { id: "expenses", label: t("owner.financial.tabExpenses"), icon: "invoice" },
-    { id: "payroll", label: t("owner.financial.tabPayroll"), icon: "users" },
-    { id: "moneyflow", label: t("owner.financial.tabMoneyFlow"), icon: "chart" },
+    { id: "overview", label: "Overview", icon: "grid" },
+    { id: "income", label: "Income", icon: "wallet" },
+    { id: "expenses", label: "Expenses", icon: "invoice" },
+    { id: "payroll", label: "Payroll (Coach & Staff)", icon: "users" },
+    { id: "moneyflow", label: "Money Flow", icon: "chart" },
   ];
 
   return (
     <div className="space-y-5">
       {/* Header */}
       <div>
-        <h2 className="font-display font-bold text-2xl text-ink">{t("owner.financial.pageTitle")}</h2>
-        <p className="text-ink-mute text-sm mt-0.5">{t("owner.financial.pageSub")}</p>
+        <h2 className="font-display font-bold text-2xl text-ink">{"Financial"}</h2>
+        <p className="text-ink-mute text-sm mt-0.5">{"Income, expenses & payroll across all centers."}</p>
       </div>
 
       {/* Sub-tabs */}

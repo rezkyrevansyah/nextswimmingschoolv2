@@ -4,13 +4,11 @@ import Btn from "@/components/ui/Btn";
 import { Input } from "@/components/ui/FormFields";
 import Modal from "@/components/ui/Modal";
 import { NoTranslate } from "@/components/ui/NoTranslate";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import type { useOwnerRaporLevels } from "./useOwnerRaporLevels";
 
 type Hook = ReturnType<typeof useOwnerRaporLevels>;
 
 export default function BestTimesModal({ hook }: { hook: Hook }) {
-  const { t, tNode } = useLocale();
   const {
     bestTimeLevel, setBestTimeLevel, loadingBestTimes, distances, strokes, targets,
     newDistance, setNewDistance, addingDistance, addDistance, deleteDistance,
@@ -22,15 +20,15 @@ export default function BestTimesModal({ hook }: { hook: Hook }) {
 
   return (
     <Modal open={!!bestTimeLevel} onClose={close}
-      title={tNode("owner.raporLevels.bestTimeModalTitle", { level: bestTimeLevel?.name ?? "" })} size="lg"
-      footer={<Btn variant="ghost" onClick={close}>{t("common.actions.close")}</Btn>}>
+      title={(<>{"Personal Best Time Table — "}<NoTranslate>{bestTimeLevel?.name ?? ""}</NoTranslate></>)} size="lg"
+      footer={<Btn variant="ghost" onClick={close}>{"Close"}</Btn>}>
       <div className="space-y-6">
-        <p className="text-xs text-ink-mute">{t("owner.raporLevels.bestTimeHint")}</p>
-        {loadingBestTimes ? <div className="text-ink-mute text-sm text-center py-6">{t("owner.raporLevels.criteriaLoading")}</div> : (
+        <p className="text-xs text-ink-mute">{"Define the distance columns and stroke rows for this level, then set an optional target time per cell. The coach's form will show exactly this grid."}</p>
+        {loadingBestTimes ? <div className="text-ink-mute text-sm text-center py-6">{"Loading…"}</div> : (
           <>
             <div className="space-y-2">
-              <div className="text-xs font-bold uppercase tracking-widest text-ink-faint">{t("owner.raporLevels.distancesTitle")}</div>
-              {distances.length === 0 && <p className="text-sm text-ink-mute">{t("owner.raporLevels.distancesEmpty")}</p>}
+              <div className="text-xs font-bold uppercase tracking-widest text-ink-faint">{"Distances"}</div>
+              {distances.length === 0 && <p className="text-sm text-ink-mute">{"No distances yet."}</p>}
               <div className="flex flex-wrap gap-2">
                 {distances.map(d => (
                   <span key={d.id} className="inline-flex items-center gap-1.5 pl-3 pr-1.5 py-1.5 rounded-full bg-ocean-50 text-ocean-700 text-sm font-semibold">
@@ -42,14 +40,14 @@ export default function BestTimesModal({ hook }: { hook: Hook }) {
                 ))}
               </div>
               <div className="flex items-center gap-2">
-                <Input inputMode="numeric" value={newDistance} onChange={e => setNewDistance(e.target.value)} placeholder={t("owner.raporLevels.addDistancePlaceholder")} className="max-w-[140px]" />
-                <Btn variant="outline" size="sm" icon="plus" onClick={addDistance} disabled={addingDistance}>{t("owner.raporLevels.addDistanceBtn")}</Btn>
+                <Input inputMode="numeric" value={newDistance} onChange={e => setNewDistance(e.target.value)} placeholder={"E.g. 50"} className="max-w-[140px]" />
+                <Btn variant="outline" size="sm" icon="plus" onClick={addDistance} disabled={addingDistance}>{"Add Distance"}</Btn>
               </div>
             </div>
 
             <div className="space-y-2">
-              <div className="text-xs font-bold uppercase tracking-widest text-ink-faint">{t("owner.raporLevels.strokesTitle")}</div>
-              {strokes.length === 0 && <p className="text-sm text-ink-mute">{t("owner.raporLevels.strokesEmpty")}</p>}
+              <div className="text-xs font-bold uppercase tracking-widest text-ink-faint">{"Strokes"}</div>
+              {strokes.length === 0 && <p className="text-sm text-ink-mute">{"No strokes yet."}</p>}
               <div className="flex flex-wrap gap-2">
                 {strokes.map(s => (
                   <span key={s.id} className="inline-flex items-center gap-1.5 pl-3 pr-1.5 py-1.5 rounded-full bg-wave-50 text-wave-700 text-sm font-semibold">
@@ -61,22 +59,22 @@ export default function BestTimesModal({ hook }: { hook: Hook }) {
                 ))}
               </div>
               <div className="flex items-center gap-2">
-                <Input value={newStroke} onChange={e => setNewStroke(e.target.value)} placeholder={t("owner.raporLevels.addStrokePlaceholder")} className="max-w-[220px]" />
-                <Btn variant="outline" size="sm" icon="plus" onClick={addStroke} disabled={addingStroke}>{t("owner.raporLevels.addStrokeBtn")}</Btn>
+                <Input value={newStroke} onChange={e => setNewStroke(e.target.value)} placeholder={"E.g. Freestyle"} className="max-w-[220px]" />
+                <Btn variant="outline" size="sm" icon="plus" onClick={addStroke} disabled={addingStroke}>{"Add Stroke"}</Btn>
               </div>
             </div>
 
             <div className="space-y-2 border-t border-line pt-4">
-              <div className="text-xs font-bold uppercase tracking-widest text-ink-faint">{t("owner.raporLevels.targetsTitle")}</div>
-              <p className="text-xs text-ink-mute">{t("owner.raporLevels.targetsHint")}</p>
+              <div className="text-xs font-bold uppercase tracking-widest text-ink-faint">{"Target Times"}</div>
+              <p className="text-xs text-ink-mute">{"Optional — shown to the coach as a reference standard per cell."}</p>
               {distances.length === 0 || strokes.length === 0 ? (
-                <p className="text-sm text-ink-mute">{t("owner.raporLevels.targetsEmptyNeedBoth")}</p>
+                <p className="text-sm text-ink-mute">{"Add at least one distance and one stroke to set target times."}</p>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm border-collapse">
                     <thead>
                       <tr>
-                        <th className="text-left p-2 text-xs uppercase tracking-widest text-ink-faint font-bold border-b border-line">{t("owner.raporLevels.strokesTitle")}</th>
+                        <th className="text-left p-2 text-xs uppercase tracking-widest text-ink-faint font-bold border-b border-line">{"Strokes"}</th>
                         {distances.map(d => (
                           <th key={d.id} className="text-center p-2 text-xs uppercase tracking-widest text-ink-faint font-bold border-b border-line">{d.distance}m</th>
                         ))}
@@ -96,7 +94,7 @@ export default function BestTimesModal({ hook }: { hook: Hook }) {
                                 <Input
                                   inputMode="decimal"
                                   value={value}
-                                  placeholder={t("owner.raporLevels.targetPlaceholder")}
+                                  placeholder={"--"}
                                   disabled={savingCell === key}
                                   onChange={e => setCellDrafts(prev => new Map(prev).set(key, e.target.value))}
                                   onBlur={e => saveTargetCell(s.id, d.id, e.target.value)}

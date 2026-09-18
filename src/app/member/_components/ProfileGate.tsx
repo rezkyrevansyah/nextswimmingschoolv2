@@ -5,24 +5,22 @@ import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
 import { Card } from "@/components/ui/Card";
 import Avatar from "@/components/ui/Avatar";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import { useUpload } from "@/hooks/useUpload";
 
 export default function ProfileGate({ memberName, onComplete, onLogout }: { memberName: string; onComplete: () => void; onLogout: () => void }) {
-  const { t } = useLocale();
   const { upload, uploading } = useUpload();
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [error, setError] = useState("");
 
   const handleUpload = async () => {
-    if (!avatarFile) return setError(t("member.profileGate.errorSelectPhoto"));
+    if (!avatarFile) return setError("Please choose a photo first");
     setError("");
     try {
       await upload.avatar(avatarFile);
       onComplete();
     } catch {
-      setError(t("member.profileGate.errorUploadFailed"));
+      setError("Failed to upload photo, please try again");
     }
   };
 
@@ -31,8 +29,8 @@ export default function ProfileGate({ memberName, onComplete, onLogout }: { memb
       <Logo size={48} withWord />
       <div className="w-full max-w-xs mt-8 space-y-5">
         <div className="text-center space-y-1">
-          <h1 className="font-display font-bold text-2xl text-ink">{t("member.profileGate.title")}</h1>
-          <p className="text-sm text-ink-mute">{t("member.profileGate.subtitle")}</p>
+          <h1 className="font-display font-bold text-2xl text-ink">{"Complete Profile"}</h1>
+          <p className="text-sm text-ink-mute">{"Upload a profile photo to start using the application."}</p>
         </div>
         <Card className="flex flex-col items-center gap-4">
           <label className="cursor-pointer group relative inline-block">
@@ -52,14 +50,14 @@ export default function ProfileGate({ memberName, onComplete, onLogout }: { memb
             }} />
           </label>
           <div className="text-center">
-            <p className="text-sm text-ink-soft">{t("member.profileGate.clickToPick")}</p>
-            <p className="text-xs text-ink-faint mt-0.5">{t("member.profileGate.formatHint")}</p>
+            <p className="text-sm text-ink-soft">{"Click photo to choose an image"}</p>
+            <p className="text-xs text-ink-faint mt-0.5">{"Format: JPG / PNG · Max. 5 MB"}</p>
           </div>
           {error && <p className="text-xs text-danger-600 text-center">{error}</p>}
           <Btn variant="primary" className="w-full" disabled={uploading || !avatarFile} onClick={handleUpload}>
-            {uploading ? t("common.actions.uploading") : t("member.profileGate.saveAndContinue")}
+            {uploading ? "Uploading…" : "Save & Continue"}
           </Btn>
-          <button onClick={onLogout} className="text-xs text-ink-mute hover:text-danger-600 transition-colors">{t("member.profile.logoutBtn")}</button>
+          <button onClick={onLogout} className="text-xs text-ink-mute hover:text-danger-600 transition-colors">{"Log out of account"}</button>
         </Card>
       </div>
     </div>

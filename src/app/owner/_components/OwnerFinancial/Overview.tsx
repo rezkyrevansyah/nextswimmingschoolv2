@@ -2,11 +2,9 @@
 import Icon from "@/components/ui/Icon";
 import { NoTranslate } from "@/components/ui/NoTranslate";
 import { fmtIDR, clampPercent } from "@/lib/utils";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import type { FinancialHook } from "./index";
 
 export default function Overview({ hook }: { hook: FinancialHook }) {
-  const { t } = useLocale();
   const {
     totalIncome, rangedPaidBills, totalRealCashOut, netAmount, totalTaxWithheld, totalGrossExpenses,
     chartMonths, setChartMonths, loadingBills, loadingExpenses, barChartData, barMax,
@@ -25,7 +23,7 @@ export default function Overview({ hook }: { hook: FinancialHook }) {
               <div className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-ok-500 inline-block" />
                 <span className="text-[11px] font-bold uppercase tracking-wider text-ink-faint">
-                  {t("owner.financial.statTotalIncome")}
+                  {"Total Income"}
                 </span>
               </div>
               <span className="w-9 h-9 rounded-xl bg-ok-50 text-ok-600 border border-ok-200/60 flex items-center justify-center shrink-0">
@@ -50,7 +48,7 @@ export default function Overview({ hook }: { hook: FinancialHook }) {
               <div className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-danger-500 inline-block" />
                 <span className="text-[11px] font-bold uppercase tracking-wider text-ink-faint">
-                  {t("owner.financial.statNetCashOut")}
+                  {"Real Cash Outflow"}
                 </span>
               </div>
               <span className="w-9 h-9 rounded-xl bg-danger-50 text-danger-600 border border-danger-200/60 flex items-center justify-center shrink-0">
@@ -73,7 +71,7 @@ export default function Overview({ hook }: { hook: FinancialHook }) {
               <div className="flex items-center gap-2">
                 <span className={`w-2 h-2 rounded-full ${netAmount >= 0 ? "bg-ok-500" : "bg-warn-500"} inline-block`} />
                 <span className="text-[11px] font-bold uppercase tracking-wider text-ink-faint">
-                  {t("owner.financial.statNet")}
+                  {"Net"}
                 </span>
               </div>
               <span className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${netAmount >= 0 ? "bg-ocean-50 text-ocean-700 border border-ocean-200/60" : "bg-warn-50 text-warn-700 border border-warn-200/60"}`}>
@@ -103,7 +101,7 @@ export default function Overview({ hook }: { hook: FinancialHook }) {
                   PPh 21
                 </span>
                 <span className="text-xs font-bold text-ink">
-                  {t("owner.financial.statTaxWithheld")}
+                  {"Income Tax (PPh 21)"}
                 </span>
               </div>
               <div className="text-[11px] text-ink-mute">
@@ -126,7 +124,7 @@ export default function Overview({ hook }: { hook: FinancialHook }) {
                   Beban Bruto
                 </span>
                 <span className="text-xs font-bold text-ink">
-                  {t("owner.financial.statGrossExpenses")}
+                  {"Total Gross Expenses"}
                 </span>
               </div>
               <div className="text-[11px] text-ink-mute">
@@ -148,8 +146,8 @@ export default function Overview({ hook }: { hook: FinancialHook }) {
         {/* Header row */}
         <div className="flex items-start justify-between gap-3 mb-5">
           <div>
-            <div className="font-display font-bold text-base text-ink">{t("owner.financial.chartTitle")}</div>
-            <div className="text-xs text-ink-mute mt-0.5">{t("owner.financial.chartSub", { count: chartMonths })}</div>
+            <div className="font-display font-bold text-base text-ink">{"Income vs Expenses"}</div>
+            <div className="text-xs text-ink-mute mt-0.5">{`last ${chartMonths} months · income & expense comparison`}</div>
           </div>
           <div className="flex gap-1 shrink-0 bg-paper-tint rounded-xl p-1">
             {([3, 6, 12] as const).map(n => (
@@ -158,14 +156,14 @@ export default function Overview({ hook }: { hook: FinancialHook }) {
                 onClick={() => setChartMonths(n)}
                 className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all cursor-pointer ${chartMonths === n ? "bg-white shadow-xs text-ocean-700 font-bold" : "text-ink-mute hover:text-ink"}`}
               >
-                {t("owner.financial.chartMonthShort", { count: n })}
+                {`${n}M`}
               </button>
             ))}
           </div>
         </div>
 
         {loadingBills || loadingExpenses ? (
-          <div className="h-48 flex items-center justify-center text-ink-mute text-sm">{t("owner.financial.chartLoading")}</div>
+          <div className="h-48 flex items-center justify-center text-ink-mute text-sm">{"Loading…"}</div>
         ) : (
           <>
             {/* Vertical grouped bar chart */}
@@ -181,10 +179,10 @@ export default function Overview({ hook }: { hook: FinancialHook }) {
                     {/* Tooltip */}
                     <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-ink text-white text-[10px] leading-tight rounded-lg px-2.5 py-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 w-36 shadow-float">
                       <div className="font-semibold mb-1">{m.label}</div>
-                      <div className="flex justify-between gap-2"><span className="text-ok-300">{t("owner.financial.chartLegendIncome")}</span><span>{fmtIDR(m.income)}</span></div>
-                      <div className="flex justify-between gap-2"><span className="text-danger-300">{t("owner.financial.chartLegendExpenses")}</span><span>{fmtIDR(m.expense)}</span></div>
+                      <div className="flex justify-between gap-2"><span className="text-ok-300">{"Income"}</span><span>{fmtIDR(m.income)}</span></div>
+                      <div className="flex justify-between gap-2"><span className="text-danger-300">{"Expenses"}</span><span>{fmtIDR(m.expense)}</span></div>
                       <div className={`flex justify-between gap-2 mt-1 pt-1 border-t border-white/20 font-semibold ${netPositive ? "text-ok-300" : "text-danger-300"}`}>
-                        <span>{t("owner.financial.statNet")}</span><span>{netPositive ? "+" : ""}{fmtIDR(m.net)}</span>
+                        <span>{"Net"}</span><span>{netPositive ? "+" : ""}{fmtIDR(m.net)}</span>
                       </div>
                     </div>
                     {/* Bars + labels */}
@@ -222,23 +220,23 @@ export default function Overview({ hook }: { hook: FinancialHook }) {
               <div className="flex gap-4 text-xs text-ink-mute">
                 <span className="flex items-center gap-1.5">
                   <span className="w-3 h-3 rounded-sm bg-ok-500 inline-block" />
-                  {t("owner.financial.chartLegendIncome")}
+                  {"Income"}
                 </span>
                 <span className="flex items-center gap-1.5">
                   <span className="w-3 h-3 rounded-sm bg-danger-500 inline-block" />
-                  {t("owner.financial.chartLegendExpenses")}
+                  {"Expenses"}
                 </span>
                 <span className="flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-ok-500 inline-block" />
-                  {t("owner.financial.chartLegendNetPositive")}
+                  {"Net +"}
                 </span>
                 <span className="flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-danger-500 inline-block" />
-                  {t("owner.financial.chartLegendNetNegative")}
+                  {"Net −"}
                 </span>
               </div>
               <div className="text-xs text-ink-faint">
-                {t("owner.financial.chartMax", { amount: fmtIDR(barMax) })}
+                {`Max: ${fmtIDR(barMax)}`}
               </div>
             </div>
 
@@ -260,7 +258,7 @@ export default function Overview({ hook }: { hook: FinancialHook }) {
       {/* Top cabang by income */}
       {branches.length > 0 && (
         <div className="bg-paper border border-line rounded-2xl p-5 shadow-xs">
-          <div className="font-display font-bold text-base mb-4">{t("owner.financial.branchIncomeTitle")}</div>
+          <div className="font-display font-bold text-base mb-4">{"Income per Center"}</div>
           <div className="grid gap-3">
             {branches.map(b => {
               const inc = branchIncomeMap[b.id] ?? 0;
@@ -270,7 +268,7 @@ export default function Overview({ hook }: { hook: FinancialHook }) {
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
                       <div className="text-sm font-semibold text-ink break-words"><NoTranslate>{b.name}</NoTranslate></div>
-                      <div className="text-[11px] uppercase tracking-widest text-ink-faint mt-0.5">{t("owner.financial.branchIncomeContribution")}</div>
+                      <div className="text-[11px] uppercase tracking-widest text-ink-faint mt-0.5">{"Contribution"}</div>
                     </div>
                     <div className="text-sm font-mono font-bold text-ocean-700 whitespace-nowrap">{fmtIDR(inc)}</div>
                   </div>
@@ -278,7 +276,7 @@ export default function Overview({ hook }: { hook: FinancialHook }) {
                     <div className="h-full rounded-full bg-gradient-to-r from-ocean-500 to-wave-500 transition-all duration-500" style={{ width: `${width}%` }} />
                   </div>
                   <div className="mt-1 text-[11px] text-ink-mute">
-                    {inc > 0 ? t("owner.financial.branchIncomePercent", { percent: Math.round(width) }) : t("owner.financial.branchIncomeEmpty")}
+                    {inc > 0 ? `${Math.round(width)}% of highest center` : "No income yet"}
                   </div>
                 </div>
               );

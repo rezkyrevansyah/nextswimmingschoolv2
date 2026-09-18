@@ -1,6 +1,7 @@
 "use client";
 import Btn from "@/components/ui/Btn";
 import Modal from "@/components/ui/Modal";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 import ClassInfoTab from "./ClassInfoTab";
 import ClassCoachTab from "./ClassCoachTab";
 import ClassMemberTab from "./ClassMemberTab";
@@ -8,17 +9,17 @@ import { ClassCoachAttendanceTab, ClassMemberAttendanceTab } from "./ClassAttend
 import type { OwnerClassesMasterHook } from "./_hook";
 
 export default function ClassDetailModal({ hook }: { hook: OwnerClassesMasterHook }) {
-  const { t, tNode, detailClass, setDetailClass, detailTab, switchDetailTab } = hook;
+  const { detailClass, setDetailClass, detailTab, switchDetailTab } = hook;
 
   return (
     <Modal
       open={!!detailClass}
       onClose={() => setDetailClass(null)}
-      title={tNode("owner.classes.detailModalTitle", { name: detailClass?.name ?? "" })}
+      title={(<>{"Class Detail — "}<NoTranslate>{detailClass?.name ?? ""}</NoTranslate></>)}
       size="xl"
       footer={
         <Btn variant="ghost" onClick={() => setDetailClass(null)}>
-          {t("owner.classes.closeBtn")}
+          {"Close"}
         </Btn>
       }
     >
@@ -28,11 +29,11 @@ export default function ClassDetailModal({ hook }: { hook: OwnerClassesMasterHoo
           <div className="flex gap-1 flex-wrap border-b border-line pb-2">
             {(["info", "coach", "member", "att_coach", "att_member"] as const).map((tab) => {
               const labels: Record<string, string> = {
-                info: t("owner.classes.tabInfo"),
-                coach: t("owner.classes.tabCoach"),
-                member: t("owner.classes.tabMember"),
-                att_coach: t("owner.classes.tabAttCoach"),
-                att_member: t("owner.classes.tabAttMember"),
+                info: "Info",
+                coach: "Coach",
+                member: "Student",
+                att_coach: "Coach Attendance",
+                att_member: "Student Attendance",
               };
               return (
                 <button

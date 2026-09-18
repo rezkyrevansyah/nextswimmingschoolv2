@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import Icon from "@/components/ui/Icon";
 import StarDisplay from "@/components/ui/StarDisplay";
-import { useLocale } from "@/components/providers/LocaleProvider";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 import { fmtDate } from "@/lib/utils";
 
 interface MyReviewRow {
@@ -11,7 +11,6 @@ interface MyReviewRow {
 }
 
 export default function CoachMyReviews({ coachId }: { coachId: string }) {
-  const { t } = useLocale();
   const [reviews, setReviews] = useState<MyReviewRow[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -27,7 +26,7 @@ export default function CoachMyReviews({ coachId }: { coachId: string }) {
 
   const avg = reviews.length ? reviews.reduce((s, r) => s + r.stars, 0) / reviews.length : null;
 
-  if (loading) return <div className="text-ink-mute text-sm py-3">{t("coach.rapor.loadingReviews")}</div>;
+  if (loading) return <div className="text-ink-mute text-sm py-3">{"Loading reviews…"}</div>;
 
   return (
     <div className="space-y-3">
@@ -36,7 +35,7 @@ export default function CoachMyReviews({ coachId }: { coachId: string }) {
           <div className="text-center shrink-0">
             <div className="text-3xl font-bold text-amber-600">{avg.toFixed(1)}</div>
             <StarDisplay stars={Math.round(avg)} size="sm" />
-            <div className="text-xs text-ink-mute mt-1">{t("coach.rapor.reviewCountLabel", { count: reviews.length })}</div>
+            <div className="text-xs text-ink-mute mt-1">{`${reviews.length} reviews`}</div>
           </div>
           <div className="flex-1 space-y-1">
             {[5,4,3,2,1].map(s => {
@@ -55,22 +54,22 @@ export default function CoachMyReviews({ coachId }: { coachId: string }) {
           </div>
         </div>
       )}
-      {reviews.length === 0 && <p className="text-ink-mute text-sm text-center py-6">{t("coach.rapor.noReviewsYet")}</p>}
+      {reviews.length === 0 && <p className="text-ink-mute text-sm text-center py-6">{"No reviews from students yet."}</p>}
       <div className="space-y-2.5">
         {reviews.map(r => (
           <div key={r.id} className="bg-white border border-line rounded-2xl p-4">
             <div className="flex items-start justify-between gap-2 mb-2">
               <div>
                 {/* reviewer identity is masked server-side — do not add Avatar/photo here */}
-                <div className="font-semibold text-ink text-sm">{r.member_name}</div>
-                <div className="text-xs text-ink-mute">{r.period_label}</div>
+                <div className="font-semibold text-ink text-sm"><NoTranslate>{r.member_name}</NoTranslate></div>
+                <div className="text-xs text-ink-mute"><NoTranslate>{r.period_label}</NoTranslate></div>
               </div>
               <div className="flex flex-col items-end gap-1 shrink-0">
                 <StarDisplay stars={r.stars} size="sm" />
                 <span className="text-xs text-ink-faint">{fmtDate(r.created_at)}</span>
               </div>
             </div>
-            {r.message && <p className="text-sm text-ink-soft bg-paper-tint rounded-xl px-3 py-2">{r.message}</p>}
+            {r.message && <p className="text-sm text-ink-soft bg-paper-tint rounded-xl px-3 py-2"><NoTranslate>{r.message}</NoTranslate></p>}
           </div>
         ))}
       </div>

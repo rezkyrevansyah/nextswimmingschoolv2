@@ -7,8 +7,7 @@ import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
 import { Card } from "@/components/ui/Card";
 import Avatar from "@/components/ui/Avatar";
-import LanguageSwitcher from "@/components/ui/LanguageSwitcher";
-import { useLocale } from "@/components/providers/LocaleProvider";
+import { GoogleLanguageSwitcher } from "@/components/GoogleTranslate";
 import AdminSettings from "./_components/AdminSettings";
 import AdminDashboard from "./_components/AdminDashboard";
 import AdminClass from "./_components/AdminClass";
@@ -32,57 +31,58 @@ import Bell from "@/components/layout/Bell";
 import BetaFeedback, { BETA_FEEDBACK_ENABLED } from "@/components/layout/BetaFeedback";
 import { createClient } from "@/utils/supabase/client";
 import { roleHomePath } from "@/lib/utils";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 import type { User } from "@supabase/supabase-js";
 
 // ── Nav ────────────────────────────────────────────────────────────────────────
 
-function buildNavItems(t: (key: string) => string, role: string, showPayments: boolean): NavItem[] {
+function buildNavItems(role: string, showPayments: boolean): NavItem[] {
   const isManagerCenter = role === "manager_center";
   const canSeeFinancial = isManagerCenter || role !== "admin";
   const canSeePay = isManagerCenter || showPayments;
   return [
-    { section: t("admin.nav.sectionOperasional") },
-    { id: "dashboard",  label: t("admin.nav.dashboard"), icon: "grid"      },
-    { id: "activity",   label: t("admin.nav.activity"),  icon: "calendar"  },
-    { section: t("admin.nav.sectionManajemen") },
-    { id: "classes",    label: t("admin.nav.classes"),   icon: "swim"      },
-    { id: "members",    label: t("admin.nav.members"),   icon: "users"     },
-    { id: "memberPrivate", label: t("admin.memberPrivate.pageTitle"), icon: "star" },
-    { id: "coaches",    label: t("admin.nav.coaches"),   icon: "shield"    },
-    { id: "competitions", label: t("admin.nav.competitions"), icon: "flag" },
-    { id: "absensi",    label: t("admin.nav.absensi"),   icon: "check"     },
-    { id: "announce",   label: t("admin.nav.announce"),  icon: "bell"      },
-    { section: t("admin.nav.sectionPersetujuan") },
-    { id: "izin",       label: t("admin.nav.izin"),      icon: "clipboard" },
-    { id: "approve",    label: t("admin.nav.approve"),   icon: "check"     },
-    { section: t("admin.nav.sectionKeuanganRapor") },
-    ...(canSeePay ? [{ id: "pay", label: t("admin.nav.pay"), icon: "wallet" }] : []),
-    ...(canSeeFinancial ? [{ id: "financial", label: t("admin.nav.financial"), icon: "invoice" }] : []),
-    { id: "rapor",      label: t("admin.nav.rapor"),     icon: "book"      },
-    { id: "school",     label: t("admin.nav.school"),    icon: "school"    },
-    { section: t("admin.nav.sectionSystem") },
-    { id: "settings",   label: t("admin.nav.settings"),  icon: "settings"  },
+    { section: "Operations" },
+    { id: "dashboard",  label: "Dashboard", icon: "grid"      },
+    { id: "activity",   label: "Class Activity",  icon: "calendar"  },
+    { section: "Management" },
+    { id: "classes",    label: "Class",   icon: "swim"      },
+    { id: "members",    label: "Student",   icon: "users"     },
+    { id: "memberPrivate", label: "Private Students", icon: "star" },
+    { id: "coaches",    label: "Coach",   icon: "shield"    },
+    { id: "competitions", label: "Competitions", icon: "flag" },
+    { id: "absensi",    label: "Attendance",   icon: "check"     },
+    { id: "announce",   label: "Announcements",  icon: "bell"      },
+    { section: "Approval" },
+    { id: "izin",       label: "Leave Requests",      icon: "clipboard" },
+    { id: "approve",    label: "Approvals",   icon: "check"     },
+    { section: "Finance & Reports" },
+    ...(canSeePay ? [{ id: "pay", label: "Payments", icon: "wallet" }] : []),
+    ...(canSeeFinancial ? [{ id: "financial", label: "Financial", icon: "invoice" }] : []),
+    { id: "rapor",      label: "Report Cards",     icon: "book"      },
+    { id: "school",     label: "School Panel",    icon: "school"    },
+    { section: "System" },
+    { id: "settings",   label: "Settings",  icon: "settings"  },
   ];
 }
 
-function buildTitles(t: (key: string) => string): Record<string, [string, string]> {
+function buildTitles(): Record<string, [string, string]> {
   return {
-    dashboard: [t("admin.titles.dashboard.title"), t("admin.titles.dashboard.sub")],
-    activity:  [t("admin.titles.activity.title"),  t("admin.titles.activity.sub")],
-    classes:   [t("admin.titles.classes.title"),   t("admin.titles.classes.sub")],
-    members:   [t("admin.titles.members.title"),   t("admin.titles.members.sub")],
-    memberPrivate: [t("admin.memberPrivate.pageTitle"), t("admin.memberPrivate.pageSub")],
-    coaches:   [t("admin.titles.coaches.title"),   t("admin.titles.coaches.sub")],
-    competitions: [t("admin.titles.competitions.title"), t("admin.titles.competitions.sub")],
-    absensi:   [t("admin.titles.absensi.title"),   t("admin.titles.absensi.sub")],
-    announce:  [t("admin.titles.announce.title"),  t("admin.titles.announce.sub")],
-    izin:      [t("admin.titles.izin.title"),      t("admin.titles.izin.sub")],
-    approve:   [t("admin.titles.approve.title"),   t("admin.titles.approve.sub")],
-    pay:       [t("admin.titles.pay.title"),       t("admin.titles.pay.sub")],
-    financial: [t("admin.titles.financial.title"), t("admin.titles.financial.sub")],
-    rapor:     [t("admin.titles.rapor.title"),     t("admin.titles.rapor.sub")],
-    school:    [t("admin.titles.school.title"),    t("admin.titles.school.sub")],
-    settings:  [t("admin.titles.settings.title"),  t("admin.titles.settings.sub")],
+    dashboard: ["Dashboard", ""],
+    activity:  ["Class Activity",  "Calendar for all classes"],
+    classes:   ["Class",   "Class & schedule CRUD"],
+    members:   ["Student",   "Center student management"],
+    memberPrivate: ["Private Students", "Manage every private (1-on-1) student in one place — schedule, location, coach, and session count."],
+    coaches:   ["Coach",   "Coaches at your center"],
+    competitions: ["Competitions", "Swimming competitions & student achievements"],
+    absensi:   ["Attendance",   "Coach & student · SSDP"],
+    announce:  ["Announcements",  "Notifications to students"],
+    izin:      ["Leave Requests",      "Approve & create leave requests"],
+    approve:   ["Approvals",   "Approval queue"],
+    pay:       ["Payments",       "Bills & verification"],
+    financial: ["Financial", "Finance & payment records"],
+    rapor:     ["Report Cards",     "Report card entry periods"],
+    school:    ["School Panel",    "Affiliated school"],
+    settings:  ["Settings",  "Logo, location, admin WhatsApp"],
   };
 }
 
@@ -100,8 +100,6 @@ export default function AdminPage() {
   const [initError, setInitError] = useState<string | null>(null);
   const [approveBadge, setApproveBadge] = useState(0);
   const [role, setRole] = useState("admin");
-  const { t } = useLocale();
-
   const loadBranch = useCallback(async (branchId: string) => {
     const { data } = await supabase.from("branches").select("id, name, city, address, lat, lng, wa_numbers, logo_url, show_payments_to_admin").eq("id", branchId).single();
     if (data) setBranch(data as Branch);
@@ -152,7 +150,7 @@ export default function AdminPage() {
         .maybeSingle();
 
       if (!profile) {
-        setInitError(t("admin.shell.notFoundBody"));
+        setInitError("Account data was not found in the database. Data may have been reset. Please contact the owner to recreate your account.");
         return;
       }
 
@@ -198,16 +196,16 @@ export default function AdminPage() {
   const branchId = resolvedBranchId || (currentUser?.user_metadata?.branch_id as string ?? "");
 
   const navItems = useMemo(() =>
-    buildNavItems(t, role, branch?.show_payments_to_admin ?? true).map(it =>
+    buildNavItems(role, branch?.show_payments_to_admin ?? true).map(it =>
       it.id === "approve" && approveBadge > 0
         ? { ...it, badge: approveBadge }
         : it
     ),
-  [approveBadge, t, role, branch?.show_payments_to_admin]);
+  [approveBadge, role, branch?.show_payments_to_admin]);
 
   function renderPage() {
     if (!resolvedBranchId && active !== "settings") return (
-      <div className="flex items-center justify-center h-64 text-ink-mute">{t("admin.shell.loadingBranch")}</div>
+      <div className="flex items-center justify-center h-64 text-ink-mute">{"Loading center data…"}</div>
     );
     switch (active) {
       case "dashboard": return <AdminDashboard branchId={branchId} />;
@@ -230,18 +228,18 @@ export default function AdminPage() {
     }
   }
 
-  const [title] = buildTitles(t)[active] ?? [t("admin.shell.brandTitle"), ""];
-  const subTitle = active === "dashboard" ? branch?.name ?? t("admin.shell.brandTitle") : (buildTitles(t)[active]?.[1] ?? "");
+  const [title] = buildTitles()[active] ?? ["Admin Panel", ""];
+  const subTitle = active === "dashboard" ? (branch?.name ? <NoTranslate>{branch.name}</NoTranslate> : "Admin Panel") : (buildTitles()[active]?.[1] ?? "");
 
   const brand = useMemo(() => (
     <div className="flex items-center gap-2.5">
       {branch?.logo_url ? <Image src={branch.logo_url} alt="logo" width={36} height={36} className="w-9 h-9 rounded-lg object-cover" /> : <Logo size={36} />}
       <div className="min-w-0">
-        <div className="font-display font-extrabold text-[14px] text-ocean-700 leading-tight">{t("admin.shell.brandTitle")}</div>
-        <div className="text-[10px] text-ink-mute tracking-wide truncate">{branch?.name ?? t("admin.shell.brandLoading")}</div>
+        <div className="font-display font-extrabold text-[14px] text-ocean-700 leading-tight">{"Admin Panel"}</div>
+        <div className="text-[10px] text-ink-mute tracking-wide truncate">{branch?.name ? <NoTranslate>{branch.name}</NoTranslate> : "Loading…"}</div>
       </div>
     </div>
-  ), [branch, t]);
+  ), [branch]);
 
   if (initError) return (
     <div className="min-h-screen flex items-center justify-center bg-paper-tint px-4">
@@ -250,11 +248,11 @@ export default function AdminPage() {
           <Icon name="warning" className="w-7 h-7" />
         </div>
         <div>
-          <h2 className="font-display font-bold text-xl text-ink">{t("admin.shell.notFoundTitle")}</h2>
+          <h2 className="font-display font-bold text-xl text-ink">{"Data Not Found"}</h2>
           <p className="text-sm text-ink-mute mt-2 leading-relaxed">{initError}</p>
         </div>
         <Btn variant="primary" className="w-full" onClick={async () => { await supabase.auth.signOut(); window.location.href = "/login"; }}>
-          {t("admin.shell.backToLogin")}
+          {"Back to Login"}
         </Btn>
       </div>
     </div>
@@ -268,13 +266,13 @@ export default function AdminPage() {
             <Icon name="shield" className="w-3.5 h-3.5 text-wave-200" />
           </span>
           <span className="text-sm font-semibold flex-1">
-            {t("admin.shell.ownerPreviewBanner")} <span className="text-wave-200 font-bold">{ownerPreview.name}</span>
+            {"Owner preview mode — Admin Panel"} <span className="text-wave-200 font-bold"><NoTranslate>{ownerPreview.name}</NoTranslate></span>
           </span>
           <button
             onClick={backToOwner}
             className="flex items-center gap-1.5 text-sm font-bold text-white bg-white/15 hover:bg-white/25 px-3 py-1.5 rounded-lg transition"
           >
-            <Icon name="arrowL" className="w-4 h-4" /> {t("admin.shell.backToOwnerBtn")}
+            <Icon name="arrowL" className="w-4 h-4" /> {"Back to Owner Panel"}
           </button>
         </div>
       )}
@@ -288,12 +286,12 @@ export default function AdminPage() {
           <div className="space-y-2">
             {branch && (
               <Card className="!p-3 bg-wave-50 border-wave-100">
-                <div className="text-[10px] uppercase tracking-widest font-bold text-wave-700">{t("admin.shell.activeBranchLabel")}</div>
-                <div className="font-display font-bold text-ink mt-0.5 text-sm">{branch.name}</div>
+                <div className="text-[10px] uppercase tracking-widest font-bold text-wave-700">{"Active Center"}</div>
+                <div className="font-display font-bold text-ink mt-0.5 text-sm"><NoTranslate>{branch.name}</NoTranslate></div>
               </Card>
             )}
             <button onClick={logout} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold text-ink-mute hover:bg-paper-tint">
-              <Icon name="logout" className="w-4 h-4" /> {t("common.actions.logout")}
+              <Icon name="logout" className="w-4 h-4" /> {"Logout"}
             </button>
           </div>
         }
@@ -326,11 +324,11 @@ export default function AdminPage() {
         <Topbar
           title={title}
           sub={subTitle}
-          search={t("admin.shell.searchPlaceholder")}
+          search={"Search students, coaches, invoices…"}
           onMenu={() => setMobileNav(true)}
           right={
             <>
-              <LanguageSwitcher />
+              <GoogleLanguageSwitcher variant="pill" />
               <Bell userId={currentUser?.id ?? ""} />
               <Avatar name={currentUser?.user_metadata?.full_name ?? "A"} size={36} />
             </>

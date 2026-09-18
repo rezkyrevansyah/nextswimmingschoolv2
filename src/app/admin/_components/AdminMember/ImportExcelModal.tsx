@@ -2,11 +2,12 @@
 import Btn from "@/components/ui/Btn";
 import Modal from "@/components/ui/Modal";
 import Icon from "@/components/ui/Icon";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 import type { AdminMemberHook } from "./_hook";
 
 export default function ImportExcelModal({ hook }: { hook: AdminMemberHook }) {
   const {
-    t, openImport, setOpenImport, importStep, setImportStep, importRows, importPage, setImportPage,
+    openImport, setOpenImport, importStep, setImportStep, importRows, importPage, setImportPage,
     importing, importProgress, importResult, handleExcelFile, downloadTemplate, runImport,
   } = hook;
 
@@ -14,17 +15,17 @@ export default function ImportExcelModal({ hook }: { hook: AdminMemberHook }) {
     <Modal
       open={openImport}
       onClose={() => setOpenImport(false)}
-      title={importStep === "upload" ? t("admin.members.importModalTitleUpload") : importStep === "preview" ? t("admin.members.importModalTitlePreview", { count: importRows.length }) : t("admin.members.importModalTitleResult")}
+      title={importStep === "upload" ? "Import Students from Excel" : importStep === "preview" ? `Import Preview (${importRows.length} rows)` : "Import Result"}
       size={importStep === "result" ? (importResult && (importResult.failed.length > 0 || importResult.classWarnings.length > 0) ? "lg" : "sm") : "xl"}
       footer={
         importStep === "upload" ? (
-          <Btn variant="ghost" onClick={() => setOpenImport(false)}>{t("common.actions.close")}</Btn>
+          <Btn variant="ghost" onClick={() => setOpenImport(false)}>{"Close"}</Btn>
         ) : importStep === "preview" ? (
           importing && importProgress ? (
             <div className="flex-1 flex items-center gap-3 min-w-0">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs font-semibold text-ink-soft">{t("admin.members.importingMembersLabel")}</span>
+                  <span className="text-xs font-semibold text-ink-soft">{"Importing students…"}</span>
                   <span className="text-xs font-bold text-ocean-600 tabular-nums">
                     {importProgress.done}/{importProgress.total} ({Math.round((importProgress.done / importProgress.total) * 100)}%)
                   </span>
@@ -39,23 +40,23 @@ export default function ImportExcelModal({ hook }: { hook: AdminMemberHook }) {
             </div>
           ) : (
             <>
-              <Btn variant="ghost" onClick={() => setImportStep("upload")}>{t("admin.members.backBtn")}</Btn>
+              <Btn variant="ghost" onClick={() => setImportStep("upload")}>{"Back"}</Btn>
               <Btn
                 variant="primary"
                 icon="upload"
                 disabled={importRows.filter(r => r._status !== "error").length === 0}
                 onClick={runImport}
               >
-                {t("admin.members.importCountMembersBtn", { count: importRows.filter(r => r._status !== "error").length })}
+                {`Import ${importRows.filter(r => r._status !== "error").length} Students`}
               </Btn>
             </>
           )
         ) : (
           <>
             {importResult && importResult.failed.length > 0 && (
-              <Btn variant="ghost" onClick={() => setImportStep("preview")}>{t("admin.members.viewPreviewDetailBtn")}</Btn>
+              <Btn variant="ghost" onClick={() => setImportStep("preview")}>{"View Preview Detail"}</Btn>
             )}
-            <Btn variant="primary" onClick={() => setOpenImport(false)}>{t("common.actions.close")}</Btn>
+            <Btn variant="primary" onClick={() => setOpenImport(false)}>{"Close"}</Btn>
           </>
         )
       }
@@ -64,26 +65,26 @@ export default function ImportExcelModal({ hook }: { hook: AdminMemberHook }) {
       {importStep === "upload" && (
         <div className="space-y-5">
           <div className="bg-ocean-50 border border-ocean-100 rounded-xl p-4 text-sm text-ocean-800 space-y-2">
-            <div className="font-bold text-ocean-700 mb-1">{t("admin.members.columnsRequiredTitle")}</div>
+            <div className="font-bold text-ocean-700 mb-1">{"Required columns in the Excel file:"}</div>
             <div className="grid sm:grid-cols-2 gap-x-6 gap-y-1 text-xs">
-              <div><span className="font-mono font-bold">nama_lengkap</span> <span className="text-ocean-600">{t("admin.members.requiredBadge")}</span></div>
-              <div><span className="font-mono font-bold">email</span> <span className="text-ocean-600">{t("admin.members.requiredBadge")}</span></div>
-              <div><span className="font-mono font-bold">password</span> <span className="text-ocean-600">{t("admin.members.requiredMin6Badge")}</span></div>
+              <div><span className="font-mono font-bold">nama_lengkap</span> <span className="text-ocean-600">{"— REQUIRED"}</span></div>
+              <div><span className="font-mono font-bold">email</span> <span className="text-ocean-600">{"— REQUIRED"}</span></div>
+              <div><span className="font-mono font-bold">password</span> <span className="text-ocean-600">{"— REQUIRED (min. 6 characters)"}</span></div>
               <div><span className="font-mono font-bold">tipe_member</span> <span className="text-ink-mute">— reguler / private / afiliasi_sekolah</span></div>
               <div><span className="font-mono font-bold">tanggal_lahir</span> <span className="text-ink-mute">— DD/MM/YYYY</span></div>
-              <div><span className="font-mono font-bold">jenis_kelamin</span> <span className="text-ink-mute">{t("admin.members.genderColHint")}</span></div>
-              <div><span className="font-mono font-bold">no_hp</span> <span className="text-ink-mute">{t("admin.members.optionalBadge")}</span></div>
-              <div><span className="font-mono font-bold">jumlah_sesi</span> <span className="text-ink-mute">{t("admin.members.sessionCountColHint")}</span></div>
-              <div><span className="font-mono font-bold">nama_kelas</span> <span className="text-ink-mute">{t("admin.members.classNameColHint")}</span></div>
-              <div><span className="font-mono font-bold">nama_sekolah</span> <span className="text-ocean-600">{t("admin.members.schoolNameColHint")}</span></div>
+              <div><span className="font-mono font-bold">jenis_kelamin</span> <span className="text-ink-mute">{"— L or P"}</span></div>
+              <div><span className="font-mono font-bold">no_hp</span> <span className="text-ink-mute">{"— Optional"}</span></div>
+              <div><span className="font-mono font-bold">jumlah_sesi</span> <span className="text-ink-mute">{"— Required if type=private"}</span></div>
+              <div><span className="font-mono font-bold">nama_kelas</span> <span className="text-ink-mute">{"— Must match a class name in the system"}</span></div>
+              <div><span className="font-mono font-bold">nama_sekolah</span> <span className="text-ocean-600">{"— REQUIRED if type=afiliasi_sekolah"}</span></div>
             </div>
-            <div className="text-xs text-ocean-700 pt-1 border-t border-ocean-100">{t("admin.members.privateImportColumnsNote")}</div>
+            <div className="text-xs text-ocean-700 pt-1 border-t border-ocean-100">{"For type=private, also fill in: jumlah_sesi, jadwal_hari, jam_mulai, jam_selesai (required — schedule at this center's own pool), and optionally coach_utama_hp / coach_asisten_hp and harga_paket."}</div>
           </div>
           <label className="flex flex-col items-center justify-center gap-3 border-2 border-dashed border-line rounded-2xl p-10 cursor-pointer hover:border-ocean-400 hover:bg-ocean-50/30 transition-colors">
             <Icon name="upload" className="w-10 h-10 text-ink-faint" />
             <div className="text-center">
-              <div className="font-semibold text-ink">{t("admin.members.clickToChooseFile")}</div>
-              <div className="text-sm text-ink-mute">{t("admin.members.fileTypesHint")}</div>
+              <div className="font-semibold text-ink">{"Click to choose a file"}</div>
+              <div className="text-sm text-ink-mute">{".xlsx, .xls, or .csv"}</div>
             </div>
             <input
               type="file"
@@ -94,7 +95,7 @@ export default function ImportExcelModal({ hook }: { hook: AdminMemberHook }) {
           </label>
           <div className="text-center">
             <button type="button" onClick={downloadTemplate} className="text-sm text-ocean-600 hover:underline font-semibold">
-              {t("admin.members.downloadExcelTemplateBtn")}
+              {"Download Excel template"}
             </button>
           </div>
         </div>
@@ -111,22 +112,22 @@ export default function ImportExcelModal({ hook }: { hook: AdminMemberHook }) {
         return (
           <div className="space-y-4">
             <div className="flex flex-wrap gap-2">
-              <span className="px-3 py-1 rounded-full text-xs font-bold bg-ok-50 text-ok-700 ring-1 ring-ok-200">{t("admin.members.okBadge", { count: okCount })}</span>
-              {warnCount > 0 && <span className="px-3 py-1 rounded-full text-xs font-bold bg-warn-50 text-warn-700 ring-1 ring-warn-200">{t("admin.members.warningBadge", { count: warnCount })}</span>}
-              {errCount > 0 && <span className="px-3 py-1 rounded-full text-xs font-bold bg-danger-50 text-danger-700 ring-1 ring-danger-200">{t("admin.members.errorSkippedBadge", { count: errCount })}</span>}
+              <span className="px-3 py-1 rounded-full text-xs font-bold bg-ok-50 text-ok-700 ring-1 ring-ok-200">{`${okCount} OK`}</span>
+              {warnCount > 0 && <span className="px-3 py-1 rounded-full text-xs font-bold bg-warn-50 text-warn-700 ring-1 ring-warn-200">{`${warnCount} Warning`}</span>}
+              {errCount > 0 && <span className="px-3 py-1 rounded-full text-xs font-bold bg-danger-50 text-danger-700 ring-1 ring-danger-200">{`${errCount} Error — will be skipped`}</span>}
             </div>
             <div className="overflow-x-auto rounded-xl border border-line">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-paper-tint border-b border-line text-left">
                     <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs w-10">#</th>
-                    <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs">{t("admin.members.colName3")}</th>
-                    <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs">{t("admin.coaches.colEmail")}</th>
-                    <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs">{t("admin.members.colType2")}</th>
-                    <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs">{t("admin.members.colClassImport")}</th>
-                    <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs">{t("admin.members.colSchoolImport")}</th>
-                    <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs">{t("admin.members.colStatusImport")}</th>
-                    <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs">{t("admin.members.colNotesImport")}</th>
+                    <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs">{"Name"}</th>
+                    <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs">{"Email"}</th>
+                    <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs">{"Type"}</th>
+                    <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs">{"Class"}</th>
+                    <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs">{"School"}</th>
+                    <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs">{"Status"}</th>
+                    <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs">{"Notes"}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -136,14 +137,14 @@ export default function ImportExcelModal({ hook }: { hook: AdminMemberHook }) {
                       className={r._status === "error" ? "bg-danger-50/40 border-b border-danger-100" : r._status === "warn" ? "bg-warn-50/40 border-b border-warn-100" : "border-b border-line"}
                     >
                       <td className="px-3 py-2 text-xs text-ink-mute">{r._rowNum}</td>
-                      <td className="px-3 py-2 font-medium text-ink truncate max-w-[140px]">{r.full_name || <span className="text-ink-faint italic">—</span>}</td>
-                      <td className="px-3 py-2 text-ink-soft truncate max-w-[160px]">{r.email || <span className="text-ink-faint italic">—</span>}</td>
+                      <td className="px-3 py-2 font-medium text-ink truncate max-w-[140px]">{r.full_name ? <NoTranslate>{r.full_name}</NoTranslate> : <span className="text-ink-faint italic">—</span>}</td>
+                      <td className="px-3 py-2 text-ink-soft truncate max-w-[160px]">{r.email ? <NoTranslate>{r.email}</NoTranslate> : <span className="text-ink-faint italic">—</span>}</td>
                       <td className="px-3 py-2 text-xs capitalize">{r.member_type}</td>
-                      <td className="px-3 py-2 text-xs text-ink-soft">{r.member_type === "private" ? (r.schedule_days?.length ? `${r.schedule_days.join(",")} ${r.time_start ?? ""}-${r.time_end ?? ""}` : "—") : (r.nama_kelas_raw || "—")}</td>
-                      <td className="px-3 py-2 text-xs text-ink-soft">{r.nama_sekolah_raw || "—"}</td>
+                      <td className="px-3 py-2 text-xs text-ink-soft"><NoTranslate>{r.member_type === "private" ? (r.schedule_days?.length ? `${r.schedule_days.join(",")} ${r.time_start ?? ""}-${r.time_end ?? ""}` : "—") : (r.nama_kelas_raw || "—")}</NoTranslate></td>
+                      <td className="px-3 py-2 text-xs text-ink-soft"><NoTranslate>{r.nama_sekolah_raw || "—"}</NoTranslate></td>
                       <td className="px-3 py-2">
                         {r._status === "ok" && <span className="text-xs font-bold text-ok-600">OK</span>}
-                        {r._status === "warn" && <span className="text-xs font-bold text-warn-600">{t("admin.members.statusWarn")}</span>}
+                        {r._status === "warn" && <span className="text-xs font-bold text-warn-600">{"Warning"}</span>}
                         {r._status === "error" && <span className="text-xs font-bold text-danger-600">Error</span>}
                       </td>
                       <td className="px-3 py-2 text-xs text-ink-mute max-w-[200px]">
@@ -156,9 +157,9 @@ export default function ImportExcelModal({ hook }: { hook: AdminMemberHook }) {
             </div>
             {totalPages > 1 && (
               <div className="flex items-center justify-between text-sm">
-                <button type="button" onClick={() => setImportPage(p => Math.max(0, p - 1))} disabled={importPage === 0} className="px-3 py-1.5 rounded-lg border border-line text-ink-mute disabled:opacity-40">{t("admin.members.prevBtn")}</button>
-                <span className="text-ink-mute text-xs">{t("admin.rapor.pageOfLabel", { page: importPage + 1, total: totalPages })}</span>
-                <button type="button" onClick={() => setImportPage(p => Math.min(totalPages - 1, p + 1))} disabled={importPage === totalPages - 1} className="px-3 py-1.5 rounded-lg border border-line text-ink-mute disabled:opacity-40">{t("admin.members.nextBtn")}</button>
+                <button type="button" onClick={() => setImportPage(p => Math.max(0, p - 1))} disabled={importPage === 0} className="px-3 py-1.5 rounded-lg border border-line text-ink-mute disabled:opacity-40">{"‹ Previous"}</button>
+                <span className="text-ink-mute text-xs">{`Page ${importPage + 1} of ${totalPages}`}</span>
+                <button type="button" onClick={() => setImportPage(p => Math.min(totalPages - 1, p + 1))} disabled={importPage === totalPages - 1} className="px-3 py-1.5 rounded-lg border border-line text-ink-mute disabled:opacity-40">{"Next ›"}</button>
               </div>
             )}
           </div>
@@ -174,18 +175,18 @@ export default function ImportExcelModal({ hook }: { hook: AdminMemberHook }) {
                 <Icon name="check" className="w-6 h-6" strokeWidth={2.5} />
               </div>
               <div className="text-4xl font-display font-extrabold text-ok-600">{importResult.success}</div>
-              <div className="text-sm font-semibold text-ok-800 mt-1">{t("admin.members.membersCreatedSuccessfully")}</div>
+              <div className="text-sm font-semibold text-ok-800 mt-1">{"Students created successfully"}</div>
             </div>
           ) : (
             <>
               <div className="grid grid-cols-2 gap-3">
                 <div className="rounded-2xl bg-ok-50 border border-ok-200 p-4 text-center">
                   <div className="text-3xl font-display font-extrabold text-ok-600">{importResult.success}</div>
-                  <div className="text-xs font-semibold text-ok-700 mt-1">{t("admin.members.membersCreatedSuccessfully")}</div>
+                  <div className="text-xs font-semibold text-ok-700 mt-1">{"Students created successfully"}</div>
                 </div>
                 <div className="rounded-2xl bg-danger-50 border border-danger-200 p-4 text-center">
                   <div className="text-3xl font-display font-extrabold text-danger-600">{importResult.failed.length}</div>
-                  <div className="text-xs font-semibold text-danger-700 mt-1">{t("admin.members.failedToImport")}</div>
+                  <div className="text-xs font-semibold text-danger-700 mt-1">{"Failed to import"}</div>
                 </div>
               </div>
 
@@ -194,16 +195,16 @@ export default function ImportExcelModal({ hook }: { hook: AdminMemberHook }) {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="bg-paper-tint border-b border-line text-left sticky top-0">
-                        <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs w-14">{t("admin.members.colRowImport")}</th>
-                        <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs">{t("admin.coaches.colEmail")}</th>
-                        <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs">{t("admin.members.colReasonImport")}</th>
+                        <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs w-14">{"Row"}</th>
+                        <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs">{"Email"}</th>
+                        <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs">{"Reason"}</th>
                       </tr>
                     </thead>
                     <tbody>
                       {importResult.failed.map(f => (
                         <tr key={f.row} className="border-b border-line">
                           <td className="px-3 py-2 text-xs text-ink-mute">{f.row}</td>
-                          <td className="px-3 py-2 text-ink-soft">{f.email}</td>
+                          <td className="px-3 py-2 text-ink-soft"><NoTranslate>{f.email}</NoTranslate></td>
                           <td className="px-3 py-2 text-xs text-danger-700">{f.error}</td>
                         </tr>
                       ))}
@@ -214,21 +215,21 @@ export default function ImportExcelModal({ hook }: { hook: AdminMemberHook }) {
 
               {importResult.classWarnings.length > 0 && (
                 <div className="space-y-2">
-                  <div className="text-xs font-semibold text-warn-700">{t("admin.members.classFullWarningsTitle", { count: importResult.classWarnings.length })}</div>
+                  <div className="text-xs font-semibold text-warn-700">{`${importResult.classWarnings.length} student(s) created without a class (class was full)`}</div>
                   <div className="overflow-x-auto rounded-xl border border-line max-h-60 overflow-y-auto">
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="bg-paper-tint border-b border-line text-left sticky top-0">
-                          <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs w-14">{t("admin.members.colRowImport")}</th>
-                          <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs">{t("admin.coaches.colEmail")}</th>
-                          <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs">{t("admin.members.colReasonImport")}</th>
+                          <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs w-14">{"Row"}</th>
+                          <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs">{"Email"}</th>
+                          <th className="px-3 py-2.5 font-semibold text-ink-mute text-xs">{"Reason"}</th>
                         </tr>
                       </thead>
                       <tbody>
                         {importResult.classWarnings.map(w => (
                           <tr key={w.row} className="border-b border-line">
                             <td className="px-3 py-2 text-xs text-ink-mute">{w.row}</td>
-                            <td className="px-3 py-2 text-ink-soft">{w.email}</td>
+                            <td className="px-3 py-2 text-ink-soft"><NoTranslate>{w.email}</NoTranslate></td>
                             <td className="px-3 py-2 text-xs text-warn-700">{w.warning}</td>
                           </tr>
                         ))}

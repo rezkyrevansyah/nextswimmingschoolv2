@@ -2,12 +2,12 @@
 import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
 import { Field, Input, Select } from "@/components/ui/FormFields";
 import { Card } from "@/components/ui/Card";
 import Modal from "@/components/ui/Modal";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 import type { ScheduleSlot } from "../_types";
 import { getSlotTime } from "../_utils";
 import { toLocalDateStr } from "@/lib/utils";
@@ -49,8 +49,7 @@ interface CalEventExt extends CalEvent { isHoliday?: boolean; holidayId?: string
 export default function AdminClassActivity({ branchId }: { branchId: string }) {
   const supabase = createClient();
   const toast = useToast();
-  const { t, tArray, locale } = useLocale();
-  const dayLabels = tArray("common.days.short"); // Sun-first
+  const dayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]; // Sun-first
   const [events, setEvents] = useState<CalEventExt[]>([]);
   const [weekOffset, setWeekOffset] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -142,7 +141,7 @@ export default function AdminClassActivity({ branchId }: { branchId: string }) {
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const addHoliday = async () => {
-    if (!holidayForm.class_id || !holidayForm.holiday_date) return toast.error(t("admin.classActivity.classDateRequired"));
+    if (!holidayForm.class_id || !holidayForm.holiday_date) return toast.error("Class and date are required");
     setSavingH(true);
     const user = (await supabase.auth.getUser()).data.user;
     const { error } = await supabase.from("class_holidays").upsert({
@@ -153,8 +152,8 @@ export default function AdminClassActivity({ branchId }: { branchId: string }) {
       created_by: user?.id,
     }, { onConflict: "class_id,holiday_date" });
     setSavingH(false);
-    if (error) return toast.error(t("admin.classActivity.saveFailed"), error.message);
-    toast.success(t("admin.classActivity.classMarkedHolidayToast"));
+    if (error) return toast.error("Failed to save", error.message);
+    toast.success("Class marked as holiday");
     setOpenHoliday(false);
     setHolidayForm({ class_id: "", holiday_date: "", reason: "" });
     load();
@@ -162,12 +161,12 @@ export default function AdminClassActivity({ branchId }: { branchId: string }) {
 
   const removeHoliday = async (holidayId: string) => {
     const { error } = await supabase.from("class_holidays").delete().eq("id", holidayId);
-    if (error) return toast.error(t("admin.classActivity.cancelFailed"), error.message);
-    toast.success(t("admin.classActivity.holidayCancelledToast"));
+    if (error) return toast.error("Failed to cancel", error.message);
+    toast.success("Holiday status cancelled");
     load();
   };
 
-  const localeTag = locale === "id" ? "id-ID" : "en-US";
+  const localeTag = "en-US";
   const weekLabel = `${weekDates[0].getDate()} ${weekDates[0].toLocaleDateString(localeTag, { month: "short" })} – ${weekDates[6].getDate()} ${weekDates[6].toLocaleDateString(localeTag, { month: "short", year: "numeric" })}`;
 
   // Total calendar height in px
@@ -177,9 +176,9 @@ export default function AdminClassActivity({ branchId }: { branchId: string }) {
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div><h2 className="font-display font-bold text-2xl">{t("admin.classActivity.pageTitle")}</h2><p className="text-ink-mute text-sm mt-0.5">{t("admin.classActivity.pageSub")}</p></div>
+        <div><h2 className="font-display font-bold text-2xl">{"Class Activity"}</h2><p className="text-ink-mute text-sm mt-0.5">{"Calendar for all active classes this week."}</p></div>
         <div className="flex gap-2 items-center flex-wrap">
-          <Btn variant="soft" size="sm" icon="flag" onClick={() => setOpenHoliday(true)}>{t("admin.classActivity.markHolidayBtn")}</Btn>
+          <Btn variant="soft" size="sm" icon="flag" onClick={() => setOpenHoliday(true)}>{"Mark as Holiday"}</Btn>
           <button onClick={() => setWeekOffset(w => w - 1)} className="w-8 h-8 rounded-lg border border-line hover:bg-paper-tint flex items-center justify-center text-ink-mute"><Icon name="chevron-left" className="w-4 h-4" /></button>
           <div className="font-display font-bold text-ink px-2 text-sm">{weekLabel}</div>
           <button onClick={() => setWeekOffset(w => w + 1)} className="w-8 h-8 rounded-lg border border-line hover:bg-paper-tint flex items-center justify-center text-ink-mute"><Icon name="chevron-right" className="w-4 h-4" /></button>
@@ -193,7 +192,7 @@ export default function AdminClassActivity({ branchId }: { branchId: string }) {
             return (
               <div key={h.id} className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-warn-50 border border-warn-200 text-xs font-semibold text-warn-700">
                 <Icon name="flag" className="w-3 h-3" />
-                {cls?.name ?? h.class_id} · {h.holiday_date}{h.reason ? ` (${h.reason})` : ""}
+                <NoTranslate>{cls?.name ?? h.class_id}</NoTranslate> · {h.holiday_date}{h.reason ? <> (<NoTranslate>{h.reason}</NoTranslate>)</> : ""}
                 <button onClick={() => removeHoliday(h.id)} className="ml-1 hover:text-warn-900">
                   <Icon name="x" className="w-3 h-3" />
                 </button>
@@ -203,7 +202,7 @@ export default function AdminClassActivity({ branchId }: { branchId: string }) {
         </div>
       )}
 
-      {loading ? <div className="p-10 text-center text-ink-mute">{t("admin.classActivity.loadingCalendar")}</div> : (
+      {loading ? <div className="p-10 text-center text-ink-mute">{"Loading calendar…"}</div> : (
         <Card padded={false} className="overflow-hidden">
           <div className="overflow-x-auto">
             <div className="min-w-[700px]">
@@ -307,11 +306,11 @@ export default function AdminClassActivity({ branchId }: { branchId: string }) {
                             <div className="font-bold text-[11px] truncate flex items-center gap-1 leading-tight">
                               {ev.isHoliday && <Icon name="flag" className="w-3 h-3 shrink-0" />}
                               {ev.isSub && !ev.isHoliday && <Icon name="refresh" className="w-3 h-3 shrink-0" />}
-                              <span className="truncate">{ev.name}</span>
+                              <span className="truncate"><NoTranslate>{ev.name}</NoTranslate></span>
                             </div>
                             {heightPx >= 44 && (
                               <div className="text-[10px] opacity-75 truncate leading-tight mt-0.5">
-                                {ev.isHoliday ? t("admin.classActivity.holidayShort") : ev.isSub ? t("admin.classActivity.substituteLabel", { coach: ev.coach }) : ev.coach}
+                                {ev.isHoliday ? "Holiday" : ev.isSub ? (<>{"Substitute: "}<NoTranslate>{ev.coach}</NoTranslate></>) : <NoTranslate>{ev.coach}</NoTranslate>}
                               </div>
                             )}
                             {heightPx >= 56 && (
@@ -330,20 +329,20 @@ export default function AdminClassActivity({ branchId }: { branchId: string }) {
       )}
 
       {/* Tandai Libur Modal */}
-      <Modal open={openHoliday} onClose={() => setOpenHoliday(false)} title={t("admin.classActivity.markHolidayModalTitle")} size="sm"
-        footer={<><Btn variant="ghost" onClick={() => setOpenHoliday(false)}>{t("common.actions.cancel")}</Btn><Btn variant="primary" onClick={addHoliday} disabled={savingH}>{savingH ? t("common.actions.saving") : t("admin.classActivity.markHolidayBtn")}</Btn></>}>
+      <Modal open={openHoliday} onClose={() => setOpenHoliday(false)} title={"Mark Class as Holiday"} size="sm"
+        footer={<><Btn variant="ghost" onClick={() => setOpenHoliday(false)}>{"Cancel"}</Btn><Btn variant="primary" onClick={addHoliday} disabled={savingH}>{savingH ? "Saving…" : "Mark as Holiday"}</Btn></>}>
         <div className="space-y-4">
-          <Field label={t("admin.classActivity.fieldClass")} required>
+          <Field label={"Class"} required>
             <Select value={holidayForm.class_id} onChange={e => setHolidayForm(f => ({ ...f, class_id: e.target.value }))}>
-              <option value="">{t("admin.classActivity.selectClassPlaceholder")}</option>
-              {allClasses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              <option value="">{"Select class…"}</option>
+              {allClasses.map(c => <option key={c.id} value={c.id} translate="no">{c.name}</option>)}
             </Select>
           </Field>
-          <Field label={t("admin.classActivity.fieldHolidayDate")} required>
+          <Field label={"Holiday date"} required>
             <Input type="date" value={holidayForm.holiday_date} onChange={e => setHolidayForm(f => ({ ...f, holiday_date: e.target.value }))} />
           </Field>
-          <Field label={t("admin.classActivity.fieldReasonOptional")}>
-            <Input value={holidayForm.reason} onChange={e => setHolidayForm(f => ({ ...f, reason: e.target.value }))} placeholder={t("admin.classActivity.reasonPlaceholder")} />
+          <Field label={"Reason (optional)"}>
+            <Input value={holidayForm.reason} onChange={e => setHolidayForm(f => ({ ...f, reason: e.target.value }))} placeholder={"E.g. National holiday, pool closed"} />
           </Field>
         </div>
       </Modal>

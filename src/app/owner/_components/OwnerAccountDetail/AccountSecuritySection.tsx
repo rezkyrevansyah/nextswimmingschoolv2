@@ -11,7 +11,7 @@ type PersonalSource = { bank_name: string | null; bank_account: string | null; b
 
 export default function AccountSecuritySection({ hook, personalSource }: { hook: AccountDetailDataHook; personalSource: PersonalSource }) {
   const {
-    t, account, linkedStaff, copyToClipboard, openEdit,
+    account, linkedStaff, copyToClipboard, openEdit,
     showPwdReset, newPassword, setNewPassword, showNewPwd, setShowNewPwd, resettingPwd, handleResetPassword,
   } = hook;
   if (!account) return null;
@@ -22,10 +22,10 @@ export default function AccountSecuritySection({ hook, personalSource }: { hook:
       {BANK_ACCOUNT_ROLES.includes(account.role) && (
         <div>
           <div className="flex items-center justify-between gap-2">
-            <SectionLabel className="flex-1">{t("owner.accountDetail.bankAccountTitle")}</SectionLabel>
+            <SectionLabel className="flex-1">{"Bank Account"}</SectionLabel>
             {linkedStaff && (
               <span className="text-[10px] font-bold uppercase tracking-wide text-ocean-700 bg-ocean-50 border border-ocean-200 rounded-full px-2 py-0.5 shrink-0">
-                {t("owner.accountDetail.viaLinkedStaffBadge")}
+                {"Via linked Staff account"}
               </span>
             )}
           </div>
@@ -39,25 +39,25 @@ export default function AccountSecuritySection({ hook, personalSource }: { hook:
                   <NoTranslate>{personalSource.bank_account}</NoTranslate>
                 </div>
                 <div className="text-sm text-ink-mute">
-                  {t("owner.accountDetail.accountHolderPrefix")}{" "}
+                  {"a.n."}{" "}
                   <NoTranslate>{personalSource.bank_holder ?? "—"}</NoTranslate>
                 </div>
               </div>
               <button
                 onClick={() =>
-                  copyToClipboard(personalSource.bank_account!, t("owner.accountDetail.fieldBankAccount"))
+                  copyToClipboard(personalSource.bank_account!, "Account Number")
                 }
                 className="w-10 h-10 rounded-xl border border-ocean-200 bg-ocean-50 text-ocean-700 hover:bg-ocean-100 flex items-center justify-center transition-colors"
-                title={t("owner.accountDetail.copyBankAccountTitleAttr")}
+                title={"Copy account number"}
               >
                 <Icon name="copy" className="w-4 h-4" />
               </button>
             </div>
           ) : (
             <p className="text-sm text-ink-mute italic">
-              {t("owner.accountDetail.bankAccountEmpty")}{" "}
+              {"No bank account data yet."}{" "}
               <button onClick={openEdit} className="text-ocean-600 underline">
-                {t("owner.accountDetail.addBankAccountLink")}
+                {"Add now"}
               </button>
             </p>
           )}
@@ -69,7 +69,7 @@ export default function AccountSecuritySection({ hook, personalSource }: { hook:
         <div className="rounded-xl border border-warn-200 bg-warn-50 p-4 space-y-3">
           <p className="text-sm font-bold text-warn-700 flex items-center gap-2">
             <Icon name="key" className="w-4 h-4" />
-            {t("owner.accountDetail.resetPasswordTitle")}
+            {"Reset Account Password"}
           </p>
           <div className="flex gap-2">
             <div className="relative flex-1">
@@ -77,7 +77,7 @@ export default function AccountSecuritySection({ hook, personalSource }: { hook:
                 type={showNewPwd ? "text" : "password"}
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                placeholder={t("owner.accountDetail.newPasswordPlaceholder")}
+                placeholder={"New password (min. 6 characters)"}
                 className="pr-10"
               />
               <button
@@ -96,8 +96,8 @@ export default function AccountSecuritySection({ hook, personalSource }: { hook:
               disabled={resettingPwd || !newPassword.trim()}
             >
               {resettingPwd
-                ? t("owner.accountDetail.processingBtn")
-                : t("owner.accountDetail.setPasswordBtn")}
+                ? "Processing..."
+                : "Set Password"}
             </Btn>
           </div>
         </div>

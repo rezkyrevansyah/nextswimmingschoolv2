@@ -4,7 +4,7 @@ import Icon from "@/components/ui/Icon";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import Status from "@/components/ui/Status";
 import Avatar from "@/components/ui/Avatar";
-import { useLocale } from "@/components/providers/LocaleProvider";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 import { waLink, toLocalDateStr } from "@/lib/utils";
 import { createClient } from "@/utils/supabase/client";
 
@@ -21,7 +21,6 @@ function translateDayShort(day: string, shortDays: string[]): string {
 }
 
 export default function MemberSchedule({ memberId }: { memberId: string }) {
-  const { t, tArray } = useLocale();
   const supabase = createClient();
   const [classes, setClasses] = useState<{ id: string; name: string; schedule_days: string[]; time_start: string | null; time_end: string | null; schedule_times?: { day: string; time_start: string; time_end: string }[] | null; location: string; goals: string | null; description: string | null; coaches: { name: string; phone: string | null; role: string }[] }[]>([]);
   const [sessions, setSessions] = useState<{ date: string; day: string; time: string; class_id: string; onLeave?: boolean }[]>([]);
@@ -31,9 +30,9 @@ export default function MemberSchedule({ memberId }: { memberId: string }) {
   const [sessionPage, setSessionPage] = useState(0);
   const PAGE_SIZE = 8;
 
-  const longDays = tArray("common.days.long");
-  const shortDays = tArray("common.days.short");
-  const monthNames = tArray("common.months.short");
+  const longDays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const shortDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
   useEffect(() => {
     if (!memberId) return;
@@ -115,33 +114,33 @@ export default function MemberSchedule({ memberId }: { memberId: string }) {
 
   return (
     <div className="space-y-5">
-      <SectionTitle sub={t("member.schedule.enrolledClassesSub")}>{t("member.schedule.enrolledClassesTitle")}</SectionTitle>
+      <SectionTitle sub={"Enrolled classes"}>{"Your Classes"}</SectionTitle>
       {classes.map((c) => {
         const isHoliday = holidayClassIds.has(c.id);
         return (
         <Card key={c.id} padded={false} className={`overflow-hidden${isHoliday ? " opacity-70" : ""}`}>
           <div className="p-5 bg-ocean-700 text-white">
             <div className="flex items-center gap-2.5 flex-wrap">
-              <div className="font-display font-bold text-xl flex-1 min-w-0">{c.name}</div>
-              {isHoliday && <Status kind="holiday" className="border-white/30">{t("member.schedule.holidayToday")}</Status>}
+              <div className="font-display font-bold text-xl flex-1 min-w-0"><NoTranslate>{c.name}</NoTranslate></div>
+              {isHoliday && <Status kind="holiday" className="border-white/30">{"Holiday Today"}</Status>}
             </div>
             <div className="mt-2 space-y-2">
               {c.coaches.length === 0 ? (
-                <span className="text-wave-200/60 text-sm">{t("member.schedule.noCoach")}</span>
+                <span className="text-wave-200/60 text-sm">{"No coach assigned"}</span>
               ) : c.coaches.length === 1 ? (
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2 min-w-0">
                     <Avatar name={c.coaches[0].name} size={24} className="shrink-0" />
-                    <span className="flex-1 min-w-0 text-wave-200 text-sm truncate">{c.coaches[0].name}</span>
+                    <span className="flex-1 min-w-0 text-wave-200 text-sm truncate"><NoTranslate>{c.coaches[0].name}</NoTranslate></span>
                     <span className={`shrink-0 px-1.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide ${c.coaches[0].role === "head" ? "bg-wave-400/20 text-wave-200" : "bg-white/10 text-white/50"}`}>
-                      {c.coaches[0].role === "head" ? t("member.schedule.headCoach") : t("member.schedule.assistantCoach")}
+                      {c.coaches[0].role === "head" ? "Head Coach" : "Assistant Coach"}
                     </span>
                   </div>
                   {c.coaches[0].phone && (
-                    <a href={waLink(t("member.schedule.waCoachMessage", { className: c.name }), c.coaches[0].phone)} target="_blank" rel="noreferrer"
+                    <a href={waLink(`Hello Coach, I would like to ask regarding the ${c.name} class.`, c.coaches[0].phone)} target="_blank" rel="noreferrer"
                       className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition-colors">
                       <Icon name="whatsapp" className="w-3.5 h-3.5" />
-                      {t("member.schedule.chatCoach")}
+                      {"Chat Coach"}
                     </a>
                   )}
                 </div>
@@ -150,16 +149,16 @@ export default function MemberSchedule({ memberId }: { memberId: string }) {
                   <div key={idx} className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2 min-w-0">
                       <Avatar name={coach.name} size={24} className="shrink-0" />
-                      <span className="flex-1 min-w-0 text-wave-200 text-sm truncate">{coach.name}</span>
+                      <span className="flex-1 min-w-0 text-wave-200 text-sm truncate"><NoTranslate>{coach.name}</NoTranslate></span>
                       <span className={`shrink-0 px-1.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide ${coach.role === "head" ? "bg-wave-400/20 text-wave-200" : "bg-white/10 text-white/50"}`}>
-                        {coach.role === "head" ? t("member.schedule.headCoach") : t("member.schedule.assistantCoach")}
+                        {coach.role === "head" ? "Head Coach" : "Assistant Coach"}
                       </span>
                     </div>
                     {coach.phone && (
-                      <a href={waLink(t("member.schedule.waCoachMessage", { className: c.name }), coach.phone)} target="_blank" rel="noreferrer"
+                      <a href={waLink(`Hello Coach, I would like to ask regarding the ${c.name} class.`, coach.phone)} target="_blank" rel="noreferrer"
                         className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition-colors">
                         <Icon name="whatsapp" className="w-3.5 h-3.5" />
-                        {t("member.schedule.chatCoach")}
+                        {"Chat Coach"}
                       </a>
                     )}
                   </div>
@@ -171,14 +170,14 @@ export default function MemberSchedule({ memberId }: { memberId: string }) {
             <div className="px-5 py-3 border-b border-line space-y-2">
               {c.goals && (
                 <div>
-                  <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("member.schedule.goals")}</div>
-                  <p className="text-xs text-ink-soft mt-0.5">{c.goals}</p>
+                  <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{"Goals"}</div>
+                  <p className="text-xs text-ink-soft mt-0.5"><NoTranslate>{c.goals}</NoTranslate></p>
                 </div>
               )}
               {c.description && (
                 <div>
-                  <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{t("member.schedule.description")}</div>
-                  <p className="text-xs text-ink-soft mt-0.5">{c.description}</p>
+                  <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{"Description"}</div>
+                  <p className="text-xs text-ink-soft mt-0.5"><NoTranslate>{c.description}</NoTranslate></p>
                 </div>
               )}
             </div>
@@ -193,7 +192,7 @@ export default function MemberSchedule({ memberId }: { memberId: string }) {
                     const slot = c.schedule_times?.find(s => s.day === d) ?? null;
                     const ts = slot?.time_start || c.time_start || "";
                     const te = slot?.time_end   || c.time_end   || "";
-                    return <div className="text-xs text-ink-mute font-mono">{ts.slice(0,5)}{te ? `–${te.slice(0,5)}` : ""} · {c.location}</div>;
+                    return <div className="text-xs text-ink-mute font-mono">{ts.slice(0,5)}{te ? `–${te.slice(0,5)}` : ""} · <NoTranslate>{c.location}</NoTranslate></div>;
                   })()}
                 </div>
               </div>
@@ -206,7 +205,7 @@ export default function MemberSchedule({ memberId }: { memberId: string }) {
       {sessions.length > 0 && (
         <Card padded={false}>
           <div className="p-5 border-b border-line">
-            <SectionTitle sub={t("member.schedule.upcomingSub")}>{t("member.schedule.upcomingTitle")}</SectionTitle>
+            <SectionTitle sub={"Next 4 weeks"}>{"Upcoming Sessions"}</SectionTitle>
           </div>
           <div className="divide-y divide-line">
             {pagedSessions.map((s, i) => {
@@ -222,12 +221,12 @@ export default function MemberSchedule({ memberId }: { memberId: string }) {
                     <div className="text-[11px] text-ink-mute leading-tight">{yearStr}</div>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-semibold text-ink leading-tight">{cls?.name ?? "—"}</div>
+                    <div className="text-sm font-semibold text-ink leading-tight"><NoTranslate>{cls?.name ?? "—"}</NoTranslate></div>
                     <div className="text-xs text-ink-mute mt-0.5">{translateDayName(s.day, longDays)} · {s.time}</div>
                   </div>
                   {onLeave && (
                     <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide text-warn-600 bg-warn-50 px-1.5 py-0.5 rounded">
-                      {t("member.schedule.onLeave")}
+                      {"Leave"}
                     </span>
                   )}
                 </div>
@@ -242,17 +241,17 @@ export default function MemberSchedule({ memberId }: { memberId: string }) {
                 className="flex items-center gap-1 text-xs font-semibold text-ink-soft hover:text-ink disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
               >
                 <Icon name="chevron-left" className="w-4 h-4" />
-                {t("member.schedule.prev")}
+                {"Previous"}
               </button>
               <span className="text-xs text-ink-mute">
-                {t("member.schedule.pageInfo", { start: sessionRangeStart, end: sessionRangeEnd, total: totalSessions })}
+                {`${sessionRangeStart}–${sessionRangeEnd} of ${totalSessions} sessions`}
               </span>
               <button
                 onClick={() => setSessionPage((p) => Math.min(totalPages - 1, p + 1))}
                 disabled={sessionPage >= totalPages - 1}
                 className="flex items-center gap-1 text-xs font-semibold text-ink-soft hover:text-ink disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
               >
-                {t("member.schedule.next")}
+                {"Next"}
                 <Icon name="chevron-right" className="w-4 h-4" />
               </button>
             </div>
@@ -261,7 +260,7 @@ export default function MemberSchedule({ memberId }: { memberId: string }) {
       )}
 
       {classes.length === 0 && (
-        <div className="text-center py-12 text-ink-mute text-sm">{t("member.schedule.emptyClasses")}</div>
+        <div className="text-center py-12 text-ink-mute text-sm">{"Not enrolled in any classes yet."}</div>
       )}
     </div>
   );

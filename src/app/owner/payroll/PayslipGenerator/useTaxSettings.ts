@@ -4,11 +4,9 @@ import { fmtIDR } from "@/lib/utils";
 import { logActivity } from "@/lib/activityLog";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import { resolveTaxSetting } from "@/lib/payroll";
 
 export function useTaxSettings({ userId, userName }: { userId: string; userName: string }) {
-  const { t } = useLocale();
   const supabase = createClient();
   const toast = useToast();
 
@@ -35,9 +33,9 @@ export function useTaxSettings({ userId, userName }: { userId: string; userName:
 
   const saveTaxSetting = async () => {
     if (taxMode === "percent" && (!taxPercent || Number(taxPercent) <= 0))
-      return toast.error(t("owner.payslip.invalidTaxPercent"));
+      return toast.error("Enter a valid tax percentage");
     if (taxMode === "fixed" && (!taxFixed || Number(taxFixed) <= 0))
-      return toast.error(t("owner.payslip.invalidTaxFixed"));
+      return toast.error("Enter a valid tax amount");
     setSavingTax(true);
     const payload = {
       coach_id: null,
@@ -53,8 +51,8 @@ export function useTaxSettings({ userId, userName }: { userId: string; userName:
       : supabase.from("tax_settings").insert(payload);
     const { error } = await op;
     setSavingTax(false);
-    if (error) return toast.error(t("owner.payslip.taxSaveFailed"), error.message);
-    toast.success(t("owner.payslip.taxSaved"));
+    if (error) return toast.error("Failed to save tax setting", error.message);
+    toast.success("Tax setting saved");
     setShowTaxModal(false);
     logActivity(supabase, {
       userId,
@@ -63,9 +61,7 @@ export function useTaxSettings({ userId, userName }: { userId: string; userName:
       entityType: "tax_settings",
       entityId: taxSettingId ?? "new",
       action: "update",
-      label: t("owner.payslip.activityTaxUpdated", {
-        value: taxMode === "percent" ? `${taxPercent}%` : fmtIDR(Number(taxFixed)),
-      }),
+      label: `Tax setting changed to ${taxMode === "percent" ? `${taxPercent}%` : fmtIDR(Number(taxFixed))}`,
     });
     loadTaxSetting();
   };

@@ -11,7 +11,6 @@ import { fmtDate, cn } from "@/lib/utils";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import PayslipGenerator from "../payroll/PayslipGenerator";
 import type { Branch } from "../_types";
 
@@ -26,7 +25,6 @@ interface InvoicePeriod {
 }
 
 export default function OwnerInvoices({ branches, userId, userName }: { branches: Branch[]; userId: string; userName: string }) {
-  const { t, tNode } = useLocale();
   const supabase = createClient();
   const toast = useToast();
   const confirm = useConfirm();
@@ -77,28 +75,28 @@ export default function OwnerInvoices({ branches, userId, userName }: { branches
       created_by: userId || null,
     });
     setSavingPeriod(false);
-    if (error) return toast.error(t("owner.invoices.saveFailed"), error.message);
-    toast.success(t("owner.invoices.periodCreatedToast"));
+    if (error) return toast.error("Failed to save", error.message);
+    toast.success("Invoice submission period opened successfully");
     setOpenAddPeriod(false);
     loadPeriods();
   };
 
   const closePeriod = async (id: string) => {
     const ok = await confirm({
-      title: t("owner.invoices.closePeriodConfirmTitle"),
-      body: t("owner.invoices.closePeriodConfirmBody"),
-      confirmLabel: t("owner.invoices.closePeriodConfirmLabel"),
+      title: "Close Invoice Period?",
+      body: "Coaches will no longer be able to submit invoices for this period.",
+      confirmLabel: "Yes, Close Period",
       danger: true,
     });
     if (!ok) return;
     await supabase.from("invoice_periods").update({ is_open: false }).eq("id", id);
-    toast.success(t("owner.invoices.periodClosedToast"));
+    toast.success("Invoice submission period closed");
     loadPeriods();
   };
 
   const reopenPeriod = async (id: string) => {
     await supabase.from("invoice_periods").update({ is_open: true }).eq("id", id);
-    toast.success(t("owner.invoices.periodReopenedToast"));
+    toast.success("Invoice submission period reopened");
     loadPeriods();
   };
 
@@ -126,8 +124,8 @@ export default function OwnerInvoices({ branches, userId, userName }: { branches
       updated_at: new Date().toISOString(),
     }).eq("id", editPeriodTarget.id);
     setSavingEditPeriod(false);
-    if (error) return toast.error(t("owner.invoices.saveFailed"), error.message);
-    toast.success(t("owner.invoices.periodUpdatedToast"));
+    if (error) return toast.error("Failed to save", error.message);
+    toast.success("Invoice submission period updated");
     setEditPeriodTarget(null);
     loadPeriods();
   };
@@ -138,8 +136,8 @@ export default function OwnerInvoices({ branches, userId, userName }: { branches
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <h2 className="font-display font-bold text-2xl text-ink">{t("owner.invoices.pageTitle")}</h2>
-          <p className="text-ink-mute text-sm mt-0.5">{t("owner.invoices.pageSub")}</p>
+          <h2 className="font-display font-bold text-2xl text-ink">{"Payslips"}</h2>
+          <p className="text-ink-mute text-sm mt-0.5">{"Approve coach invoices and manage staff payroll, then generate payslips — all in one place."}</p>
         </div>
         <div className="flex items-center gap-2.5 flex-wrap">
           <div className="flex gap-2">
@@ -153,7 +151,7 @@ export default function OwnerInvoices({ branches, userId, userName }: { branches
                   : "bg-paper border border-line text-ink-soft hover:bg-paper-tint hover:text-ink"
               )}
             >
-              {t("owner.invoices.tabInvoicesList")}
+              {"Invoice List"}
             </button>
             <button
               type="button"
@@ -165,12 +163,12 @@ export default function OwnerInvoices({ branches, userId, userName }: { branches
                   : "bg-paper border border-line text-ink-soft hover:bg-paper-tint hover:text-ink"
               )}
             >
-              {t("owner.invoices.tabPeriods")}
+              {"Submission Periods"}
             </button>
           </div>
           {subTab === "periods" && (
             <Select value={branchFilter} onChange={e => setBranchFilter(e.target.value)} className="!w-44">
-              <option value="all">{t("owner.invoices.allBranches")}</option>
+              <option value="all">{"All Centers"}</option>
               {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
             </Select>
           )}
@@ -203,7 +201,7 @@ export default function OwnerInvoices({ branches, userId, userName }: { branches
                 setOpenAddPeriod(true);
               }}
             >
-              {t("owner.invoices.newPeriodBtn")}
+              {"Open New Period"}
             </Btn>
           </div>
 
@@ -213,7 +211,7 @@ export default function OwnerInvoices({ branches, userId, userName }: { branches
               <div className="absolute -right-20 -bottom-20 w-72 h-72 rounded-full bg-wave-500/20 blur-3xl pointer-events-none" />
               <div className="relative">
                 <div className="flex items-center gap-2 text-ocean-100 text-xs font-bold uppercase tracking-widest">
-                  <span className="w-2.5 h-2.5 rounded-full bg-ok-400 animate-pulse" /> {t("owner.invoices.periodStatusOpen")}
+                  <span className="w-2.5 h-2.5 rounded-full bg-ok-400 animate-pulse" /> {"Open / Active"}
                 </div>
                 <div className="mt-2 font-display font-extrabold text-2xl lg:text-3xl"><NoTranslate>{activePeriod.label}</NoTranslate></div>
                 <div className="text-white/80 text-sm mt-1">
@@ -231,7 +229,7 @@ export default function OwnerInvoices({ branches, userId, userName }: { branches
                     onClick={() => closePeriod(activePeriod.id)}
                     className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-white/10 hover:bg-white/20 text-white/80 hover:text-white border border-white/20 transition-colors cursor-pointer"
                   >
-                    {t("owner.invoices.closePeriodBtn")}
+                    {"Close Period"}
                   </button>
                 </div>
               </div>
@@ -245,9 +243,9 @@ export default function OwnerInvoices({ branches, userId, userName }: { branches
               <span>AKSI</span>
             </div>
             {periodsLoading ? (
-              <div className="p-10 text-center text-ink-mute text-sm">{t("owner.invoices.loading")}</div>
+              <div className="p-10 text-center text-ink-mute text-sm">{"Loading data…"}</div>
             ) : periods.length === 0 ? (
-              <div className="p-10 text-center text-ink-mute text-sm">{t("owner.invoices.noPeriodsYet")}</div>
+              <div className="p-10 text-center text-ink-mute text-sm">{"No submission periods yet."}</div>
             ) : (
               <div className="divide-y divide-line">
                 {periods.map((p) => (
@@ -256,11 +254,11 @@ export default function OwnerInvoices({ branches, userId, userName }: { branches
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-semibold text-ink"><NoTranslate>{p.label}</NoTranslate></span>
                         <Status kind={p.is_open ? "active" : "archived"}>
-                          {p.is_open ? t("owner.invoices.periodStatusOpen") : t("owner.invoices.periodStatusClosed")}
+                          {p.is_open ? "Open / Active" : "Closed"}
                         </Status>
                       </div>
                       <div className="text-xs text-ink-mute mt-1">
-                        {tNode("owner.invoices.periodRangeScope", { from: fmtDate(p.date_from), to: fmtDate(p.date_to), scope: p.branch?.name ?? t("owner.invoices.allCentersOption") })}
+                        {(<>{"Range: "}<NoTranslate>{fmtDate(p.date_from)}</NoTranslate>{" – "}<NoTranslate>{fmtDate(p.date_to)}</NoTranslate>{" · Scope: "}<NoTranslate>{p.branch?.name ?? "All Centers (Global)"}</NoTranslate></>)}
                       </div>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
@@ -276,14 +274,14 @@ export default function OwnerInvoices({ branches, userId, userName }: { branches
                           onClick={() => closePeriod(p.id)}
                           className="px-2.5 py-1.5 rounded-lg border border-warn-200 bg-warn-50 text-warn-700 hover:bg-warn-100 text-xs font-semibold transition-colors cursor-pointer"
                         >
-                          {t("owner.invoices.closePeriodBtn")}
+                          {"Close Period"}
                         </button>
                       ) : (
                         <button
                           onClick={() => reopenPeriod(p.id)}
                           className="px-2.5 py-1.5 rounded-lg border border-ok-200 bg-ok-50 text-ok-700 hover:bg-ok-100 text-xs font-semibold transition-colors cursor-pointer"
                         >
-                          {t("owner.invoices.reopenPeriodBtn")}
+                          {"Reopen Period"}
                         </button>
                       )}
                     </div>
@@ -297,35 +295,35 @@ export default function OwnerInvoices({ branches, userId, userName }: { branches
           <Modal
             open={openAddPeriod}
             onClose={() => setOpenAddPeriod(false)}
-            title={t("owner.invoices.openPeriodModalTitle")}
+            title={"Open Invoice Submission Period"}
             size="sm"
             footer={
               <>
-                <Btn variant="ghost" onClick={() => setOpenAddPeriod(false)}>{t("common.actions.cancel")}</Btn>
+                <Btn variant="ghost" onClick={() => setOpenAddPeriod(false)}>{"Cancel"}</Btn>
                 <Btn variant="primary" onClick={createPeriod} disabled={savingPeriod}>
-                  {savingPeriod ? "Menyimpan..." : t("owner.invoices.newPeriodBtn")}
+                  {savingPeriod ? "Menyimpan..." : "Open New Period"}
                 </Btn>
               </>
             }
           >
             <div className="space-y-4">
-              <Field label={t("owner.invoices.fieldPeriodLabel")} required>
+              <Field label={"Period Label"} required>
                 <Input
                   value={periodForm.label}
                   onChange={e => setPeriodForm(f => ({ ...f, label: e.target.value }))}
-                  placeholder={t("owner.invoices.fieldPeriodLabelPlaceholder")}
+                  placeholder={"E.g. Invoice Period August 2026"}
                 />
               </Field>
-              <Field label={t("owner.invoices.fieldCenter")}>
+              <Field label={"Center Scope"}>
                 <Select value={periodForm.branch_id} onChange={e => setPeriodForm(f => ({ ...f, branch_id: e.target.value }))}>
-                  <option value="">{t("owner.invoices.allCentersOption")}</option>
+                  <option value="">{"All Centers (Global)"}</option>
                   {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                 </Select>
               </Field>
-              <Field label={t("owner.invoices.fieldDateFrom")} required>
+              <Field label={"Session Start Date"} required>
                 <Input type="date" value={periodForm.date_from} onChange={e => setPeriodForm(f => ({ ...f, date_from: e.target.value }))} />
               </Field>
-              <Field label={t("owner.invoices.fieldDateTo")} required>
+              <Field label={"Submission Deadline Date"} required>
                 <Input type="date" value={periodForm.date_to} onChange={e => setPeriodForm(f => ({ ...f, date_to: e.target.value }))} />
               </Field>
             </div>
@@ -335,35 +333,35 @@ export default function OwnerInvoices({ branches, userId, userName }: { branches
           <Modal
             open={!!editPeriodTarget}
             onClose={() => setEditPeriodTarget(null)}
-            title={t("owner.invoices.editPeriodModalTitle")}
+            title={"Edit Submission Period"}
             size="sm"
             footer={
               <>
-                <Btn variant="ghost" onClick={() => setEditPeriodTarget(null)}>{t("common.actions.cancel")}</Btn>
+                <Btn variant="ghost" onClick={() => setEditPeriodTarget(null)}>{"Cancel"}</Btn>
                 <Btn variant="primary" onClick={saveEditPeriod} disabled={savingEditPeriod}>
-                  {savingEditPeriod ? t("common.actions.saving") : t("common.actions.save")}
+                  {savingEditPeriod ? "Saving…" : "Save"}
                 </Btn>
               </>
             }
           >
             <div className="space-y-4">
-              <Field label={t("owner.invoices.fieldPeriodLabel")} required>
+              <Field label={"Period Label"} required>
                 <Input
                   value={editPeriodForm.label}
                   onChange={e => setEditPeriodForm(f => ({ ...f, label: e.target.value }))}
-                  placeholder={t("owner.invoices.fieldPeriodLabelPlaceholder")}
+                  placeholder={"E.g. Invoice Period August 2026"}
                 />
               </Field>
-              <Field label={t("owner.invoices.fieldCenter")}>
+              <Field label={"Center Scope"}>
                 <Select value={editPeriodForm.branch_id} onChange={e => setEditPeriodForm(f => ({ ...f, branch_id: e.target.value }))}>
-                  <option value="">{t("owner.invoices.allCentersOption")}</option>
+                  <option value="">{"All Centers (Global)"}</option>
                   {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                 </Select>
               </Field>
-              <Field label={t("owner.invoices.fieldDateFrom")} required>
+              <Field label={"Session Start Date"} required>
                 <Input type="date" value={editPeriodForm.date_from} onChange={e => setEditPeriodForm(f => ({ ...f, date_from: e.target.value }))} />
               </Field>
-              <Field label={t("owner.invoices.fieldDateTo")} required>
+              <Field label={"Submission Deadline Date"} required>
                 <Input type="date" value={editPeriodForm.date_to} onChange={e => setEditPeriodForm(f => ({ ...f, date_to: e.target.value }))} />
               </Field>
             </div>

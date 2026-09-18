@@ -5,14 +5,14 @@ import { NoTranslate } from "@/components/ui/NoTranslate";
 import type { OwnerClassesMasterHook } from "./_hook";
 
 export default function ClassMemberTab({ hook }: { hook: OwnerClassesMasterHook }) {
-  const { t, detailLoading, detailMembers } = hook;
+  const { detailLoading, detailMembers } = hook;
 
   return (
     <div>
       {detailLoading ? (
-        <div className="text-center py-8 text-ink-mute text-sm">{t("owner.classes.coachLoading")}</div>
+        <div className="text-center py-8 text-ink-mute text-sm">{"Loading…"}</div>
       ) : detailMembers.length === 0 ? (
-        <div className="text-center py-8 text-ink-mute text-sm">{t("owner.classes.memberEmpty")}</div>
+        <div className="text-center py-8 text-ink-mute text-sm">{"No active student in this class yet."}</div>
       ) : (
         <div className="divide-y divide-line border rounded-xl overflow-hidden">
           {detailMembers.map((m) => (
@@ -26,7 +26,7 @@ export default function ClassMemberTab({ hook }: { hook: OwnerClassesMasterHook 
               </div>
               <div className="text-right">
                 <Status kind={m.status === "active" ? "active" : "suspend"}>
-                  {m.status === "active" ? t("common.status.active") : m.status}
+                  {m.status === "active" ? "Active" : m.status}
                 </Status>
                 {m.remaining_sessions != null && (
                   <div className="text-[10px] text-ink-mute font-mono mt-0.5">

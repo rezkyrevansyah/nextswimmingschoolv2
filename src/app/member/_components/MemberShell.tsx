@@ -3,33 +3,31 @@ import { useState } from "react";
 import Logo from "@/components/ui/Logo";
 import Icon from "@/components/ui/Icon";
 import Avatar from "@/components/ui/Avatar";
-import LanguageSwitcher from "@/components/ui/LanguageSwitcher";
+import { GoogleLanguageSwitcher } from "@/components/GoogleTranslate";
 import MobileNav from "@/components/layout/MobileNav";
 import type { NavItem as MobileNavItem } from "@/components/layout/Sidebar";
 import Bell from "@/components/layout/Bell";
-import { useLocale } from "@/components/providers/LocaleProvider";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 import type { TabId } from "../_types";
 
-type TFn = (key: string, vars?: Record<string, string | number>) => string;
-
-function getNavItems(t: TFn): MobileNavItem[] {
+function getNavItems(): MobileNavItem[] {
   return [
-    { id: "home",     label: t("member.nav.home"),   short: t("member.nav.shortHome"),     icon: "home"     },
-    { id: "schedule", label: t("member.nav.schedule"), short: t("member.nav.shortSchedule"), icon: "calendar" },
-    { id: "bills",    label: t("member.nav.bills"),  short: t("member.nav.shortBills"),    icon: "wallet"   },
-    { id: "rapor",    label: t("member.nav.rapor"),  short: t("member.nav.shortRapor"),    icon: "book"     },
-    { id: "profile",  label: t("member.nav.profile"),short: t("member.nav.shortProfile"),  icon: "user"     },
+    { id: "home",     label: "Home",   short: "Home",     icon: "home"     },
+    { id: "schedule", label: "Schedule", short: "Schedule", icon: "calendar" },
+    { id: "bills",    label: "Bills",  short: "Pay",    icon: "wallet"   },
+    { id: "rapor",    label: "Report Card",  short: "Report",    icon: "book"     },
+    { id: "profile",  label: "Profile",short: "Me",  icon: "user"     },
   ];
 }
 
-function getAllItems(t: TFn): MobileNavItem[] {
+function getAllItems(): MobileNavItem[] {
   return [
-    ...getNavItems(t).slice(0, 2),
-    { id: "absen",   label: t("member.nav.attendance"), short: t("member.nav.shortAttendance"), icon: "check"     },
-    { id: "bills",   label: t("member.nav.bills"),      short: t("member.nav.shortBills"),      icon: "wallet"    },
-    { id: "leave",   label: t("member.nav.leave"),      short: t("member.nav.shortLeave"),      icon: "clipboard" },
-    { id: "rapor",   label: t("member.nav.rapor"),      short: t("member.nav.shortRapor"),      icon: "book"      },
-    { id: "profile", label: t("member.nav.profile"),    short: t("member.nav.shortProfile"),    icon: "user"      },
+    ...getNavItems().slice(0, 2),
+    { id: "absen",   label: "Attendance", short: "Attend", icon: "check"     },
+    { id: "bills",   label: "Bills",      short: "Pay",      icon: "wallet"    },
+    { id: "leave",   label: "Leave",      short: "Leave",      icon: "clipboard" },
+    { id: "rapor",   label: "Report Card",      short: "Report",      icon: "book"      },
+    { id: "profile", label: "Profile",    short: "Me",    icon: "user"      },
   ];
 }
 
@@ -43,16 +41,15 @@ export default function MemberShell({ children, active, setActive, name, branchN
   avatarUrl?: string | null;
   isSchoolAffiliate?: boolean;
 }) {
-  const { t } = useLocale();
   const [showMoreMenu, setShowMoreMenu] = useState(false);
-  const allItems = getAllItems(t);
+  const allItems = getAllItems();
 
   const isMoreActive = ["bills", "leave", "profile"].includes(active);
   const mobileNavItems: MobileNavItem[] = [
-    { id: "home", label: t("member.nav.home"), short: t("member.nav.shortHome") || "Home", icon: "home" },
-    { id: "schedule", label: t("member.nav.schedule"), short: t("member.nav.shortSchedule") || "Jadwal", icon: "calendar" },
-    { id: "absen", label: t("member.nav.attendance"), short: t("member.nav.shortAttendance") || "Presensi", icon: "check" },
-    { id: "rapor", label: t("member.nav.rapor"), short: t("member.nav.shortRapor") || "Rapor", icon: "book" },
+    { id: "home", label: "Home", short: "Home", icon: "home" },
+    { id: "schedule", label: "Schedule", short: "Schedule", icon: "calendar" },
+    { id: "absen", label: "Attendance", short: "Attend", icon: "check" },
+    { id: "rapor", label: "Report Card", short: "Report", icon: "book" },
     { id: "more", label: "Menu", short: "Menu", icon: "menu" },
   ];
 
@@ -65,16 +62,16 @@ export default function MemberShell({ children, active, setActive, name, branchN
     }
   };
 
-  const title = active === "home" ? t("member.shell.greeting", { name: name || "…" }) : {
-    schedule: t("member.nav.schedule"), absen: t("member.nav.attendance"), bills: t("member.nav.bills"),
-    leave: t("member.nav.leave"), rapor: t("member.nav.rapor"), profile: t("member.nav.profile"),
+  const title = active === "home" ? (<>{"Hi, "}<NoTranslate>{name || "…"}</NoTranslate></>) : {
+    schedule: "Schedule", absen: "Attendance", bills: "Bills",
+    leave: "Leave", rapor: "Report Card", profile: "Profile",
   }[active] ?? "";
 
   const sub = active === "home"
-    ? t("member.shell.subMember", { branch: branchName || "…" })
-    : { schedule: t("member.shell.subSchedule"), absen: t("member.shell.subAttendance"),
-        bills: t("member.shell.subBills"), leave: t("member.shell.subLeave"),
-        rapor: t("member.shell.subRapor"), profile: t("member.shell.subProfile") }[active] ?? "";
+    ? (<>{"Student · "}<NoTranslate>{branchName || "…"}</NoTranslate></>)
+    : { schedule: "Classes you're enrolled in", absen: "Attendance history",
+        bills: "Class payments", leave: "Absence requests",
+        rapor: "Coach's assessment results", profile: "Personal data & QR" }[active] ?? "";
 
   return (
     <div className="min-h-screen bg-paper-tint pb-24 lg:pb-0">
@@ -93,9 +90,9 @@ export default function MemberShell({ children, active, setActive, name, branchN
               </button>
             ))}
           </div>
-          <LanguageSwitcher />
+          <GoogleLanguageSwitcher variant="pill" />
           <Bell userId={userId} />
-          <button onClick={() => setActive("profile")} title={t("member.shell.profileTooltip")}>
+          <button onClick={() => setActive("profile")} title={"Profile"}>
             <Avatar name={name} src={avatarUrl ?? undefined} size={36} />
           </button>
         </div>
@@ -111,8 +108,8 @@ export default function MemberShell({ children, active, setActive, name, branchN
               <div className="flex items-center gap-3">
                 <Avatar name={name} src={avatarUrl ?? undefined} size={40} />
                 <div>
-                  <div className="font-display font-bold text-sm text-ink">{name}</div>
-                  <div className="text-xs text-ink-mute">{branchName || "Next Swimming"}</div>
+                  <div className="font-display font-bold text-sm text-ink"><NoTranslate>{name}</NoTranslate></div>
+                  <div className="text-xs text-ink-mute">{branchName ? <NoTranslate>{branchName}</NoTranslate> : "Next Swimming"}</div>
                 </div>
               </div>
               <button onClick={() => setShowMoreMenu(false)} className="w-8 h-8 rounded-full flex items-center justify-center text-ink-mute hover:bg-paper-tint">
@@ -131,7 +128,7 @@ export default function MemberShell({ children, active, setActive, name, branchN
                   <Icon name="user" className="w-5 h-5" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="font-bold text-sm">{t("member.nav.profile")}</div>
+                  <div className="font-bold text-sm">{"Profile"}</div>
                   <div className="text-xs text-ink-mute">Data diri, nomor kontak & kartu QR</div>
                 </div>
                 <Icon name="arrowRight" className="w-4 h-4 text-ink-faint" />
@@ -148,7 +145,7 @@ export default function MemberShell({ children, active, setActive, name, branchN
                     <Icon name="wallet" className="w-5 h-5" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="font-bold text-sm">{t("member.nav.bills")}</div>
+                    <div className="font-bold text-sm">{"Bills"}</div>
                     <div className="text-xs text-ink-mute">Status iuran bulanan & upload bukti bayar</div>
                   </div>
                   <Icon name="arrowRight" className="w-4 h-4 text-ink-faint" />
@@ -165,7 +162,7 @@ export default function MemberShell({ children, active, setActive, name, branchN
                   <Icon name="clipboard" className="w-5 h-5" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="font-bold text-sm">{t("member.nav.leave")}</div>
+                  <div className="font-bold text-sm">{"Leave"}</div>
                   <div className="text-xs text-ink-mute">Form pengajuan izin tidak hadir</div>
                 </div>
                 <Icon name="arrowRight" className="w-4 h-4 text-ink-faint" />

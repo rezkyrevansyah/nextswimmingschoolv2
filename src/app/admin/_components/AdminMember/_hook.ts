@@ -13,6 +13,4 @@ export type AdminMemberHook =
   ReturnType<typeof useMemberEditData> &
   ReturnType<typeof useMemberActionsData> &
   ReturnType<typeof useMemberImportData> &
-  ReturnType<typeof useMemberQRData> & {
-    t: (key: string, vars?: Record<string, string | number>) => string;
-  };
+  ReturnType<typeof useMemberQRData>;

@@ -4,7 +4,6 @@ import { useState } from "react";
 import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
 import { waLink } from "@/lib/utils";
-import { useLocale } from "@/components/providers/LocaleProvider";
 
 interface FaqItem {
   id: string;
@@ -13,7 +12,6 @@ interface FaqItem {
 }
 
 export default function Faq({ items, waPhone }: { items: FaqItem[]; waPhone: string | null }) {
-  const { t } = useLocale();
   const [openId, setOpenId] = useState<string | null>(null);
 
   if (items.length === 0) return null;
@@ -23,12 +21,12 @@ export default function Faq({ items, waPhone }: { items: FaqItem[]; waPhone: str
       <div className="mx-auto max-w-3xl px-6">
         <div className="text-center max-w-2xl mx-auto">
           <p className="text-xs font-semibold tracking-wide uppercase text-wave-600">
-            {t("landing.faq.label")}
+            {"FAQ"}
           </p>
           <h2 className="mt-2 font-display font-extrabold text-3xl sm:text-4xl text-ink">
-            {t("landing.faq.headline")}
+            {"Frequently asked questions."}
           </h2>
-          <p className="mt-3 text-ink-mute">{t("landing.faq.subtitle")}</p>
+          <p className="mt-3 text-ink-mute">{"Can't find what you're looking for? Reach out to us on WhatsApp."}</p>
         </div>
 
         <div className="mt-10 space-y-3">
@@ -60,9 +58,9 @@ export default function Faq({ items, waPhone }: { items: FaqItem[]; waPhone: str
 
         {waPhone && (
           <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4 text-center sm:text-left">
-            <p className="text-sm text-ink-mute">{t("landing.faq.ctaText")}</p>
-            <Btn variant="wa" size="md" icon="whatsapp" href={waLink(t("landing.faq.ctaMessage"), waPhone)} target="_blank" rel="noreferrer">
-              {t("landing.faq.ctaButton")}
+            <p className="text-sm text-ink-mute">{"Still have questions?"}</p>
+            <Btn variant="wa" size="md" icon="whatsapp" href={waLink("Hi Next Swimming School admin, I have a question that wasn't covered in the FAQ.", waPhone)} target="_blank" rel="noreferrer">
+              {"Chat on WhatsApp"}
             </Btn>
           </div>
         )}

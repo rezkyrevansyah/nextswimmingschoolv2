@@ -1,12 +1,10 @@
 "use client";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import Icon from "@/components/ui/Icon";
 import type { useActivityLogData } from "./useActivityLogData";
 
 type ActivityLogDataHook = ReturnType<typeof useActivityLogData>;
 
 export default function ActivityLogFilterBar({ hook }: { hook: ActivityLogDataHook }) {
-  const { t } = useLocale();
   const {
     branches, total, statsToday, statsWeek,
     filterBranch, setFilterBranch, filterEntity, setFilterEntity, filterAction, setFilterAction,
@@ -23,7 +21,7 @@ export default function ActivityLogFilterBar({ hook }: { hook: ActivityLogDataHo
         <div className="bg-paper rounded-2xl border border-line shadow-xs p-4 sm:p-5 flex flex-col justify-between">
           <div>
             <div className="text-[10px] uppercase tracking-wider font-bold text-ink-faint">
-              {t("owner.activityLog.statToday")}
+              {"Today"}
             </div>
             <div className="font-display font-extrabold text-2xl text-ocean-600 mt-1 tabular-nums">
               {statsToday.toLocaleString("id-ID")}
@@ -39,7 +37,7 @@ export default function ActivityLogFilterBar({ hook }: { hook: ActivityLogDataHo
         <div className="bg-paper rounded-2xl border border-line shadow-xs p-4 sm:p-5 flex flex-col justify-between">
           <div>
             <div className="text-[10px] uppercase tracking-wider font-bold text-ink-faint">
-              {t("owner.activityLog.statWeek")}
+              {"Last 7 days"}
             </div>
             <div className="font-display font-extrabold text-2xl text-wave-600 mt-1 tabular-nums">
               {statsWeek.toLocaleString("id-ID")}
@@ -55,7 +53,7 @@ export default function ActivityLogFilterBar({ hook }: { hook: ActivityLogDataHo
         <div className="bg-paper rounded-2xl border border-line shadow-xs p-4 sm:p-5 flex flex-col justify-between">
           <div>
             <div className="text-[10px] uppercase tracking-wider font-bold text-ink-faint">
-              {t("owner.activityLog.statTotal")}
+              {"Total logs"}
             </div>
             <div className="font-display font-extrabold text-2xl text-ok-600 mt-1 tabular-nums">
               {total.toLocaleString("id-ID")}
@@ -76,7 +74,7 @@ export default function ActivityLogFilterBar({ hook }: { hook: ActivityLogDataHo
             <input
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder={t("owner.activityLog.searchPlaceholder")}
+              placeholder={"Search activity…"}
               className="w-full h-10 pl-10 pr-3 text-sm rounded-xl border border-line bg-paper-tint/50 text-ink placeholder:text-ink-faint focus:outline-none focus:border-ocean-500 focus:bg-paper transition-all"
             />
           </div>
@@ -91,7 +89,7 @@ export default function ActivityLogFilterBar({ hook }: { hook: ActivityLogDataHo
             }`}
           >
             <Icon name="filter" className="w-4 h-4" />
-            <span>{t("owner.activityLog.filterBtn")}</span>
+            <span>{"Filter"}</span>
             {activeFilterCount > 0 && (
               <span className="bg-ocean-600 text-white text-[11px] font-bold rounded-full w-4 h-4 inline-flex items-center justify-center">
                 {activeFilterCount}
@@ -105,65 +103,65 @@ export default function ActivityLogFilterBar({ hook }: { hook: ActivityLogDataHo
               onClick={resetFilters}
               className="h-10 text-xs font-semibold text-ocean-600 hover:text-ocean-700 px-3 hover:underline transition-colors"
             >
-              {t("owner.activityLog.resetBtn")}
+              {"Reset"}
             </button>
           )}
 
           <span className="text-xs text-ink-mute font-medium self-center ml-auto">
-            {t("owner.activityLog.activityCount", { count: total })}
+            {`${total} activities`}
           </span>
         </div>
 
         {showFilters && (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 pt-3 border-t border-line">
             <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-ink-faint mb-1.5">{t("owner.activityLog.filterBranch")}</label>
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-ink-faint mb-1.5">{"Center"}</label>
               <select
                 value={filterBranch}
                 onChange={e => setFilterBranch(e.target.value)}
                 className="w-full h-9 text-xs rounded-xl border border-line bg-paper-tint/50 text-ink pl-3 pr-8 focus:outline-none focus:border-ocean-500"
               >
-                <option value="all">{t("owner.activityLog.allBranches")}</option>
+                <option value="all">{"All centers"}</option>
                 {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-ink-faint mb-1.5">{t("owner.activityLog.filterEntity")}</label>
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-ink-faint mb-1.5">{"Entity"}</label>
               <select
                 value={filterEntity}
                 onChange={e => setFilterEntity(e.target.value)}
                 className="w-full h-9 text-xs rounded-xl border border-line bg-paper-tint/50 text-ink pl-3 pr-8 focus:outline-none focus:border-ocean-500"
               >
-                <option value="all">{t("owner.activityLog.allEntities")}</option>
+                <option value="all">{"All entities"}</option>
                 {Object.entries(entityLabel).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-ink-faint mb-1.5">{t("owner.activityLog.filterAction")}</label>
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-ink-faint mb-1.5">{"Action"}</label>
               <select
                 value={filterAction}
                 onChange={e => setFilterAction(e.target.value)}
                 className="w-full h-9 text-xs rounded-xl border border-line bg-paper-tint/50 text-ink pl-3 pr-8 focus:outline-none focus:border-ocean-500"
               >
-                <option value="all">{t("owner.activityLog.allActions")}</option>
+                <option value="all">{"All actions"}</option>
                 {Object.entries(actionLabel).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-ink-faint mb-1.5">{t("owner.activityLog.filterRole")}</label>
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-ink-faint mb-1.5">{"Role"}</label>
               <select
                 value={filterRole}
                 onChange={e => setFilterRole(e.target.value)}
                 className="w-full h-9 text-xs rounded-xl border border-line bg-paper-tint/50 text-ink pl-3 pr-8 focus:outline-none focus:border-ocean-500"
               >
-                <option value="all">{t("owner.activityLog.allRoles")}</option>
-                <option value="owner">{t("owner.activityLog.roleOwner")}</option>
-                <option value="admin">{t("owner.activityLog.roleAdmin")}</option>
-                <option value="coach">{t("owner.activityLog.roleCoach")}</option>
+                <option value="all">{"All roles"}</option>
+                <option value="owner">{"Owner"}</option>
+                <option value="admin">{"Admin"}</option>
+                <option value="coach">{"Coach"}</option>
               </select>
             </div>
             <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-ink-faint mb-1.5">{t("owner.activityLog.filterDateFrom")}</label>
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-ink-faint mb-1.5">{"From date"}</label>
               <input
                 type="date"
                 value={filterDateFrom}
@@ -173,7 +171,7 @@ export default function ActivityLogFilterBar({ hook }: { hook: ActivityLogDataHo
               </input>
             </div>
             <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-ink-faint mb-1.5">{t("owner.activityLog.filterDateTo")}</label>
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-ink-faint mb-1.5">{"To date"}</label>
               <input
                 type="date"
                 value={filterDateTo}

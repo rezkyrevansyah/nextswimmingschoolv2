@@ -3,7 +3,6 @@ import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import Modal from "@/components/ui/Modal";
 import Btn from "@/components/ui/Btn";
@@ -16,7 +15,6 @@ import { revalidate } from "./_utils";
 import type { CoachItem } from "./_types";
 
 export default function CoachesTab() {
-  const { t } = useLocale();
   const toast = useToast();
   const confirm = useConfirm();
   const supabase = createClient();
@@ -54,36 +52,36 @@ export default function CoachesTab() {
           .insert({ name: form.name, sort_order: form.sort_order, photo_url: photoFile ? null : (form.photo_url.trim() || null) })
           .select("id")
           .single();
-        if (error || !inserted) throw new Error(error?.message ?? t("owner.landingCms.saveFailedGeneric"));
+        if (error || !inserted) throw new Error(error?.message ?? "Failed to save");
         if (photoFile) await upload.landingImage(photoFile, "coach", inserted.id);
       }
     } catch (e) {
-      toast.error(t("owner.landingCms.coaches.saveFailed"), (e as Error).message);
+      toast.error("Failed to save", (e as Error).message);
       setSaving(false);
       return;
     }
     await revalidate();
-    toast.success(t("owner.landingCms.coaches.saved"));
+    toast.success("Coach saved");
     setSaving(false);
     setShowModal(false);
     load();
   };
 
   const del = async (c: CoachItem) => {
-    const yes = await confirm({ title: t("owner.landingCms.coaches.deleteConfirmTitle"), body: c.name || t("owner.landingCms.coaches.deleteConfirmBody"), danger: true });
+    const yes = await confirm({ title: "Delete this coach?", body: c.name || "This coach will be removed from the landing page.", danger: true });
     if (!yes) return;
     const { error } = await supabase.from("landing_coaches").delete().eq("id", c.id);
-    if (error) return toast.error(t("owner.landingCms.coaches.deleteFailed"), error.message);
+    if (error) return toast.error("Failed to delete", error.message);
     await revalidate();
-    toast.success(t("owner.landingCms.coaches.deleted"));
+    toast.success("Coach deleted");
     load();
   };
 
   return (
     <Card>
       <div className="flex items-center justify-between">
-        <SectionTitle sub={t("owner.landingCms.coaches.sectionSub")}>{t("owner.landingCms.coaches.sectionTitle")}</SectionTitle>
-        <Btn variant="soft" size="sm" icon="plus" onClick={openAdd}>{t("owner.landingCms.add")}</Btn>
+        <SectionTitle sub={"Coach photo + name shown in the Our Coach section"}>{"Coach"}</SectionTitle>
+        <Btn variant="soft" size="sm" icon="plus" onClick={openAdd}>{"Add"}</Btn>
       </div>
       <div className="mt-4 grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {items.map((c) => (
@@ -93,22 +91,22 @@ export default function CoachesTab() {
             </div>
             <div className="p-3 flex items-start gap-2">
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-bold text-ink truncate">{c.name ? <NoTranslate>{c.name}</NoTranslate> : t("owner.landingCms.noName")}</div>
+                <div className="text-sm font-bold text-ink truncate">{c.name ? <NoTranslate>{c.name}</NoTranslate> : "Unnamed"}</div>
               </div>
               <button onClick={() => openEdit(c)} className="w-7 h-7 rounded-lg border border-line bg-white flex items-center justify-center hover:bg-paper-deep shrink-0"><Icon name="edit" className="w-3.5 h-3.5 text-ink-mute" /></button>
               <button onClick={() => del(c)} className="w-7 h-7 rounded-lg border border-danger-200 bg-danger-50 flex items-center justify-center hover:bg-danger-100 shrink-0"><Icon name="trash" className="w-3.5 h-3.5 text-danger-500" /></button>
             </div>
           </div>
         ))}
-        {items.length === 0 && <div className="py-8 text-center text-ink-mute text-sm sm:col-span-2 lg:col-span-3">{t("owner.landingCms.coaches.empty")}</div>}
+        {items.length === 0 && <div className="py-8 text-center text-ink-mute text-sm sm:col-span-2 lg:col-span-3">{"No coaches yet."}</div>}
       </div>
 
-      <Modal open={showModal} onClose={() => setShowModal(false)} title={editItem ? t("owner.landingCms.coaches.editModalTitle") : t("owner.landingCms.coaches.addModalTitle")} size="sm"
-        footer={<><Btn variant="ghost" onClick={() => setShowModal(false)}>{t("common.actions.cancel")}</Btn><Btn variant="primary" onClick={save} disabled={saving || uploading || !form.name.trim()}>{saving || uploading ? t("common.actions.saving") : t("common.actions.save")}</Btn></>}>
+      <Modal open={showModal} onClose={() => setShowModal(false)} title={editItem ? "Edit Coach" : "Add Coach"} size="sm"
+        footer={<><Btn variant="ghost" onClick={() => setShowModal(false)}>{"Cancel"}</Btn><Btn variant="primary" onClick={save} disabled={saving || uploading || !form.name.trim()}>{saving || uploading ? "Saving…" : "Save"}</Btn></>}>
         <div className="space-y-3">
-          <ImageField label={t("owner.landingCms.coaches.fieldPhoto")} url={form.photo_url} onUrlChange={(url) => setForm({ ...form, photo_url: url })} onFileChange={setPhotoFile} square />
-          <Field label={t("owner.landingCms.coaches.fieldName")}><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={t("owner.landingCms.coaches.fieldNamePlaceholder")} /></Field>
-          <Field label={t("owner.landingCms.coaches.fieldOrder")}><Input type="number" value={String(form.sort_order)} onChange={(e) => setForm({ ...form, sort_order: Number(e.target.value) })} /></Field>
+          <ImageField label={"Photo"} url={form.photo_url} onUrlChange={(url) => setForm({ ...form, photo_url: url })} onFileChange={setPhotoFile} square />
+          <Field label={"Coach name"}><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={"Coach Andi"} /></Field>
+          <Field label={"Order"}><Input type="number" value={String(form.sort_order)} onChange={(e) => setForm({ ...form, sort_order: Number(e.target.value) })} /></Field>
         </div>
       </Modal>
     </Card>

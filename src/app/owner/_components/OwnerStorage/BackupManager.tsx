@@ -2,14 +2,12 @@
 import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
 import { NoTranslate } from "@/components/ui/NoTranslate";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import type { useOwnerStorage } from "./useOwnerStorage";
 import { BACKUP_CATEGORIES } from "./_utils";
 
 type Hook = ReturnType<typeof useOwnerStorage>;
 
 export default function BackupManager({ hook }: { hook: Hook }) {
-  const { t } = useLocale();
   const {
     backupList, backupLoading, backupLoaded, setBackupLoaded, setBackupList,
     selectedCats, setSelectedCats, toggleCat,
@@ -22,13 +20,13 @@ export default function BackupManager({ hook }: { hook: Hook }) {
   return (
     <div className="bg-paper rounded-2xl border border-line shadow-xs p-5 space-y-5">
       <div>
-        <h3 className="font-display font-bold text-base text-ink">{t("owner.storage.backupTitle")}</h3>
-        <p className="text-xs text-ink-mute mt-0.5">{t("owner.storage.backupSub")}</p>
+        <h3 className="font-display font-bold text-base text-ink">{"File Manager & Backup"}</h3>
+        <p className="text-xs text-ink-mute mt-0.5">{"Manage, delete, and download files stored in Supabase Storage"}</p>
       </div>
 
       {/* Category selector pills */}
       <div className="space-y-2">
-        <div className="text-xs font-semibold text-ink-mute uppercase tracking-wider">{t("owner.storage.selectCategoryLabel")}</div>
+        <div className="text-xs font-semibold text-ink-mute uppercase tracking-wider">{"Select Category"}</div>
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
@@ -39,7 +37,7 @@ export default function BackupManager({ hook }: { hook: Hook }) {
                 : "bg-paper border-line text-ink-soft hover:bg-paper-tint hover:border-ocean-300"
             }`}
           >
-            {t("owner.storage.allCategoriesBtn")}
+            {"All Categories"}
           </button>
           {BACKUP_CATEGORIES.map(cat => (
             <button
@@ -52,7 +50,7 @@ export default function BackupManager({ hook }: { hook: Hook }) {
                   : "bg-paper border-line text-ink-soft hover:bg-paper-tint hover:border-ocean-300"
               }`}
             >
-              {t(cat.labelKey)}
+              {cat.label}
             </button>
           ))}
         </div>
@@ -61,18 +59,18 @@ export default function BackupManager({ hook }: { hook: Hook }) {
       {/* Action bar & buttons */}
       <div className="flex items-center gap-3 flex-wrap pt-2 border-t border-line">
         <Btn variant="soft" size="sm" icon="eye" disabled={backupLoading} onClick={loadBackupList}>
-          {backupLoading ? t("owner.storage.loadingFileList") : t("owner.storage.viewFileListBtn")}
+          {backupLoading ? "Loading…" : "View File List"}
         </Btn>
         {backupLoaded && backupList.length > 0 && !selectMode && (
           <Btn variant="outline" size="sm" icon="check" onClick={() => setSelectMode(true)}>
-            {t("owner.storage.selectFilesBtn")}
+            {"Select Files"}
           </Btn>
         )}
 
         {downloadProgress ? (
           <div className="flex-1 min-w-64 max-w-md bg-paper-deep rounded-xl p-2.5 space-y-1.5">
             <div className="flex justify-between text-xs font-semibold text-ink">
-              <span>{t("owner.storage.downloadingLabel")}</span>
+              <span>{"Downloading files…"}</span>
               <span className="tabular-nums">{downloadProgress.done}/{downloadProgress.total}</span>
             </div>
             <div className="h-1.5 bg-paper rounded-full overflow-hidden">
@@ -90,13 +88,13 @@ export default function BackupManager({ hook }: { hook: Hook }) {
             disabled={!backupLoaded || backupList.length === 0 || downloading}
             onClick={downloadBackup}
           >
-            {downloading ? t("owner.storage.processingBtn") : (backupLoaded ? t("owner.storage.downloadBackupBtnCount", { count: backupList.length }) : t("owner.storage.downloadBackupBtn"))}
+            {downloading ? "Processing…" : (backupLoaded ? `Download Backup ZIP (${backupList.length} files)` : "Download Backup ZIP")}
           </Btn>
         )}
 
         {backupLoaded && (
           <span className="text-xs text-ink-mute ml-auto">
-            {t("owner.storage.filesFoundSummary", { count: backupList.length })}
+            {`${backupList.length} files found`}
             {Object.keys(backupByCat).length > 1 && (
               <> · {Object.entries(backupByCat).map(([cat, n]) => `${cat} (${n})`).join(", ")}</>
             )}
@@ -108,12 +106,12 @@ export default function BackupManager({ hook }: { hook: Hook }) {
       {selectMode && (
         <div className="flex items-center justify-between gap-3 flex-wrap px-4 py-3 rounded-xl bg-ocean-50 border border-ocean-200/60 shadow-xs">
           <div className="flex items-center gap-3">
-            <span className="text-sm font-bold text-ocean-800">{t("owner.storage.filesSelected", { count: selectedFiles.size })}</span>
+            <span className="text-sm font-bold text-ocean-800">{`${selectedFiles.size} files selected`}</span>
             <Btn variant="ghost" size="sm" onClick={() => setSelectedFiles(new Set(backupList.map(f => f.key)))}>
-              {t("owner.storage.selectAllBtn")}
+              {"Select All"}
             </Btn>
             <Btn variant="ghost" size="sm" onClick={() => { setSelectMode(false); setSelectedFiles(new Set()); }}>
-              {t("owner.storage.cancelBtn")}
+              {"Cancel"}
             </Btn>
           </div>
           <Btn
@@ -123,7 +121,7 @@ export default function BackupManager({ hook }: { hook: Hook }) {
             disabled={selectedFiles.size === 0 || deleting}
             onClick={deleteSelected}
           >
-            {deleting ? t("owner.storage.deletingBtn") : t("owner.storage.deleteSelectedBtn")}
+            {deleting ? "Deleting…" : "Delete Selected"}
           </Btn>
         </div>
       )}
@@ -167,7 +165,7 @@ export default function BackupManager({ hook }: { hook: Hook }) {
                 {!selectMode && (
                   <button
                     type="button"
-                    title={t("owner.storage.deleteFileTitleAttr")}
+                    title={"Delete this file"}
                     onClick={(e) => { e.stopPropagation(); deleteSingle(f); }}
                     disabled={deletingKey === f.key}
                     className="w-8 h-8 rounded-xl border border-line bg-paper hover:bg-danger-50 text-ink-mute hover:text-danger-600 flex items-center justify-center transition-colors disabled:opacity-40 shrink-0"
@@ -185,7 +183,7 @@ export default function BackupManager({ hook }: { hook: Hook }) {
           {totalBackupPages > 1 && (
             <div className="px-5 py-3 border-t border-line flex items-center justify-between bg-paper-deep/50">
               <span className="text-xs text-ink-mute font-medium">
-                {t("owner.storage.backupPagination", { count: backupList.length, page: safeBackupPage + 1, total: totalBackupPages })}
+                {`${backupList.length} files · page ${safeBackupPage + 1}/${totalBackupPages}`}
               </span>
               <div className="flex gap-1.5">
                 <button
@@ -213,7 +211,7 @@ export default function BackupManager({ hook }: { hook: Hook }) {
       {backupLoaded && backupList.length === 0 && (
         <div className="py-12 text-center text-sm text-ink-mute bg-paper-tint/40 rounded-2xl border border-dashed border-line">
           <Icon name="archive" className="w-8 h-8 text-ink-faint mx-auto mb-2" />
-          <p className="font-semibold text-ink">{t("owner.storage.noFilesFoundForCategory")}</p>
+          <p className="font-semibold text-ink">{"No files found for the selected category"}</p>
         </div>
       )}
     </div>

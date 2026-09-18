@@ -3,13 +3,12 @@ import { useState, useCallback, useEffect, useMemo } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
-import { useLocale } from "@/components/providers/LocaleProvider";
 import { logActivity } from "@/lib/activityLog";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 import type { StorageStats, BackupFile } from "./_types";
 import { BACKUP_PAGE_SIZE } from "./_utils";
 
 export function useOwnerStorage({ userId, userName }: { userId: string; userName: string }) {
-  const { t, tNode } = useLocale();
   const supabase = createClient();
   const toast = useToast();
   const confirm = useConfirm();
@@ -71,7 +70,7 @@ export function useOwnerStorage({ userId, userName }: { userId: string; userName
       setBackupLoaded(true);
       setBackupPage(0);
     } catch {
-      toast.error(t("owner.storage.listLoadFailed"));
+      toast.error("Failed to load file list");
     }
     setBackupLoading(false);
   };
@@ -110,8 +109,8 @@ export function useOwnerStorage({ userId, userName }: { userId: string; userName
     const targets = backupList.filter(f => selectedFiles.has(f.key));
     if (targets.length === 0) return;
     const yes = await confirm({
-      title: t("owner.storage.deleteSelectedConfirmTitle", { count: targets.length }),
-      body: t("owner.storage.deleteSelectedConfirmBody"),
+      title: `Delete ${targets.length} selected files?`,
+      body: "Files will be permanently removed from storage and cannot be recovered. If a file is linked to data (avatar, logo, etc.), its reference will also be cleared.",
       danger: true,
     });
     if (!yes) return;
@@ -128,12 +127,12 @@ export function useOwnerStorage({ userId, userName }: { userId: string; userName
       const data = await res.json() as { deleted: number; failed: { key: string; error: string }[] };
       if (!res.ok) throw new Error();
 
-      toast.success(t("owner.storage.deleteSuccess", { count: data.deleted }), data.failed.length > 0 ? t("owner.storage.deleteFailedSub", { count: data.failed.length }) : undefined);
+      toast.success(`${data.deleted} files deleted successfully`, data.failed.length > 0 ? `${data.failed.length} files failed to delete.` : undefined);
       logActivity(supabase, {
         userId, userRole: "owner", userName,
         entityType: "system_storage", entityId: "delete",
         action: "delete",
-        label: t("owner.storage.activityDeleted", { count: data.deleted }),
+        label: `${data.deleted} storage files deleted by owner`,
         meta: { count: data.deleted, keys: targets.map(f => f.key) },
       });
 
@@ -143,15 +142,15 @@ export function useOwnerStorage({ userId, userName }: { userId: string; userName
       setSelectMode(false);
       loadStats();
     } catch {
-      toast.error(t("owner.storage.deleteFailed"), t("owner.storage.deleteFailedGeneric"));
+      toast.error("Failed to delete files", "An error occurred while deleting the selected files.");
     }
     setDeleting(false);
   };
 
   const deleteSingle = async (f: BackupFile) => {
     const yes = await confirm({
-      title: t("owner.storage.deleteFileConfirmTitle"),
-      body: tNode("owner.storage.deleteFileConfirmBody", { name: f.label }),
+      title: "Delete this file?",
+      body: (<>{"\""}<NoTranslate>{f.label}</NoTranslate>{"\" will be permanently removed from storage and cannot be recovered. If it's linked to data (avatar, logo, etc.), its reference will also be cleared."}</>),
       danger: true,
     });
     if (!yes) return;
@@ -166,12 +165,12 @@ export function useOwnerStorage({ userId, userName }: { userId: string; userName
       const data = await res.json() as { deleted: number; failed: { key: string; error: string }[] };
       if (!res.ok || data.failed.length > 0) throw new Error();
 
-      toast.success(t("owner.storage.deleteSuccess", { count: 1 }));
+      toast.success(`${1} files deleted successfully`);
       logActivity(supabase, {
         userId, userRole: "owner", userName,
         entityType: "system_storage", entityId: "delete",
         action: "delete",
-        label: t("owner.storage.activityDeleted", { count: 1 }),
+        label: `${1} storage files deleted by owner`,
         meta: { count: 1, keys: [f.key] },
       });
 
@@ -179,7 +178,7 @@ export function useOwnerStorage({ userId, userName }: { userId: string; userName
       setSelectedFiles(prev => { const next = new Set(prev); next.delete(f.key); return next; });
       loadStats();
     } catch {
-      toast.error(t("owner.storage.deleteFailed"), t("owner.storage.deleteFailedGeneric"));
+      toast.error("Failed to delete files", "An error occurred while deleting the selected files.");
     }
     setDeletingKey(null);
   };
@@ -213,16 +212,16 @@ export function useOwnerStorage({ userId, userName }: { userId: string; userName
       a.download = `Storage-Backup-${new Date().toISOString().slice(0, 10)}.zip`;
       a.click();
       URL.revokeObjectURL(url);
-      toast.success(t("owner.storage.downloadSuccess", { count: successCount }));
+      toast.success(`Backup complete (${successCount} files downloaded successfully)`);
       logActivity(supabase, {
         userId, userRole: "owner", userName,
         entityType: "system_storage", entityId: "backup",
         action: "create",
-        label: t("owner.storage.activityBackupDownloaded", { success: successCount, total: backupList.length }),
+        label: `System storage backup downloaded (${successCount}/${backupList.length} files)`,
         meta: { success_count: successCount, total_count: backupList.length },
       });
     } catch {
-      toast.error(t("owner.storage.downloadFailed"), t("owner.storage.downloadFailedSub"));
+      toast.error("Backup failed", "An error occurred while creating the ZIP.");
     }
     setDownloading(false);
     setDownloadProgress(null);

@@ -2,14 +2,13 @@
 import Logo from "@/components/ui/Logo";
 import Icon from "@/components/ui/Icon";
 import Avatar from "@/components/ui/Avatar";
-import LanguageSwitcher from "@/components/ui/LanguageSwitcher";
+import { GoogleLanguageSwitcher } from "@/components/GoogleTranslate";
 import Sidebar, { type NavItem } from "@/components/layout/Sidebar";
 import Topbar from "@/components/layout/Topbar";
 import Bell from "@/components/layout/Bell";
 import MobileNav from "@/components/layout/MobileNav";
 import BetaFeedback, { BETA_FEEDBACK_ENABLED } from "@/components/layout/BetaFeedback";
-import { useLocale } from "@/components/providers/LocaleProvider";
-
+import { NoTranslate } from "@/components/ui/NoTranslate";
 import { useStaffData } from "./_components/useStaffData";
 import StaffProfileGate from "./_components/StaffProfileGate";
 import StaffClockInFlow from "./_components/StaffClockInFlow";
@@ -23,7 +22,6 @@ import ExpenseModal from "./_components/ExpenseModal";
 import type { TabId } from "./_types";
 
 export default function StaffPage() {
-  const { t } = useLocale();
   const hook = useStaffData();
   const {
     active, setActive, mobileNav, setMobileNav,
@@ -33,20 +31,20 @@ export default function StaffPage() {
   } = hook;
 
   const navItems: NavItem[] = [
-    { id: "home", label: t("staff.nav.home"), short: "Home", icon: "home" },
-    { id: "absen", label: t("staff.nav.absen"), short: "Absen", icon: "check" },
-    { id: "invoice", label: t("staff.nav.invoice"), short: "Invoice", icon: "invoice" },
-    { id: "payslip", label: t("staff.nav.payslip"), short: "Payslip", icon: "wallet" },
-    { id: "expenses", label: t("staff.nav.expenses"), short: "Reimburse", icon: "wallet" },
-    { id: "profile", label: t("staff.nav.profile"), short: "Profil", icon: "user" },
+    { id: "home", label: "Home", short: "Home", icon: "home" },
+    { id: "absen", label: "Daily Attendance", short: "Absen", icon: "check" },
+    { id: "invoice", label: "Invoice", short: "Invoice", icon: "invoice" },
+    { id: "payslip", label: "Payslip", short: "Payslip", icon: "wallet" },
+    { id: "expenses", label: "Reimburse / Expenses", short: "Reimburse", icon: "wallet" },
+    { id: "profile", label: "Profile & Bank Account", short: "Profil", icon: "user" },
   ];
 
   const mobileNavItems: NavItem[] = [
-    { id: "home", label: t("staff.nav.home"), short: "Home", icon: "home" },
-    { id: "absen", label: t("staff.nav.absen"), short: "Absen", icon: "check" },
-    { id: "invoice", label: t("staff.nav.invoice"), short: "Invoice", icon: "invoice" },
-    { id: "expenses", label: t("staff.nav.expenses"), short: "Reimburse", icon: "wallet" },
-    { id: "profile", label: t("staff.nav.profile"), short: "Profil", icon: "user" },
+    { id: "home", label: "Home", short: "Home", icon: "home" },
+    { id: "absen", label: "Daily Attendance", short: "Absen", icon: "check" },
+    { id: "invoice", label: "Invoice", short: "Invoice", icon: "invoice" },
+    { id: "expenses", label: "Reimburse / Expenses", short: "Reimburse", icon: "wallet" },
+    { id: "profile", label: "Profile & Bank Account", short: "Profil", icon: "user" },
   ];
 
   const [title, sub] = pageTitles[active];
@@ -81,8 +79,8 @@ export default function StaffPage() {
           <div className="flex items-center gap-2.5">
             <Logo size={36} />
             <div className="min-w-0">
-              <div className="font-display font-extrabold text-[14px] text-ocean-700 leading-tight">{t("staff.shell.brandTitle")}</div>
-              <div className="text-[10px] text-ink-mute tracking-wide truncate">{branch?.name ?? "Next Swimming"}</div>
+              <div className="font-display font-extrabold text-[14px] text-ocean-700 leading-tight">{"Staff Panel"}</div>
+              <div className="text-[10px] text-ink-mute tracking-wide truncate">{branch?.name ? <NoTranslate>{branch.name}</NoTranslate> : "Next Swimming"}</div>
             </div>
           </div>
         }
@@ -91,7 +89,7 @@ export default function StaffPage() {
             onClick={logout}
             className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold text-ink-mute hover:bg-paper-tint"
           >
-            <Icon name="logout" className="w-4 h-4" /> {t("common.actions.logout")}
+            <Icon name="logout" className="w-4 h-4" /> {"Logout"}
           </button>
         }
       />
@@ -105,8 +103,8 @@ export default function StaffPage() {
               <div className="flex items-center gap-2.5">
                 <Logo size={32} />
                 <div className="min-w-0">
-                  <div className="font-display font-extrabold text-sm text-ocean-700 leading-tight">{t("staff.shell.brandTitle")}</div>
-                  <div className="text-[10px] text-ink-mute truncate">{branch?.name ?? "Next Swimming"}</div>
+                  <div className="font-display font-extrabold text-sm text-ocean-700 leading-tight">{"Staff Panel"}</div>
+                  <div className="text-[10px] text-ink-mute truncate">{branch?.name ? <NoTranslate>{branch.name}</NoTranslate> : "Next Swimming"}</div>
                 </div>
               </div>
               <button onClick={() => setMobileNav(false)} className="w-8 h-8 rounded-lg flex items-center justify-center text-ink-mute hover:bg-paper-tint">
@@ -132,7 +130,7 @@ export default function StaffPage() {
                 onClick={logout}
                 className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-semibold text-danger-600 hover:bg-danger-50 transition"
               >
-                <Icon name="logout" className="w-4 h-4" /> {t("common.actions.logout")}
+                <Icon name="logout" className="w-4 h-4" /> {"Logout"}
               </button>
             </div>
           </div>
@@ -144,11 +142,11 @@ export default function StaffPage() {
         <Topbar
           title={title}
           sub={sub}
-          search={t("staff.shell.searchPlaceholder")}
+          search={"Search history…"}
           onMenu={() => setMobileNav(true)}
           right={
             <>
-              <LanguageSwitcher />
+              <GoogleLanguageSwitcher variant="pill" />
               {user && <Bell userId={user.id} />}
               <Avatar name={profile?.full_name ?? "Staff"} size={36} />
             </>

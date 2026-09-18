@@ -3,12 +3,13 @@ import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
 import Avatar from "@/components/ui/Avatar";
 import Modal from "@/components/ui/Modal";
+import { NoTranslate } from "@/components/ui/NoTranslate";
 import { fmtDate } from "@/lib/utils";
 import type { AdminCompetitionHook } from "./_hook";
 
 export default function CompetitionDetailModal({ hook }: { hook: AdminCompetitionHook }) {
   const {
-    t, AWARD_LABELS, selectedComp, setSelectedComp, participations, loadingParts,
+    AWARD_LABELS, selectedComp, setSelectedComp, participations, loadingParts,
     openAddParticipant, openEditParticipant, handleRemoveParticipant, getDoc, handleViewDoc,
   } = hook;
 
@@ -18,21 +19,21 @@ export default function CompetitionDetailModal({ hook }: { hook: AdminCompetitio
     <Modal
       open={!!selectedComp}
       onClose={() => setSelectedComp(null)}
-      title={`Detail Perlombaan — ${selectedComp.name}`}
+      title={<>Detail Perlombaan — <NoTranslate>{selectedComp.name}</NoTranslate></>}
       size="xl"
     >
       <div className="space-y-5">
         {/* Comp Header Info Card */}
         <div className="bg-ocean-50/70 border border-ocean-200 rounded-xl p-4 flex flex-wrap items-center justify-between gap-3 text-sm">
           <div>
-            <div className="font-bold text-ocean-900 text-base">{selectedComp.name}</div>
+            <div className="font-bold text-ocean-900 text-base"><NoTranslate>{selectedComp.name}</NoTranslate></div>
             <div className="text-ocean-700 text-xs mt-0.5">
-              📍 {selectedComp.location || selectedComp.city || t("admin.competition.locationNotSetFallback")} | 📅 {fmtDate(selectedComp.start_date)}
-              {selectedComp.organizer && ` | 🏢 ${selectedComp.organizer}`}
+              📍 {selectedComp.location || selectedComp.city ? <NoTranslate>{selectedComp.location || selectedComp.city}</NoTranslate> : "Location not set"} | 📅 {fmtDate(selectedComp.start_date)}
+              {selectedComp.organizer && <> | 🏢 <NoTranslate>{selectedComp.organizer}</NoTranslate></>}
             </div>
           </div>
           <Btn variant="primary" size="sm" icon="plus" onClick={() => openAddParticipant()}>
-            {t("admin.competition.addMemberResultBtn")}
+            {"Add Student Result"}
           </Btn>
         </div>
 
@@ -43,18 +44,18 @@ export default function CompetitionDetailModal({ hook }: { hook: AdminCompetitio
           </div>
 
           {loadingParts ? (
-            <div className="py-8 text-center text-ink-mute">{t("admin.competition.loadingParticipants")}</div>
+            <div className="py-8 text-center text-ink-mute">{"Loading participant data..."}</div>
           ) : participations.length === 0 ? (
             <div className="py-8 text-center text-ink-mute border border-dashed border-line rounded-xl">
-              {t("admin.competition.noParticipantsYet")}
+              {"No participants registered in this competition yet. Click Add Student Result above."}
             </div>
           ) : (
             <div className="overflow-x-auto border border-line rounded-2xl">
               <table className="w-full text-sm min-w-[900px]">
                 <thead>
                   <tr className="bg-paper-tint text-left text-[11px] font-bold uppercase tracking-wider text-ink-faint border-b border-line">
-                    <th className="py-3 px-4 min-w-[200px]">{t("admin.competition.colMemberBranch")}</th>
-                    <th className="py-3 px-4 min-w-[160px]">{t("admin.competition.colCategoryAgeGroup")}</th>
+                    <th className="py-3 px-4 min-w-[200px]">{"Student & Center"}</th>
+                    <th className="py-3 px-4 min-w-[160px]">{"Category & Age Group"}</th>
                     <th className="py-3 px-4 w-32 whitespace-nowrap">Waktu Result</th>
                     <th className="py-3 px-4 text-center w-24 whitespace-nowrap">Peringkat</th>
                     <th className="py-3 px-4 text-center w-36 whitespace-nowrap">Hasil / Medali</th>
@@ -75,14 +76,14 @@ export default function CompetitionDetailModal({ hook }: { hook: AdminCompetitio
                           <div className="flex items-center gap-2.5">
                             <Avatar src={avatarUrl ?? undefined} name={memberName} size={32} />
                             <div className="min-w-0">
-                              <div className="font-bold text-ink-strong truncate max-w-[180px]">{memberName}</div>
-                              <div className="text-xs text-ink-mute">{p.branch?.name || "Center"}</div>
+                              <div className="font-bold text-ink-strong truncate max-w-[180px]"><NoTranslate>{memberName}</NoTranslate></div>
+                              <div className="text-xs text-ink-mute">{p.branch?.name ? <NoTranslate>{p.branch.name}</NoTranslate> : "Center"}</div>
                             </div>
                           </div>
                         </td>
                         <td className="py-3 px-4 min-w-[160px]">
-                          <div className="font-medium text-ink-strong">{p.category}</div>
-                          {p.age_group && <div className="text-xs text-ink-mute">{p.age_group}</div>}
+                          <div className="font-medium text-ink-strong"><NoTranslate>{p.category}</NoTranslate></div>
+                          {p.age_group && <div className="text-xs text-ink-mute"><NoTranslate>{p.age_group}</NoTranslate></div>}
                         </td>
                         <td className="py-3 px-4 font-mono font-bold text-ocean-700 whitespace-nowrap">
                           {p.time_formatted || (p.time_seconds ? `${p.time_seconds}s` : "—")}
@@ -92,11 +93,11 @@ export default function CompetitionDetailModal({ hook }: { hook: AdminCompetitio
                         </td>
                         <td className="py-3 px-4 text-center whitespace-nowrap">
                           <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${awardInfo.style}`}>
-                            {awardInfo.icon} {p.award === "custom" && p.custom_award_label ? p.custom_award_label : awardInfo.label}
+                            {awardInfo.icon} {p.award === "custom" && p.custom_award_label ? <NoTranslate>{p.custom_award_label}</NoTranslate> : awardInfo.label}
                           </span>
                         </td>
                         <td className="py-3 px-4 text-xs text-ink-soft min-w-[140px]">
-                          {p.coach?.full_name || "—"}
+                          <NoTranslate>{p.coach?.full_name || "—"}</NoTranslate>
                         </td>
                         <td className="py-3 px-4 text-center whitespace-nowrap">
                           {(() => {
@@ -119,7 +120,7 @@ export default function CompetitionDetailModal({ hook }: { hook: AdminCompetitio
                             <button
                               type="button"
                               onClick={() => openEditParticipant(p)}
-                              title={t("admin.competition.editTitle")}
+                              title={"Edit"}
                               className="w-7 h-7 rounded-lg hover:bg-paper-deep text-ink-mute hover:text-ocean-600 flex items-center justify-center transition-colors"
                             >
                               <Icon name="edit" className="w-3.5 h-3.5" />
@@ -127,7 +128,7 @@ export default function CompetitionDetailModal({ hook }: { hook: AdminCompetitio
                             <button
                               type="button"
                               onClick={() => handleRemoveParticipant(p)}
-                              title={t("admin.competition.deleteTitle")}
+                              title={"Delete"}
                               className="w-7 h-7 rounded-lg hover:bg-danger-50 text-ink-mute hover:text-danger-500 flex items-center justify-center transition-colors"
                             >
                               <Icon name="trash" className="w-3.5 h-3.5" />
