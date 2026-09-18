@@ -1,4 +1,4 @@
-// ── Helpers (AdminMember only) ───────────────────────────────────────────────
+// ── Helpers (AdminStudent only) ───────────────────────────────────────────────
 
 export function parseImportDate(raw: unknown): string | undefined {
   if (!raw) return undefined;
@@ -22,7 +22,7 @@ export function normalizeGender(raw: unknown): "male" | "female" | undefined {
   return undefined;
 }
 
-export function normalizeMemberType(raw: unknown): "reguler" | "private" | "school_affiliate" | undefined {
+export function normalizeStudentType(raw: unknown): "reguler" | "private" | "school_affiliate" | undefined {
   if (!raw) return undefined;
   const s = String(raw).trim().toLowerCase().replace(/\s+/g, "_");
   if (["reguler", "regular"].includes(s)) return "reguler";

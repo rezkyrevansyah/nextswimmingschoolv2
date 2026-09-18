@@ -26,7 +26,7 @@ Glosarium: `docs/README.md`. Status: `docs/01-prd.md` bab 4.4. Uang: `docs/03-al
 
 ### `profiles`
 
-Akun masuk. `role` sah: `owner` | `admin` | `manager_center` | `coach` | `staff` | `member` | `school`.
+Akun masuk. `role` sah: `owner` | `admin` | `manager_center` | `coach` | `staff` | `student` | `school`.
 
 Kolom yang mengunci perilaku:
 
@@ -59,7 +59,7 @@ Contoh: `NEXT.001.OW.26`
 | `AD` | Admin |
 | `MC` | Manager Center |
 | `CO` | Coach |
-| `ST` | Student (`member`) |
+| `ST` | Student (`student`) |
 | `SC` | School |
 | `SF` | Staff |
 
@@ -90,7 +90,7 @@ Pelatih ke banyak pusat. Pemilih cabang di panel Coach jika lebih dari satu.
 
 ### `schools`
 
-Sekolah mitra. Terikat akun `school` (`schools.profile_id`) dan satu pusat. Logo + tanda tangan untuk PDF rapor. Panel School hanya baca siswa `members.school_id` = sekolah itu.
+Sekolah mitra. Terikat akun `school` (`schools.profile_id`) dan satu pusat. Logo + tanda tangan untuk PDF rapor. Panel School hanya baca siswa `students.school_id` = sekolah itu.
 
 ---
 
@@ -152,7 +152,7 @@ Peran tidak mengubah tarif. Honor tetap dihitung dari `coach_rates` untuk pelati
 
 `rapor_signer_coach_id` tetap kolom tersendiri di kelas. Cadangannya pelatih `head`, bukan `assistant`.
 
-### `members` (Student)
+### `students` (Student)
 
 Tipe sah: `reguler` | `private` | `school_affiliate`.
 
@@ -184,7 +184,7 @@ Swafoto pelatih opsional; gagal unggah tetap menyimpan baris.
 
 Sesi covering: baris milik **pengganti**. Honor mengikuti pelatih yang mengajar.
 
-### `member_attendances`
+### `student_attendances`
 
 Status sah: `hadir` | `telat` | `izin` | `sakit` | `tidak_hadir`.
 
@@ -211,7 +211,7 @@ Bukan libur kelas.
 | Siapa | Perilaku |
 |---|---|
 | Pelatih | Pengajuan + **pengganti wajib per kelas**; status awal `pending`; Admin setuju/tolak/ganti nama pengganti |
-| Siswa | Tipe `izin` \| `sakit` \| `ujian` \| `lainnya`; persetujuan menyisipkan `member_attendances` |
+| Siswa | Tipe `izin` \| `sakit` \| `ujian` \| `lainnya`; persetujuan menyisipkan `student_attendances` |
 | Staf tanggal nanti | Diajukan ke Admin Leave Requests sub-tab Staff; setelah disetujui clock-in ditolak |
 | Staf hari ini | Bukan Leave Requests; langsung `staff_attendances` |
 
@@ -219,7 +219,7 @@ Pengganti: pelatih aktif, bukan diri sendiri, boleh lintas pusat. Status konsep 
 
 ### `registrations`
 
-Calon dari `/register`. Status tertunda sampai Admin setuju (buat `member`) / tolak / hapus. Calon tidak masuk panel sebelum disetujui.
+Calon dari `/register`. Status tertunda sampai Admin setuju (buat `student`) / tolak / hapus. Calon tidak masuk panel sebelum disetujui.
 
 Lencana Approvals = `registrations` tertunda + sertifikat pelatih tertunda. Izin orang **tidak** masuk lencana.
 
@@ -313,7 +313,7 @@ Satu baris per murid, kolom tanggal (FB-10). Mengikuti saringan aktif. Batas mua
 
 ### Pengumuman
 
-Per pusat. Sasaran `target_roles`: `member` | `coach` | `admin` | `school`. Panel School **tidak** punya tab pengumuman.
+Per pusat. Sasaran `target_roles`: `student` | `coach` | `admin` | `school`. Panel School **tidak** punya tab pengumuman.
 
 ### CMS landing
 
@@ -368,7 +368,7 @@ Aturan yang mudah salah:
 | `invoice_periods` | Jendela klaim honor |
 | `rapor_periods` | Jendela isi rapor |
 | `class_packages` | Paket kelas reguler |
-| `members.remaining_sessions` | Sisa sesi privat |
+| `students.remaining_sessions` | Sisa sesi privat |
 | `school_grade` | Jenjang sekolah mitra |
 | `classes.name` | Nama kelas les |
 ---

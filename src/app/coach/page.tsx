@@ -107,16 +107,16 @@ export default function CoachPage() {
     const classIds = rows.map((c) => c.id);
 
     // Load class rosters via a server route — `profiles` RLS blocks a coach
-    // from reading other users' (members') profile rows directly from the
+    // from reading other users' (students') profile rows directly from the
     // browser, regardless of query shape, so this goes through a Route
     // Handler using the service-role client instead (see route file).
     if (classIds.length > 0) {
-      type MemberEntry = NonNullable<ClassRow["member_classes"]>[number];
+      type StudentEntry = NonNullable<ClassRow["student_classes"]>[number];
       try {
-        const res = await fetch(`/api/coach/class-members?classIds=${classIds.join(",")}`);
+        const res = await fetch(`/api/coach/class-students?classIds=${classIds.join(",")}`);
         if (res.ok) {
-          const { membersByClass } = await res.json() as { membersByClass: Record<string, MemberEntry["member"][]> };
-          for (const c of rows) c.member_classes = (membersByClass[c.id] ?? []).map(member => ({ member }));
+          const { studentsByClass } = await res.json() as { studentsByClass: Record<string, StudentEntry["student"][]> };
+          for (const c of rows) c.student_classes = (studentsByClass[c.id] ?? []).map(student => ({ student }));
         }
       } catch {
         // Roster stays empty on network failure — non-fatal for the rest of the page.

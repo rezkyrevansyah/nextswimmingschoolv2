@@ -15,9 +15,9 @@ export function useSchoolRaporExport(data: ReturnType<typeof useSchoolRaporData>
   const [downloadProgress, setDownloadProgress] = useState<{ done: number; total: number } | null>(null);
 
   const toPrintStudent = (s: Student) => ({
-    member_id: s.id, period_id: s.period_id ?? undefined,
+    student_id: s.id, period_id: s.period_id ?? undefined,
     full_name: s.full_name, avatar_url: s.avatar_url ?? undefined,
-    member_no: s.member_no ?? undefined, birth_date: s.birth_date ?? undefined,
+    student_no: s.student_no ?? undefined, birth_date: s.birth_date ?? undefined,
     location: branchName || undefined,
     level: s.level ?? undefined,
     class_name: s.class_name, coach_name: s.coach_name,

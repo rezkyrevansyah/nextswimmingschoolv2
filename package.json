@@ -14,11 +14,11 @@
     "test:e2e:ui": "dotenv -e .env.test -- playwright test --ui",
     "test:e2e:report": "playwright show-report",
     "test:e2e:headed": "dotenv -e .env.test -- playwright test --headed",
-    "test:e2e:flow": "dotenv -e .env.test -- playwright test --project=flow-owner --project=flow-admin --project=flow-coach --project=flow-member",
+    "test:e2e:flow": "dotenv -e .env.test -- playwright test --project=flow-owner --project=flow-admin --project=flow-coach --project=flow-student",
     "test:e2e:flow:owner": "dotenv -e .env.test -- playwright test --project=flow-owner",
     "test:e2e:flow:admin": "dotenv -e .env.test -- playwright test --project=flow-admin",
     "test:e2e:flow:coach": "dotenv -e .env.test -- playwright test --project=flow-coach",
-    "test:e2e:flow:member": "dotenv -e .env.test -- playwright test --project=flow-member"
+    "test:e2e:flow:student": "dotenv -e .env.test -- playwright test --project=flow-student"
   },
   "dependencies": {
     "@sentry/nextjs": "^10.57.0",

@@ -4,9 +4,9 @@ import { createClient } from "@/utils/supabase/client";
 import { useUpload } from "@/hooks/useUpload";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
-import type { ScheduleSlot, ClassRow, CoachProfile, ClassPackage, MemberAttendanceRow } from "../../_types";
+import type { ScheduleSlot, ClassRow, CoachProfile, ClassPackage, StudentAttendanceRow } from "../../_types";
 import type { Database, Json } from "@/types/database";
-import { isMemberPresentLike } from "@/lib/attendance";
+import { isStudentPresentLike } from "@/lib/attendance";
 import { EMPTY_CLASS_FORM } from "./_utils";
 
 export function useClassData(branchId: string) {
@@ -34,7 +34,7 @@ export function useClassData(branchId: string) {
 
   // Per-class attendance modal
   const [attClass, setAttClass] = useState<ClassRow | null>(null);
-  const [attSessions, setAttSessions] = useState<{ date: string; rows: MemberAttendanceRow[] }[]>([]);
+  const [attSessions, setAttSessions] = useState<{ date: string; rows: StudentAttendanceRow[] }[]>([]);
   const [loadingAtt2, setLoadingAtt2] = useState(false);
   const [attExpanded, setAttExpanded] = useState<Set<string>>(new Set());
 
@@ -46,7 +46,7 @@ export function useClassData(branchId: string) {
 
   const load = useCallback(async () => {
     // Private classes are excluded — they're managed exclusively via the
-    // dedicated "Member Private" menu now (AdminMemberPrivate.tsx), which
+    // dedicated "Student Private" menu now (AdminStudentPrivate.tsx), which
     // keeps the 1:1 class-to-student relationship intact.
     const { data } = await supabase.from("classes")
       .select("id, name, branch_id, status, capacity, enrolled, price_monthly, price_per_session, class_type, location_type, external_location_name, external_location_address, google_maps_url, schedule_days, time_start, time_end, schedule_times, goals, description, photo_url, spreadsheet_url, spreadsheet_filled, class_coaches(coach_id, role, profile:profiles(full_name, id)), coach_spreadsheets:class_coach_spreadsheets(coach_id, spreadsheet_url, updated_at, coach:profiles(full_name)), packages:class_packages(id, name, sessions, price, sort_order, active)")
@@ -345,14 +345,14 @@ export function useClassData(branchId: string) {
     setAttSessions([]);
     setAttExpanded(new Set());
     setLoadingAtt2(true);
-    const { data } = await supabase.from("member_attendances")
-      .select("id, member_id, class_id, session_date, status, method, member:members(profile:profiles(full_name))")
+    const { data } = await supabase.from("student_attendances")
+      .select("id, student_id, class_id, session_date, status, method, student:students(profile:profiles(full_name))")
       .eq("class_id", c.id)
       .order("session_date", { ascending: false })
       .limit(300);
-    const rows = (data ?? []) as unknown as MemberAttendanceRow[];
+    const rows = (data ?? []) as unknown as StudentAttendanceRow[];
     // Group by session_date
-    const map = new Map<string, MemberAttendanceRow[]>();
+    const map = new Map<string, StudentAttendanceRow[]>();
     for (const r of rows) {
       if (!map.has(r.session_date)) map.set(r.session_date, []);
       map.get(r.session_date)!.push(r);
@@ -376,6 +376,6 @@ export function useClassData(branchId: string) {
     toggleDay, updateSlotTime,
     openPackages, savePackage, deletePackage, togglePackageActive, openClassAtt,
     archivedCount, visibleClasses,
-    isMemberPresentLike,
+    isStudentPresentLike,
   };
 }

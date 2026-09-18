@@ -129,7 +129,7 @@ export default function OwnerStaffPresensi({ branches }: { branches: Branch[] })
   useEffect(() => { setPage(0); }, [tab, filterBranch]);
 
   // One staff_attendances row per calendar day in [date_from, date_to] —
-  // mirrors autoCreateMemberAttendances in AdminIzin.tsx, simplified since
+  // mirrors autoCreateStudentAttendances in AdminIzin.tsx, simplified since
   // staff attendance has no per-class/schedule_days concept to filter by.
   const applyStaffLeaveToAttendances = async (leave: StaffLeaveRow) => {
     const status = staffLeaveTypeToStatus(leave.type);

@@ -18,7 +18,7 @@ type AccountDetailDataHook = ReturnType<typeof useAccountDetailData>;
 export default function AccountViewPanel({ hook }: { hook: AccountDetailDataHook }) {
   const {
     ROLE_LABELS, account,
-    coachClasses, certifications, memberData, downloadingQr, linkedStaff,
+    coachClasses, certifications, studentData, downloadingQr, linkedStaff,
     copyToClipboard, handleDownloadSingleQR, calcAge,
   } = hook;
   if (!account) return null;
@@ -27,7 +27,7 @@ export default function AccountViewPanel({ hook }: { hook: AccountDetailDataHook
   const isKnownRole = account.role in ROLE_LABELS;
   const roleColor = ROLE_COLORS[account.role] ?? "bg-slate-100 text-slate-700 border-slate-200";
   const displayName = account.full_name?.trim() || account.email?.split("@")[0] || roleLabel || "—";
-  const activeQR = memberData?.qr_code || memberData?.member_no || account.qr_code || account.user_no || account.id;
+  const activeQR = studentData?.qr_code || studentData?.student_no || account.qr_code || account.user_no || account.id;
 
   // Personal + bank data source: the linked Staff account when one exists
   // (see linkedStaff state above), otherwise this account's own row.
@@ -78,9 +78,9 @@ export default function AccountViewPanel({ hook }: { hook: AccountDetailDataHook
                 </>
               )}
             </span>
-            {(memberData?.member_no || account.user_no) && (
+            {(studentData?.student_no || account.user_no) && (
               <span className="font-mono text-xs font-bold text-ocean-700 bg-ocean-50 px-2.5 py-0.5 rounded-lg border border-ocean-200">
-                <NoTranslate>{memberData?.member_no || account.user_no}</NoTranslate>
+                <NoTranslate>{studentData?.student_no || account.user_no}</NoTranslate>
               </span>
             )}
           </div>
@@ -136,48 +136,48 @@ export default function AccountViewPanel({ hook }: { hook: AccountDetailDataHook
         </div>
       </div>
 
-      {/* Member Specific Stats & Classes */}
-      {account.role === "member" && memberData && (
+      {/* Student Specific Stats & Classes */}
+      {account.role === "student" && studentData && (
         <div>
-          <SectionLabel sub={`Type: ${memberData.type}`}>
-            {"Student Membership Details"}
+          <SectionLabel sub={`Type: ${studentData.type}`}>
+            {"Student Studentship Details"}
           </SectionLabel>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
             <div className="bg-paper-tint rounded-xl p-2.5 border border-line/60 text-center">
               <div className="text-[10px] text-ink-faint uppercase font-bold">{"Remaining Sessions"}</div>
               <div className="text-xl font-bold font-mono text-ocean-700">
-                {memberData.remaining_sessions ?? "—"}
+                {studentData.remaining_sessions ?? "—"}
               </div>
             </div>
             <div className="bg-paper-tint rounded-xl p-2.5 border border-line/60 text-center">
               <div className="text-[10px] text-ink-faint uppercase font-bold">{"Total Sessions"}</div>
               <div className="text-xl font-bold font-mono text-ink">
-                {memberData.total_sessions ?? "—"}
+                {studentData.total_sessions ?? "—"}
               </div>
             </div>
             <div className="bg-paper-tint rounded-xl p-2.5 border border-line/60 text-center col-span-2 sm:col-span-2">
               <div className="text-[10px] text-ink-faint uppercase font-bold">{"School Affiliate"}</div>
               <div className="text-sm font-semibold text-ink truncate mt-0.5">
-                {memberData.school?.name ? (
-                  <NoTranslate>{memberData.school.name}</NoTranslate>
+                {studentData.school?.name ? (
+                  <NoTranslate>{studentData.school.name}</NoTranslate>
                 ) : (
                   "Non-Affiliated"
                 )}
               </div>
-              {memberData.school_grade && (
+              {studentData.school_grade && (
                 <div className="text-xs text-ink-mute mt-0.5">
-                  {"School Grade"}: <NoTranslate>{memberData.school_grade}</NoTranslate>
+                  {"School Grade"}: <NoTranslate>{studentData.school_grade}</NoTranslate>
                 </div>
               )}
             </div>
           </div>
 
           {/* Enrolled classes */}
-          {memberData.member_classes && memberData.member_classes.length > 0 && (
+          {studentData.student_classes && studentData.student_classes.length > 0 && (
             <div className="pt-2 mt-2.5 border-t border-line/60">
               <div className="text-[11px] font-bold text-ink-mute mb-1.5">{"Enrolled Classes:"}</div>
               <div className="flex flex-wrap gap-1.5">
-                {memberData.member_classes.map((mc, idx) => (
+                {studentData.student_classes.map((mc, idx) => (
                   <span
                     key={mc.class?.id || idx}
                     className="bg-paper-tint px-2.5 py-1 rounded-lg border border-line/60 text-xs font-semibold text-ink-soft"

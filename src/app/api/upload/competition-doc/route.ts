@@ -1,10 +1,10 @@
 /**
  * POST /api/upload/competition-doc
- * Body: multipart/form-data { file: File, competitionId: string, memberId: string }
+ * Body: multipart/form-data { file: File, competitionId: string, studentId: string }
  * Returns: { url: string }
  *
  * Admin/Owner only. Uploads a single certificate/photo document covering every
- * category a member won at one competition (upserted by competition_id+member_id,
+ * category a student won at one competition (upserted by competition_id+student_id,
  * not one per achievement row).
  */
 import { NextRequest, NextResponse } from "next/server";
@@ -30,8 +30,8 @@ export async function POST(req: NextRequest) {
   const form = await req.formData();
   const file          = form.get("file")          as File | null;
   const competitionId = form.get("competitionId") as string | null;
-  const memberId       = form.get("memberId")       as string | null;
-  if (!file || !competitionId || !memberId) return NextResponse.json({ error: "Missing fields" }, { status: 400 });
+  const studentId       = form.get("studentId")       as string | null;
+  if (!file || !competitionId || !studentId) return NextResponse.json({ error: "Missing fields" }, { status: 400 });
 
   const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
   const MAX_SIZE_MB = 10;
@@ -43,14 +43,14 @@ export async function POST(req: NextRequest) {
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());
-  const key = keys.competitionDoc(competitionId, memberId);
+  const key = keys.competitionDoc(competitionId, studentId);
   const url = await uploadToBucket(BUCKET_PUBLIC, key, buffer, file.type || "image/jpeg");
 
   const { error } = await supabase
     .from("competition_documents")
     .upsert(
-      { competition_id: competitionId, member_id: memberId, document_url: url, content_type: file.type, uploaded_by: user.id, updated_at: new Date().toISOString() },
-      { onConflict: "competition_id,member_id" }
+      { competition_id: competitionId, student_id: studentId, document_url: url, content_type: file.type, uploaded_by: user.id, updated_at: new Date().toISOString() },
+      { onConflict: "competition_id,student_id" }
     );
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 

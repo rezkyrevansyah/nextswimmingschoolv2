@@ -1,24 +1,24 @@
 "use client";
 import { useState } from "react";
 import { useToast } from "@/components/providers/ToastProvider";
-import type { MemberRow } from "./_types";
+import type { StudentRow } from "./_types";
 
-export function useMemberQRData({ members }: { members: MemberRow[] }) {
+export function useStudentQRData({ students }: { students: StudentRow[] }) {
   const toast = useToast();
   const [qrSelectMode, setQrSelectMode] = useState(false);
   const [selectedQR, setSelectedQR] = useState<Set<string>>(new Set());
   const [generatingQR, setGeneratingQR] = useState(false);
 
-  const bulkDownloadQR = async (memberIds: string[]) => {
-    if (memberIds.length === 0) return;
+  const bulkDownloadQR = async (studentIds: string[]) => {
+    if (studentIds.length === 0) return;
     setGeneratingQR(true);
     try {
       const QRCode = await import("qrcode");
       const JSZip = (await import("jszip")).default;
       const zip = new JSZip();
 
-      for (const mid of memberIds) {
-        const m = members.find(r => r.id === mid);
+      for (const mid of studentIds) {
+        const m = students.find(r => r.id === mid);
         if (!m) continue;
         const qrValue = m.qr_code ?? m.id;
         const name = (m.profile?.full_name ?? mid).replace(/[^a-zA-Z0-9\s-]/g, "").replace(/\s+/g, "-");
@@ -41,7 +41,7 @@ export function useMemberQRData({ members }: { members: MemberRow[] }) {
       URL.revokeObjectURL(url);
       setQrSelectMode(false);
       setSelectedQR(new Set());
-      toast.success("Download complete", `${memberIds.length} QR codes downloaded successfully`);
+      toast.success("Download complete", `${studentIds.length} QR codes downloaded successfully`);
     } catch {
       toast.error("Failed to generate QR", "An error occurred while creating the ZIP file.");
     }

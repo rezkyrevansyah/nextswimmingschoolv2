@@ -41,7 +41,7 @@ export function useAdminFinancialData({ branchId, userId, userName }: { branchId
     for (let from = 0; ; from += PAGE) {
       const { data } = await supabase
         .from("bills")
-        .select("id, member_id, class_id, period_label, amount, discount, total, status, type, paid_at, paid_method, created_at, member:members(profile:profiles(full_name)), class:classes(name)")
+        .select("id, student_id, class_id, period_label, amount, discount, total, status, type, paid_at, paid_method, created_at, student:students(profile:profiles(full_name)), class:classes(name)")
         .eq("branch_id", branchId)
         .order("created_at", { ascending: false })
         .range(from, from + PAGE - 1);
@@ -96,7 +96,7 @@ export function useAdminFinancialData({ branchId, userId, userName }: { branchId
       const q = search.toLowerCase();
       r = r.filter(row => row.source === "manual"
         ? row.description.toLowerCase().includes(q) || (row.category ?? "").toLowerCase().includes(q)
-        : row.member?.profile?.full_name?.toLowerCase().includes(q) || row.period_label.toLowerCase().includes(q) || (row.class?.name ?? "").toLowerCase().includes(q)
+        : row.student?.profile?.full_name?.toLowerCase().includes(q) || row.period_label.toLowerCase().includes(q) || (row.class?.name ?? "").toLowerCase().includes(q)
       );
     }
     r = [...r].sort((a, b2) => {

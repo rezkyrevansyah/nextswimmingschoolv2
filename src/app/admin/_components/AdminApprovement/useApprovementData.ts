@@ -158,8 +158,8 @@ export function useApprovementData(branchId: string) {
     setApprovingId(r.id);
     let proofUrl: string | null = null;
     if (proofFile) proofUrl = await upload.upload.paymentProof(proofFile, r.id);
-    const memberEmail = r.email?.trim();
-    if (!memberEmail) {
+    const studentEmail = r.email?.trim();
+    if (!studentEmail) {
       toast.error("Email not filled in registration data", "Edit the registration first to fill in the email.");
       setApprovingId(null);
       return;
@@ -168,9 +168,9 @@ export function useApprovementData(branchId: string) {
     const res = await fetch("/api/admin/users", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: memberEmail, password: tempPassword, full_name: r.full_name, role: "member", branch_id: branchId, phone: r.phone, birth_date: r.birth_date || null, gender: r.gender || null, address: r.address || null, health_notes: r.health_notes || null, member_type: "reguler", school_id: null, class_id: null, total_sessions: null, proof_url: proofUrl, registration_id: r.id }),
+      body: JSON.stringify({ email: studentEmail, password: tempPassword, full_name: r.full_name, role: "student", branch_id: branchId, phone: r.phone, birth_date: r.birth_date || null, gender: r.gender || null, address: r.address || null, health_notes: r.health_notes || null, student_type: "reguler", school_id: null, class_id: null, total_sessions: null, proof_url: proofUrl, registration_id: r.id }),
     });
-    const json = await res.json() as { user_id?: string; member_id?: string; error?: string; code?: string; class_assignment_error?: string };
+    const json = await res.json() as { user_id?: string; student_id?: string; error?: string; code?: string; class_assignment_error?: string };
     if (!res.ok) {
       const [errT, errS, errD] = parseUserApiError(json);
       toast.error(errT, errS, errD);

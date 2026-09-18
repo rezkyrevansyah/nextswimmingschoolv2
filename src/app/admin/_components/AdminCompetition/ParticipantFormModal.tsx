@@ -16,8 +16,8 @@ export default function ParticipantFormModal({ hook, onNewCompRequested, onEditC
   const {
     activeTab, competitions, selectedComp,
     openPartForm, setOpenPartForm, editPart, partForm, setPartForm, savingPart, handleSaveParticipant,
-    awardMemberId, awardMemberSearch, memberSearch, setMemberSearch, filteredMembers,
-    coachesList, formEffectiveMemberId, formEffectiveCompId, getDoc, mergeDocs, handleViewDoc,
+    awardStudentId, awardStudentSearch, studentSearch, setStudentSearch, filteredStudents,
+    coachesList, formEffectiveStudentId, formEffectiveCompId, getDoc, mergeDocs, handleViewDoc,
   } = hook;
 
   if (!openPartForm) return null;
@@ -78,28 +78,28 @@ export default function ParticipantFormModal({ hook, onNewCompRequested, onEditC
         )}
 
         <Field label={"Select Student"} required>
-          {(editPart || (activeTab === "awards" && awardMemberId && !editPart && partForm.member_id === awardMemberId)) ? (
+          {(editPart || (activeTab === "awards" && awardStudentId && !editPart && partForm.student_id === awardStudentId)) ? (
             <div className="p-2.5 bg-paper-tint rounded-lg font-bold text-ink-strong">
               <NoTranslate>
                 {editPart
-                  ? (editPart.member?.profile as { full_name: string } | null)?.full_name
-                  : awardMemberSearch}
+                  ? (editPart.student?.profile as { full_name: string } | null)?.full_name
+                  : awardStudentSearch}
               </NoTranslate>
             </div>
           ) : (
             <div className="space-y-2">
               <Input
                 placeholder={"Type to search student..."}
-                value={memberSearch}
-                onChange={e => setMemberSearch(e.target.value)}
+                value={studentSearch}
+                onChange={e => setStudentSearch(e.target.value)}
               />
               <Select
-                value={partForm.member_id}
-                onChange={e => setPartForm(prev => ({ ...prev, member_id: e.target.value }))}
+                value={partForm.student_id}
+                onChange={e => setPartForm(prev => ({ ...prev, student_id: e.target.value }))}
                 required
               >
                 <option value="">{"-- Select Student --"}</option>
-                {filteredMembers.map(m => (
+                {filteredStudents.map(m => (
                   <option key={m.id} value={m.id} translate="no">
                     {m.full_name} ({m.branch_name || "Center"})
                   </option>
@@ -206,11 +206,11 @@ export default function ParticipantFormModal({ hook, onNewCompRequested, onEditC
           </Field>
         </div>
 
-        {formEffectiveMemberId && formEffectiveCompId && (
+        {formEffectiveStudentId && formEffectiveCompId && (
           <CompetitionDocUploader
-            memberId={formEffectiveMemberId}
+            studentId={formEffectiveStudentId}
             competitionId={formEffectiveCompId}
-            doc={getDoc(formEffectiveMemberId, formEffectiveCompId)}
+            doc={getDoc(formEffectiveStudentId, formEffectiveCompId)}
             onUploaded={doc => mergeDocs([doc])}
             onView={handleViewDoc}
           />

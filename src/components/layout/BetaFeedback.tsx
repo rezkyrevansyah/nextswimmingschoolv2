@@ -7,13 +7,13 @@ import Modal from "@/components/ui/Modal";
 // ── BETA FLAG — set false atau hapus file ini untuk menonaktifkan ─────────────
 export const BETA_FEEDBACK_ENABLED = true;
 
-type Role = "owner" | "admin" | "coach" | "member" | "school" | "staff";
+type Role = "owner" | "admin" | "coach" | "student" | "school" | "staff";
 
 const ROLE_LABELS: Record<Role, string> = {
   owner:  "Owner Panel",
   admin:  "Admin Panel",
   coach:  "Coach Panel",
-  member: "Student Panel",
+  student: "Student Panel",
   school: "School Panel",
   staff:  "Staff Panel",
 };
@@ -33,7 +33,7 @@ export default function BetaFeedback({ role }: { role: Role }) {
 
   const waMessage = [
     "[BETA FEEDBACK]",
-    "Halo Kak, saya ingin melaporkan bug / memberi masukan untuk aplikasi Next Swimming School.",
+    "Halo Kak, saya ingin melaporkan bug / studenti masukan untuk aplikasi Next Swimming School.",
     "",
     `Panel   : ${ROLE_LABELS[role]}`,
     `Tanggal : ${today}`,

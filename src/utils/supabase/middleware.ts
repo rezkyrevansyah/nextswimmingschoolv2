@@ -52,15 +52,15 @@ export const updateSession = async (request: NextRequest) => {
     return NextResponse.redirect(url);
   }
 
-  // Block suspended members — redirect to /login with ?suspended=1
-  if (user && pathname.startsWith("/member")) {
-    const { data: memberRows, error: memberError } = await supabase
-      .from("members")
+  // Block suspended students — redirect to /login with ?suspended=1
+  if (user && pathname.startsWith("/student")) {
+    const { data: studentRows, error: studentError } = await supabase
+      .from("students")
       .select("status, suspend_until")
       .eq("profile_id", user.id);
 
-    if (memberError) {
-      // Fail closed: don't silently let a suspended member through just
+    if (studentError) {
+      // Fail closed: don't silently let a suspended student through just
       // because the status lookup errored (e.g. duplicate rows, DB hiccup).
       const url = request.nextUrl.clone();
       url.pathname = "/login";
@@ -68,11 +68,11 @@ export const updateSession = async (request: NextRequest) => {
       return NextResponse.redirect(url);
     }
 
-    const isSuspended = (memberRows ?? []).some(
-      (member) =>
-        member.status === "suspended" ||
-        (member.suspend_until != null &&
-          new Date(member.suspend_until) >= new Date())
+    const isSuspended = (studentRows ?? []).some(
+      (student) =>
+        student.status === "suspended" ||
+        (student.suspend_until != null &&
+          new Date(student.suspend_until) >= new Date())
     );
     if (isSuspended) {
       await supabase.auth.signOut();

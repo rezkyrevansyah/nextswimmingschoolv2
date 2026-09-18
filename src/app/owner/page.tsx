@@ -14,7 +14,7 @@ import LandingCMS from "./_components/LandingCMS";
 import OwnerSchools from "./_components/OwnerSchools";
 import OwnerMasterData from "./_components/OwnerMasterData";
 import OwnerAccountsMaster from "./_components/OwnerAccountsMaster";
-import OwnerMemberPrivate from "./_components/OwnerMemberPrivate";
+import OwnerStudentPrivate from "./_components/OwnerStudentPrivate";
 import OwnerStaffPresensi from "./_components/OwnerStaffPresensi";
 import CoachLoans from "./payroll/CoachLoans";
 import AdminCompetition from "../admin/_components/AdminCompetition";
@@ -44,7 +44,7 @@ function buildNavItems(): NavItem[] {
     { id: "schools",       label: "Schools",       icon: "school" },
     { id: "levels",        label: "Report Levels",        icon: "workspace_premium" },
     { id: "classes",       label: "Classes",       icon: "pool" },
-    { id: "memberPrivate", label: "Private Students",           icon: "person" },
+    { id: "studentPrivate", label: "Private Students",           icon: "person" },
     { id: "rates",         label: "Coach Rates",         icon: "sell" },
     { id: "competitions",  label: "Competitions",  icon: "trophy" },
     { id: "staffPresensi", label: "Attendance",                 icon: "fact_check" },
@@ -66,7 +66,7 @@ function buildTitles(): Record<string, [string, string]> {
     schools:       ["Partner Schools & Signatures",   "Manage partner schools, upload logos, and configure report card digital signatures."],
     levels:        ["Report Levels",    "Criteria templates & time standards per swim level"],
     classes:       ["Classes",   "All classes across centers"],
-    memberPrivate: ["Private Students", "Manage private student assignments and coaches"],
+    studentPrivate: ["Private Students", "Manage private student assignments and coaches"],
     rates:         ["Rate Settings",     "Coach rates per class"],
     competitions:  ["Competitions & Achievements", "Track students' competitions and awards across all centers"],
     staffPresensi: ["Staff Attendance & Leave", "Review staff clock-ins with their selfie, and approve or reject leave requests"],
@@ -92,16 +92,16 @@ export default function OwnerPage() {
   const [initError, setInitError] = useState<string | null>(null);
 
   const loadBranches = useCallback(async () => {
-    const [{ data: branchData }, { data: members }, { data: coaches }, { data: staffData }, { data: classes }] = await Promise.all([
+    const [{ data: branchData }, { data: students }, { data: coaches }, { data: staffData }, { data: classes }] = await Promise.all([
       supabase.from("branches").select("id, name, city, address, lat, lng, status, wa_numbers, bank_name, bank_account, bank_holder, show_payments_to_admin").order("name"),
-      supabase.from("members").select("id, branch_id").eq("status", "active"),
+      supabase.from("students").select("id, branch_id").eq("status", "active"),
       supabase.from("profiles").select("id, branch_id").eq("role", "coach"),
       supabase.from("profiles").select("id, branch_id").eq("role", "staff"),
       supabase.from("classes").select("id, branch_id").eq("status", "active"),
     ]);
 
     if (branchData) {
-      const memberMap = (members ?? []).reduce<Record<string, number>>((acc, m) => {
+      const studentMap = (students ?? []).reduce<Record<string, number>>((acc, m) => {
         if (m.branch_id) acc[m.branch_id] = (acc[m.branch_id] ?? 0) + 1;
         return acc;
       }, {});
@@ -120,7 +120,7 @@ export default function OwnerPage() {
 
       const flat = branchData.map((b) => ({
         ...b,
-        member_count: memberMap[b.id] ?? 0,
+        student_count: studentMap[b.id] ?? 0,
         coach_count:  coachMap[b.id]  ?? 0,
         staff_count:  staffMap[b.id]  ?? 0,
         class_count:  classMap[b.id]  ?? 0,
@@ -167,7 +167,7 @@ export default function OwnerPage() {
     schools:   <OwnerSchools branches={branches} />,
     accounts:  <OwnerAccountsMaster branches={branches} />,
     staffPresensi: <OwnerStaffPresensi branches={branches} />,
-    memberPrivate: <OwnerMemberPrivate branches={branches} />,
+    studentPrivate: <OwnerStudentPrivate branches={branches} />,
     classes:   <OwnerClasses branches={branches} />,
     competitions: <AdminCompetition branchId="" />,
     levels:    <OwnerRaporLevels />,

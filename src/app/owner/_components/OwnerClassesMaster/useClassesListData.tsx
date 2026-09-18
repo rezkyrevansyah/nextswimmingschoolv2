@@ -54,7 +54,7 @@ export function useClassesListData(branches: { id: string; name: string }[]) {
         "id, name, branch_id, status, capacity, enrolled, price_monthly, price_per_session, class_type, location_type, external_location_name, external_location_address, google_maps_url, schedule_days, time_start, time_end, schedule_times, goals, description, photo_url, spreadsheet_url, spreadsheet_filled, rapor_signer_coach_id, branch:branches(id, name), class_coaches(coach_id, role, profile:profiles(id, full_name, phone, avatar_url)), coach_spreadsheets:class_coach_spreadsheets(coach_id, spreadsheet_url, updated_at, coach:profiles(full_name))"
       )
       // Private classes are excluded — they're managed exclusively via the
-      // dedicated "Member Private" menu now, which keeps the 1:1
+      // dedicated "Student Private" menu now, which keeps the 1:1
       // class-to-student relationship intact.
       .neq("class_type", "private")
       .order("branch_id")

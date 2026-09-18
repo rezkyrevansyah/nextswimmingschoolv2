@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/Card";
 import Avatar from "@/components/ui/Avatar";
 import { useUpload } from "@/hooks/useUpload";
 
-export default function ProfileGate({ memberName, onComplete, onLogout }: { memberName: string; onComplete: () => void; onLogout: () => void }) {
+export default function ProfileGate({ studentName, onComplete, onLogout }: { studentName: string; onComplete: () => void; onLogout: () => void }) {
   const { upload, uploading } = useUpload();
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
@@ -35,7 +35,7 @@ export default function ProfileGate({ memberName, onComplete, onLogout }: { memb
         <Card className="flex flex-col items-center gap-4">
           <label className="cursor-pointer group relative inline-block">
             <Avatar
-              name={memberName || "?"}
+              name={studentName || "?"}
               src={avatarPreview ?? undefined}
               size={112}
               className="ring-2 ring-dashed ring-line group-hover:ring-ocean-400 transition-all"

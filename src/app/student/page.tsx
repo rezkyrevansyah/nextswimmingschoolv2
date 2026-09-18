@@ -5,32 +5,32 @@ import Btn from "@/components/ui/Btn";
 import { NoTranslate } from "@/components/ui/NoTranslate";
 import { createClient } from "@/utils/supabase/client";
 
-import MemberShell from "./_components/MemberShell";
-import MemberHome from "./_components/MemberHome";
-import MemberSchedule from "./_components/MemberSchedule";
-import MemberAbsensi from "./_components/MemberAbsensi";
-import MemberBills from "./_components/MemberBills";
-import MemberLeave from "./_components/MemberLeave";
-import MemberRapor from "./_components/MemberRapor";
-import MemberProfile from "./_components/MemberProfile";
+import StudentShell from "./_components/StudentShell";
+import StudentHome from "./_components/StudentHome";
+import StudentSchedule from "./_components/StudentSchedule";
+import StudentAbsensi from "./_components/StudentAbsensi";
+import StudentBills from "./_components/StudentBills";
+import StudentLeave from "./_components/StudentLeave";
+import StudentRapor from "./_components/StudentRapor";
+import StudentProfile from "./_components/StudentProfile";
 import ProfileGate from "./_components/ProfileGate";
 import type { TabId } from "./_types";
 
-export default function MemberPage() {
+export default function StudentPage() {
   const supabase = createClient();
   const [active, setActive] = useState<TabId>("home");
-  const [memberId, setMemberId] = useState("");
-  const [memberName, setMemberName] = useState("");
-  const [memberType, setMemberType] = useState<"reguler" | "private" | "school_affiliate">("reguler");
+  const [studentId, setStudentId] = useState("");
+  const [studentName, setStudentName] = useState("");
+  const [studentType, setStudentType] = useState<"reguler" | "private" | "school_affiliate">("reguler");
   const [branchId, setBranchId] = useState("");
   const [branchName, setBranchName] = useState("");
   const [userId, setUserId] = useState("");
   const [locked, setLocked] = useState(false);
   const [lockChecked, setLockChecked] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
-  const [memberAvatarUrl, setMemberAvatarUrl] = useState<string | null>(null);
-  const [memberNo, setMemberNo] = useState<string | null>(null);
-  const [memberBirthDate, setMemberBirthDate] = useState<string | null>(null);
+  const [studentAvatarUrl, setStudentAvatarUrl] = useState<string | null>(null);
+  const [studentNo, setStudentNo] = useState<string | null>(null);
+  const [studentBirthDate, setStudentBirthDate] = useState<string | null>(null);
   const [suspendUntil, setSuspendUntil] = useState<string | null>(null);
   const [suspendReason, setSuspendReason] = useState<string | null>(null);
   const [suspendCountdown, setSuspendCountdown] = useState("");
@@ -84,9 +84,9 @@ export default function MemberPage() {
       const bid = meta.branch_id as string | undefined;
       if (bid) setBranchId(bid);
 
-      // Load member record by profile_id (= auth uid)
-      supabase.from("members")
-        .select("id, type, member_no, suspend_until, suspend_reason, profile:profiles(full_name, birth_date, is_profile_complete, avatar_url)")
+      // Load student record by profile_id (= auth uid)
+      supabase.from("students")
+        .select("id, type, student_no, suspend_until, suspend_reason, profile:profiles(full_name, birth_date, is_profile_complete, avatar_url)")
         .eq("profile_id", u.id)
         .single()
         .then(async ({ data: m }) => {
@@ -95,16 +95,16 @@ export default function MemberPage() {
             return;
           }
           if (m) {
-            setMemberId(m.id);
-            const rec = m as unknown as { id: string; type: "reguler" | "private" | "school_affiliate"; member_no: string | null; suspend_until: string | null; suspend_reason: string | null; profile: { full_name: string; birth_date: string | null; is_profile_complete: boolean | null; avatar_url: string | null } | null };
-            setMemberType(rec.type ?? "reguler");
-            setMemberNo(rec.member_no ?? null);
+            setStudentId(m.id);
+            const rec = m as unknown as { id: string; type: "reguler" | "private" | "school_affiliate"; student_no: string | null; suspend_until: string | null; suspend_reason: string | null; profile: { full_name: string; birth_date: string | null; is_profile_complete: boolean | null; avatar_url: string | null } | null };
+            setStudentType(rec.type ?? "reguler");
+            setStudentNo(rec.student_no ?? null);
             setSuspendUntil(rec.suspend_until ?? null);
             setSuspendReason(rec.suspend_reason ?? null);
             const prof = rec.profile;
-            setMemberName(prof?.full_name ?? "");
-            setMemberAvatarUrl(prof?.avatar_url ?? null);
-            setMemberBirthDate(prof?.birth_date ?? null);
+            setStudentName(prof?.full_name ?? "");
+            setStudentAvatarUrl(prof?.avatar_url ?? null);
+            setStudentBirthDate(prof?.birth_date ?? null);
             // Lock if profile incomplete AND no avatar
             const complete = prof?.is_profile_complete === true;
             const hasAvatar = !!(prof?.avatar_url);
@@ -127,22 +127,22 @@ export default function MemberPage() {
     window.location.href = "/login";
   };
 
-  // Called when member finishes uploading avatar from profile tab
+  // Called when student finishes uploading avatar from profile tab
   const onProfileComplete = () => setLocked(false);
 
   const pages: Record<TabId, React.ReactNode> = {
-    home:     <>{SuspendBanner}<MemberHome setActive={setActive} memberId={memberId} memberName={memberName} branchId={branchId} /></>,
-    schedule: <>{SuspendBanner}<MemberSchedule memberId={memberId} /></>,
-    absen:    <>{SuspendBanner}<MemberAbsensi memberId={memberId} onSwitchToLeave={() => setActive("leave")} /></>,
-    bills:    <>{SuspendBanner}<MemberBills memberId={memberId} memberName={memberName} branchId={branchId} /></>,
-    leave:    <>{SuspendBanner}<MemberLeave memberId={memberId} onSwitchToAbsen={() => setActive("absen")} /></>,
-    rapor:    <>{SuspendBanner}<MemberRapor memberId={memberId} memberName={memberName} branchId={branchId} avatarUrl={memberAvatarUrl} memberNo={memberNo} birthDate={memberBirthDate} location={branchName} /></>,
-    profile:  <MemberProfile memberId={memberId} memberName={memberName} onLogout={logout} onProfileComplete={onProfileComplete} onAvatarChange={url => setMemberAvatarUrl(url)} />,
+    home:     <>{SuspendBanner}<StudentHome setActive={setActive} studentId={studentId} studentName={studentName} branchId={branchId} /></>,
+    schedule: <>{SuspendBanner}<StudentSchedule studentId={studentId} /></>,
+    absen:    <>{SuspendBanner}<StudentAbsensi studentId={studentId} onSwitchToLeave={() => setActive("leave")} /></>,
+    bills:    <>{SuspendBanner}<StudentBills studentId={studentId} studentName={studentName} branchId={branchId} /></>,
+    leave:    <>{SuspendBanner}<StudentLeave studentId={studentId} onSwitchToAbsen={() => setActive("absen")} /></>,
+    rapor:    <>{SuspendBanner}<StudentRapor studentId={studentId} studentName={studentName} branchId={branchId} avatarUrl={studentAvatarUrl} studentNo={studentNo} birthDate={studentBirthDate} location={branchName} /></>,
+    profile:  <StudentProfile studentId={studentId} studentName={studentName} onLogout={logout} onProfileComplete={onProfileComplete} onAvatarChange={url => setStudentAvatarUrl(url)} />,
   };
 
   // Profile completion gate — shown before lockChecked is done to avoid flash
   if (lockChecked && locked) {
-    return <ProfileGate memberName={memberName} onComplete={onProfileComplete} onLogout={logout} />;
+    return <ProfileGate studentName={studentName} onComplete={onProfileComplete} onLogout={logout} />;
   }
 
   if (initError) return (
@@ -163,8 +163,8 @@ export default function MemberPage() {
   );
 
   return (
-    <MemberShell active={active} setActive={setActive} name={memberName} branchName={branchName} userId={userId} avatarUrl={memberAvatarUrl} isSchoolAffiliate={memberType === "school_affiliate"}>
+    <StudentShell active={active} setActive={setActive} name={studentName} branchName={branchName} userId={userId} avatarUrl={studentAvatarUrl} isSchoolAffiliate={studentType === "school_affiliate"}>
       {lockChecked ? pages[active] : <div className="p-10 text-center text-ink-mute">{"Loading…"}</div>}
-    </MemberShell>
+    </StudentShell>
   );
 }

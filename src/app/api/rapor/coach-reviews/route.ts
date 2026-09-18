@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { getSupabaseAdmin } from "@/utils/supabase/admin";
-import { maskMemberName } from "@/lib/utils";
+import { maskStudentName } from "@/lib/utils";
 
 export async function GET() {
   const supabase = await createClient();
@@ -23,8 +23,8 @@ export async function GET() {
 
   const admin = getSupabaseAdmin();
   const { data, error } = await admin
-    .from("member_reviews")
-    .select("id, stars, message, created_at, member:members!member_reviews_member_id_fkey(profile:profiles(full_name)), rapor:rapor_entries!member_reviews_rapor_id_fkey(rapor_periods(label))")
+    .from("student_reviews")
+    .select("id, stars, message, created_at, student:students!student_reviews_student_id_fkey(profile:profiles(full_name)), rapor:rapor_entries!student_reviews_rapor_id_fkey(rapor_periods(label))")
     .eq("coach_id", user.id)
     .order("created_at", { ascending: false });
 
@@ -34,14 +34,14 @@ export async function GET() {
 
   const rows = (data as unknown as {
     id: string; stars: number; message: string | null; created_at: string;
-    member: { profile: { full_name: string } | null } | null;
+    student: { profile: { full_name: string } | null } | null;
     rapor: { rapor_periods: { label: string } | null } | null;
   }[]).map(r => ({
     id: r.id,
     stars: r.stars,
     message: r.message,
     created_at: r.created_at,
-    member_name: maskMemberName(r.member?.profile?.full_name),
+    student_name: maskStudentName(r.student?.profile?.full_name),
     period_label: r.rapor?.rapor_periods?.label ?? "—",
   }));
 

@@ -55,8 +55,8 @@ Enam terburuk:
 | 5.625 | `src/app/owner/page.tsx` |
 | 4.318 | `src/app/coach/page.tsx` |
 | 2.428 | `src/app/owner/payroll/PayslipGenerator.tsx` |
-| 2.014 | `src/app/member/page.tsx` |
-| 1.932 | `src/app/admin/_components/AdminMember.tsx` |
+| 2.014 | `src/app/student/page.tsx` |
+| 1.932 | `src/app/admin/_components/AdminStudent.tsx` |
 | 1.647 | `src/app/owner/_components/OwnerClassesMaster.tsx` |
 
 ---
@@ -135,7 +135,7 @@ src/app/owner/
     OwnerMasterData.tsx
     OwnerAccountsMaster.tsx
     OwnerAccountDetail.tsx
-    OwnerMemberPrivate.tsx
+    OwnerStudentPrivate.tsx
     OwnerStaffPresensi.tsx
     OwnerClassesMaster.tsx
   payroll/
@@ -144,9 +144,9 @@ src/app/owner/
     CoachLoans.tsx
 ```
 
-Admin sudah mendekati bentuk ini di **tingkat 1** (`page.tsx` tipis + satu berkas per menu). **Tingkat 2** (folder per layar gemuk) belum: `AdminMember.tsx` masih sekitar 1.932 baris.
+Admin sudah mendekati bentuk ini di **tingkat 1** (`page.tsx` tipis + satu berkas per menu). **Tingkat 2** (folder per layar gemuk) belum: `AdminStudent.tsx` masih sekitar 1.932 baris.
 
-Coach, Student (`member`), Staff, dan School meniru pola yang sama: `page.tsx` = `Shell` + `switch (active)`; tiap tab = `_components/CoachRapor/` dan seterusnya.
+Coach, Student (`student`), Staff, dan School meniru pola yang sama: `page.tsx` = `Shell` + `switch (active)`; tiap tab = `_components/CoachRapor/` dan seterusnya.
 
 Landing publik `(public)/_components/` sudah per section. Jangan diubah oleh pekerjaan ini.
 
@@ -184,7 +184,7 @@ Sudah berkas sendiri tetapi masih gemuk (gelombang 3, kecuali Payslip didahuluka
 | ~1.022 | `_components/OwnerAccountDetail.tsx` |
 | ~928 | `_components/OwnerAccountsMaster.tsx` |
 
-Tab Owner yang **sudah** di `_components/` atau `payroll/`: master, accounts, schools, memberPrivate, staffPresensi, landing, loans, competitions (memakai ulang `AdminCompetition`).
+Tab Owner yang **sudah** di `_components/` atau `payroll/`: master, accounts, schools, studentPrivate, staffPresensi, landing, loans, competitions (memakai ulang `AdminCompetition`).
 
 ### 5.2 Coach — `src/app/coach/page.tsx` (~4.318)
 
@@ -198,7 +198,7 @@ Tab Owner yang **sudah** di `_components/` atau `payroll/`: master, accounts, sc
 | `CoachAbsensi` | 1453 | `_components/CoachAbsensi/` |
 | `SpreadsheetModal` | 2023 | Colocate Kelas |
 | `ReimburseModal` | 2079 | Colocate Invoice |
-| `MemberDetailModal` | 2128 | Colocate Kelas |
+| `StudentDetailModal` | 2128 | Colocate Kelas |
 | `CoachKelas` | 2172 | `_components/CoachKelas.tsx` |
 | `CoachInvoice` | 2388 | `_components/CoachInvoice/` |
 | `CoachRapor` | 2859 | `_components/CoachRapor/` (paling gemuk di panel ini) |
@@ -210,13 +210,13 @@ Tab Owner yang **sudah** di `_components/` atau `payroll/`: master, accounts, sc
 
 | Baris | Berkas | Pecah menjadi |
 |---|---|---|
-| ~2.014 | `src/app/member/page.tsx` | `Shell` + `MemberHome` `MemberSchedule` `MemberAbsensi` `MemberBills` `MemberLeave` `MemberRapor` `MemberProfile` `ProfileGate` |
+| ~2.014 | `src/app/student/page.tsx` | `Shell` + `StudentHome` `StudentSchedule` `StudentAbsensi` `StudentBills` `StudentLeave` `StudentRapor` `StudentProfile` `ProfileGate` |
 | ~1.635 | `src/app/staff/page.tsx` | `StaffProfileGate` `StaffClockInFlow` `StaffInvoice` + sisa tab |
 | ~1.337 | `src/app/school/page.tsx` | `SchoolAbsensi` + tab rapor/ekspor |
 
 ### 5.4 Layar sudah diekstrak tetapi masih god screen (gelombang 3)
 
-`AdminMember` (~1.932), `AdminCompetition` (~1.522), `AdminCoach` (~1.258), `AdminMemberPrivate` (~1.205), plus Owner gemuk di 5.1.
+`AdminStudent` (~1.932), `AdminCompetition` (~1.522), `AdminCoach` (~1.258), `AdminStudentPrivate` (~1.205), plus Owner gemuk di 5.1.
 
 Pola tingkat 2: `index.tsx` (daftar) + `*FormModal.tsx` + `use*.ts` jika fetch/mutasi mendominasi ukuran berkas.
 
@@ -262,13 +262,13 @@ Lalu pecah `OwnerFinancial/` dan `PayslipGenerator` sampai tiap berkas ≤ 500 b
 
 ### Gelombang 2 — Coach, Student, Staff, School
 
-Shell + satu folder atau berkas per tab, resep bab 6. `CoachRapor` dan `MemberRapor` didahulukan di dalam gelombang ini karena paling gemuk.
+Shell + satu folder atau berkas per tab, resep bab 6. `CoachRapor` dan `StudentRapor` didahulukan di dalam gelombang ini karena paling gemuk.
 
 **Selesai jika:** tidak ada `src/app/<peran>/page.tsx` ≥ 500 baris.
 
 ### Gelombang 3 — god screen sisa
 
-`AdminMember`, `AdminCompetition`, `AdminCoach`, `AdminMemberPrivate`, `OwnerClassesMaster`, `LandingCMS`, `OwnerAccountDetail`.
+`AdminStudent`, `AdminCompetition`, `AdminCoach`, `AdminStudentPrivate`, `OwnerClassesMaster`, `LandingCMS`, `OwnerAccountDetail`.
 
 **Selesai jika:** tidak ada komponen layar ≥ 500 baris tanpa pecahan folder.
 

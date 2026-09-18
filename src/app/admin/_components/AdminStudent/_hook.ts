@@ -1,16 +1,16 @@
-import type { useMemberListData } from "./useMemberListData";
-import type { useMemberDetailData } from "./useMemberDetailData";
-import type { useMemberCreateData } from "./useMemberCreateData";
-import type { useMemberEditData } from "./useMemberEditData";
-import type { useMemberActionsData } from "./useMemberActionsData";
-import type { useMemberImportData } from "./useMemberImportData";
-import type { useMemberQRData } from "./useMemberQRData";
+import type { useStudentListData } from "./useStudentListData";
+import type { useStudentDetailData } from "./useStudentDetailData";
+import type { useStudentCreateData } from "./useStudentCreateData";
+import type { useStudentEditData } from "./useStudentEditData";
+import type { useStudentActionsData } from "./useStudentActionsData";
+import type { useStudentImportData } from "./useStudentImportData";
+import type { useStudentQRData } from "./useStudentQRData";
 
-export type AdminMemberHook =
-  ReturnType<typeof useMemberListData> &
-  ReturnType<typeof useMemberDetailData> &
-  ReturnType<typeof useMemberCreateData> &
-  ReturnType<typeof useMemberEditData> &
-  ReturnType<typeof useMemberActionsData> &
-  ReturnType<typeof useMemberImportData> &
-  ReturnType<typeof useMemberQRData>;
+export type AdminStudentHook =
+  ReturnType<typeof useStudentListData> &
+  ReturnType<typeof useStudentDetailData> &
+  ReturnType<typeof useStudentCreateData> &
+  ReturnType<typeof useStudentEditData> &
+  ReturnType<typeof useStudentActionsData> &
+  ReturnType<typeof useStudentImportData> &
+  ReturnType<typeof useStudentQRData>;

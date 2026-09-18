@@ -1,42 +1,42 @@
 import { describe, it, expect } from "vitest";
 import {
-  memberDbToUi,
+  studentDbToUi,
   coachDbToUi,
   staffDbToUi,
-  uiToMemberDb,
+  uiToStudentDb,
   uiToCoachDb,
   uiToStaffDb,
-  memberStatusKind,
+  studentStatusKind,
   coachStatusKind,
   staffStatusKind,
-  memberStatusIcon,
-  isMemberPresentLike,
+  studentStatusIcon,
+  isStudentPresentLike,
   isCoachPresentLike,
   isStaffPresentLike,
   minutesAfterStart,
   classifyCoachClockIn,
-  classifyMemberScan,
-  memberLeaveTypeToStatus,
+  classifyStudentScan,
+  studentLeaveTypeToStatus,
   staffLeaveTypeToStatus,
   isUniqueViolation,
   COACH_LATE_THRESHOLD_MINUTES,
-  MEMBER_QR_LATE_THRESHOLD_MINUTES,
+  STUDENT_QR_LATE_THRESHOLD_MINUTES,
 } from "./attendance";
 
-describe("memberDbToUi", () => {
-  it("maps every member enum value", () => {
-    expect(memberDbToUi("hadir")).toBe("present");
-    expect(memberDbToUi("telat")).toBe("late");
-    expect(memberDbToUi("tidak_hadir")).toBe("absent");
-    expect(memberDbToUi("sakit")).toBe("sick");
-    expect(memberDbToUi("izin")).toBe("izin");
+describe("studentDbToUi", () => {
+  it("maps every student enum value", () => {
+    expect(studentDbToUi("hadir")).toBe("present");
+    expect(studentDbToUi("telat")).toBe("late");
+    expect(studentDbToUi("tidak_hadir")).toBe("absent");
+    expect(studentDbToUi("sakit")).toBe("sick");
+    expect(studentDbToUi("izin")).toBe("izin");
   });
 
   it("accepts UI aliases and unknown as absent", () => {
-    expect(memberDbToUi("present")).toBe("present");
-    expect(memberDbToUi("alpha")).toBe("absent");
-    expect(memberDbToUi(null)).toBe("absent");
-    expect(memberDbToUi("nope")).toBe("absent");
+    expect(studentDbToUi("present")).toBe("present");
+    expect(studentDbToUi("alpha")).toBe("absent");
+    expect(studentDbToUi(null)).toBe("absent");
+    expect(studentDbToUi("nope")).toBe("absent");
   });
 });
 
@@ -56,10 +56,10 @@ describe("coachDbToUi / staffDbToUi", () => {
   });
 });
 
-describe("round-trip UI ↔ member DB", () => {
+describe("round-trip UI ↔ student DB", () => {
   it("round-trips the five UI statuses", () => {
     for (const ui of ["present", "late", "absent", "sick", "izin"] as const) {
-      expect(memberDbToUi(uiToMemberDb(ui))).toBe(ui);
+      expect(studentDbToUi(uiToStudentDb(ui))).toBe(ui);
     }
   });
 
@@ -71,12 +71,12 @@ describe("round-trip UI ↔ member DB", () => {
 });
 
 describe("present-like", () => {
-  it("counts member hadir and telat as present", () => {
-    expect(isMemberPresentLike("hadir")).toBe(true);
-    expect(isMemberPresentLike("telat")).toBe(true);
-    expect(isMemberPresentLike("izin")).toBe(false);
-    expect(isMemberPresentLike("sakit")).toBe(false);
-    expect(isMemberPresentLike("tidak_hadir")).toBe(false);
+  it("counts student hadir and telat as present", () => {
+    expect(isStudentPresentLike("hadir")).toBe(true);
+    expect(isStudentPresentLike("telat")).toBe(true);
+    expect(isStudentPresentLike("izin")).toBe(false);
+    expect(isStudentPresentLike("sakit")).toBe(false);
+    expect(isStudentPresentLike("tidak_hadir")).toBe(false);
   });
 
   it("counts coach present and late", () => {
@@ -91,13 +91,13 @@ describe("present-like", () => {
   });
 });
 
-describe("memberStatusKind", () => {
+describe("studentStatusKind", () => {
   it("uses Status kinds the UI already understands", () => {
-    expect(memberStatusKind("hadir")).toBe("present");
-    expect(memberStatusKind("telat")).toBe("late");
-    expect(memberStatusKind("izin")).toBe("excused");
-    expect(memberStatusKind("sakit")).toBe("sick");
-    expect(memberStatusKind("tidak_hadir")).toBe("absent");
+    expect(studentStatusKind("hadir")).toBe("present");
+    expect(studentStatusKind("telat")).toBe("late");
+    expect(studentStatusKind("izin")).toBe("excused");
+    expect(studentStatusKind("sakit")).toBe("sick");
+    expect(studentStatusKind("tidak_hadir")).toBe("absent");
   });
 });
 
@@ -108,10 +108,10 @@ describe("late classification", () => {
     expect(classifyCoachClockIn(-5)).toBe("present");
   });
 
-  it("member QR late after 1 minute", () => {
-    expect(classifyMemberScan(MEMBER_QR_LATE_THRESHOLD_MINUTES)).toBe("hadir");
-    expect(classifyMemberScan(MEMBER_QR_LATE_THRESHOLD_MINUTES + 1)).toBe("telat");
-    expect(classifyMemberScan(-999)).toBe("hadir");
+  it("student QR late after 1 minute", () => {
+    expect(classifyStudentScan(STUDENT_QR_LATE_THRESHOLD_MINUTES)).toBe("hadir");
+    expect(classifyStudentScan(STUDENT_QR_LATE_THRESHOLD_MINUTES + 1)).toBe("telat");
+    expect(classifyStudentScan(-999)).toBe("hadir");
   });
 
   it("minutesAfterStart handles HH:MM and HH:MM:SS", () => {
@@ -121,12 +121,12 @@ describe("late classification", () => {
   });
 });
 
-describe("memberLeaveTypeToStatus", () => {
+describe("studentLeaveTypeToStatus", () => {
   it("maps sakit, and everything else to izin", () => {
-    expect(memberLeaveTypeToStatus("sakit")).toBe("sakit");
-    expect(memberLeaveTypeToStatus("izin")).toBe("izin");
-    expect(memberLeaveTypeToStatus("ujian")).toBe("izin");
-    expect(memberLeaveTypeToStatus("lainnya")).toBe("izin");
+    expect(studentLeaveTypeToStatus("sakit")).toBe("sakit");
+    expect(studentLeaveTypeToStatus("izin")).toBe("izin");
+    expect(studentLeaveTypeToStatus("ujian")).toBe("izin");
+    expect(studentLeaveTypeToStatus("lainnya")).toBe("izin");
   });
 });
 
@@ -146,13 +146,13 @@ describe("uiToStaffDb full round-trip", () => {
   });
 });
 
-describe("uiToMemberDb direct mapping", () => {
+describe("uiToStudentDb direct mapping", () => {
   it("maps each UI status to its exact DB value", () => {
-    expect(uiToMemberDb("present")).toBe("hadir");
-    expect(uiToMemberDb("late")).toBe("telat");
-    expect(uiToMemberDb("absent")).toBe("tidak_hadir");
-    expect(uiToMemberDb("sick")).toBe("sakit");
-    expect(uiToMemberDb("izin")).toBe("izin");
+    expect(uiToStudentDb("present")).toBe("hadir");
+    expect(uiToStudentDb("late")).toBe("telat");
+    expect(uiToStudentDb("absent")).toBe("tidak_hadir");
+    expect(uiToStudentDb("sick")).toBe("sakit");
+    expect(uiToStudentDb("izin")).toBe("izin");
   });
 });
 
@@ -171,13 +171,13 @@ describe("coachStatusKind / staffStatusKind", () => {
   });
 });
 
-describe("memberStatusIcon", () => {
+describe("studentStatusIcon", () => {
   it("maps each UI status to its icon", () => {
-    expect(memberStatusIcon("hadir")).toBe("check");
-    expect(memberStatusIcon("izin")).toBe("clipboard");
-    expect(memberStatusIcon("sakit")).toBe("warning");
-    expect(memberStatusIcon("tidak_hadir")).toBe("close");
-    expect(memberStatusIcon("telat")).toBe("info");
+    expect(studentStatusIcon("hadir")).toBe("check");
+    expect(studentStatusIcon("izin")).toBe("clipboard");
+    expect(studentStatusIcon("sakit")).toBe("warning");
+    expect(studentStatusIcon("tidak_hadir")).toBe("close");
+    expect(studentStatusIcon("telat")).toBe("info");
   });
 });
 
@@ -195,7 +195,7 @@ describe("legacy-alias branches", () => {
 
 describe("case sensitivity (characterization, not an endorsement)", () => {
   it("uppercase/mixed-case input is not recognized and falls back to absent", () => {
-    expect(memberDbToUi("HADIR")).toBe("absent");
+    expect(studentDbToUi("HADIR")).toBe("absent");
     expect(coachDbToUi("Present")).toBe("absent");
     expect(staffDbToUi("SAKIT")).toBe("absent");
   });

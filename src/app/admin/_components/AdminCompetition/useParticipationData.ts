@@ -4,13 +4,13 @@ import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
 import { parseSwimTime } from "@/lib/utils";
-import type { ParticipationRow, CompetitionDocumentRow, MemberOption } from "./_types";
+import type { ParticipationRow, CompetitionDocumentRow, StudentOption } from "./_types";
 
 export function useParticipationData({
-  branchId, membersList, selectedComp, loadCompetitions,
+  branchId, studentsList, selectedComp, loadCompetitions,
 }: {
   branchId: string;
-  membersList: MemberOption[];
+  studentsList: StudentOption[];
   selectedComp: { id: string } | null;
   loadCompetitions: () => void;
 }) {
@@ -24,7 +24,7 @@ export function useParticipationData({
   const [openPartForm, setOpenPartForm] = useState(false);
   const [editPart, setEditPart] = useState<ParticipationRow | null>(null);
   const [partForm, setPartForm] = useState({
-    member_id: "",
+    student_id: "",
     coach_id: "",
     category: "",
     stroke: "",
@@ -40,24 +40,24 @@ export function useParticipationData({
   });
   const [savingPart, setSavingPart] = useState(false);
 
-  // Competition documents — one certificate/photo per (member, competition), covers every
-  // category that member won at that event. Keyed by `${competition_id}_${member_id}`.
+  // Competition documents — one certificate/photo per (student, competition), covers every
+  // category that student won at that event. Keyed by `${competition_id}_${student_id}`.
   const [competitionDocs, setCompetitionDocs] = useState<Record<string, CompetitionDocumentRow>>({});
-  const docKey = (competitionId: string, memberId: string) => `${competitionId}_${memberId}`;
+  const docKey = (competitionId: string, studentId: string) => `${competitionId}_${studentId}`;
   const getDoc = useCallback(
-    (memberId: string | null | undefined, competitionId: string | null | undefined) =>
-      memberId && competitionId ? competitionDocs[docKey(competitionId, memberId)] : undefined,
+    (studentId: string | null | undefined, competitionId: string | null | undefined) =>
+      studentId && competitionId ? competitionDocs[docKey(competitionId, studentId)] : undefined,
     [competitionDocs]
   );
   const mergeDocs = useCallback((rows: CompetitionDocumentRow[]) => {
     setCompetitionDocs(prev => {
       const next = { ...prev };
-      rows.forEach(d => { next[docKey(d.competition_id, d.member_id)] = d; });
+      rows.forEach(d => { next[docKey(d.competition_id, d.student_id)] = d; });
       return next;
     });
   }, []);
 
-  const [memberSearch, setMemberSearch] = useState("");
+  const [studentSearch, setStudentSearch] = useState("");
 
   // Lightbox — PDFs can't render inside an <img>, so route those to a new tab instead
   // of the image lightbox based on the document's stored content type.
@@ -70,48 +70,48 @@ export function useParticipationData({
     }
   };
 
-  const [awardMemberId, setAwardMemberId] = useState("");
-  const [awardMemberSearch, setAwardMemberSearch] = useState("");
-  const [memberParticipations, setMemberParticipations] = useState<ParticipationRow[]>([]);
-  const [memberParticipationsLoading, setMemberParticipationsLoading] = useState(false);
+  const [awardStudentId, setAwardStudentId] = useState("");
+  const [awardStudentSearch, setAwardStudentSearch] = useState("");
+  const [studentParticipations, setStudentParticipations] = useState<ParticipationRow[]>([]);
+  const [studentParticipationsLoading, setStudentParticipationsLoading] = useState(false);
 
-  // Participant picker (Awards tab) — search + filter + pagination over membersList
+  // Participant picker (Awards tab) — search + filter + pagination over studentsList
   const [pickerSearch, setPickerSearch] = useState("");
   const [pickerTypeFilter, setPickerTypeFilter] = useState<"all" | "reguler" | "private" | "school_affiliate">("all");
   const [pickerBranchFilter, setPickerBranchFilter] = useState("all");
   const [pickerPage, setPickerPage] = useState(0);
   const PICKER_PAGE_SIZE = 10;
 
-  // ── Load Member Participations (for awards tab) ───────────────────────────
-  const loadMemberParticipations = useCallback(async (memberId: string) => {
-    if (!memberId) { setMemberParticipations([]); return; }
-    setMemberParticipationsLoading(true);
+  // ── Load Student Participations (for awards tab) ───────────────────────────
+  const loadStudentParticipations = useCallback(async (studentId: string) => {
+    if (!studentId) { setStudentParticipations([]); return; }
+    setStudentParticipationsLoading(true);
     const { data, error } = await supabase
       .from("competition_participations")
       .select(`
-        id, competition_id, member_id, branch_id, coach_id, category, stroke, distance_meters, age_group,
+        id, competition_id, student_id, branch_id, coach_id, category, stroke, distance_meters, age_group,
         time_seconds, time_formatted, rank, result_status, award, custom_award_label, notes, created_at,
         competition:competitions(id, name, start_date, level),
-        member:members(id, profile:profiles(full_name, avatar_url)),
+        student:students(id, profile:profiles(full_name, avatar_url)),
         branch:branches(name),
         coach:profiles!competition_participations_coach_id_fkey(full_name)
       `)
-      .eq("member_id", memberId)
+      .eq("student_id", studentId)
       .order("created_at", { ascending: false });
-    setMemberParticipationsLoading(false);
+    setStudentParticipationsLoading(false);
     if (error) { toast.error(`Failed to load awards: ${error.message}`); return; }
-    setMemberParticipations((data as unknown as ParticipationRow[]) ?? []);
+    setStudentParticipations((data as unknown as ParticipationRow[]) ?? []);
 
     const { data: docs } = await supabase
       .from("competition_documents")
-      .select("id, competition_id, member_id, document_url, content_type")
-      .eq("member_id", memberId);
+      .select("id, competition_id, student_id, document_url, content_type")
+      .eq("student_id", studentId);
     if (docs) mergeDocs(docs as CompetitionDocumentRow[]);
   }, [supabase, toast, mergeDocs]);
 
   useEffect(() => {
-    loadMemberParticipations(awardMemberId);
-  }, [awardMemberId, loadMemberParticipations]);
+    loadStudentParticipations(awardStudentId);
+  }, [awardStudentId, loadStudentParticipations]);
 
   // ── Load Competition Details ──────────────────────────────────────────────
   const loadParticipations = useCallback(async (compId: string) => {
@@ -119,9 +119,9 @@ export function useParticipationData({
     const { data, error } = await supabase
       .from("competition_participations")
       .select(`
-        id, competition_id, member_id, branch_id, coach_id, category, stroke, distance_meters, age_group,
+        id, competition_id, student_id, branch_id, coach_id, category, stroke, distance_meters, age_group,
         time_seconds, time_formatted, rank, result_status, award, custom_award_label, notes, created_at,
-        member:members(id, profile:profiles(full_name, avatar_url)),
+        student:students(id, profile:profiles(full_name, avatar_url)),
         branch:branches(name),
         coach:profiles!competition_participations_coach_id_fkey(full_name)
       `)
@@ -136,7 +136,7 @@ export function useParticipationData({
 
     const { data: docs } = await supabase
       .from("competition_documents")
-      .select("id, competition_id, member_id, document_url, content_type")
+      .select("id, competition_id, student_id, document_url, content_type")
       .eq("competition_id", compId);
     if (docs) mergeDocs(docs as CompetitionDocumentRow[]);
 
@@ -144,10 +144,10 @@ export function useParticipationData({
   }, [supabase, toast, mergeDocs]);
 
   // ── Participation Handlers ────────────────────────────────────────────────
-  const openAddParticipant = (prefilledMemberId?: string) => {
+  const openAddParticipant = (prefilledStudentId?: string) => {
     setEditPart(null);
     setPartForm({
-      member_id: prefilledMemberId ?? "",
+      student_id: prefilledStudentId ?? "",
       coach_id: "",
       category: "",
       stroke: "",
@@ -167,7 +167,7 @@ export function useParticipationData({
   const openEditParticipant = (p: ParticipationRow) => {
     setEditPart(p);
     setPartForm({
-      member_id: p.member_id,
+      student_id: p.student_id,
       coach_id: p.coach_id ?? "",
       category: p.category,
       stroke: p.stroke ?? "",
@@ -185,14 +185,14 @@ export function useParticipationData({
   };
 
   // Pre-fills the award form from an existing entry as a starting point for a NEW row (editPart
-  // stays null, so handleSaveParticipant inserts rather than updates) — for a member who wins
+  // stays null, so handleSaveParticipant inserts rather than updates) — for a student who wins
   // several similar categories at once, this is faster than a blank form each time. The
-  // certificate/document itself is unaffected either way: it's scoped to (member, competition),
+  // certificate/document itself is unaffected either way: it's scoped to (student, competition),
   // not to this individual achievement row, so it stays exactly as already uploaded.
   const openDuplicateParticipant = (p: ParticipationRow) => {
     setEditPart(null);
     setPartForm({
-      member_id: p.member_id,
+      student_id: p.student_id,
       coach_id: p.coach_id ?? "",
       category: p.category,
       stroke: p.stroke ?? "",
@@ -220,7 +220,7 @@ export function useParticipationData({
       toast.error("Please select a competition first.");
       return;
     }
-    if (!partForm.member_id || !partForm.category.trim()) {
+    if (!partForm.student_id || !partForm.category.trim()) {
       toast.error("Student and event category are required.");
       return;
     }
@@ -232,7 +232,7 @@ export function useParticipationData({
       const { error } = await supabase
         .from("competition_participations")
         .update({
-          member_id: partForm.member_id,
+          student_id: partForm.student_id,
           coach_id: partForm.coach_id || null,
           category: partForm.category.trim(),
           stroke: partForm.stroke.trim() || null,
@@ -258,17 +258,17 @@ export function useParticipationData({
       toast.success("Participant result updated successfully.");
       setOpenPartForm(false);
       if (selectedComp) loadParticipations(selectedComp.id);
-      if (awardMemberId) loadMemberParticipations(awardMemberId);
+      if (awardStudentId) loadStudentParticipations(awardStudentId);
       loadCompetitions();
     } else {
-      const selectedMember = membersList.find(m => m.id === partForm.member_id);
-      const targetBranchId = branchId || selectedMember?.branch_id || "";
+      const selectedStudent = studentsList.find(m => m.id === partForm.student_id);
+      const targetBranchId = branchId || selectedStudent?.branch_id || "";
 
       const { error } = await supabase
         .from("competition_participations")
         .insert({
           competition_id: effectiveCompId,
-          member_id: partForm.member_id,
+          student_id: partForm.student_id,
           branch_id: targetBranchId,
           coach_id: partForm.coach_id || null,
           category: partForm.category.trim(),
@@ -292,10 +292,10 @@ export function useParticipationData({
 
       toast.success("Competition participant added successfully.");
       if (keepOpenForNext) {
-        // Member, lomba, coach, and age group stay locked — only the per-category fields reset —
-        // so entering the next category win for the same member+lomba needs no re-navigation.
+        // Student, lomba, coach, and age group stay locked — only the per-category fields reset —
+        // so entering the next category win for the same student+lomba needs no re-navigation.
         setPartForm(prev => ({
-          member_id: prev.member_id,
+          student_id: prev.student_id,
           coach_id: prev.coach_id,
           category: "",
           stroke: "",
@@ -313,7 +313,7 @@ export function useParticipationData({
         setOpenPartForm(false);
       }
       if (selectedComp) loadParticipations(selectedComp.id);
-      if (awardMemberId) loadMemberParticipations(awardMemberId);
+      if (awardStudentId) loadStudentParticipations(awardStudentId);
       loadCompetitions();
     }
     setSavingPart(false);
@@ -322,7 +322,7 @@ export function useParticipationData({
   const handleRemoveParticipant = async (p: ParticipationRow) => {
     const ok = await confirm({
       title: "Remove Participant from Competition?",
-      body: `${`Remove participation of ${(p.member?.profile as any)?.full_name ?? "Student"} in event ${p.category}?`} ${"(The student's account will NOT be deleted)"}`,
+      body: `${`Remove participation of ${(p.student?.profile as any)?.full_name ?? "Student"} in event ${p.category}?`} ${"(The student's account will NOT be deleted)"}`,
       confirmLabel: "Remove Participant",
       danger: true,
     });
@@ -335,57 +335,57 @@ export function useParticipationData({
     } else {
       toast.success("Participant removed from competition successfully.");
       if (selectedComp) loadParticipations(selectedComp.id);
-      if (awardMemberId) loadMemberParticipations(awardMemberId);
+      if (awardStudentId) loadStudentParticipations(awardStudentId);
       loadCompetitions();
     }
   };
 
-  const filteredMembers = useMemo(() => {
-    if (!memberSearch.trim()) return membersList.slice(0, 30);
-    return membersList.filter(m =>
-      m.full_name.toLowerCase().includes(memberSearch.toLowerCase())
+  const filteredStudents = useMemo(() => {
+    if (!studentSearch.trim()) return studentsList.slice(0, 30);
+    return studentsList.filter(m =>
+      m.full_name.toLowerCase().includes(studentSearch.toLowerCase())
     ).slice(0, 30);
-  }, [membersList, memberSearch]);
+  }, [studentsList, studentSearch]);
 
-  // Participant picker (Awards tab) — branches present in membersList, for the branch filter (owner/unscoped view only)
+  // Participant picker (Awards tab) — branches present in studentsList, for the branch filter (owner/unscoped view only)
   const pickerBranchOptions = useMemo(() => {
     const seen = new Map<string, string>();
-    membersList.forEach(m => { if (m.branch_id && m.branch_name) seen.set(m.branch_id, m.branch_name); });
+    studentsList.forEach(m => { if (m.branch_id && m.branch_name) seen.set(m.branch_id, m.branch_name); });
     return [...seen.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
-  }, [membersList]);
+  }, [studentsList]);
 
-  const pickerFilteredMembers = useMemo(() => {
+  const pickerFilteredStudents = useMemo(() => {
     const q = pickerSearch.trim().toLowerCase();
-    return membersList.filter(m => {
-      const matchSearch = !q || m.full_name.toLowerCase().includes(q) || (m.member_no ?? "").toLowerCase().includes(q);
+    return studentsList.filter(m => {
+      const matchSearch = !q || m.full_name.toLowerCase().includes(q) || (m.student_no ?? "").toLowerCase().includes(q);
       const matchType = pickerTypeFilter === "all" || m.type === pickerTypeFilter;
       const matchBranch = pickerBranchFilter === "all" || m.branch_id === pickerBranchFilter;
       return matchSearch && matchType && matchBranch;
     });
-  }, [membersList, pickerSearch, pickerTypeFilter, pickerBranchFilter]);
+  }, [studentsList, pickerSearch, pickerTypeFilter, pickerBranchFilter]);
 
-  const pickerTotalPages = Math.max(1, Math.ceil(pickerFilteredMembers.length / PICKER_PAGE_SIZE));
+  const pickerTotalPages = Math.max(1, Math.ceil(pickerFilteredStudents.length / PICKER_PAGE_SIZE));
   const pickerSafePage = Math.min(pickerPage, pickerTotalPages - 1);
-  const pickerPaginatedMembers = pickerFilteredMembers.slice(pickerSafePage * PICKER_PAGE_SIZE, (pickerSafePage + 1) * PICKER_PAGE_SIZE);
+  const pickerPaginatedStudents = pickerFilteredStudents.slice(pickerSafePage * PICKER_PAGE_SIZE, (pickerSafePage + 1) * PICKER_PAGE_SIZE);
 
   /* eslint-disable-next-line react-hooks/set-state-in-effect -- reset pagination when picker filters change */
   useEffect(() => { setPickerPage(0); }, [pickerSearch, pickerTypeFilter, pickerBranchFilter]);
 
-  // The (member, competition) pair the achievement form's certificate uploader is scoped to —
+  // The (student, competition) pair the achievement form's certificate uploader is scoped to —
   // resolved the same way handleSaveParticipant resolves the competition to save against.
-  const formEffectiveMemberId = editPart?.member_id || partForm.member_id;
+  const formEffectiveStudentId = editPart?.student_id || partForm.student_id;
   const formEffectiveCompId = selectedComp?.id || partForm.competition_id;
 
   return {
     participations, loadingParts, loadParticipations,
     openPartForm, setOpenPartForm, editPart, partForm, setPartForm, savingPart,
     getDoc, mergeDocs, handleViewDoc, lightboxUrl, setLightboxUrl,
-    memberSearch, setMemberSearch, filteredMembers,
-    awardMemberId, setAwardMemberId, awardMemberSearch, setAwardMemberSearch,
-    memberParticipations, setMemberParticipations, memberParticipationsLoading, loadMemberParticipations,
+    studentSearch, setStudentSearch, filteredStudents,
+    awardStudentId, setAwardStudentId, awardStudentSearch, setAwardStudentSearch,
+    studentParticipations, setStudentParticipations, studentParticipationsLoading, loadStudentParticipations,
     pickerSearch, setPickerSearch, pickerTypeFilter, setPickerTypeFilter, pickerBranchFilter, setPickerBranchFilter,
-    pickerPage, setPickerPage, pickerBranchOptions, pickerFilteredMembers, pickerTotalPages, pickerSafePage, pickerPaginatedMembers,
+    pickerPage, setPickerPage, pickerBranchOptions, pickerFilteredStudents, pickerTotalPages, pickerSafePage, pickerPaginatedStudents,
     openAddParticipant, openEditParticipant, openDuplicateParticipant, handleSaveParticipant, handleRemoveParticipant,
-    formEffectiveMemberId, formEffectiveCompId,
+    formEffectiveStudentId, formEffectiveCompId,
   };
 }

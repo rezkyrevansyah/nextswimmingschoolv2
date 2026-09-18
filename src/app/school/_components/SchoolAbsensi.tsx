@@ -4,13 +4,13 @@ import Btn from "@/components/ui/Btn";
 import Status from "@/components/ui/Status";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import { NoTranslate } from "@/components/ui/NoTranslate";
-import { isMemberPresentLike, memberDbToUi, memberStatusKind } from "@/lib/attendance";
+import { isStudentPresentLike, studentDbToUi, studentStatusKind } from "@/lib/attendance";
 import { createClient } from "@/utils/supabase/client";
 
 interface SchoolAttRow {
   id: string;
-  member_id: string;
-  member_name: string;
+  student_id: string;
+  student_name: string;
   school_grade: string | null;
   class_id: string;
   class_name: string;
@@ -21,10 +21,10 @@ interface SchoolAttRow {
 
 const ATT_PAGE_SIZE = 20;
 
-export default function SchoolAbsensi({ schoolId, schoolName, members }: {
+export default function SchoolAbsensi({ schoolId, schoolName, students }: {
   schoolId: string;
   schoolName: string;
-  members: { id: string; name: string; school_grade: string | null; class_name: string }[];
+  students: { id: string; name: string; school_grade: string | null; class_name: string }[];
 }) {
   const supabase = createClient();
   const today = new Date().toISOString().split("T")[0];
@@ -34,15 +34,15 @@ export default function SchoolAbsensi({ schoolId, schoolName, members }: {
   const [, setLoading] = useState(false);
   const [filterDateFrom, setFilterDateFrom] = useState(defaultFrom);
   const [filterDateTo, setFilterDateTo] = useState(today);
-  const [filterMember, setFilterMember] = useState("all");
+  const [filterStudent, setFilterStudent] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
   const [page, setPage] = useState(0);
   const [downloading, setDownloading] = useState(false);
 
   const load = useCallback(async () => {
-    if (members.length === 0) { setRows([]); return; }
+    if (students.length === 0) { setRows([]); return; }
     setLoading(true);
-    const memberIds = members.map(m => m.id);
+    const studentIds = students.map(m => m.id);
     // Paginated fetch — no arbitrary row cap, so a wide date range × many
     // students can't silently truncate the data this export is built from.
     const BATCH = 1000;
@@ -50,9 +50,9 @@ export default function SchoolAbsensi({ schoolId, schoolName, members }: {
     const allData: unknown[] = [];
     while (true) {
       const { data: batch } = await supabase
-        .from("member_attendances")
-        .select("id, member_id, class_id, session_date, status, method, member:members(profile:profiles(full_name)), class:classes(name)")
-        .in("member_id", memberIds)
+        .from("student_attendances")
+        .select("id, student_id, class_id, session_date, status, method, student:students(profile:profiles(full_name)), class:classes(name)")
+        .in("student_id", studentIds)
         .gte("session_date", filterDateFrom)
         .lte("session_date", filterDateTo)
         .order("session_date", { ascending: false })
@@ -66,16 +66,16 @@ export default function SchoolAbsensi({ schoolId, schoolName, members }: {
     const data = allData;
     const mapped: SchoolAttRow[] = (data ?? []).map((r) => {
       const raw = r as unknown as {
-        id: string; member_id: string; class_id: string; session_date: string;
+        id: string; student_id: string; class_id: string; session_date: string;
         status: SchoolAttRow["status"]; method: SchoolAttRow["method"];
-        member: { profile: { full_name: string } | null } | null;
+        student: { profile: { full_name: string } | null } | null;
         class: { name: string } | null;
       };
       return {
         id: raw.id,
-        member_id: raw.member_id,
-        member_name: raw.member?.profile?.full_name ?? members.find(m => m.id === raw.member_id)?.name ?? "—",
-        school_grade: members.find(m => m.id === raw.member_id)?.school_grade ?? null,
+        student_id: raw.student_id,
+        student_name: raw.student?.profile?.full_name ?? students.find(m => m.id === raw.student_id)?.name ?? "—",
+        school_grade: students.find(m => m.id === raw.student_id)?.school_grade ?? null,
         class_id: raw.class_id,
         class_name: raw.class?.name ?? "—",
         session_date: raw.session_date,
@@ -86,7 +86,7 @@ export default function SchoolAbsensi({ schoolId, schoolName, members }: {
     setRows(mapped);
     setLoading(false);
     setPage(0);
-  }, [members, filterDateFrom, filterDateTo, supabase]);
+  }, [students, filterDateFrom, filterDateTo, supabase]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -109,19 +109,19 @@ export default function SchoolAbsensi({ schoolId, schoolName, members }: {
     }
   };
 
-  // Client-side filter by member & status (server already filters by date + members)
+  // Client-side filter by student & status (server already filters by date + students)
   const filtered = useMemo(() => {
     let r = rows;
-    if (filterMember !== "all") r = r.filter(a => a.member_id === filterMember);
+    if (filterStudent !== "all") r = r.filter(a => a.student_id === filterStudent);
     if (filterStatus !== "all") r = r.filter(a => a.status === filterStatus);
     return r;
-  }, [rows, filterMember, filterStatus]);
+  }, [rows, filterStudent, filterStatus]);
 
-  // Stats — computed from date-filtered rows (before member/status filter)
-  const statsHadir     = rows.filter(r => isMemberPresentLike(r.status)).length;
-  const statsTidakHadir = rows.filter(r => memberDbToUi(r.status) === "absent").length;
+  // Stats — computed from date-filtered rows (before student/status filter)
+  const statsHadir     = rows.filter(r => isStudentPresentLike(r.status)).length;
+  const statsTidakHadir = rows.filter(r => studentDbToUi(r.status) === "absent").length;
   const statsIzinSakit  = rows.filter(r => {
-    const ui = memberDbToUi(r.status);
+    const ui = studentDbToUi(r.status);
     return ui === "izin" || ui === "sick";
   }).length;
   const statsDates      = new Set(rows.map(r => r.session_date)).size;
@@ -132,7 +132,7 @@ export default function SchoolAbsensi({ schoolId, schoolName, members }: {
   const paginated  = filtered.slice(safePage * ATT_PAGE_SIZE, (safePage + 1) * ATT_PAGE_SIZE);
 
   const getStatusLabel = (status: string) => {
-    switch (memberDbToUi(status)) {
+    switch (studentDbToUi(status)) {
       case "present": return "Present";
       case "izin": return "Leave";
       case "sick": return "Sick";
@@ -153,19 +153,19 @@ export default function SchoolAbsensi({ schoolId, schoolName, members }: {
   };
 
   const downloadExcel = async () => {
-    const targetMembers = filterMember === "all" ? members : members.filter(m => m.id === filterMember);
-    if (targetMembers.length === 0) return;
+    const targetStudents = filterStudent === "all" ? students : students.filter(m => m.id === filterStudent);
+    if (targetStudents.length === 0) return;
     setDownloading(true);
     try {
       const XLSX = await import("xlsx");
 
-      // Per-member date → status lookup, built from every attendance row in
+      // Per-student date → status lookup, built from every attendance row in
       // the selected date range (independent of the per-record filterStatus
       // dropdown, which doesn't map cleanly onto a per-student summary row).
-      const byMember = new Map<string, Map<string, SchoolAttRow["status"]>>();
+      const byStudent = new Map<string, Map<string, SchoolAttRow["status"]>>();
       for (const r of rows) {
-        if (!byMember.has(r.member_id)) byMember.set(r.member_id, new Map());
-        byMember.get(r.member_id)!.set(r.session_date, r.status);
+        if (!byStudent.has(r.student_id)) byStudent.set(r.student_id, new Map());
+        byStudent.get(r.student_id)!.set(r.session_date, r.status);
       }
 
       // Every calendar date in the selected range, inclusive — same column
@@ -190,13 +190,13 @@ export default function SchoolAbsensi({ schoolId, schoolName, members }: {
         "Leave",
       ];
 
-      const dataRows = targetMembers.map(m => {
-        const memberDates = byMember.get(m.id);
+      const dataRows = targetStudents.map(m => {
+        const studentDates = byStudent.get(m.id);
         let present = 0, late = 0, absent = 0, sick = 0, izin = 0;
         const dateCells = dates.map(date => {
-          const status = memberDates?.get(date);
+          const status = studentDates?.get(date);
           if (!status) return "-";
-          switch (memberDbToUi(status)) {
+          switch (studentDbToUi(status)) {
             case "present": present++; break;
             case "late": late++; break;
             case "absent": absent++; break;
@@ -258,7 +258,7 @@ export default function SchoolAbsensi({ schoolId, schoolName, members }: {
               variant="outline"
               size="sm"
               icon="download"
-              disabled={members.length === 0 || downloading}
+              disabled={students.length === 0 || downloading}
               onClick={downloadExcel}
             >
               {downloading ? "Exporting…" : "Export Excel (.xlsx)"}
@@ -303,12 +303,12 @@ export default function SchoolAbsensi({ schoolId, schoolName, members }: {
             <div>
               <label className="text-[10px] uppercase tracking-widest font-bold text-ink-faint block mb-1">{"All Students"}</label>
               <select
-                value={filterMember}
-                onChange={e => setFilterMember(e.target.value)}
+                value={filterStudent}
+                onChange={e => setFilterStudent(e.target.value)}
                 className="w-full text-sm border border-line rounded-lg px-2.5 py-1.5 bg-white outline-none focus:border-ocean-400"
               >
                 <option value="all">{"All Students"}</option>
-                {members.map(m => (
+                {students.map(m => (
                   <option key={m.id} value={m.id} translate="no">{m.name}</option>
                 ))}
               </select>
@@ -348,11 +348,11 @@ export default function SchoolAbsensi({ schoolId, schoolName, members }: {
               {paginated.map(r => (
                 <tr key={r.id} className="hover:bg-paper-tint transition-colors">
                   <td className="py-3 px-5 font-mono text-xs text-ink-soft">{r.session_date}</td>
-                  <td className="py-3 px-4 font-semibold text-ink"><NoTranslate>{r.member_name}</NoTranslate></td>
+                  <td className="py-3 px-4 font-semibold text-ink"><NoTranslate>{r.student_name}</NoTranslate></td>
                   <td className="py-3 px-4 text-ink-soft text-xs"><NoTranslate>{r.school_grade ?? "—"}</NoTranslate></td>
                   <td className="py-3 px-4 text-ink-soft text-xs"><NoTranslate>{r.class_name}</NoTranslate></td>
                   <td className="py-3 px-4">
-                    <Status kind={memberStatusKind(r.status)}>
+                    <Status kind={studentStatusKind(r.status)}>
                       {getStatusLabel(r.status)}
                     </Status>
                   </td>
@@ -376,11 +376,11 @@ export default function SchoolAbsensi({ schoolId, schoolName, members }: {
             <div key={r.id} className="p-4 space-y-2 bg-white">
               <div className="flex items-center justify-between">
                 <span className="font-mono text-xs text-ink-mute">{r.session_date}</span>
-                <Status kind={memberStatusKind(r.status)}>
+                <Status kind={studentStatusKind(r.status)}>
                   {getStatusLabel(r.status)}
                 </Status>
               </div>
-              <div className="font-semibold text-sm text-ink"><NoTranslate>{r.member_name}</NoTranslate></div>
+              <div className="font-semibold text-sm text-ink"><NoTranslate>{r.student_name}</NoTranslate></div>
               {r.school_grade && <div className="text-xs text-ink-mute"><NoTranslate>{r.school_grade}</NoTranslate></div>}
               <div className="flex items-center justify-between text-xs text-ink-mute pt-1 border-t border-line/60">
                 <span><NoTranslate>{r.class_name}</NoTranslate></span>

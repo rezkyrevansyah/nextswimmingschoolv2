@@ -5,7 +5,7 @@ import Modal from "@/components/ui/Modal";
 import Status from "@/components/ui/Status";
 import { NoTranslate } from "@/components/ui/NoTranslate";
 import { fmtDate } from "@/lib/utils";
-import { memberDbToUi, memberStatusKind, memberStatusIcon } from "@/lib/attendance";
+import { studentDbToUi, studentStatusKind, studentStatusIcon } from "@/lib/attendance";
 import type { useCoachAbsensi } from "./useCoachAbsensi";
 
 export default function SessionDetailModal({ hook }: { hook: ReturnType<typeof useCoachAbsensi> }) {
@@ -27,37 +27,37 @@ export default function SessionDetailModal({ hook }: { hook: ReturnType<typeof u
           <div className="flex gap-4 text-xs font-bold mb-4 pb-3 border-b border-line flex-wrap">
             <span className="flex items-center gap-1 text-ok-600">
               <span className="w-4 h-4 rounded-full bg-ok-100 flex items-center justify-center"><Icon name="check" className="w-2.5 h-2.5" strokeWidth={3} /></span>
-              {detailRows.filter(r => memberDbToUi(r.status) === "present").length} {"Present"}
+              {detailRows.filter(r => studentDbToUi(r.status) === "present").length} {"Present"}
             </span>
             <span className="flex items-center gap-1 text-warn-600">
               <span className="w-4 h-4 rounded-full bg-warn-100 flex items-center justify-center"><Icon name="info" className="w-2.5 h-2.5" /></span>
-              {detailRows.filter(r => memberDbToUi(r.status) === "late").length} {"Late"}
+              {detailRows.filter(r => studentDbToUi(r.status) === "late").length} {"Late"}
             </span>
             <span className="flex items-center gap-1 text-warn-600">
               <span className="w-4 h-4 rounded-full bg-warn-100 flex items-center justify-center"><Icon name="clipboard" className="w-2.5 h-2.5" /></span>
-              {detailRows.filter(r => memberDbToUi(r.status) === "izin").length} {"Leave"}
+              {detailRows.filter(r => studentDbToUi(r.status) === "izin").length} {"Leave"}
             </span>
             <span className="flex items-center gap-1 text-orange-500">
               <span className="w-4 h-4 rounded-full bg-orange-100 flex items-center justify-center"><Icon name="warning" className="w-2.5 h-2.5" /></span>
-              {detailRows.filter(r => memberDbToUi(r.status) === "sick").length} {"Sick"}
+              {detailRows.filter(r => studentDbToUi(r.status) === "sick").length} {"Sick"}
             </span>
             <span className="flex items-center gap-1 text-danger-500">
               <span className="w-4 h-4 rounded-full bg-danger-100 flex items-center justify-center"><Icon name="close" className="w-2.5 h-2.5" /></span>
-              {detailRows.filter(r => memberDbToUi(r.status) === "absent").length} {"Absent"}
+              {detailRows.filter(r => studentDbToUi(r.status) === "absent").length} {"Absent"}
             </span>
           </div>
           <div className="space-y-0.5">
             {detailRows.map(r => {
-              const ui = memberDbToUi(r.status);
-              const kind = memberStatusKind(r.status);
-              const icon = memberStatusIcon(r.status);
+              const ui = studentDbToUi(r.status);
+              const kind = studentStatusKind(r.status);
+              const icon = studentStatusIcon(r.status);
               const label = ui === "present" ? "Present"
                 : ui === "late" ? "Late"
                 : ui === "izin" ? "Leave"
                 : ui === "sick" ? "Sick"
                 : "Absent";
               return (
-              <div key={r.member_id} className="flex items-center gap-3 py-2.5 border-b border-line last:border-0">
+              <div key={r.student_id} className="flex items-center gap-3 py-2.5 border-b border-line last:border-0">
                 <span className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
                   ui === "present" ? "bg-ok-50 text-ok-600" :
                   ui === "absent" ? "bg-danger-50 text-danger-500" :

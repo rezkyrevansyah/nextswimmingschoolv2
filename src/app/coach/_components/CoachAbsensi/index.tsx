@@ -21,7 +21,7 @@ export default function CoachAbsensi({ setOverlay, coachId, branchId, classes, h
   const {
     localeTag, history, historyLoading, historyPage, setHistoryPage, historyHasMore,
     filterMonth, setFilterMonth, filterClassId, setFilterClassId,
-    setOpenManual, showQR, setShowQR, memberAttHistory, openDetailSesi, loadHistory,
+    setOpenManual, showQR, setShowQR, studentAttHistory, openDetailSesi, loadHistory,
     privateClasses,
   } = hook;
 
@@ -174,11 +174,11 @@ export default function CoachAbsensi({ setOverlay, coachId, branchId, classes, h
         )}
       </Card>
 
-      {memberAttHistory.length > 0 && (
+      {studentAttHistory.length > 0 && (
         <Card padded={false}>
           <div className="p-5 border-b border-line"><SectionTitle sub={"Click a session to see student detail"}>{"Student Attendance History"}</SectionTitle></div>
           <div className="divide-y divide-line">
-            {memberAttHistory.map((h) => (
+            {studentAttHistory.map((h) => (
               <div
                 key={h.id}
                 className="px-5 py-3 flex items-center gap-3 hover:bg-paper-tint cursor-pointer active:bg-ocean-50 transition-colors"

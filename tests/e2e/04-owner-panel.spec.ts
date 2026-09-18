@@ -29,7 +29,7 @@ test.describe("Owner Panel — Dashboard", () => {
 
   test("statistik dashboard terlihat", async ({ page }) => {
     // Gunakan exact match untuk menghindari strict mode violation dengan heading yang juga mengandung teks ini
-    await expect(page.getByText("Member aktif", { exact: true })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText("Student aktif", { exact: true })).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText("Coach aktif",  { exact: true })).toBeVisible();
     await expect(page.getByText("Kelas aktif",  { exact: true })).toBeVisible();
   });

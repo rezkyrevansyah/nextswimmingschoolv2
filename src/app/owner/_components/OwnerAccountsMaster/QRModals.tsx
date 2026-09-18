@@ -46,7 +46,7 @@ export default function QRModals({ hook }: { hook: AccountsMasterDataHook }) {
             <Select value={quickRole} onChange={(e) => setQuickRole(e.target.value as RoleFilter)}>
               <option value="all">{"All Roles"}</option>
               <option value="coach">{"All Coaches"}</option>
-              <option value="member">{"All Students"}</option>
+              <option value="student">{"All Students"}</option>
               <option value="staff">{"All Staff"}</option>
               <option value="admin">{"All Admins"}</option>
               <option value="manager_center">{"All Manager Centers"}</option>

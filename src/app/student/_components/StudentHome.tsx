@@ -6,22 +6,22 @@ import { Card, SectionTitle } from "@/components/ui/Card";
 import Status from "@/components/ui/Status";
 import { NoTranslate } from "@/components/ui/NoTranslate";
 import { fmtIDR, waLink } from "@/lib/utils";
-import { isMemberPresentLike } from "@/lib/attendance";
+import { isStudentPresentLike } from "@/lib/attendance";
 import { createClient } from "@/utils/supabase/client";
 import type { TabId } from "../_types";
 
-export default function MemberHome({
-  setActive, memberId, memberName, branchId,
+export default function StudentHome({
+  setActive, studentId, studentName, branchId,
 }: {
   setActive: (id: TabId) => void;
-  memberId: string;
-  memberName: string;
+  studentId: string;
+  studentName: string;
   branchId: string;
 }) {
   const supabase = createClient();
   const [monthAttend, setMonthAttend] = useState({ present: 0, total: 0 });
   const [activeClasses, setActiveClasses] = useState(0);
-  const [memberInfo, setMemberInfo] = useState<{ type: string; remaining_sessions: number | null; total_sessions: number | null } | null>(null);
+  const [studentInfo, setStudentInfo] = useState<{ type: string; remaining_sessions: number | null; total_sessions: number | null } | null>(null);
   const [pendingBill, setPendingBill] = useState<{ period: string; amount: number; class_name: string } | null>(null);
   const [latestAnnouncement, setLatestAnnouncement] = useState<{ title: string; body: string } | null>(null);
   const [upcomingSessions, setUpcomingSessions] = useState<{ date: string; day: string; time: string; class_name: string; coach: string; class_id: string }[]>([]);
@@ -30,31 +30,31 @@ export default function MemberHome({
 
 
   useEffect(() => {
-    if (!memberId) return;
+    if (!studentId) return;
     const now = new Date();
     const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
 
     // Attendance this month
-    supabase.from("member_attendances")
+    supabase.from("student_attendances")
       .select("id, status")
-      .eq("member_id", memberId)
+      .eq("student_id", studentId)
       .gte("session_date", monthStart)
       .then(({ data }) => {
         if (data) {
-          setMonthAttend({ present: data.filter((r) => isMemberPresentLike(r.status)).length, total: data.length });
+          setMonthAttend({ present: data.filter((r) => isStudentPresentLike(r.status)).length, total: data.length });
         }
       });
 
     // Active classes
-    supabase.from("member_classes")
+    supabase.from("student_classes")
       .select("class_id", { count: "exact" })
-      .eq("member_id", memberId)
+      .eq("student_id", studentId)
       .then(({ count }) => setActiveClasses(count ?? 0));
 
     // Pending bill
     supabase.from("bills")
       .select("period_label, total, classes(name)")
-      .eq("member_id", memberId)
+      .eq("student_id", studentId)
       .eq("status", "unpaid")
       .order("created_at", { ascending: false })
       .limit(1)
@@ -66,22 +66,22 @@ export default function MemberHome({
         }
       });
 
-    // Member info (type, sessions) — used for private stat display & reminder
-    supabase.from("members")
+    // Student info (type, sessions) — used for private stat display & reminder
+    supabase.from("students")
       .select("type, remaining_sessions, total_sessions")
-      .eq("id", memberId)
+      .eq("id", studentId)
       .single()
       .then(({ data }) => {
         if (data) {
-          setMemberInfo({ type: data.type, remaining_sessions: data.remaining_sessions, total_sessions: data.total_sessions });
+          setStudentInfo({ type: data.type, remaining_sessions: data.remaining_sessions, total_sessions: data.total_sessions });
           if (data.type === "private" && data.remaining_sessions != null && data.remaining_sessions <= 1) {
             setPrivateReminder({ remaining: data.remaining_sessions, total: data.total_sessions ?? 0 });
           }
         }
       });
 
-    // Latest announcement — target_all OR targeted to member's classes
-    supabase.from("member_classes").select("class_id").eq("member_id", memberId)
+    // Latest announcement — target_all OR targeted to student's classes
+    supabase.from("student_classes").select("class_id").eq("student_id", studentId)
       .then(async ({ data: mcData }) => {
         const classIds = (mcData ?? []).map((mc) => (mc as unknown as { class_id: string }).class_id);
         // Fetch all active announcements for the branch
@@ -92,38 +92,38 @@ export default function MemberHome({
           .order("created_at", { ascending: false }).limit(20);
         if (!allAnns) return;
         // Filter: valid_from <= today AND (valid_until is null OR valid_until >= today)
-        // Show first announcement that targets member (or legacy empty target_roles)
+        // Show first announcement that targets student (or legacy empty target_roles)
         // AND is target_all OR has a matching class
         const match = (allAnns as unknown as { title: string; body: string; target_all: boolean; valid_from: string | null; valid_until: string | null; target_roles: string[]; announcement_classes: { class_id: string }[] }[])
           .find((a) => {
             if (a.valid_from && a.valid_from > today) return false;
             if (a.valid_until && a.valid_until < today) return false;
-            // Backward compat: empty target_roles = legacy, show to member
+            // Backward compat: empty target_roles = legacy, show to student
             const roles = a.target_roles ?? [];
-            if (roles.length > 0 && !roles.includes("member")) return false;
+            if (roles.length > 0 && !roles.includes("student")) return false;
             return a.target_all || a.announcement_classes.some((ac) => classIds.includes(ac.class_id));
           });
         if (match) setLatestAnnouncement({ title: match.title, body: match.body });
       });
 
     // Approved leaves for home schedule filtering
-    supabase.from("member_leaves")
-      .select("date_from, date_to, member_leave_classes(class_id)")
-      .eq("member_id", memberId)
+    supabase.from("student_leaves")
+      .select("date_from, date_to, student_leave_classes(class_id)")
+      .eq("student_id", studentId)
       .eq("status", "approved")
       .then(({ data }) => {
         if (!data) return;
-        setApprovedLeaves((data as unknown as { date_from: string; date_to: string; member_leave_classes: { class_id: string }[] }[]).map(l => ({
+        setApprovedLeaves((data as unknown as { date_from: string; date_to: string; student_leave_classes: { class_id: string }[] }[]).map(l => ({
           date_from: l.date_from,
           date_to: l.date_to,
-          class_ids: new Set(l.member_leave_classes.map(lc => lc.class_id)),
+          class_ids: new Set(l.student_leave_classes.map(lc => lc.class_id)),
         })));
       });
 
-    // Upcoming sessions from member_classes → classes (days + time_start)
-    supabase.from("member_classes")
+    // Upcoming sessions from student_classes → classes (days + time_start)
+    supabase.from("student_classes")
       .select("classes(id, name, schedule_days, time_start, time_end, schedule_times, class_coaches(profile:profiles(full_name)))")
-      .eq("member_id", memberId)
+      .eq("student_id", studentId)
       .then(({ data }) => {
         if (!data) return;
         const sessions: typeof upcomingSessions = [];
@@ -160,7 +160,7 @@ export default function MemberHome({
         sessions.sort((a, b) => a.date.localeCompare(b.date));
         setUpcomingSessions(sessions.slice(0, 4));
       });
-  }, [memberId, branchId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [studentId, branchId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isSessionOnLeave = (date: string, classId: string) =>
     approvedLeaves.some(l => date >= l.date_from && date <= l.date_to && (l.class_ids.size === 0 || l.class_ids.has(classId)));
@@ -172,7 +172,7 @@ export default function MemberHome({
         <div className="caustics absolute inset-0 opacity-30" />
         <div className="relative">
           <div className="text-wave-200 text-[11px] uppercase tracking-widest font-bold">{"WELCOME"}</div>
-          <h2 className="font-display font-bold text-2xl mt-0.5">{(<>{"Hi, "}<NoTranslate>{memberName || "…"}</NoTranslate>{" 👋"}</>)}</h2>
+          <h2 className="font-display font-bold text-2xl mt-0.5">{(<>{"Hi, "}<NoTranslate>{studentName || "…"}</NoTranslate>{" 👋"}</>)}</h2>
           <p className="text-white/80 text-sm mt-1">{"Stay motivated for today's practice!"}</p>
           <div className="mt-4 grid grid-cols-2 gap-2">
             <div className="bg-white/10 backdrop-blur ring-1 ring-white/15 rounded-xl p-3">
@@ -180,10 +180,10 @@ export default function MemberHome({
               <div className="font-display font-bold text-2xl mt-0.5">{monthAttend.present}</div>
             </div>
             <div className="bg-white/10 backdrop-blur ring-1 ring-white/15 rounded-xl p-3">
-              {memberInfo?.type === "private" ? (
+              {studentInfo?.type === "private" ? (
                 <>
                   <div className="text-[10px] uppercase tracking-widest font-bold text-wave-200">{"Sessions left"}</div>
-                  <div className="font-display font-bold text-2xl mt-0.5">{memberInfo.remaining_sessions ?? "—"}</div>
+                  <div className="font-display font-bold text-2xl mt-0.5">{studentInfo.remaining_sessions ?? "—"}</div>
                 </>
               ) : (
                 <>
@@ -207,7 +207,7 @@ export default function MemberHome({
           </div>
           <div className="mt-3 grid grid-cols-2 gap-2">
             <Btn variant="outline" size="sm" onClick={() => setActive("bills")}>{"View Bill"}</Btn>
-            <a href={waLink(`Hello Admin, I would like to confirm payment for ${pendingBill.period} for ${memberName}. Here is the transfer proof:`)} target="_blank" rel="noreferrer">
+            <a href={waLink(`Hello Admin, I would like to confirm payment for ${pendingBill.period} for ${studentName}. Here is the transfer proof:`)} target="_blank" rel="noreferrer">
               <Btn variant="wa" size="sm" icon="whatsapp" className="w-full">{"Contact Admin"}</Btn>
             </a>
           </div>
@@ -227,7 +227,7 @@ export default function MemberHome({
               </p>
             </div>
           </div>
-          <a href={waLink(`Hello Admin, I would like to renew the private session package for ${memberName}. Current remaining sessions: ${privateReminder.remaining}.`)} target="_blank" rel="noreferrer" className="mt-3 inline-flex w-full">
+          <a href={waLink(`Hello Admin, I would like to renew the private session package for ${studentName}. Current remaining sessions: ${privateReminder.remaining}.`)} target="_blank" rel="noreferrer" className="mt-3 inline-flex w-full">
             <Btn variant="wa" size="sm" icon="whatsapp" className="w-full">{"Contact Admin — Renew Package"}</Btn>
           </a>
         </Card>

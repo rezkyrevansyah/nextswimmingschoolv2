@@ -17,7 +17,7 @@ export interface CompetitionRow {
 export interface ParticipationRow {
   id: string;
   competition_id: string;
-  member_id: string;
+  student_id: string;
   branch_id: string;
   coach_id: string | null;
   category: string;
@@ -32,7 +32,7 @@ export interface ParticipationRow {
   custom_award_label: string | null;
   notes: string | null;
   created_at: string;
-  member?: {
+  student?: {
     id: string;
     profile?: { full_name: string; avatar_url: string | null } | null;
   } | null;
@@ -43,18 +43,18 @@ export interface ParticipationRow {
 export interface CompetitionDocumentRow {
   id: string;
   competition_id: string;
-  member_id: string;
+  student_id: string;
   document_url: string;
   content_type: string | null;
 }
 
-export interface MemberOption {
+export interface StudentOption {
   id: string;
   full_name: string;
   branch_name?: string;
   branch_id: string;
   type: string;
-  member_no: string | null;
+  student_no: string | null;
 }
 
 export interface CoachOption {
@@ -62,7 +62,7 @@ export interface CoachOption {
   full_name: string;
 }
 
-export const MEMBER_TYPE_LABELS: Record<string, string> = {
+export const STUDENT_TYPE_LABELS: Record<string, string> = {
   reguler: "Regular",
   private: "Private",
   school_affiliate: "School Affiliate",

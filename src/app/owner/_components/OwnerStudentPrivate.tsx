@@ -1,14 +1,14 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/utils/supabase/client";
-import AdminMemberPrivate from "@/app/admin/_components/AdminMemberPrivate";
+import AdminStudentPrivate from "@/app/admin/_components/AdminStudentPrivate";
 
 /**
- * Owner's "Member Private" screen is a thin wrapper around the same
- * AdminMemberPrivate screen used in the Admin panel — reused directly
+ * Owner's "Student Private" screen is a thin wrapper around the same
+ * AdminStudentPrivate screen used in the Admin panel — reused directly
  * (not duplicated) so create/edit/session logic stays in exactly one
  * place. Unlike the Admin panel (always scoped to one branch), Owner
- * passes the full branch list so the table shows every private member
+ * passes the full branch list so the table shows every private student
  * across every center at once, with a Branch column and an advanced
  * filter to narrow it back down — no more picking one branch just to
  * see anything.
@@ -19,7 +19,7 @@ import AdminMemberPrivate from "@/app/admin/_components/AdminMemberPrivate";
  * (or another session) wouldn't show up here until something forced a
  * refetch. A newly created center needs to be pickable immediately.
  */
-export default function OwnerMemberPrivate({ branches: initialBranches }: { branches: { id: string; name: string }[] }) {
+export default function OwnerStudentPrivate({ branches: initialBranches }: { branches: { id: string; name: string }[] }) {
   const supabase = createClient();
   const [branches, setBranches] = useState(initialBranches);
 
@@ -35,5 +35,5 @@ export default function OwnerMemberPrivate({ branches: initialBranches }: { bran
   if (branches.length === 0) {
     return <p className="text-sm text-ink-mute">{"No center exists yet — add one first from the Center menu."}</p>;
   }
-  return <AdminMemberPrivate branches={branches} onBranchesChange={loadBranches} />;
+  return <AdminStudentPrivate branches={branches} onBranchesChange={loadBranches} />;
 }

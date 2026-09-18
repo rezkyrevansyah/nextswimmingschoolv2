@@ -5,13 +5,13 @@ import Status from "@/components/ui/Status";
 import Modal from "@/components/ui/Modal";
 import { NoTranslate } from "@/components/ui/NoTranslate";
 import { fmtDate } from "@/lib/utils";
-import { memberDbToUi, memberStatusKind } from "@/lib/attendance";
+import { studentDbToUi, studentStatusKind } from "@/lib/attendance";
 import type { useClassData } from "./useClassData";
 
 type ClassDataHook = ReturnType<typeof useClassData>;
 
 export default function ClassAttendanceModal({ hook }: { hook: ClassDataHook }) {
-  const { attClass, setAttClass, attSessions, loadingAtt2, attExpanded, setAttExpanded, isMemberPresentLike } = hook;
+  const { attClass, setAttClass, attSessions, loadingAtt2, attExpanded, setAttExpanded, isStudentPresentLike } = hook;
 
   return (
     <Modal open={!!attClass} onClose={() => setAttClass(null)} title={(<>{"Student Attendance — "}<NoTranslate>{attClass?.name ?? ""}</NoTranslate></>)} size="lg"
@@ -23,7 +23,7 @@ export default function ClassAttendanceModal({ hook }: { hook: ClassDataHook }) 
       ) : (
         <div className="space-y-2 max-h-[60vh] overflow-y-auto">
           {attSessions.map(s => {
-            const hadirCount = s.rows.filter(r => isMemberPresentLike(r.status)).length;
+            const hadirCount = s.rows.filter(r => isStudentPresentLike(r.status)).length;
             const isOpen = attExpanded.has(s.date);
             return (
               <div key={s.date} className="border border-line rounded-xl overflow-hidden">
@@ -43,16 +43,16 @@ export default function ClassAttendanceModal({ hook }: { hook: ClassDataHook }) 
                   <div className="border-t border-line divide-y divide-line">
                     {s.rows.map(r => (
                       <div key={r.id} className="flex items-center gap-3 px-4 py-2.5">
-                        <span className="flex-1 text-sm text-ink"><NoTranslate>{r.member?.profile?.full_name ?? "—"}</NoTranslate></span>
+                        <span className="flex-1 text-sm text-ink"><NoTranslate>{r.student?.profile?.full_name ?? "—"}</NoTranslate></span>
                         <span className="text-xs text-ink-mute capitalize">{r.method === "manual" ? "Manual" : r.method === "qr" ? "QR" : r.method ?? "—"}</span>
                         {(() => {
-                          const ui = memberDbToUi(r.status);
+                          const ui = studentDbToUi(r.status);
                           const label = ui === "present" ? "Present"
                             : ui === "late" ? "Late"
                             : ui === "izin" ? "Excused"
                             : ui === "sick" ? "Sick"
                             : "Absent";
-                          return <Status kind={memberStatusKind(r.status)} dot={false}>{label}</Status>;
+                          return <Status kind={studentStatusKind(r.status)} dot={false}>{label}</Status>;
                         })()}
                       </div>
                     ))}

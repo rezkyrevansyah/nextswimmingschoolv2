@@ -34,8 +34,8 @@ Klien menulis dalam campuran Inggris dan “Member”. Di dokumen proyek, pakai 
 
 | Tulisan klien | Istilah dokumen / label UI / kode |
 |---|---|
-| Member / Member Private / Member Panel | Student / siswa privat / panel Student (`member`) |
-| Session Left | Sisa sesi (`members.remaining_sessions`) |
+| Member / Member Private / Member Panel | Student / siswa privat / panel Student (`student`) |
+| Session Left | Sisa sesi (`students.remaining_sessions`) |
 | Price per session (privat) | **Dilarang.** Paket = harga paket + jumlah sesi |
 | Supported / Izin | `izin` |
 | Present / Late / Absent / Sick | `hadir` / `telat` / `tidak_hadir` / `sakit` |
@@ -85,7 +85,7 @@ Prinsip ini berlaku untuk **setiap** fitur di rebuild, bukan hanya 14 butir di b
 **Status:** Sudah di PRD, rawan diulang  
 **Peran:** Admin, Owner, siswa privat
 
-**Konteks.** Klien menolak konsep harga per sesi untuk privat. Generate tagihan bulanan juga **tidak** boleh mengenai `private` (KPI-03, US-07). Sisa sesi siswa privat tinggal di `members.remaining_sessions`, bukan di `class_packages` (paket `class_packages` hanya untuk kelas reguler di Admin **Class**).
+**Konteks.** Klien menolak konsep harga per sesi untuk privat. Generate tagihan bulanan juga **tidak** boleh mengenai `private` (KPI-03, US-07). Sisa sesi siswa privat tinggal di `students.remaining_sessions`, bukan di `class_packages` (paket `class_packages` hanya untuk kelas reguler di Admin **Class**).
 
 **Keputusan tetap.**
 
@@ -130,7 +130,7 @@ Rantai ketergantungan yang wajib utuh:
 
 **Keputusan tetap.**
 
-- Sumber tampilan sisa sesi = `members.remaining_sessions` setelah pengurang yang sama dengan absensi privat yang berhasil.
+- Sumber tampilan sisa sesi = `students.remaining_sessions` setelah pengurang yang sama dengan absensi privat yang berhasil.
 - Sesi terpakai = sesi awal paket minus sisa, atau hitungan setara yang disepakati di satu fungsi peladen; jangan dihitung ulang secara berbeda di tiap panel.
 - Uji wajib: tambah paket 8 → absen sah 1 kali → sisa 7 di basis data **dan** di Home/Bills Student **dan** di **Private Students**. Absen duplikat hari yang sama tidak memotong dua kali.
 
@@ -149,7 +149,7 @@ Rantai ketergantungan yang wajib utuh:
 
 **Keputusan tetap.**
 
-- Satu sumber kebenaran per jenis absensi: siswa di `member_attendances`, pelatih di absensi kelas/clock-in, staf di `staff_attendances`. Jangan mencampur tabel.
+- Satu sumber kebenaran per jenis absensi: siswa di `student_attendances`, pelatih di absensi kelas/clock-in, staf di `staff_attendances`. Jangan mencampur tabel.
 - Status dipakai konsisten di semua panel dan di ekspor.
 - Pelatih: jendela clock-in dan aturan `present`/`late` tetap US-03. GPS dicatat dan diwarnai, **bukan** pagar yang menolak.
 - Staf: clock-in/out harian plus sakit/izin hari ini yang dicatat sendiri; bukan **Leave Requests**.

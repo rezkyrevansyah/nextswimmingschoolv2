@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import MonoFontScope from "@/components/layout/MonoFontScope";
 import { GoogleTranslate } from "@/components/GoogleTranslate";
 
-export default function MemberLayout({ children }: { children: ReactNode }) {
+export default function StudentLayout({ children }: { children: ReactNode }) {
   return (
     <MonoFontScope>
       <GoogleTranslate />

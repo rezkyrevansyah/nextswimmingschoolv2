@@ -31,7 +31,7 @@ Auth, Postgres, dan storage: Supabase. Akses data lewat Drizzle. Rincian koneksi
 | `POST` | `/api/owner/revalidate` | Owner | Setelah sunting CMS landing |
 | `GET` | `/api/storage/stats` | Owner | Statistik ember System Storage |
 | (lihat kode) | `/api/rapor/coach-reviews` | Pelatih / sistem rapor | Ulasan disamarkan |
-| (lihat kode) | `/api/coach/class-members` | Pelatih | Daftar siswa kelas; dipakai karena RLS |
+| (lihat kode) | `/api/coach/class-students` | Pelatih | Daftar siswa kelas; dipakai karena RLS |
 | (lihat kode) | `/api/coach/attendance-detail` | Pelatih | Detail absensi kelas; karena RLS |
 
 "(lihat kode)" = metode HTTP tidak dikunci di PRD. Ikuti kode yang ada. Jangan ganti path.
@@ -55,12 +55,12 @@ Implementasi boleh hidup sebagai Server Action, Route Handler, atau RPC. Yang di
 
 | Kode | Efek | Dilarang |
 |---|---|---|
-| US-01 | Simpan `registrations` tertunda; setuju → `member`; tolak → tidak membuat akun | Calon masuk panel sebelum setuju |
+| US-01 | Simpan `registrations` tertunda; setuju → `student`; tolak → tidak membuat akun | Calon masuk panel sebelum setuju |
 | US-02 | Gerbang foto siswa jika profil belum lengkap **dan** avatar kosong | Memaksa keduanya jika salah satu sudah ada |
 | US-03 | Clock-in pelatih dalam jendela; jarak dicatat | Menolak karena GPS jauh |
 | US-04 | Pindai QR / absensi manual oleh pelatih | Endpoint “siswa absen sendiri” |
 | US-05 | Izin pelatih + pengganti per kelas; Admin putuskan | Izin tanpa pengganti |
-| US-06 | Izin siswa → sisip `member_attendances` setelah setuju | Menandai hadir dari panel Student |
+| US-06 | Izin siswa → sisip `student_attendances` setelah setuju | Menandai hadir dari panel Student |
 | US-07 | Generate `bills` reguler tanpa duplikat | Generate untuk `private` / afiliasi; unggah bukti siswa |
 | US-08 | Klaim sesi → invoice `pending` → Bell Owner → slip `published` | Admin meninjau honor; pelatih melihat draf slip |
 | US-09 | Invoice staf nominal + reimburse `RB-…` | MC memproses reimburse; staf tanpa gerbang profil |

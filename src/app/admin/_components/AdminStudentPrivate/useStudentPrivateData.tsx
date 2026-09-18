@@ -8,7 +8,7 @@ import { parseUserApiError } from "../../_utils";
 import type { CoachProfile } from "../../_types";
 import { EMPTY_FORM, type PrivateStudentRow } from "./_types";
 
-export function useMemberPrivateData({ branchId, branches, onBranchesChange }: {
+export function useStudentPrivateData({ branchId, branches, onBranchesChange }: {
   branchId?: string;
   branches?: { id: string; name: string }[];
   onBranchesChange?: () => void;
@@ -46,20 +46,20 @@ export function useMemberPrivateData({ branchId, branches, onBranchesChange }: {
     if (!branches && !branchId) return;
     setLoading(true);
     let query = supabase
-      .from("members")
+      .from("students")
       .select(
-        "id, profile_id, branch_id, branch:branches(name), status, qr_code, member_no, remaining_sessions, total_sessions, " +
+        "id, profile_id, branch_id, branch:branches(name), status, qr_code, student_no, remaining_sessions, total_sessions, " +
         "profile:profiles(full_name, email, phone, birth_date, gender, address, health_notes, avatar_url), " +
-        "member_classes(class:classes(id, name, schedule_days, time_start, time_end, location_type, external_location_name, external_location_address, google_maps_url, custom_location_lat, custom_location_lng, class_coaches(coach_id, role, profile:profiles(id, full_name))))"
+        "student_classes(class:classes(id, name, schedule_days, time_start, time_end, location_type, external_location_name, external_location_address, google_maps_url, custom_location_lat, custom_location_lng, class_coaches(coach_id, role, profile:profiles(id, full_name))))"
       )
       .eq("type", "private");
     if (!branches && branchId) query = query.eq("branch_id", branchId);
     const { data, error } = await query.order("created_at", { ascending: false });
     if (error) { setLoading(false); return toast.error("Failed to load private students", error.message); }
 
-    const rows: PrivateStudentRow[] = ((data ?? []) as unknown as Array<Omit<PrivateStudentRow, "class"> & { member_classes?: { class: PrivateStudentRow["class"] }[] }>).map(m => ({
+    const rows: PrivateStudentRow[] = ((data ?? []) as unknown as Array<Omit<PrivateStudentRow, "class"> & { student_classes?: { class: PrivateStudentRow["class"] }[] }>).map(m => ({
       ...m,
-      class: m.member_classes?.[0]?.class ?? null,
+      class: m.student_classes?.[0]?.class ?? null,
     }));
     setStudents(rows);
     setLoading(false);
@@ -264,24 +264,24 @@ export function useMemberPrivateData({ branchId, branches, onBranchesChange }: {
       }).select("id").single();
       if (classErr || !newClass) { setSaving(false); return toast.error("Failed to save schedule/location", classErr?.message); }
 
-      // 2. Create the member, linked to that class (existing route already
-      // handles the members insert + member_classes link + capacity check).
+      // 2. Create the student, linked to that class (existing route already
+      // handles the students insert + student_classes link + capacity check).
       const res = await fetch("/api/admin/users", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: form.email, password: form.password, full_name: form.full_name,
-          role: "member", branch_id: targetBranchId, phone: form.phone || undefined,
+          role: "student", branch_id: targetBranchId, phone: form.phone || undefined,
           birth_date: form.birth_date || null, gender: form.gender || null,
           address: form.address || null, health_notes: form.health_notes || null,
-          member_type: "private",
+          student_type: "private",
           class_id: newClass.id,
           total_sessions: Number(form.jumlah_sesi) || null,
         }),
       });
       const json = await res.json() as { error?: string; code?: string; user_id?: string };
       if (!res.ok || !json.user_id) {
-        // Roll back the orphaned class row since member creation failed.
+        // Roll back the orphaned class row since student creation failed.
         await supabase.from("classes").delete().eq("id", newClass.id);
         setSaving(false);
         const [errT, errS] = parseUserApiError(json);
@@ -299,13 +299,13 @@ export function useMemberPrivateData({ branchId, branches, onBranchesChange }: {
       }
 
       // 4. Record the package price as a bill, so it appears in the
-      // member's payment history (member_type "private" bypasses the
+      // student's payment history (student_type "private" bypasses the
       // regular monthly-billing flow, so this is the only bill they get).
       const packagePrice = Number(form.package_price) || 0;
       const sessionCount = Number(form.jumlah_sesi) || 0;
       if (packagePrice > 0) {
         await supabase.from("bills").insert({
-          member_id: json.user_id, branch_id: targetBranchId,
+          student_id: json.user_id, branch_id: targetBranchId,
           class_id: newClass.id,
           period_label: `Add ${sessionCount} sessions`,
           type: "session_pack" as "monthly",
@@ -337,7 +337,7 @@ export function useMemberPrivateData({ branchId, branches, onBranchesChange }: {
     setSavingAddSesi(true);
     const newTotal = (addSesiTarget.total_sessions ?? 0) + jumlah;
     const newRemaining = (addSesiTarget.remaining_sessions ?? 0) + jumlah;
-    const { error } = await supabase.from("members")
+    const { error } = await supabase.from("students")
       .update({ total_sessions: newTotal, remaining_sessions: newRemaining })
       .eq("id", addSesiTarget.id);
     if (error) { setSavingAddSesi(false); return toast.error("Failed to add session", error.message); }
@@ -346,7 +346,7 @@ export function useMemberPrivateData({ branchId, branches, onBranchesChange }: {
       const price = Number(addSesiForm.price) || 0;
       if (price > 0) {
         await supabase.from("bills").insert({
-          member_id: addSesiTarget.id, branch_id: addSesiTarget.branch_id,
+          student_id: addSesiTarget.id, branch_id: addSesiTarget.branch_id,
           class_id: addSesiTarget.class?.id ?? null,
           period_label: `Add ${jumlah} sessions`,
           type: "session_pack" as "monthly",

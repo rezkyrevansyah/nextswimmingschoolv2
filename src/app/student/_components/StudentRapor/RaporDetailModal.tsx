@@ -6,12 +6,12 @@ import Modal from "@/components/ui/Modal";
 import { NoTranslate } from "@/components/ui/NoTranslate";
 import { downloadRaporPdf, printSingleRaporPopup } from "@/lib/printRapor";
 import { buildSchoolRaporSignatures } from "@/lib/rapor";
-import type { useMemberRaporData } from "./useMemberRaporData";
+import type { useStudentRaporData } from "./useStudentRaporData";
 
-export default function RaporDetailModal({ hook, memberId, memberName, avatarUrl, memberNo, birthDate, location }: {
-  hook: ReturnType<typeof useMemberRaporData>;
-  memberId: string; memberName: string;
-  avatarUrl?: string | null; memberNo?: string | null; birthDate?: string | null; location?: string;
+export default function RaporDetailModal({ hook, studentId, studentName, avatarUrl, studentNo, birthDate, location }: {
+  hook: ReturnType<typeof useStudentRaporData>;
+  studentId: string; studentName: string;
+  avatarUrl?: string | null; studentNo?: string | null; birthDate?: string | null; location?: string;
 }) {
   const { open, setOpen, selectedEntry, schoolInfo, ownerSettings } = hook;
 
@@ -22,9 +22,9 @@ export default function RaporDetailModal({ hook, memberId, memberName, avatarUrl
           {selectedEntry && (() => {
             const signatures = buildSchoolRaporSignatures(schoolInfo, selectedEntry.coach_name, selectedEntry.coach_signature_url, ownerSettings);
             const raporData = {
-              member_id: memberId, period_id: selectedEntry.period_id,
-              full_name: memberName,
-              member_no: memberNo ?? undefined,
+              student_id: studentId, period_id: selectedEntry.period_id,
+              full_name: studentName,
+              student_no: studentNo ?? undefined,
               birth_date: birthDate ?? undefined,
               avatar_url: avatarUrl ?? undefined,
               location: location ?? undefined,
@@ -62,7 +62,7 @@ export default function RaporDetailModal({ hook, memberId, memberName, avatarUrl
       {selectedEntry && (
         <div className="space-y-4">
           <Card className="!p-3 bg-paper-tint">
-            <div className="flex items-center gap-3"><Avatar name={memberName} size={42} /><div><div className="font-semibold text-ink"><NoTranslate>{memberName}</NoTranslate></div><div className="text-xs text-ink-mute"><NoTranslate>{selectedEntry.class_name} · {selectedEntry.coach_name}</NoTranslate></div></div></div>
+            <div className="flex items-center gap-3"><Avatar name={studentName} size={42} /><div><div className="font-semibold text-ink"><NoTranslate>{studentName}</NoTranslate></div><div className="text-xs text-ink-mute"><NoTranslate>{selectedEntry.class_name} · {selectedEntry.coach_name}</NoTranslate></div></div></div>
           </Card>
           <div className="space-y-3">
             {(() => {

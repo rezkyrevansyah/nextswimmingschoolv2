@@ -86,7 +86,7 @@ export function useActivityLogData(branches: Branch[]) {
     log.branch_name ?? branches.find(b => b.id === log.branch_id)?.name ?? "Cross-center";
 
   const entityLabel: Record<string, string> = {
-    branches: "Center", members: "Student", member_classes: "Student Class",
+    branches: "Center", students: "Student", student_classes: "Student Class",
     classes: "Class", class_packages: "Package", bills: "Bill",
     coach_attendances: "Coach Attendance", coach_invoices: "Coach Invoice",
     coach_leaves: "Coach Leave", certifications: "Certification",

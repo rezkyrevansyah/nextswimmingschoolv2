@@ -20,7 +20,7 @@ function translateDayShort(day: string, shortDays: string[]): string {
   return day.slice(0, 2);
 }
 
-export default function MemberSchedule({ memberId }: { memberId: string }) {
+export default function StudentSchedule({ studentId }: { studentId: string }) {
   const supabase = createClient();
   const [classes, setClasses] = useState<{ id: string; name: string; schedule_days: string[]; time_start: string | null; time_end: string | null; schedule_times?: { day: string; time_start: string; time_end: string }[] | null; location: string; goals: string | null; description: string | null; coaches: { name: string; phone: string | null; role: string }[] }[]>([]);
   const [sessions, setSessions] = useState<{ date: string; day: string; time: string; class_id: string; onLeave?: boolean }[]>([]);
@@ -35,25 +35,25 @@ export default function MemberSchedule({ memberId }: { memberId: string }) {
   const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
   useEffect(() => {
-    if (!memberId) return;
+    if (!studentId) return;
 
-    // Load approved leaves for this member
-    supabase.from("member_leaves")
-      .select("date_from, date_to, member_leave_classes(class_id)")
-      .eq("member_id", memberId)
+    // Load approved leaves for this student
+    supabase.from("student_leaves")
+      .select("date_from, date_to, student_leave_classes(class_id)")
+      .eq("student_id", studentId)
       .eq("status", "approved")
       .then(({ data }) => {
         if (!data) return;
-        setLeaveIntervals((data as unknown as { date_from: string; date_to: string; member_leave_classes: { class_id: string }[] }[]).map(l => ({
+        setLeaveIntervals((data as unknown as { date_from: string; date_to: string; student_leave_classes: { class_id: string }[] }[]).map(l => ({
           date_from: l.date_from,
           date_to: l.date_to,
-          class_ids: new Set(l.member_leave_classes.map(lc => lc.class_id)),
+          class_ids: new Set(l.student_leave_classes.map(lc => lc.class_id)),
         })));
       });
 
-    supabase.from("member_classes")
+    supabase.from("student_classes")
       .select("classes(id, name, schedule_days, time_start, time_end, schedule_times, location_name, location_type, external_location_name, external_location_address, google_maps_url, goals, description, class_coaches(role, profile:profiles(full_name, phone)))")
-      .eq("member_id", memberId)
+      .eq("student_id", studentId)
       .then(async ({ data }) => {
         if (!data) return;
         const cls = data.map((mc) => {
@@ -100,7 +100,7 @@ export default function MemberSchedule({ memberId }: { memberId: string }) {
         upcoming.sort((a, b) => a.date.localeCompare(b.date));
         setSessions(upcoming);
       });
-  }, [memberId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [studentId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Derive which sessions are on leave (runs whenever sessions or leaveIntervals change)
   const isOnLeave = (date: string, classId: string) =>

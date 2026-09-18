@@ -9,7 +9,7 @@
 
 Dokumen ini adalah **sumber kebenaran** bagaimana orang menjadi siswa, apa yang mereka lihat, dan bagaimana iuran serta sesi dihitung. Ada **tiga tipe**, bukan satu formulir untuk semua.
 
-Bahasa produk: **Student**. Peran di basis data, rute, dan tabel tetap `member` / `/member` / `members`. Jangan menulis “Member” di prosa.
+Bahasa produk: **Student**. Peran di basis data, rute, dan tabel juga `student` / `/student` / `students` (direname dari `member`). Jangan menulis “Member” di prosa.
 
 Jaringan (pusat, pelatih, kelas reguler, sekolah mitra) harus ada dulu: `docs/03-alur/01-jaringan.md`. Tagihan sebagai mesin uang: `docs/03-alur/04-uang.md`. Absensi: `docs/03-alur/03-absensi-izin-honor.md`. Rapor: `docs/03-alur/05-rapor-sekolah.md`. Layar: `docs/04-panel/05-student.md`, `docs/04-panel/02-admin.md`.
 
@@ -38,7 +38,7 @@ Satu aturan: **satu pintu create per tipe**. Jangan menggabungkan Student dan Pr
 | Pintu create | Admin **Student** atau **Approvals** dari `/register` | Hanya **Private Students** (Admin satu pusat, Owner semua pusat) | Admin **Student**, setelah akun sekolah ada |
 | Kelas | Kelas reguler (`Class`) | Satu kelas `class_type=private`, tidak di **Class** | Kelas reguler |
 | Tagihan | Generate bulanan Admin **Payments** | Bukan generate bulanan; paket harga + jumlah sesi | Tidak digenerate; biasanya `school_covered`; tab **Bills** hilang |
-| Sisa sesi | Tidak ditonjolkan (boleh session pack kelas lewat `class_packages`) | `members.remaining_sessions` setelah pengurang peladen yang sama | Tidak |
+| Sisa sesi | Tidak ditonjolkan (boleh session pack kelas lewat `class_packages`) | `students.remaining_sessions` setelah pengurang peladen yang sama | Tidak |
 | Jenjang sekolah | Tidak wajib | Tidak | **Wajib** (`school_grade`) |
 | Panel Student menonjolkan | Jadwal, tagihan, izin | Sisa sesi, jadwal lentur, peringatan sisa ≤ 1 | Jadwal, rapor, izin |
 | Panel Student menyembunyikan | Sisa paket privat | Generate tagihan bulanan | Tab **Bills** dan kartu `unpaid` di Home |
@@ -61,7 +61,7 @@ Siswa **tidak** menandai hadir sendiri, **tidak** mengunggah bukti bayar, **tida
 1. Calon atau wali mengisi `/register` → baris `registrations` tertunda.
 2. Calon **tidak** dapat masuk panel.
 3. Admin **Approvals** menyunting, menyetujui, menolak, atau menghapus. Lencana Approvals = pendaftaran tertunda + sertifikat pelatih tertunda (izin orang tidak masuk).
-4. Setuju → akun `member` tipe `reguler`. Tolak → tidak ada akun.
+4. Setuju → akun `student` tipe `reguler`. Tolak → tidak ada akun.
 5. Siswa masuk → gerbang foto jika perlu.
 6. Admin memasukkan ke kelas reguler.
 7. Admin **Payments** membuat tagihan bulan berjalan (satu baris per pasangan siswa × kelas × periode; yang sudah ada dilewati).
@@ -98,7 +98,7 @@ Kelas yang tercipta `class_type=private` **tidak** tampil di **Class**. Generate
 
 ### 4.2 Sisa sesi (satu sumber)
 
-Sumber tampilan di mana pun = `members.remaining_sessions` setelah pengurang peladen yang sama dengan absensi privat yang sah (FB-04).
+Sumber tampilan di mana pun = `students.remaining_sessions` setelah pengurang peladen yang sama dengan absensi privat yang sah (FB-04).
 
 Pengurang sah: pelatih clock-in lalu pindai atau catat sesi privat; RPC sekali per hari; duplikat ditolak (US-04).
 

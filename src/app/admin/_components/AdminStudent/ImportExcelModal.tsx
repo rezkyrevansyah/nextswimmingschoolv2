@@ -3,9 +3,9 @@ import Btn from "@/components/ui/Btn";
 import Modal from "@/components/ui/Modal";
 import Icon from "@/components/ui/Icon";
 import { NoTranslate } from "@/components/ui/NoTranslate";
-import type { AdminMemberHook } from "./_hook";
+import type { AdminStudentHook } from "./_hook";
 
-export default function ImportExcelModal({ hook }: { hook: AdminMemberHook }) {
+export default function ImportExcelModal({ hook }: { hook: AdminStudentHook }) {
   const {
     openImport, setOpenImport, importStep, setImportStep, importRows, importPage, setImportPage,
     importing, importProgress, importResult, handleExcelFile, downloadTemplate, runImport,
@@ -70,7 +70,7 @@ export default function ImportExcelModal({ hook }: { hook: AdminMemberHook }) {
               <div><span className="font-mono font-bold">nama_lengkap</span> <span className="text-ocean-600">{"— REQUIRED"}</span></div>
               <div><span className="font-mono font-bold">email</span> <span className="text-ocean-600">{"— REQUIRED"}</span></div>
               <div><span className="font-mono font-bold">password</span> <span className="text-ocean-600">{"— REQUIRED (min. 6 characters)"}</span></div>
-              <div><span className="font-mono font-bold">tipe_member</span> <span className="text-ink-mute">— reguler / private / afiliasi_sekolah</span></div>
+              <div><span className="font-mono font-bold">tipe_student</span> <span className="text-ink-mute">— reguler / private / afiliasi_sekolah</span></div>
               <div><span className="font-mono font-bold">tanggal_lahir</span> <span className="text-ink-mute">— DD/MM/YYYY</span></div>
               <div><span className="font-mono font-bold">jenis_kelamin</span> <span className="text-ink-mute">{"— L or P"}</span></div>
               <div><span className="font-mono font-bold">no_hp</span> <span className="text-ink-mute">{"— Optional"}</span></div>
@@ -139,8 +139,8 @@ export default function ImportExcelModal({ hook }: { hook: AdminMemberHook }) {
                       <td className="px-3 py-2 text-xs text-ink-mute">{r._rowNum}</td>
                       <td className="px-3 py-2 font-medium text-ink truncate max-w-[140px]">{r.full_name ? <NoTranslate>{r.full_name}</NoTranslate> : <span className="text-ink-faint italic">—</span>}</td>
                       <td className="px-3 py-2 text-ink-soft truncate max-w-[160px]">{r.email ? <NoTranslate>{r.email}</NoTranslate> : <span className="text-ink-faint italic">—</span>}</td>
-                      <td className="px-3 py-2 text-xs capitalize">{r.member_type}</td>
-                      <td className="px-3 py-2 text-xs text-ink-soft"><NoTranslate>{r.member_type === "private" ? (r.schedule_days?.length ? `${r.schedule_days.join(",")} ${r.time_start ?? ""}-${r.time_end ?? ""}` : "—") : (r.nama_kelas_raw || "—")}</NoTranslate></td>
+                      <td className="px-3 py-2 text-xs capitalize">{r.student_type}</td>
+                      <td className="px-3 py-2 text-xs text-ink-soft"><NoTranslate>{r.student_type === "private" ? (r.schedule_days?.length ? `${r.schedule_days.join(",")} ${r.time_start ?? ""}-${r.time_end ?? ""}` : "—") : (r.nama_kelas_raw || "—")}</NoTranslate></td>
                       <td className="px-3 py-2 text-xs text-ink-soft"><NoTranslate>{r.nama_sekolah_raw || "—"}</NoTranslate></td>
                       <td className="px-3 py-2">
                         {r._status === "ok" && <span className="text-xs font-bold text-ok-600">OK</span>}

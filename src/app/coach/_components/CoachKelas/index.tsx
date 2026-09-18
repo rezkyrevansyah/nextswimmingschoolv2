@@ -9,11 +9,11 @@ import Placeholder from "@/components/ui/Placeholder";
 import Modal from "@/components/ui/Modal";
 import { NoTranslate } from "@/components/ui/NoTranslate";
 import { createClient } from "@/utils/supabase/client";
-import { memberDbToUi, memberStatusKind, memberStatusIcon } from "@/lib/attendance";
+import { studentDbToUi, studentStatusKind, studentStatusIcon } from "@/lib/attendance";
 import type { ClassRow, CoachSpreadsheetRow } from "../../_types";
-import { calcAgeFromBirthDate, type MemberDetail } from "./_shared";
+import { calcAgeFromBirthDate, type StudentDetail } from "./_shared";
 import SpreadsheetModal from "./SpreadsheetModal";
-import MemberDetailModal from "./MemberDetailModal";
+import StudentDetailModal from "./StudentDetailModal";
 
 export default function CoachKelas({ classes, coachId, classSpreadsheets, ownSpreadsheets, onRefreshClasses }: {
   classes: ClassRow[];
@@ -27,18 +27,18 @@ export default function CoachKelas({ classes, coachId, classSpreadsheets, ownSpr
   const monthsShort = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const [det, setDet] = useState<ClassRow | null>(null);
   const [openSpreadsheet, setOpenSpreadsheet] = useState<ClassRow | null>(null);
-  const [memberDet, setMemberDet] = useState<MemberDetail | null>(null);
-  const [memberAttHistory, setMemberAttHistory] = useState<{ memberId: string; memberName: string; classId: string; className: string; rows: { id: string; session_date: string; status: string }[] } | null>(null);
+  const [studentDet, setStudentDet] = useState<StudentDetail | null>(null);
+  const [studentAttHistory, setStudentAttHistory] = useState<{ studentId: string; studentName: string; classId: string; className: string; rows: { id: string; session_date: string; status: string }[] } | null>(null);
   const [loadingAtt, setLoadingAtt] = useState(false);
 
-  const openMemberAtt = async (memberId: string, memberName: string, classId: string, className: string) => {
+  const openStudentAtt = async (studentId: string, studentName: string, classId: string, className: string) => {
     setLoadingAtt(true);
-    setMemberAttHistory({ memberId, memberName, classId, className, rows: [] });
-    const { data } = await supabase.from("member_attendances")
+    setStudentAttHistory({ studentId, studentName, classId, className, rows: [] });
+    const { data } = await supabase.from("student_attendances")
       .select("id, session_date, status")
-      .eq("member_id", memberId).eq("class_id", classId)
+      .eq("student_id", studentId).eq("class_id", classId)
       .order("session_date", { ascending: false }).limit(50);
-    setMemberAttHistory({ memberId, memberName, classId, className, rows: (data ?? []).map(r => ({ id: r.id, session_date: r.session_date, status: r.status })) });
+    setStudentAttHistory({ studentId, studentName, classId, className, rows: (data ?? []).map(r => ({ id: r.id, session_date: r.session_date, status: r.status })) });
     setLoadingAtt(false);
   };
 
@@ -142,62 +142,62 @@ export default function CoachKelas({ classes, coachId, classSpreadsheets, ownSpr
             <div>
               <SectionTitle sub={`${det.enrolled} students registered · click for detail`}>{"Student List"}</SectionTitle>
               <div className="space-y-2">
-                {(det.member_classes ?? []).map((mc, i) => {
-                  const memberAge = mc.member?.profile?.birth_date ? calcAgeFromBirthDate(mc.member.profile.birth_date) : null;
-                  return mc.member && (
-                  <div key={mc.member.id ?? i} className="flex items-center gap-2 p-2.5 rounded-xl border border-line hover:bg-paper-tint transition">
-                    <button onClick={() => setMemberDet(mc.member!)} className="flex items-center gap-3 flex-1 min-w-0 text-left">
-                      <Avatar name={mc.member.profile?.full_name ?? "?"} src={mc.member.profile?.avatar_url ?? undefined} size={36} />
+                {(det.student_classes ?? []).map((mc, i) => {
+                  const studentAge = mc.student?.profile?.birth_date ? calcAgeFromBirthDate(mc.student.profile.birth_date) : null;
+                  return mc.student && (
+                  <div key={mc.student.id ?? i} className="flex items-center gap-2 p-2.5 rounded-xl border border-line hover:bg-paper-tint transition">
+                    <button onClick={() => setStudentDet(mc.student!)} className="flex items-center gap-3 flex-1 min-w-0 text-left">
+                      <Avatar name={mc.student.profile?.full_name ?? "?"} src={mc.student.profile?.avatar_url ?? undefined} size={36} />
                       <div className="flex-1 min-w-0">
-                        <div className="font-semibold text-sm text-ink truncate"><NoTranslate>{mc.member.profile?.full_name ?? "—"}</NoTranslate></div>
-                        {mc.member.profile?.birth_date && (
+                        <div className="font-semibold text-sm text-ink truncate"><NoTranslate>{mc.student.profile?.full_name ?? "—"}</NoTranslate></div>
+                        {mc.student.profile?.birth_date && (
                           <div className="text-xs text-ink-mute">
-                            {`${memberAge ?? 0} years old`}
+                            {`${studentAge ?? 0} years old`}
                           </div>
                         )}
                       </div>
                     </button>
                     <button
-                      onClick={() => openMemberAtt(mc.member!.id, mc.member!.profile?.full_name ?? "—", det.id, det.name)}
+                      onClick={() => openStudentAtt(mc.student!.id, mc.student!.profile?.full_name ?? "—", det.id, det.name)}
                       className="shrink-0 px-2.5 py-1.5 rounded-lg border border-line text-xs font-semibold text-ink-soft hover:bg-ocean-50 hover:border-ocean-200 hover:text-ocean-700 transition flex items-center gap-1">
                       <Icon name="check" className="w-3 h-3" />{"Attendance"}
                     </button>
                   </div>
                 );
                 })}
-                {(det.member_classes?.length ?? 0) === 0 && <div className="text-sm text-ink-mute">{"No students registered yet."}</div>}
+                {(det.student_classes?.length ?? 0) === 0 && <div className="text-sm text-ink-mute">{"No students registered yet."}</div>}
               </div>
             </div>
           </div>
         )}
       </Modal>
 
-      {/* Member detail modal */}
-      {memberDet && <MemberDetailModal member={memberDet} onClose={() => setMemberDet(null)} />}
+      {/* Student detail modal */}
+      {studentDet && <StudentDetailModal student={studentDet} onClose={() => setStudentDet(null)} />}
 
-      {/* Member attendance history modal */}
-      {memberAttHistory && (
-        <Modal open={!!memberAttHistory} onClose={() => setMemberAttHistory(null)}
-          title={(<>{"Attendance — "}<NoTranslate>{memberAttHistory.memberName}</NoTranslate></>)}
-          footer={<Btn variant="ghost" onClick={() => setMemberAttHistory(null)}>{"Close"}</Btn>}>
-          <div className="text-xs text-ink-mute mb-3 font-semibold uppercase tracking-widest"><NoTranslate>{memberAttHistory.className}</NoTranslate></div>
+      {/* Student attendance history modal */}
+      {studentAttHistory && (
+        <Modal open={!!studentAttHistory} onClose={() => setStudentAttHistory(null)}
+          title={(<>{"Attendance — "}<NoTranslate>{studentAttHistory.studentName}</NoTranslate></>)}
+          footer={<Btn variant="ghost" onClick={() => setStudentAttHistory(null)}>{"Close"}</Btn>}>
+          <div className="text-xs text-ink-mute mb-3 font-semibold uppercase tracking-widest"><NoTranslate>{studentAttHistory.className}</NoTranslate></div>
           {loadingAtt ? (
             <div className="text-center py-6 text-ink-mute text-sm">{"Loading…"}</div>
-          ) : memberAttHistory.rows.length === 0 ? (
+          ) : studentAttHistory.rows.length === 0 ? (
             <div className="text-center py-6 text-ink-mute text-sm">{"No attendance data for this class yet."}</div>
           ) : (
             <div className="divide-y divide-line -mx-5">
-              {memberAttHistory.rows.map((r) => {
+              {studentAttHistory.rows.map((r) => {
                 const d = new Date(r.session_date + "T00:00:00");
                 const dateStr = `${d.getDate()} ${monthsShort[d.getMonth()]} ${d.getFullYear()}`;
-                const ui = memberDbToUi(r.status);
+                const ui = studentDbToUi(r.status);
                 const statusLabel = ui === "present" ? "Present"
                   : ui === "late" ? "Late"
                   : ui === "izin" ? "Leave"
                   : ui === "sick" ? "Sick"
                   : "Absent";
-                const statusKind = memberStatusKind(r.status);
-                const icon = memberStatusIcon(r.status);
+                const statusKind = studentStatusKind(r.status);
+                const icon = studentStatusIcon(r.status);
                 return (
                   <div key={r.id} className="px-5 py-3 flex items-center gap-3">
                     <span className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${ui === "present" ? "bg-ok-50 text-ok-600" : ui === "absent" ? "bg-danger-50 text-danger-500" : "bg-warn-50 text-warn-600"}`}>

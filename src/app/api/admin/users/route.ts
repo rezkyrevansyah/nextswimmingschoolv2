@@ -2,8 +2,8 @@
  * POST /api/admin/users
  * Body: { email, password, full_name, role, branch_id?, phone?,
  *         birth_date?, gender?, address?, health_notes?,
- *         member_type?, school_id?, class_id?, total_sessions? }
- * Creates a Supabase auth user + profile row + optional member row setup.
+ *         student_type?, school_id?, class_id?, total_sessions? }
+ * Creates a Supabase auth user + profile row + optional student row setup.
  * Only callable by admin or owner.
  */
 import { NextRequest, NextResponse } from "next/server";
@@ -29,12 +29,12 @@ export async function POST(req: NextRequest) {
     role?: string;
     branch_id?: string;
     phone?: string;
-    // Member-specific extras
+    // Student-specific extras
     birth_date?: string;
     gender?: string;
     address?: string;
     health_notes?: string;
-    member_type?: string;
+    student_type?: string;
     school_id?: string;
     school_grade?: string;
     class_id?: string;
@@ -57,8 +57,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Missing required fields: email, password, full_name, role" }, { status: 400 });
   }
 
-  // Admins can only create coach/member/school/staff — not admin/owner
-  if (callerRole === "admin" && !["coach", "member", "school", "staff"].includes(role)) {
+  // Admins can only create coach/student/school/staff — not admin/owner
+  if (callerRole === "admin" && !["coach", "student", "school", "staff"].includes(role)) {
     return NextResponse.json({ error: "Admin can only create coach, student, school, or staff accounts" }, { status: 403 });
   }
 
@@ -72,10 +72,10 @@ export async function POST(req: NextRequest) {
   if (body.registration_id) {
     const { data: existingReg } = await db
       .from("registrations")
-      .select("id, status, member_id")
+      .select("id, status, student_id")
       .eq("id", body.registration_id)
       .single();
-    if (existingReg?.member_id) {
+    if (existingReg?.student_id) {
       return NextResponse.json(
         { error: "Pendaftaran ini sudah disetujui sebelumnya dan sudah punya akun student.", code: "ALREADY_APPROVED" },
         { status: 409 }
@@ -118,7 +118,7 @@ export async function POST(req: NextRequest) {
   // fall back to an explicit update so all fields (branch_id, role, etc.) are set.
   const profileData = {
     id: userId,
-    role: role as "owner" | "admin" | "manager_center" | "coach" | "member" | "school" | "staff",
+    role: role as "owner" | "admin" | "manager_center" | "coach" | "student" | "school" | "staff",
     full_name,
     email,
     phone: phone || null,
@@ -131,7 +131,7 @@ export async function POST(req: NextRequest) {
     bank_account: body.bank_account || null,
     bank_holder: body.bank_holder || null,
     is_profile_complete: false,
-    ...(role !== "member" ? { user_no: userNo } : {}),
+    ...(role !== "student" ? { user_no: userNo } : {}),
     ...(role === "staff" || role === "admin" || role === "manager_center" ? { custom_role_label: body.custom_role_label || null } : {}),
   };
 
@@ -165,59 +165,59 @@ export async function POST(req: NextRequest) {
     }, { onConflict: "coach_id,branch_id" });
   }
 
-  // For members: explicitly insert members row (no DB trigger for this),
+  // For students: explicitly insert students row (no DB trigger for this),
   // then optionally assign to a class.
-  let memberId: string | null = null;
-  if (role === "member") {
+  let studentId: string | null = null;
+  if (role === "student") {
     if (!branch_id) {
       await db.auth.admin.deleteUser(userId);
       return NextResponse.json({ error: "branch_id required for student" }, { status: 400 });
     }
 
-    const isPrivateMember = body.member_type === "private";
-    const { data: memberRow, error: memberError } = await db
-      .from("members")
+    const isPrivateStudent = body.student_type === "private";
+    const { data: studentRow, error: studentError } = await db
+      .from("students")
       .insert({
         profile_id: userId,
         branch_id,
-        type: (body.member_type ?? "reguler") as "reguler" | "private" | "school_affiliate",
+        type: (body.student_type ?? "reguler") as "reguler" | "private" | "school_affiliate",
         status: "active",
         school_id: body.school_id || null,
-        school_grade: body.member_type === "school_affiliate" ? (body.school_grade?.trim() || null) : null,
+        school_grade: body.student_type === "school_affiliate" ? (body.school_grade?.trim() || null) : null,
         date_start: new Date().toISOString().split("T")[0],
-        total_sessions: isPrivateMember ? (body.total_sessions ?? null) : null,
-        remaining_sessions: isPrivateMember ? (body.total_sessions ?? null) : null,
-        member_no: userNo,
+        total_sessions: isPrivateStudent ? (body.total_sessions ?? null) : null,
+        remaining_sessions: isPrivateStudent ? (body.total_sessions ?? null) : null,
+        student_no: userNo,
       })
       .select("id")
       .single();
 
-    if (memberError) {
+    if (studentError) {
       await db.auth.admin.deleteUser(userId);
-      return NextResponse.json({ error: memberError.message }, { status: 500 });
+      return NextResponse.json({ error: studentError.message }, { status: 500 });
     }
 
-    memberId = memberRow?.id ?? null;
+    studentId = studentRow?.id ?? null;
 
-    if (body.class_id && memberRow) {
+    if (body.class_id && studentRow) {
       const { data: classRow } = await db.from("classes").select("capacity").eq("id", body.class_id).single();
       const { count: enrolledCount } = await db
-        .from("member_classes")
-        .select("member_id", { count: "exact", head: true })
+        .from("student_classes")
+        .select("student_id", { count: "exact", head: true })
         .eq("class_id", body.class_id);
       const capacity = classRow?.capacity ?? 0;
       if (capacity > 0 && (enrolledCount ?? 0) >= capacity) {
-        // Member account is already created — don't roll it back over a full
+        // Student account is already created — don't roll it back over a full
         // class, just leave them unassigned so the admin can pick another
         // class/schedule instead of losing the whole registration.
         return NextResponse.json({
           user_id: userId,
-          member_id: memberId,
+          student_id: studentId,
           class_assignment_error: "Kelas sudah penuh — student dibuat tanpa penugasan kelas. Silakan tetapkan kelas lain secara manual.",
         });
       }
-      await db.from("member_classes").insert({
-        member_id: memberRow.id,
+      await db.from("student_classes").insert({
+        student_id: studentRow.id,
         class_id: body.class_id,
         joined_at: new Date().toISOString(),
       });
@@ -228,13 +228,13 @@ export async function POST(req: NextRequest) {
   // account creation so the two never drift out of sync (previously this was
   // a separate client-side update that could fail independently, leaving an
   // account created but the registration stuck "pending").
-  if (body.registration_id && role === "member") {
+  if (body.registration_id && role === "student") {
     await db.from("registrations").update({
       status: "approved",
       reviewed_by: user.id,
       reviewed_at: new Date().toISOString(),
       proof_url: body.proof_url ?? undefined,
-      member_id: memberId,
+      student_id: studentId,
     }).eq("id", body.registration_id);
   }
 
@@ -284,7 +284,7 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({
     user_id: userId,
-    member_id: memberId,
+    student_id: studentId,
     staff_user_id: staffUserId,
     ...(staffWarning ? { staff_warning: staffWarning } : {}),
   });

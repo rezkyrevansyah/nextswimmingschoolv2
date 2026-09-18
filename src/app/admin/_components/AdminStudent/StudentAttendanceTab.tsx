@@ -3,21 +3,21 @@ import { Select } from "@/components/ui/FormFields";
 import Status from "@/components/ui/Status";
 import { NoTranslate } from "@/components/ui/NoTranslate";
 import { fmtDate } from "@/lib/utils";
-import { memberDbToUi, memberStatusKind } from "@/lib/attendance";
-import type { AdminMemberHook } from "./_hook";
+import { studentDbToUi, studentStatusKind } from "@/lib/attendance";
+import type { AdminStudentHook } from "./_hook";
 
-export default function MemberAttendanceTab({ hook }: { hook: AdminMemberHook }) {
+export default function StudentAttendanceTab({ hook }: { hook: AdminStudentHook }) {
   const { detail, attClassFilter, setAttClassFilter, loadingAtt, attendances } = hook;
   if (!detail) return null;
-  const memberClassNames = detail.member_classes?.map(mc => mc.class?.name).filter(Boolean) as string[] ?? [];
+  const studentClassNames = detail.student_classes?.map(mc => mc.class?.name).filter(Boolean) as string[] ?? [];
   const filteredAtt = attClassFilter ? attendances.filter(a => a.class?.name === attClassFilter) : attendances;
 
   return (
     <div className="space-y-3">
-      {memberClassNames.length > 1 && (
+      {studentClassNames.length > 1 && (
         <Select value={attClassFilter} onChange={e => setAttClassFilter(e.target.value)} className="text-xs">
           <option value="">{"All classes"}</option>
-          {memberClassNames.map(n => <option key={n} value={n} translate="no">{n}</option>)}
+          {studentClassNames.map(n => <option key={n} value={n} translate="no">{n}</option>)}
         </Select>
       )}
       {loadingAtt ? (
@@ -42,13 +42,13 @@ export default function MemberAttendanceTab({ hook }: { hook: AdminMemberHook })
                   <td className="py-2 text-ink-soft"><NoTranslate>{a.class?.name ?? "—"}</NoTranslate></td>
                   <td className="py-2">
                     {(() => {
-                      const ui = memberDbToUi(a.status);
+                      const ui = studentDbToUi(a.status);
                       const label = ui === "present" ? "Present"
                         : ui === "late" ? "Late"
                         : ui === "izin" ? "Excused"
                         : ui === "sick" ? "Sick"
                         : "Absent";
-                      return <Status kind={memberStatusKind(a.status)} dot={false}>{label}</Status>;
+                      return <Status kind={studentStatusKind(a.status)} dot={false}>{label}</Status>;
                     })()}
                   </td>
                   <td className="py-2 px-3 text-ink-mute capitalize">{a.method === "manual" ? "Manual" : a.method === "qr" ? "QR Scan" : a.method ?? "—"}</td>

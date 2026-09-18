@@ -21,7 +21,7 @@ export default function EntryFormModal({ hook }: { hook: ReturnType<typeof useCo
   const close = () => { setOpen(null); setBestTimeMatrix([]); setOtherRecorded([]); setRemovedBtIds([]); };
 
   return (
-    <Modal open={!!open} onClose={close} title={(<>{"Report Card — "}<NoTranslate>{open?.member?.profile?.full_name ?? ""}</NoTranslate></>)} size="lg"
+    <Modal open={!!open} onClose={close} title={(<>{"Report Card — "}<NoTranslate>{open?.student?.profile?.full_name ?? ""}</NoTranslate></>)} size="lg"
       footer={<><Btn variant="ghost" onClick={close}>{"Cancel"}</Btn><Btn variant="primary" onClick={saveRapor} disabled={saving || notesInvalid}>{saving ? "Saving…" : "Save report card"}</Btn></>}>
       <div className="space-y-5">
         {criteria.length === 0 && (

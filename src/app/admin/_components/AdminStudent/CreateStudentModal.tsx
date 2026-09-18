@@ -6,18 +6,18 @@ import Icon from "@/components/ui/Icon";
 import DatePicker from "@/components/ui/DatePicker";
 import { Field, Input, Select, Textarea } from "@/components/ui/FormFields";
 import { fmtIDR } from "@/lib/utils";
-import type { AdminMemberHook } from "./_hook";
+import type { AdminStudentHook } from "./_hook";
 
-export default function CreateMemberModal({ hook }: { hook: AdminMemberHook }) {
+export default function CreateStudentModal({ hook }: { hook: AdminStudentHook }) {
   const {
-    openCreate, setOpenCreate, form, setForm, saving, createMember,
+    openCreate, setOpenCreate, form, setForm, saving, createStudent,
     createAvatarPreview, setCreateAvatarFile, setCreateAvatarPreview,
     schoolsList, classes, showCreatePwd, setShowCreatePwd,
   } = hook;
 
   return (
     <Modal open={openCreate} onClose={() => setOpenCreate(false)} title={"Add New Student"} size="lg"
-      footer={<><Btn variant="ghost" onClick={() => setOpenCreate(false)}>{"Cancel"}</Btn><Btn variant="primary" onClick={createMember} disabled={saving}>{saving ? "Saving…" : "Save & send WA"}</Btn></>}>
+      footer={<><Btn variant="ghost" onClick={() => setOpenCreate(false)}>{"Cancel"}</Btn><Btn variant="primary" onClick={createStudent} disabled={saving}>{saving ? "Saving…" : "Save & send WA"}</Btn></>}>
       <div className="grid sm:grid-cols-2 gap-4">
         {/* Avatar picker */}
         <div className="sm:col-span-2 flex flex-col items-center gap-2">

@@ -5,7 +5,7 @@ import { useToast } from "@/components/providers/ToastProvider";
 import type { CoachProfile, ClassRow } from "../../_types";
 import type { Database } from "@/types/database";
 import { fmtDate } from "@/lib/utils";
-import { memberLeaveTypeToStatus, uiToCoachDb, MEMBER_ATTENDANCE_CONFLICT, COACH_ATTENDANCE_CONFLICT } from "@/lib/attendance";
+import { studentLeaveTypeToStatus, uiToCoachDb, STUDENT_ATTENDANCE_CONFLICT, COACH_ATTENDANCE_CONFLICT } from "@/lib/attendance";
 import type { LeaveRow } from "./_types";
 
 const PAGE_SIZE = 15;
@@ -28,7 +28,7 @@ export function useIzinData(branchId: string) {
   const [rejecting, setRejecting] = useState(false);
   const [openCreate, setOpenCreate] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [allMembers, setAllMembers] = useState<{ id: string; full_name: string }[]>([]);
+  const [allStudents, setAllStudents] = useState<{ id: string; full_name: string }[]>([]);
   const [allClasses, setAllClasses] = useState<{ id: string; name: string }[]>([]);
   const [createForm, setCreateForm] = useState({ target_id: "", type: "sakit", date_from: "", date_to: "", reason: "", class_ids: [] as string[], class_substitutes: {} as Record<string, string> });
   const [detailTarget, setDetailTarget] = useState<LeaveRow | null>(null);
@@ -47,19 +47,19 @@ export function useIzinData(branchId: string) {
         .order("created_at", { ascending: false });
       data = (d as Record<string, unknown>[] | null) ?? null;
     } else {
-      const { data: d } = await supabase.from("member_leaves")
-        .select("id, member_id, type, reason, date_from, date_to, status, member:members(branch_id, profile_id, profile:profiles(full_name))")
+      const { data: d } = await supabase.from("student_leaves")
+        .select("id, student_id, type, reason, date_from, date_to, status, student:students(branch_id, profile_id, profile:profiles(full_name))")
         .order("created_at", { ascending: false });
       data = (d as Record<string, unknown>[] | null)?.filter(
-        l => (l.member as { branch_id?: string } | null)?.branch_id === branchId
+        l => (l.student as { branch_id?: string } | null)?.branch_id === branchId
       ) ?? null;
     }
     if (data) setLeaves(data.map((l: Record<string, unknown>) => ({
       ...l,
       profile: tab === "coach"
         ? (l.coach as { full_name?: string; role?: string } | null)
-        : ((l.member as { profile?: { full_name?: string } } | null)?.profile ?? null),
-      member_profile_id: (l.member as { profile_id?: string } | null)?.profile_id ?? null,
+        : ((l.student as { profile?: { full_name?: string } } | null)?.profile ?? null),
+      student_profile_id: (l.student as { profile_id?: string } | null)?.profile_id ?? null,
     })) as unknown as LeaveRow[]);
     setLoading(false);
   }, [branchId, tab]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -76,8 +76,8 @@ export function useIzinData(branchId: string) {
           .filter(c => !c.suspend_until || c.suspend_until < today);
         setAllCoaches(active);
       });
-    supabase.from("members").select("id, profile:profiles(full_name)").eq("branch_id", branchId).eq("status", "active")
-      .then(({ data }) => { if (data) setAllMembers(data.map((m: Record<string, unknown>) => ({ id: m.id as string, full_name: ((m.profile as { full_name?: string } | null)?.full_name ?? "—") }))); });
+    supabase.from("students").select("id, profile:profiles(full_name)").eq("branch_id", branchId).eq("status", "active")
+      .then(({ data }) => { if (data) setAllStudents(data.map((m: Record<string, unknown>) => ({ id: m.id as string, full_name: ((m.profile as { full_name?: string } | null)?.full_name ?? "—") }))); });
     supabase.from("classes").select("id, name").eq("branch_id", branchId).order("name")
       .then(({ data }) => { if (data) setAllClasses(data as { id: string; name: string }[]); });
   }, [load]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -86,36 +86,36 @@ export function useIzinData(branchId: string) {
   // Reset page when tab changes
   useEffect(() => { setPage(0); }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const autoCreateMemberAttendances = async (leaveId: string) => {
+  const autoCreateStudentAttendances = async (leaveId: string) => {
     const { data: leaveDetail } = await supabase
-      .from("member_leaves")
-      .select("member_id, date_from, date_to, type, member_leave_classes(class_id, class:classes(schedule_days))")
+      .from("student_leaves")
+      .select("student_id, date_from, date_to, type, student_leave_classes(class_id, class:classes(schedule_days))")
       .eq("id", leaveId)
       .single();
     if (!leaveDetail) return;
     const detail = leaveDetail as unknown as {
-      member_id: string; date_from: string; date_to: string; type: string;
-      member_leave_classes: { class_id: string; class: { schedule_days: string[] } | null }[];
+      student_id: string; date_from: string; date_to: string; type: string;
+      student_leave_classes: { class_id: string; class: { schedule_days: string[] } | null }[];
     };
-    const leaveStatus = memberLeaveTypeToStatus(detail.type);
+    const leaveStatus = studentLeaveTypeToStatus(detail.type);
     const dayNames = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
     const from = new Date(detail.date_from);
     const to   = new Date(detail.date_to);
     const adminId = (await supabase.auth.getUser()).data.user?.id ?? null;
-    const rows: Database["public"]["Tables"]["member_attendances"]["Insert"][] = [];
-    for (const lc of detail.member_leave_classes) {
+    const rows: Database["public"]["Tables"]["student_attendances"]["Insert"][] = [];
+    for (const lc of detail.student_leave_classes) {
       const scheduleDays: string[] = lc.class?.schedule_days ?? [];
       const d = new Date(from);
       while (d <= to) {
         const dayName = dayNames[d.getDay()];
         if (scheduleDays.length === 0 || scheduleDays.includes(dayName)) {
-          rows.push({ member_id: detail.member_id, class_id: lc.class_id, session_date: d.toISOString().slice(0, 10), status: leaveStatus as Database["public"]["Enums"]["attendance_status"], method: "manual" as Database["public"]["Enums"]["attendance_method"], marked_by: adminId });
+          rows.push({ student_id: detail.student_id, class_id: lc.class_id, session_date: d.toISOString().slice(0, 10), status: leaveStatus as Database["public"]["Enums"]["attendance_status"], method: "manual" as Database["public"]["Enums"]["attendance_method"], marked_by: adminId });
         }
         d.setDate(d.getDate() + 1);
       }
     }
     if (rows.length > 0) {
-      await supabase.from("member_attendances").upsert(rows, { onConflict: MEMBER_ATTENDANCE_CONFLICT });
+      await supabase.from("student_attendances").upsert(rows, { onConflict: STUDENT_ATTENDANCE_CONFLICT });
     }
   };
 
@@ -137,15 +137,15 @@ export function useIzinData(branchId: string) {
       const leave = leaves.find(l => l.id === id);
       if (leave) { setRejectTarget(leave); setRejectReason(""); return; }
     }
-    const table = tab === "coach" ? "coach_leaves" : "member_leaves";
+    const table = tab === "coach" ? "coach_leaves" : "student_leaves";
     const adminId = (await supabase.auth.getUser()).data.user?.id ?? null;
     const { error } = await supabase.from(table as "coach_leaves").update({ status, reviewed_at: new Date().toISOString(), reviewed_by: adminId }).eq("id", id);
     if (error) return toast.error("Failed to update status", error.message);
-    // Auto-create member attendance records when member leave approved
-    if (status === "approved" && tab === "member") {
-      await autoCreateMemberAttendances(id);
+    // Auto-create student attendance records when student leave approved
+    if (status === "approved" && tab === "student") {
+      await autoCreateStudentAttendances(id);
       const leave = leaves.find(l => l.id === id);
-      const notifUserId = leave?.member_profile_id ?? leave?.member_id;
+      const notifUserId = leave?.student_profile_id ?? leave?.student_id;
       if (leave && notifUserId) {
         await supabase.from("notifications").insert({
           user_id: notifUserId,
@@ -166,11 +166,11 @@ export function useIzinData(branchId: string) {
     setRejecting(true);
     const adminId = (await supabase.auth.getUser()).data.user?.id ?? null;
     const upd: Database["public"]["Tables"]["coach_leaves"]["Update"] = { status: "rejected" as Database["public"]["Enums"]["leave_status"], reviewed_at: new Date().toISOString(), reject_reason: rejectReason.trim(), reviewed_by: adminId };
-    const table = tab === "coach" ? "coach_leaves" : "member_leaves";
+    const table = tab === "coach" ? "coach_leaves" : "student_leaves";
     const { error } = await supabase.from(table as "coach_leaves").update(upd).eq("id", rejectTarget.id);
     setRejecting(false);
     if (error) return toast.error("Failed to reject leave", error.message);
-    // Notify coach/member when leave is rejected
+    // Notify coach/student when leave is rejected
     if (tab === "coach" && rejectTarget.coach_id) {
       await supabase.from("notifications").insert({
         user_id: rejectTarget.coach_id,
@@ -182,8 +182,8 @@ export function useIzinData(branchId: string) {
         kind: "warn",
       });
     }
-    const rejectNotifUserId = rejectTarget.member_profile_id ?? rejectTarget.member_id;
-    if (tab === "member" && rejectNotifUserId) {
+    const rejectNotifUserId = rejectTarget.student_profile_id ?? rejectTarget.student_id;
+    if (tab === "student" && rejectNotifUserId) {
       await supabase.from("notifications").insert({
         user_id: rejectNotifUserId,
         title: "Leave rejected",
@@ -245,14 +245,14 @@ export function useIzinData(branchId: string) {
         if (rows.length > 0) await supabase.from("coach_attendances").upsert(rows, { onConflict: COACH_ATTENDANCE_CONFLICT });
       }
     } else {
-      const { data, error } = await supabase.from("member_leaves").insert({ member_id: createForm.target_id, type: createForm.type as Database["public"]["Enums"]["leave_type"], date_from: createForm.date_from, date_to: createForm.date_to, reason: createForm.reason || null, status: "approved" as Database["public"]["Enums"]["leave_status"], created_by_admin: true, reviewed_at: new Date().toISOString() }).select("id").single();
+      const { data, error } = await supabase.from("student_leaves").insert({ student_id: createForm.target_id, type: createForm.type as Database["public"]["Enums"]["leave_type"], date_from: createForm.date_from, date_to: createForm.date_to, reason: createForm.reason || null, status: "approved" as Database["public"]["Enums"]["leave_status"], created_by_admin: true, reviewed_at: new Date().toISOString() }).select("id").single();
       if (error || !data) { setCreating(false); return toast.error("Failed to create leave", error?.message); }
       if (createForm.class_ids.length > 0) {
-        await supabase.from("member_leave_classes").insert(createForm.class_ids.map(cid => ({ leave_id: data.id, class_id: cid })));
+        await supabase.from("student_leave_classes").insert(createForm.class_ids.map(cid => ({ leave_id: data.id, class_id: cid })));
         // Auto-create attendance records
-        await autoCreateMemberAttendances(data.id);
+        await autoCreateStudentAttendances(data.id);
       }
-      // Notify member that admin created an approved leave for them
+      // Notify student that admin created an approved leave for them
       await supabase.from("notifications").insert({
         user_id: createForm.target_id,
         title: "Leave recorded by admin",
@@ -385,7 +385,7 @@ export function useIzinData(branchId: string) {
     tab, setTab, leaves, loading,
     approveTarget, setApproveTarget, classSubstitutes, setClassSubstitutes, approving, allCoaches,
     rejectTarget, setRejectTarget, rejectReason, setRejectReason, rejecting,
-    openCreate, setOpenCreate, creating, allMembers, allClasses, createForm, setCreateForm,
+    openCreate, setOpenCreate, creating, allStudents, allClasses, createForm, setCreateForm,
     detailTarget, setDetailTarget, page, setPage,
     decide, confirmReject, createLeave, confirmApprove,
     totalPages, safePage, paginatedLeaves,

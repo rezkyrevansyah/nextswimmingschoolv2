@@ -10,7 +10,7 @@ type IzinDataHook = ReturnType<typeof useIzinData>;
 export default function CreateLeaveModal({ hook }: { hook: IzinDataHook }) {
   const {
     tab, openCreate, setOpenCreate, createForm, setCreateForm, creating, createLeave,
-    allCoaches, allMembers, allClasses,
+    allCoaches, allStudents, allClasses,
   } = hook;
 
   return (
@@ -22,7 +22,7 @@ export default function CreateLeaveModal({ hook }: { hook: IzinDataHook }) {
             <option value="">{`— select ${tab === "coach" ? "Coach".toLowerCase() : "Student".toLowerCase()} —`}</option>
             {tab === "coach"
               ? allCoaches.map(c => <option key={c.id} value={c.id} translate="no">{c.full_name}</option>)
-              : allMembers.map(m => <option key={m.id} value={m.id} translate="no">{m.full_name}</option>)}
+              : allStudents.map(m => <option key={m.id} value={m.id} translate="no">{m.full_name}</option>)}
           </Select>
         </Field>
         <Field label={"Leave type"} required>

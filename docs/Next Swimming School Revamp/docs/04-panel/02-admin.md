@@ -62,9 +62,9 @@ Admin tidak membuat pusat. Pusat sudah ada dari Owner.
 | 3 | Coach | `coaches` | Pelatih harus ada sebelum kelas dan privat |
 | 4 | Class | `classes` | Kelas reguler; paket `class_packages` hanya di sini |
 | 5 | Class Activity | `activity` | Libur dan kalender; butuh kelas |
-| 6 | Student | `members` | Siswa reguler dan afiliasi; butuh kelas dan (jika afiliasi) sekolah |
+| 6 | Student | `students` | Siswa reguler dan afiliasi; butuh kelas dan (jika afiliasi) sekolah |
 | 7 | Approvals | `approve` | Jalur create siswa dari `/register`; dekat Student |
-| 8 | Private Students | `memberPrivate` | Setelah pelatih ada; terpisah dari Student |
+| 8 | Private Students | `studentPrivate` | Setelah pelatih ada; terpisah dari Student |
 | 9 | Announcements | `announce` | Butuh kelas jika sasarannya per kelas |
 | 10 | Leave Requests | `izin` | Butuh pelatih dan siswa |
 | 11 | Attendance | `absensi` | Butuh kelas, orang, dan izin yang disetujui |
@@ -172,7 +172,7 @@ Libur kelas **bukan** izin orang (itu **Leave Requests**).
 
 ---
 
-## 6. Student (`members`)
+## 6. Student (`students`)
 
 **Apa:** Siswa pusat **reguler** dan **afiliasi**. Bukan siswa privat.
 
@@ -198,7 +198,7 @@ Libur kelas **bukan** izin orang (itu **Leave Requests**).
 
 ### A. Pendaftaran (`registrations`)
 
-Dari `/register`. Menyunting data, menyetujui (membuat akun Student, peran `member`, tipe `reguler` atau `school_affiliate` sesuai data daftar), menolak, menghapus, tautan WhatsApp.
+Dari `/register`. Menyunting data, menyetujui (membuat akun Student, peran `student`, tipe `reguler` atau `school_affiliate` sesuai data daftar), menolak, menghapus, tautan WhatsApp.
 
 ### B. Sertifikasi pelatih
 
@@ -210,13 +210,13 @@ Menyetujui atau menolak unggahan dari **Coach** (Admin atau pelatih sendiri).
 
 ---
 
-## 8. Private Students (`memberPrivate`)
+## 8. Private Students (`studentPrivate`)
 
 **Apa:** Les privat — satu siswa, satu kelas privat. Satu-satunya jalur create privat di pusat ini (FB-01). Sama dengan Owner; Admin terbatas satu pusat.
 
 **Yang dapat dilakukan:** satu kali tambah menyimpan bersama: data siswa, **harga paket + jumlah sesi** (bukan harga per pertemuan, FB-02), sisa sesi, jadwal (hari jamak, tiap hari punya jam mulai dan jam selesai), pelatih beserta perannya, lokasi pusat atau titik sendiri lewat peta; mengubah sisa sesi; menugaskan pelatih; menambah sesi paket; menghapus. Kelas privat **tidak** tampil di **Class**.
 
-Ubah jadwal, lokasi, atau pelatih: absensi baru memakai konfigurasi baru; absensi lama utuh (FB-03). Sisa sesi = `members.remaining_sessions` setelah pengurang peladen yang sama (FB-04). Generate tagihan bulanan **Payments** tidak mencakup `private`.
+Ubah jadwal, lokasi, atau pelatih: absensi baru memakai konfigurasi baru; absensi lama utuh (FB-03). Sisa sesi = `students.remaining_sessions` setelah pengurang peladen yang sama (FB-04). Generate tagihan bulanan **Payments** tidak mencakup `private`.
 
 **Dampak ke peran lain:** pelatih memakai pin kelas untuk GPS; Student melihat sisa sesi.
 
@@ -228,7 +228,7 @@ Ubah jadwal, lokasi, atau pelatih: absensi baru memakai konfigurasi baru; absens
 
 **Apa:** Pengumuman satu pusat.
 
-**Yang dapat dilakukan:** judul, isi, semua kelas atau kelas tertentu, `target_roles` (`member | coach | admin | school`), masa berlaku, aktif/nonaktif, hapus.
+**Yang dapat dilakukan:** judul, isi, semua kelas atau kelas tertentu, `target_roles` (`student | coach | admin | school`), masa berlaku, aktif/nonaktif, hapus.
 
 **Dampak ke peran lain:**
 
@@ -274,7 +274,7 @@ Daftar `coach_attendances` (saringan pelatih, kelas, tanggal). Input manual hadi
 
 ### B. Student
 
-Daftar `member_attendances` (kelas, status, bulan, nama). Hampir hanya baca. Baris `sakit`/`izin` otomatis dari **Leave Requests** yang disetujui. Status sah: `hadir | telat | izin | sakit | tidak_hadir`.
+Daftar `student_attendances` (kelas, status, bulan, nama). Hampir hanya baca. Baris `sakit`/`izin` otomatis dari **Leave Requests** yang disetujui. Status sah: `hadir | telat | izin | sakit | tidak_hadir`.
 
 ### C. Staff
 
@@ -340,7 +340,7 @@ ZIP hanya memuat rapor `locked`; nama berkas memuat identitas siswa; tidak campu
 
 **Dampak ke peran lain:** transaksi tampil di Owner **Financial** lintas pusat.
 
-**Jangan:** menyetujui honor atau reimburse dari sini. Jangan memberi Admin biasa akses lewat URL.
+**Jangan:** menyetujui honor atau reimburse dari sini. Jangan studenti Admin biasa akses lewat URL.
 
 ---
 

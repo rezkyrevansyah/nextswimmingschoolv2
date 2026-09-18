@@ -75,7 +75,7 @@ Daftar lengkap “jangan improvisasi”: gerbang bayar, unggah bukti siswa, paga
 
 | Istilah dokumen | Label UI / kode | Arti |
 |---|---|---|
-| Student | peran `member`, rute `/member`, tabel `members` | Bahasa produk untuk siswa. Jangan menulis “Member” di prosa |
+| Student | peran `student`, rute `/student`, tabel `students` | Bahasa produk untuk siswa. Peran/rute/tabel sudah direname dari `member`; jangan menulis “Member” di prosa |
 | Pusat | Centers, `branches` | Cabang sekolah renang |
 | Tagihan siswa | Payments / Bills, `bills` | Iuran siswa |
 | Invoice honor | Honor / Invoice, `coach_invoices` | Klaim pelatih atau staf ke Owner |
@@ -88,7 +88,7 @@ Daftar lengkap “jangan improvisasi”: gerbang bayar, unggah bukti siswa, paga
 | Manager Center | `manager_center` | `/admin`; selalu Payments + Financial |
 | Supported | Izin | Bukan “ada pengganti” |
 | Paket sesi kelas | `class_packages` | Hanya Admin **Class** |
-| Paket sesi privat | `members.remaining_sessions` | Bukan harga per pertemuan |
+| Paket sesi privat | `students.remaining_sessions` | Bukan harga per pertemuan |
 | Jenjang sekolah | `school_grade` | Bukan nama kelas les |
 | ID akun | `public_id` | `NEXT.001.OW.26`. Staff = `SF`. Student = `ST` |
 | QR akun | `qr_payload` | Auto saat create. Permanen. QR siswa untuk absensi |

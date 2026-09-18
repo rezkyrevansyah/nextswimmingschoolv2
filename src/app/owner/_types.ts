@@ -15,7 +15,7 @@ export interface Branch {
   bank_holder?: string | null;
   show_payments_to_admin?: boolean;
   color?: string;
-  member_count?: number;
+  student_count?: number;
   coach_count?: number;
   staff_count?: number;
   class_count?: number;

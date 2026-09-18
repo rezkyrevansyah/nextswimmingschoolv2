@@ -4,7 +4,7 @@ import { createClient } from "@/utils/supabase/client";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
 import { logActivity } from "@/lib/activityLog";
-import { MEMBER_TYPE_LABELS, AWARD_LABELS, type CompetitionRow, type MemberOption, type CoachOption } from "./_types";
+import { STUDENT_TYPE_LABELS, AWARD_LABELS, type CompetitionRow, type StudentOption, type CoachOption } from "./_types";
 
 export function useCompetitionData(branchId: string) {
   const supabase = createClient();
@@ -33,8 +33,8 @@ export function useCompetitionData(branchId: string) {
 
   const [selectedComp, setSelectedComp] = useState<CompetitionRow | null>(null);
 
-  // Member & Coach options for selector
-  const [membersList, setMembersList] = useState<MemberOption[]>([]);
+  // Student & Coach options for selector
+  const [studentsList, setStudentsList] = useState<StudentOption[]>([]);
   const [coachesList, setCoachesList] = useState<CoachOption[]>([]);
 
   const [activeTab, setActiveTab] = useState<"competitions" | "awards">("awards");
@@ -89,11 +89,11 @@ export function useCompetitionData(branchId: string) {
     loadCompetitions();
   }, [loadCompetitions]);
 
-  // ── Load Members & Coaches Options ──────────────────────────────────────────
+  // ── Load Students & Coaches Options ──────────────────────────────────────────
   const loadOptions = useCallback(async () => {
     let q = supabase
-      .from("members")
-      .select("id, branch_id, type, member_no, profile:profiles(full_name), branch:branches(name)")
+      .from("students")
+      .select("id, branch_id, type, student_no, profile:profiles(full_name), branch:branches(name)")
       .eq("status", "active");
 
     if (branchId) {
@@ -106,14 +106,14 @@ export function useCompetitionData(branchId: string) {
     ]);
 
     if (mData) {
-      setMembersList(
+      setStudentsList(
         mData.map(m => ({
           id: m.id,
           branch_id: m.branch_id,
           full_name: (m.profile as any)?.full_name ?? "Unnamed",
           branch_name: (m.branch as any)?.name ?? "",
           type: m.type,
-          member_no: m.member_no,
+          student_no: m.student_no,
         }))
       );
     }
@@ -284,11 +284,11 @@ export function useCompetitionData(branchId: string) {
   const totalMedals = competitions.reduce((acc, c) => acc + (c.medals_count ?? 0), 0);
 
   return {
-    branchId, MEMBER_TYPE_LABELS, AWARD_LABELS,
+    branchId, STUDENT_TYPE_LABELS, AWARD_LABELS,
     competitions, loading, search, setSearch, levelFilter, setLevelFilter,
     openCompForm, setOpenCompForm, editComp, compForm, setCompForm, savingComp,
     selectedComp, setSelectedComp,
-    membersList, coachesList,
+    studentsList, coachesList,
     activeTab, setActiveTab, compFormReturnToPart, setCompFormReturnToPart,
     loadCompetitions,
     openCreateComp, openEditComp, handleSaveComp, handleDeleteComp,

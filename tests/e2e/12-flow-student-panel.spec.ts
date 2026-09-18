@@ -1,25 +1,25 @@
 /**
- * 12-flow-member-panel.spec.ts
+ * 12-flow-student-panel.spec.ts
  * ─────────────────────────────────────────────────────────────────────────────
- * Flow test: Member login dan simulasi lihat jadwal, tagihan, absensi,
+ * Flow test: Student login dan simulasi lihat jadwal, tagihan, absensi,
  * izin, rapor, dan profil.
  *
- * Login menggunakan: member@next.com / Member1234
+ * Login menggunakan: student@next.com / Student1234
  * (dibuat oleh 10-flow-admin-crud.spec.ts)
  *
- * Memerlukan: TEST_MEMBER_EMAIL=member@next.com + TEST_MEMBER_PASSWORD=Member1234
+ * Memerlukan: TEST_STUDENT_EMAIL=student@next.com + TEST_STUDENT_PASSWORD=Student1234
  */
 
 import { test, expect } from "../fixtures/auth";
 
-test.describe("Member Flow — Home & Statistik", () => {
+test.describe("Student Flow — Home & Statistik", () => {
   test.beforeEach(async ({ page, skipIfNoAuth }) => {
-    skipIfNoAuth("member");
-    await page.goto("/member");
+    skipIfNoAuth("student");
+    await page.goto("/student");
     await page.waitForLoadState("networkidle");
   });
 
-  test("home menampilkan greeting dengan nama member", async ({ page }) => {
+  test("home menampilkan greeting dengan nama student", async ({ page }) => {
     await expect(page.getByText(/Hai,/i).first()).toBeVisible({ timeout: 10_000 });
   });
 
@@ -39,10 +39,10 @@ test.describe("Member Flow — Home & Statistik", () => {
   });
 });
 
-test.describe("Member Flow — Jadwal", () => {
+test.describe("Student Flow — Jadwal", () => {
   test.beforeEach(async ({ page, skipIfNoAuth }) => {
-    skipIfNoAuth("member");
-    await page.goto("/member");
+    skipIfNoAuth("student");
+    await page.goto("/student");
     await page.waitForLoadState("networkidle");
     await page.getByRole("button", { name: /Jadwal/i }).first().click();
     await page.waitForTimeout(500);
@@ -53,7 +53,7 @@ test.describe("Member Flow — Jadwal", () => {
   });
 
   test("jadwal menampilkan informasi hari, jam, dan coach", async ({ page }) => {
-    // Jika member sudah diassign ke kelas, jadwal harus muncul
+    // Jika student sudah diassign ke kelas, jadwal harus muncul
     const hasSchedule = await page.getByText(/Senin|Selasa|Rabu|Kamis|Jumat|Sabtu|Minggu/i)
       .isVisible({ timeout: 3_000 }).catch(() => false);
     const noSchedule = await page.getByText(/belum|kosong|tidak ada/i)
@@ -62,10 +62,10 @@ test.describe("Member Flow — Jadwal", () => {
   });
 });
 
-test.describe("Member Flow — Tagihan", () => {
+test.describe("Student Flow — Tagihan", () => {
   test.beforeEach(async ({ page, skipIfNoAuth }) => {
-    skipIfNoAuth("member");
-    await page.goto("/member");
+    skipIfNoAuth("student");
+    await page.goto("/student");
     await page.waitForLoadState("networkidle");
     await page.getByRole("button", { name: /Tagihan|Bayar/i }).first().click();
     await page.waitForTimeout(500);
@@ -101,10 +101,10 @@ test.describe("Member Flow — Tagihan", () => {
   });
 });
 
-test.describe("Member Flow — Absensi", () => {
+test.describe("Student Flow — Absensi", () => {
   test.beforeEach(async ({ page, skipIfNoAuth }) => {
-    skipIfNoAuth("member");
-    await page.goto("/member");
+    skipIfNoAuth("student");
+    await page.goto("/student");
     await page.waitForLoadState("networkidle");
     const absenBtn = page.getByRole("button", { name: /Absen/i }).first();
     if (await absenBtn.isVisible({ timeout: 3_000 }).catch(() => false)) {
@@ -125,10 +125,10 @@ test.describe("Member Flow — Absensi", () => {
   });
 });
 
-test.describe("Member Flow — Izin", () => {
+test.describe("Student Flow — Izin", () => {
   test.beforeEach(async ({ page, skipIfNoAuth }) => {
-    skipIfNoAuth("member");
-    await page.goto("/member");
+    skipIfNoAuth("student");
+    await page.goto("/student");
     await page.waitForLoadState("networkidle");
     const izinBtn = page.getByRole("button", { name: /^Izin$/i }).first();
     if (await izinBtn.isVisible({ timeout: 3_000 }).catch(() => false)) {
@@ -155,10 +155,10 @@ test.describe("Member Flow — Izin", () => {
   });
 });
 
-test.describe("Member Flow — Rapor", () => {
+test.describe("Student Flow — Rapor", () => {
   test.beforeEach(async ({ page, skipIfNoAuth }) => {
-    skipIfNoAuth("member");
-    await page.goto("/member");
+    skipIfNoAuth("student");
+    await page.goto("/student");
     await page.waitForLoadState("networkidle");
     await page.getByRole("button", { name: /Rapor/i }).first().click();
     await page.waitForTimeout(1000);
@@ -179,17 +179,17 @@ test.describe("Member Flow — Rapor", () => {
   });
 });
 
-test.describe("Member Flow — Profil", () => {
+test.describe("Student Flow — Profil", () => {
   test.beforeEach(async ({ page, skipIfNoAuth }) => {
-    skipIfNoAuth("member");
-    await page.goto("/member");
+    skipIfNoAuth("student");
+    await page.goto("/student");
     await page.waitForLoadState("networkidle");
     await page.getByRole("button", { name: /Profile|Profil|Saya/i }).first().click();
     await page.waitForTimeout(1000);
   });
 
-  test("profil menampilkan nama member", async ({ page }) => {
-    await expect(page.getByText(/Member Test/i).first()).toBeVisible({ timeout: 10_000 });
+  test("profil menampilkan nama student", async ({ page }) => {
+    await expect(page.getByText(/Student Test/i).first()).toBeVisible({ timeout: 10_000 });
   });
 
   test("QR code absensi tersedia di profil", async ({ page }) => {

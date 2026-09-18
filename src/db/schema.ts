@@ -13,7 +13,7 @@ export const profiles = pgTable('profiles', {
   fullName: text('full_name').notNull(),
   email: text('email').notNull(),
   phone: varchar('phone', { length: 50 }),
-  role: text('role').notNull(), // 'owner' | 'admin' | 'coach' | 'member' | 'school'
+  role: text('role').notNull(), // 'owner' | 'admin' | 'coach' | 'student' | 'school'
   avatarUrl: text('avatar_url'),
   branchId: uuid('branch_id'),
   createdAt: timestamp('created_at').defaultNow(),
@@ -88,7 +88,7 @@ export const competitions = pgTable('competitions', {
 export const competitionParticipations = pgTable('competition_participations', {
   id: uuid('id').primaryKey().defaultRandom(),
   competitionId: uuid('competition_id').notNull(),
-  memberId: uuid('member_id').notNull(),
+  studentId: uuid('student_id').notNull(),
   branchId: uuid('branch_id').notNull(),
   coachId: uuid('coach_id'),
   category: text('category').notNull(),
@@ -106,13 +106,13 @@ export const competitionParticipations = pgTable('competition_participations', {
   updatedAt: timestamp('updated_at').defaultNow(),
 });
 
-// Competition Documents table — one certificate/photo per (member, competition), covering
-// every category that member won at that event. Replaces the old per-participation
+// Competition Documents table — one certificate/photo per (student, competition), covering
+// every category that student won at that event. Replaces the old per-participation
 // certificateUrl/photoUrl fields above.
 export const competitionDocuments = pgTable('competition_documents', {
   id: uuid('id').primaryKey().defaultRandom(),
   competitionId: uuid('competition_id').notNull(),
-  memberId: uuid('member_id').notNull(),
+  studentId: uuid('student_id').notNull(),
   documentUrl: text('document_url').notNull(),
   uploadedBy: uuid('uploaded_by'),
   contentType: text('content_type'),

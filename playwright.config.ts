@@ -5,7 +5,7 @@ import path from "path";
 export const STORAGE_STATE_OWNER  = path.join(__dirname, "tests/.auth/owner.json");
 export const STORAGE_STATE_ADMIN  = path.join(__dirname, "tests/.auth/admin.json");
 export const STORAGE_STATE_COACH  = path.join(__dirname, "tests/.auth/coach.json");
-export const STORAGE_STATE_MEMBER = path.join(__dirname, "tests/.auth/member.json");
+export const STORAGE_STATE_STUDENT = path.join(__dirname, "tests/.auth/student.json");
 export const STORAGE_STATE_SCHOOL = path.join(__dirname, "tests/.auth/school.json");
 
 export default defineConfig({
@@ -77,13 +77,13 @@ export default defineConfig({
       },
     },
 
-    // ── Member panel ──────────────────────────────────────────────────────────
+    // ── Student panel ──────────────────────────────────────────────────────────
     {
-      name: "member",
-      testMatch: /07-member-panel\.spec\.ts/,
+      name: "student",
+      testMatch: /07-student-panel\.spec\.ts/,
       use: {
         ...devices["Desktop Chrome"],
-        storageState: STORAGE_STATE_MEMBER,
+        storageState: STORAGE_STATE_STUDENT,
       },
     },
 
@@ -123,11 +123,11 @@ export default defineConfig({
       },
     },
     {
-      name: "flow-member",
-      testMatch: /12-flow-member-panel\.spec\.ts/,
+      name: "flow-student",
+      testMatch: /12-flow-student-panel\.spec\.ts/,
       use: {
         ...devices["Desktop Chrome"],
-        storageState: STORAGE_STATE_MEMBER,
+        storageState: STORAGE_STATE_STUDENT,
       },
     },
   ],

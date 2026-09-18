@@ -7,7 +7,7 @@ export type Criterion = PrintCriterion;
 export interface Student {
   id: string;
   full_name: string;
-  member_no: string | null;
+  student_no: string | null;
   birth_date: string | null;
   avatar_url: string | null;
   school_grade: string | null;

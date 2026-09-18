@@ -2,11 +2,11 @@
 import { Field, Input, Switch } from "@/components/ui/FormFields";
 import Btn from "@/components/ui/Btn";
 import Modal from "@/components/ui/Modal";
-import type { useMemberPrivateData } from "./useMemberPrivateData";
+import type { useStudentPrivateData } from "./useStudentPrivateData";
 
-type MemberPrivateDataHook = ReturnType<typeof useMemberPrivateData>;
+type StudentPrivateDataHook = ReturnType<typeof useStudentPrivateData>;
 
-export default function AddSessionsModal({ hook }: { hook: MemberPrivateDataHook }) {
+export default function AddSessionsModal({ hook }: { hook: StudentPrivateDataHook }) {
   const { addSesiTarget, setAddSesiTarget, addSesiForm, setAddSesiForm, savingAddSesi, doAddSesi } = hook;
 
   return (

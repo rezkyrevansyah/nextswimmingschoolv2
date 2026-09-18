@@ -2,9 +2,9 @@
 import Status from "@/components/ui/Status";
 import { NoTranslate } from "@/components/ui/NoTranslate";
 import { fmtIDR, fmtDate } from "@/lib/utils";
-import type { AdminMemberHook } from "./_hook";
+import type { AdminStudentHook } from "./_hook";
 
-export default function MemberPaymentTab({ hook }: { hook: AdminMemberHook }) {
+export default function StudentPaymentTab({ hook }: { hook: AdminStudentHook }) {
   const { loadingBills, bills } = hook;
 
   return (

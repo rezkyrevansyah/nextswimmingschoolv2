@@ -27,7 +27,7 @@ export interface ClassRow {
   spreadsheet_url?: string | null;
   branch_id?: string;
   branch?: { name: string; city: string; address: string | null } | null;
-  member_classes?: { member: { id: string; profile: { full_name: string; avatar_url?: string | null; birth_date: string | null; phone: string | null; gender: string | null; address: string | null; health_notes: string | null } | null } | null }[];
+  student_classes?: { student: { id: string; profile: { full_name: string; avatar_url?: string | null; birth_date: string | null; phone: string | null; gender: string | null; address: string | null; health_notes: string | null } | null } | null }[];
   coach_spreadsheets?: CoachSpreadsheetRow[];
 }
 
@@ -38,10 +38,10 @@ export interface AttendanceRow {
   class?: { name: string } | null;
 }
 
-export interface MemberAttRow {
-  id: string; member_id: string; session_date: string; status: string;
+export interface StudentAttRow {
+  id: string; student_id: string; session_date: string; status: string;
   type?: string; school_grade?: string | null;
-  member?: { full_name: string; avatar_url?: string | null; birth_date?: string | null } | null;
+  student?: { full_name: string; avatar_url?: string | null; birth_date?: string | null } | null;
 }
 
 export interface InvoiceSession {
@@ -67,13 +67,13 @@ export interface PastInvoice {
 }
 
 export interface RaporEntry {
-  id: string; member_id: string; class_id: string; locked: boolean;
+  id: string; student_id: string; class_id: string; locked: boolean;
   personality?: string | null;
   motivation?: string | null;
   learning_achievements?: string | null;
   level?: string | null;
   level_id?: string | null;
-  member?: { member_no?: string | null; profile: { full_name: string; avatar_url?: string | null; birth_date?: string | null } | null } | null;
+  student?: { student_no?: string | null; profile: { full_name: string; avatar_url?: string | null; birth_date?: string | null } | null } | null;
   class?: { name: string } | null;
   rapor_levels?: { rapor_level_criteria: (PrintCriterion & { sort_order: number })[] } | null;
 }

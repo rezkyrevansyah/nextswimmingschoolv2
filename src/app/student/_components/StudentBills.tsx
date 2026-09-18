@@ -8,14 +8,14 @@ import { NoTranslate } from "@/components/ui/NoTranslate";
 import { fmtIDR, waLink } from "@/lib/utils";
 import { createClient } from "@/utils/supabase/client";
 
-export default function MemberBills({ memberId, memberName, branchId }: { memberId: string; memberName: string; branchId: string }) {
+export default function StudentBills({ studentId, studentName, branchId }: { studentId: string; studentName: string; branchId: string }) {
   const supabase = createClient();
   const [tab, setTab] = useState("active");
   const [activeBills, setActiveBills] = useState<{ id: string; period_label: string; amount: number; discount: number; discount_reason: string | null; total: number; class_name: string; type: string; sessions_total: number | null; sessions_used: number }[]>([]);
   const [history, setHistory] = useState<{ id: string; period_label: string; amount: number; paid_at: string; payment_method: string | null }[]>([]);
   const [adminWa, setAdminWa] = useState<string | null>(null);
   const [bankInfo, setBankInfo] = useState<{ bank_name: string | null; bank_account: string | null; bank_holder: string | null } | null>(null);
-  // Single source of truth for "sessions left" — same members.remaining_sessions/
+  // Single source of truth for "sessions left" — same students.remaining_sessions/
   // total_sessions the home dashboard reads, kept in sync by
   // record_private_session_attendance on clock-in. Avoids showing a different
   // number here from per-bill sessions_used.
@@ -36,14 +36,14 @@ export default function MemberBills({ memberId, memberName, branchId }: { member
 
 
   const load = useCallback(async () => {
-    if (!memberId) return;
-    const [actRes, hisRes, memberRes] = await Promise.all([
-      supabase.from("bills").select("id, period_label, amount, discount, discount_reason, total, type, sessions_total, sessions_used, classes(name)").eq("member_id", memberId).in("status", ["unpaid", "partial"]).order("created_at", { ascending: false }),
-      supabase.from("bills").select("id, period_label, amount, total, paid_at, paid_method").eq("member_id", memberId).eq("status", "paid").order("paid_at", { ascending: false }),
-      supabase.from("members").select("remaining_sessions, total_sessions").eq("id", memberId).single(),
+    if (!studentId) return;
+    const [actRes, hisRes, studentRes] = await Promise.all([
+      supabase.from("bills").select("id, period_label, amount, discount, discount_reason, total, type, sessions_total, sessions_used, classes(name)").eq("student_id", studentId).in("status", ["unpaid", "partial"]).order("created_at", { ascending: false }),
+      supabase.from("bills").select("id, period_label, amount, total, paid_at, paid_method").eq("student_id", studentId).eq("status", "paid").order("paid_at", { ascending: false }),
+      supabase.from("students").select("remaining_sessions, total_sessions").eq("id", studentId).single(),
     ]);
-    if (memberRes.data) {
-      setSessionsInfo({ remaining: memberRes.data.remaining_sessions, total: memberRes.data.total_sessions });
+    if (studentRes.data) {
+      setSessionsInfo({ remaining: studentRes.data.remaining_sessions, total: studentRes.data.total_sessions });
     }
     if (actRes.data) {
       setActiveBills(actRes.data.map((b) => {
@@ -65,13 +65,13 @@ export default function MemberBills({ memberId, memberName, branchId }: { member
         paid_at: b.paid_at ?? "", payment_method: (b as unknown as { paid_method: string | null }).paid_method,
       })));
     }
-  }, [memberId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [studentId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* eslint-disable react-hooks/set-state-in-effect -- async data loader + realtime */
   useEffect(() => {
     load();
-    const channel = supabase.channel(`bills:${memberId}`)
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "bills", filter: `member_id=eq.${memberId}` }, () => load())
+    const channel = supabase.channel(`bills:${studentId}`)
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "bills", filter: `student_id=eq.${studentId}` }, () => load())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [load]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -143,7 +143,7 @@ export default function MemberBills({ memberId, memberName, branchId }: { member
                   <div className="font-mono font-bold text-sm text-ink ml-auto truncate"><NoTranslate>{adminWa}</NoTranslate></div>
                 </div>
               )}
-              <a href={waLink(`Hello Admin, I would like to confirm bill payment for ${b.period_label} for ${memberName}. Transfer proof attached.`, adminWa)} target="_blank" rel="noreferrer" className="mt-3 inline-flex w-full">
+              <a href={waLink(`Hello Admin, I would like to confirm bill payment for ${b.period_label} for ${studentName}. Transfer proof attached.`, adminWa)} target="_blank" rel="noreferrer" className="mt-3 inline-flex w-full">
                 <Btn variant="wa" icon="whatsapp" size="lg" className="w-full">{"Contact Admin for confirmation"}</Btn>
               </a>
               <div className="mt-2 text-[11px] text-ink-mute text-center">

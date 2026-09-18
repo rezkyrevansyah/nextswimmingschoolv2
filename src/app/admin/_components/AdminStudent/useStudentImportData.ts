@@ -4,9 +4,9 @@ import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
 import type { ClassRow, School } from "../../_types";
 import type { ImportRow, ImportRowStatus, ValidatedRow } from "./_types";
-import { parseImportDate, normalizeGender, normalizeMemberType, normalizeDayName, normalizeImportTime } from "./_utils";
+import { parseImportDate, normalizeGender, normalizeStudentType, normalizeDayName, normalizeImportTime } from "./_utils";
 
-export function useMemberImportData({
+export function useStudentImportData({
   branchId, classes, schoolsList, findCoachByPhone, load,
 }: {
   branchId: string;
@@ -33,8 +33,8 @@ export function useMemberImportData({
       const full_name = String(r.nama_lengkap ?? "").trim();
       const email = String(r.email ?? "").trim();
       const password = String(r.password ?? "").trim();
-      const memberTypeRaw = r.tipe_member;
-      const member_type = normalizeMemberType(memberTypeRaw) ?? "reguler";
+      const studentTypeRaw = r.tipe_student;
+      const student_type = normalizeStudentType(studentTypeRaw) ?? "reguler";
       const birth_date = parseImportDate(r.tanggal_lahir);
       const gender = normalizeGender(r.jenis_kelamin);
       const phone = r.no_hp ? String(r.no_hp).trim() : undefined;
@@ -49,12 +49,12 @@ export function useMemberImportData({
       else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.push("Invalid email format");
       if (!password) errors.push("Password is required");
       else if (password.length < 6) errors.push("Password must be at least 6 characters");
-      if (memberTypeRaw && !normalizeMemberType(memberTypeRaw)) errors.push(`Invalid student type: "${String(memberTypeRaw)}". Use: reguler, private, or afiliasi_sekolah`);
+      if (studentTypeRaw && !normalizeStudentType(studentTypeRaw)) errors.push(`Invalid student type: "${String(studentTypeRaw)}". Use: reguler, private, or afiliasi_sekolah`);
       if (r.tanggal_lahir && !birth_date) errors.push(`Invalid date of birth format: "${String(r.tanggal_lahir)}". Use DD/MM/YYYY`);
       if (r.jenis_kelamin && !gender) errors.push(`Invalid gender: "${String(r.jenis_kelamin)}". Use L or P`);
 
       let class_id: string | null | undefined = undefined;
-      if (member_type !== "private" && nama_kelas_raw) {
+      if (student_type !== "private" && nama_kelas_raw) {
         const found = classList.find(c => c.name.trim().toLowerCase() === nama_kelas_raw.toLowerCase());
         if (found) {
           class_id = found.id;
@@ -65,7 +65,7 @@ export function useMemberImportData({
       }
 
       let school_id: string | null | undefined = undefined;
-      if (member_type === "school_affiliate") {
+      if (student_type === "school_affiliate") {
         if (!nama_sekolah_raw) {
           errors.push("School name is required for school-affiliate type");
         } else {
@@ -87,7 +87,7 @@ export function useMemberImportData({
       let head_coach_id: string | null | undefined = undefined;
       let assistant_coach_ids: string[] | undefined = undefined;
 
-      if (member_type === "private") {
+      if (student_type === "private") {
         const sesiRaw = r.jumlah_sesi;
         total_sessions = sesiRaw != null && String(sesiRaw).trim() !== "" ? Math.round(Number(sesiRaw)) : null;
         if (total_sessions === null || isNaN(total_sessions)) errors.push("Number of sessions (numeric) is required for private type");
@@ -129,10 +129,10 @@ export function useMemberImportData({
       const status: ImportRowStatus = errors.length > 0 ? "error" : warnings.length > 0 ? "warn" : "ok";
       return {
         _rowNum: i + 2, _status: status, _errors: errors, _warnings: warnings,
-        full_name, email, password, member_type, birth_date, gender, phone, address, health_notes,
+        full_name, email, password, student_type, birth_date, gender, phone, address, health_notes,
         total_sessions, package_price, schedule_days, time_start, time_end, head_coach_id, assistant_coach_ids,
         class_id, school_id,
-        school_grade: member_type === "school_affiliate" ? (kelas_sekolah_raw || null) : null,
+        school_grade: student_type === "school_affiliate" ? (kelas_sekolah_raw || null) : null,
         nama_kelas_raw, nama_sekolah_raw,
       };
     });
@@ -158,7 +158,7 @@ export function useMemberImportData({
 
   const downloadTemplate = async () => {
     const XLSX = await import("xlsx");
-    const headers = ["nama_lengkap", "email", "password", "tipe_member", "tanggal_lahir", "jenis_kelamin", "no_hp", "alamat", "catatan_kesehatan", "jumlah_sesi", "harga_paket", "jadwal_hari", "jam_mulai", "jam_selesai", "coach_utama_hp", "coach_asisten_hp", "nama_kelas", "nama_sekolah", "kelas_sekolah"];
+    const headers = ["nama_lengkap", "email", "password", "tipe_student", "tanggal_lahir", "jenis_kelamin", "no_hp", "alamat", "catatan_kesehatan", "jumlah_sesi", "harga_paket", "jadwal_hari", "jam_mulai", "jam_selesai", "coach_utama_hp", "coach_asisten_hp", "nama_kelas", "nama_sekolah", "kelas_sekolah"];
     const exampleRegular = ["Budi Santoso", "budi@gmail.com", "aqua2024", "reguler", "15/06/2010", "L", "08123456789", "Jl. Merdeka No. 1", "", "", "", "", "", "", "", "", "Kelas A Pagi", "", ""];
     const examplePrivate = ["Siti Aminah", "siti@gmail.com", "aqua2024", "private", "10/03/2015", "P", "08129876543", "Jl. Melati No. 5", "", "8", "1500000", "Senin,Rabu", "07:00", "08:00", "08111222333", "", "", "", ""];
     const notes = [
@@ -176,7 +176,7 @@ export function useMemberImportData({
     ws["!freeze"] = { xSplit: 0, ySplit: 1 };
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Student Import");
-    XLSX.writeFile(wb, "template-import-member.xlsx");
+    XLSX.writeFile(wb, "template-import-student.xlsx");
   };
 
   const runImport = async () => {
@@ -196,14 +196,14 @@ export function useMemberImportData({
     try {
       for (let i = 0; i < toImport.length; i += CHUNK) {
         const chunk = toImport.slice(i, i + CHUNK);
-        const res = await fetch("/api/admin/import-members", {
+        const res = await fetch("/api/admin/import-students", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             branch_id: branchId,
             rows: chunk.map(r => ({
               email: r.email, password: r.password, full_name: r.full_name,
-              member_type: r.member_type, birth_date: r.birth_date, gender: r.gender,
+              student_type: r.student_type, birth_date: r.birth_date, gender: r.gender,
               phone: r.phone, address: r.address, health_notes: r.health_notes,
               total_sessions: r.total_sessions, class_id: r.class_id,
               school_id: r.school_id ?? null,

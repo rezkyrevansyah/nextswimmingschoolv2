@@ -1,5 +1,5 @@
-export type RoleFilter = "all" | "owner" | "admin" | "manager_center" | "coach" | "member" | "school" | "staff";
-export type CreatableRole = "admin" | "manager_center" | "coach" | "member" | "school" | "staff";
+export type RoleFilter = "all" | "owner" | "admin" | "manager_center" | "coach" | "student" | "school" | "staff";
+export type CreatableRole = "admin" | "manager_center" | "coach" | "student" | "school" | "staff";
 
 /** "budi@sekolah.com" -> "budistaff@sekolah.com"; "" if the email isn't complete yet. */
 export const deriveStaffEmail = (email: string): string => {
@@ -16,7 +16,7 @@ export const EMPTY_FORM = {
   branch_id: "",
   password: "",
   custom_role_label: "",
-  member_type: "reguler" as "reguler" | "private" | "school_affiliate",
+  student_type: "reguler" as "reguler" | "private" | "school_affiliate",
   school_id: "",
   school_grade: "",
   total_sessions: "",

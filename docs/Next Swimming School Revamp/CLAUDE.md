@@ -47,7 +47,7 @@ Rincian folder dan rute: `docs/06-teknis/STACK.md`.
 - Tailwind CSS v4 terbaru. Token di `src/app/globals.css` (`@theme inline`). Tidak ada `tailwind.config.ts`.
 - Panel memakai tab `useState` di dalam satu halaman, bukan rute Next.js per menu.
 - Komponen UI di `src/components/ui/`: `<Btn>`, `<Status>`, `<Card>`, `Field`.
-- Path peran: `/owner`, `/admin` (admin dan manager_center), `/coach`, `/staff`, `/member` (Student), `/school`, publik `/` dan `/register`.
+- Path peran: `/owner`, `/admin` (admin dan manager_center), `/coach`, `/staff`, `/student` (Student), `/school`, publik `/` dan `/register`.
 - Auth, Postgres, dan storage: **Supabase**. Query dan migrasi: **Drizzle ORM** terbaru plus `drizzle-kit` terbaru. Bukan Prisma. Bukan klik manual di dashboard untuk perubahan skema.
 
 ### File kecil, kode modular
@@ -100,7 +100,7 @@ Rincian: `docs/01-prd.md` bab 4.6 dan `docs/06-teknis/I18N.md`.
 - Jangan membuat `locales/id`. Jangan mengeraskan teks Indonesia di JSX. Jangan rute `/id/...`.
 - Pengalih **EN | ID** di setiap cangkang panel.
 - `translate="no"` / `notranslate` / `<NoTranslate>`: nama orang, nama pusat, rekening, QR, status mentah, merek NEXT.
-- Bahasa produk untuk siswa: **Student**. Peran, rute, dan tabel tetap `member` / `/member` / `members`. Jangan menulis "Member" di prosa dokumen.
+- Bahasa produk untuk siswa: **Student**. Peran, rute, dan tabel database juga `student` / `/student` / `students` (sudah direname dari `member`, bukan sekadar label). Jangan menulis "Member" di prosa dokumen.
 
 Kalau `docs/05-desain/DESIGN.md` bab 10 masih menyebut padanan `id/` di berkas i18n, PRD 4.6 yang dipakai.
 
@@ -163,7 +163,7 @@ Kalau `drizzle-kit migrate` atau `db:push` gagal di port 6543, pakai URL session
 
 Sumber tabel: `docs/06-teknis/SCHEMA.md`. File Drizzle hidup di `drizzle/schema.ts` atau pecahan `drizzle/*.ts` yang di-export dari situ.
 
-Contoh bentuk file (bukan tabel yang boleh dipakai apa adanya). Jangan menyalin tabel `users` dari tutorial. Pakai `profiles`, `branches`, `members`, dan seterusnya.
+Contoh bentuk file (bukan tabel yang boleh dipakai apa adanya). Jangan menyalin tabel `users` dari tutorial. Pakai `profiles`, `branches`, `students`, dan seterusnya.
 
 ```ts
 import { pgTable, serial, text, varchar } from "drizzle-orm/pg-core";

@@ -5,7 +5,7 @@ import { useConfirm } from "@/components/providers/ConfirmProvider";
 import { parseUserApiError } from "../../_utils";
 import type { ClassRow } from "../../_types";
 
-export function useMemberCreateData({
+export function useStudentCreateData({
   branchId, classes, load, setSearch,
 }: {
   branchId: string;
@@ -22,7 +22,7 @@ export function useMemberCreateData({
   const [createAvatarPreview, setCreateAvatarPreview] = useState<string | null>(null);
   const [showCreatePwd, setShowCreatePwd] = useState(false);
 
-  const createMember = async () => {
+  const createStudent = async () => {
     if (!form.full_name || !form.email || !form.password) return toast.error("Name, email, and password are required");
     if (form.type === "private" && !form.jumlah_sesi) return toast.error("Number of sessions is required for private students");
     // Capacity check
@@ -39,10 +39,10 @@ export function useMemberCreateData({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         email: form.email, password: form.password, full_name: form.full_name,
-        role: "member", branch_id: branchId, phone: form.phone,
+        role: "student", branch_id: branchId, phone: form.phone,
         birth_date: form.birth_date || null, gender: form.gender || null,
         address: form.address || null, health_notes: form.health_notes || null,
-        member_type: form.type,
+        student_type: form.type,
         school_id: form.type === "school_affiliate" ? form.school_id : null,
         school_grade: form.type === "school_affiliate" ? form.school_grade.trim() || null : null,
         class_id: form.class_id || null,
@@ -80,6 +80,6 @@ export function useMemberCreateData({
     openCreate, setOpenCreate, saving, form, setForm,
     createAvatarFile, setCreateAvatarFile, createAvatarPreview, setCreateAvatarPreview,
     showCreatePwd, setShowCreatePwd,
-    createMember,
+    createStudent,
   };
 }

@@ -67,29 +67,29 @@ export function useCoachRaporData({ coachId, branchId }: { coachId: string; bran
       if (!periodData) { setLoading(false); return; }
       setPeriod(periodData as { id: string; label: string; date_to: string });
 
-      // 2. Get all members in coach's classes
+      // 2. Get all students in coach's classes
       const { data: classCoachRows } = await supabase
         .from("class_coaches").select("class_id").eq("coach_id", coachId);
       const myClassIds = (classCoachRows ?? []).map(r => r.class_id);
 
       if (myClassIds.length === 0) { setLoading(false); return; }
 
-      // Get members enrolled in each of those classes
+      // Get students enrolled in each of those classes
       const { data: mcRows } = await supabase
-        .from("member_classes").select("member_id, class_id").in("class_id", myClassIds);
-      const memberClassPairs = (mcRows ?? []) as { member_id: string; class_id: string }[];
+        .from("student_classes").select("student_id, class_id").in("class_id", myClassIds);
+      const studentClassPairs = (mcRows ?? []) as { student_id: string; class_id: string }[];
 
-      // 3. Insert stubs for any members without an entry yet
-      if (memberClassPairs.length > 0) {
-        // Fetch existing entry member_ids to avoid duplicates (no unique constraint in DB)
+      // 3. Insert stubs for any students without an entry yet
+      if (studentClassPairs.length > 0) {
+        // Fetch existing entry student_ids to avoid duplicates (no unique constraint in DB)
         const { data: existing } = await supabase
-          .from("rapor_entries").select("member_id").eq("period_id", periodData.id).eq("coach_id", coachId);
-        const existingMemberIds = new Set((existing ?? []).map(e => e.member_id));
-        const newStubs = memberClassPairs
-          .filter(mc => !existingMemberIds.has(mc.member_id))
+          .from("rapor_entries").select("student_id").eq("period_id", periodData.id).eq("coach_id", coachId);
+        const existingStudentIds = new Set((existing ?? []).map(e => e.student_id));
+        const newStubs = studentClassPairs
+          .filter(mc => !existingStudentIds.has(mc.student_id))
           .map(mc => ({
             period_id: periodData.id,
-            member_id: mc.member_id,
+            student_id: mc.student_id,
             class_id: mc.class_id,
             coach_id: coachId,
             locked: false,
@@ -100,7 +100,7 @@ export function useCoachRaporData({ coachId, branchId }: { coachId: string; bran
       }
 
       // 4. Now fetch all entries for this coach + period — via a server route,
-      // since the nested member/coach profile names are RLS-blocked from a
+      // since the nested student/coach profile names are RLS-blocked from a
       // direct browser query (see /api/coach/rapor-entries for why).
       try {
         const res = await fetch(`/api/coach/rapor-entries?periodId=${periodData.id}`);
@@ -149,11 +149,11 @@ export function useCoachRaporData({ coachId, branchId }: { coachId: string; bran
     setLearningAchievements(e.learning_achievements ?? "");
     setLevel(e.level ?? "");
     setLevelId(e.level_id ?? "");
-    // Load best times for this member, then build the matrix from the level's template (if any)
+    // Load best times for this student, then build the matrix from the level's template (if any)
     const { data: btRows } = await supabase
-      .from("member_best_times")
+      .from("student_best_times")
       .select("id, stroke, distance, time_seconds")
-      .eq("member_id", e.member_id)
+      .eq("student_id", e.student_id)
       .eq("branch_id", branchId)
       .order("stroke").order("distance");
     await loadLevelTemplate(e.level_id ?? "", (btRows ?? []) as RecordedBestTime[]);
@@ -181,9 +181,9 @@ export function useCoachRaporData({ coachId, branchId }: { coachId: string; bran
 
   const openView = async (e: RaporEntry) => {
     const { data: btRows } = await supabase
-      .from("member_best_times")
+      .from("student_best_times")
       .select("id, stroke, distance, time_seconds")
-      .eq("member_id", e.member_id)
+      .eq("student_id", e.student_id)
       .eq("branch_id", branchId)
       .order("stroke").order("distance");
     setViewBestTimes(
@@ -241,7 +241,7 @@ export function useCoachRaporData({ coachId, branchId }: { coachId: string; bran
     if (error) { setSaving(false); return toast.error("Failed to save report card", error.message); }
     // Delete removed best time rows
     for (const id of removedBtIds) {
-      await supabase.from("member_best_times").delete().eq("id", id);
+      await supabase.from("student_best_times").delete().eq("id", id);
     }
     setRemovedBtIds([]);
     // Upsert best times — one row per filled matrix cell
@@ -251,14 +251,14 @@ export function useCoachRaporData({ coachId, branchId }: { coachId: string; bran
       const timeSec = parseSwimTimeInput(cell.time);
       if (!cell.time.trim() || isNaN(timeSec) || timeSec <= 0) continue;
       if (cell.recordedId) {
-        await supabase.from("member_best_times")
+        await supabase.from("student_best_times")
           .update({ time_seconds: timeSec, coach_id: coachId, recorded_at: today })
           .eq("id", cell.recordedId);
       } else {
-        const { data: ins } = await supabase.from("member_best_times")
+        const { data: ins } = await supabase.from("student_best_times")
           .upsert(
-            { member_id: open.member_id, branch_id: branchId, stroke: cell.stroke, distance: cell.distance, time_seconds: timeSec, coach_id: coachId, recorded_at: today },
-            { onConflict: "member_id,branch_id,stroke,distance" }
+            { student_id: open.student_id, branch_id: branchId, stroke: cell.stroke, distance: cell.distance, time_seconds: timeSec, coach_id: coachId, recorded_at: today },
+            { onConflict: "student_id,branch_id,stroke,distance" }
           )
           .select("id").single();
         if (ins) {
@@ -268,10 +268,10 @@ export function useCoachRaporData({ coachId, branchId }: { coachId: string; bran
     }
     setBestTimeMatrix(savedCells);
     setSaving(false);
-    // Notify member when rapor is first filled (not on updates)
+    // Notify student when rapor is first filled (not on updates)
     if (isNew) {
       await supabase.from("notifications").insert({
-        user_id: open.member_id,
+        user_id: open.student_id,
         title: "Report card available",
         body: `Your report card for period "${period.label}" has been filled in by the coach. Open the Report Card menu to see the results.`,
         icon: "book",

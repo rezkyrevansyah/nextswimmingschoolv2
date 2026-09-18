@@ -17,12 +17,12 @@ import { logActivity } from "@/lib/activityLog";
 import { fmtIDR, fmtDate } from "@/lib/utils";
 
 interface BillRow {
-  id: string; member_id: string; period_label: string; amount: number;
+  id: string; student_id: string; period_label: string; amount: number;
   discount: number; discount_reason: string | null; total: number; status: string;
   type: string; sessions_total: number | null; sessions_used: number;
   paid_at: string | null; paid_method: string | null; proof_url: string | null;
   admin_notes: string | null;
-  member?: { profile: { full_name: string } | null } | null;
+  student?: { profile: { full_name: string } | null } | null;
   class?: { name: string } | null;
 }
 
@@ -52,8 +52,8 @@ export default function AdminPembayaran({ branchId }: { branchId: string }) {
 
   // Tambah tagihan manual modal
   const [openAdd, setOpenAdd] = useState(false);
-  const [addForm, setAddForm] = useState({ member_id: "", class_id: "", type: "monthly", period_label: "", amount: "", discount: "", discount_reason: "", admin_notes: "", sessions_total: "" });
-  const [addMembers, setAddMembers] = useState<{ id: string; full_name: string; type: string }[]>([]);
+  const [addForm, setAddForm] = useState({ student_id: "", class_id: "", type: "monthly", period_label: "", amount: "", discount: "", discount_reason: "", admin_notes: "", sessions_total: "" });
+  const [addStudents, setAddStudents] = useState<{ id: string; full_name: string; type: string }[]>([]);
   const [addClasses, setAddClasses] = useState<{ id: string; name: string; class_type: string; price_monthly: number; price_per_session: number | null; packages?: ClassPackage[] }[]>([]);
   const [selectedPackage, setSelectedPackage] = useState<ClassPackage | null>(null);
   const [saving, setSaving] = useState(false);
@@ -61,7 +61,7 @@ export default function AdminPembayaran({ branchId }: { branchId: string }) {
   const load = useCallback(async () => {
     setLoading(true);
     const { data } = await supabase.from("bills")
-      .select("id, member_id, period_label, amount, discount, discount_reason, total, status, type, sessions_total, sessions_used, paid_at, paid_method, proof_url, admin_notes, member:members(profile:profiles(full_name)), class:classes(name)")
+      .select("id, student_id, period_label, amount, discount, discount_reason, total, status, type, sessions_total, sessions_used, paid_at, paid_method, proof_url, admin_notes, student:students(profile:profiles(full_name)), class:classes(name)")
       .eq("branch_id", branchId).order("created_at", { ascending: false }).limit(200);
     if (data) setBills(data as unknown as BillRow[]);
     setLoading(false);
@@ -70,10 +70,10 @@ export default function AdminPembayaran({ branchId }: { branchId: string }) {
   /* eslint-disable react-hooks/set-state-in-effect -- async data loader */
   useEffect(() => {
     load();
-    // Load members + classes for manual add form
-    supabase.from("members").select("id, type, profile:profiles(full_name)").eq("branch_id", branchId).eq("status", "active").neq("type", "school_affiliate")
+    // Load students + classes for manual add form
+    supabase.from("students").select("id, type, profile:profiles(full_name)").eq("branch_id", branchId).eq("status", "active").neq("type", "school_affiliate")
       .then(({ data }) => {
-        if (data) setAddMembers((data as unknown as { id: string; type: string; profile: { full_name: string } | null }[])
+        if (data) setAddStudents((data as unknown as { id: string; type: string; profile: { full_name: string } | null }[])
           .map(m => ({ id: m.id, full_name: m.profile?.full_name ?? "—", type: m.type })));
       });
     supabase.from("classes").select("id, name, class_type, price_monthly, price_per_session, packages:class_packages(id, name, sessions, price, sort_order, active)").eq("branch_id", branchId).eq("status", "active").order("name")
@@ -110,24 +110,24 @@ export default function AdminPembayaran({ branchId }: { branchId: string }) {
     }).eq("id", verifyTarget.id);
     setVerifying(false);
     if (error) return toast.error("Verification failed", error.message);
-    // Notify member
+    // Notify student
     await supabase.from("notifications").insert({
-      user_id: verifyTarget.member_id,
+      user_id: verifyTarget.student_id,
       title: "Bill verified",
       body: `Your ${verifyTarget.period_label} bill payment has been verified as paid via ${verifyForm.paid_method}.`,
       icon: "check",
       kind: "success",
     });
     toast.success("Payment verified");
-    logActivity(supabase, { userId: user?.id ?? "unknown", userRole: "admin", userName: user?.user_metadata?.full_name ?? "Admin", branchId, entityType: "bills", entityId: verifyTarget.id, entityLabel: verifyTarget.member?.profile?.full_name ?? undefined, action: "update", label: `Bill ${verifyTarget.period_label} for ${verifyTarget.member?.profile?.full_name ?? "student"} verified as paid`, meta: { amount: verifyTarget.total, paid_method: verifyForm.paid_method } });
+    logActivity(supabase, { userId: user?.id ?? "unknown", userRole: "admin", userName: user?.user_metadata?.full_name ?? "Admin", branchId, entityType: "bills", entityId: verifyTarget.id, entityLabel: verifyTarget.student?.profile?.full_name ?? undefined, action: "update", label: `Bill ${verifyTarget.period_label} for ${verifyTarget.student?.profile?.full_name ?? "student"} verified as paid`, meta: { amount: verifyTarget.total, paid_method: verifyForm.paid_method } });
     setVerifyTarget(null);
     load();
   };
 
   const saveManualBill = async () => {
-    if (!addForm.member_id || !addForm.period_label || !addForm.amount) return toast.error("Student, period, and amount are required");
-    const selectedMember = addMembers.find(m => m.id === addForm.member_id);
-    if (selectedMember?.type === "school_affiliate") return toast.error("School-affiliated students cannot be billed manually");
+    if (!addForm.student_id || !addForm.period_label || !addForm.amount) return toast.error("Student, period, and amount are required");
+    const selectedStudent = addStudents.find(m => m.id === addForm.student_id);
+    if (selectedStudent?.type === "school_affiliate") return toast.error("School-affiliated students cannot be billed manually");
     const amount = Number(addForm.amount) || 0;
     const discount = Number(addForm.discount) || 0;
     if (discount > amount) return toast.error("Discount cannot be greater than the bill amount");
@@ -135,7 +135,7 @@ export default function AdminPembayaran({ branchId }: { branchId: string }) {
     const total = amount - discount;
     const isSessionPack = addForm.type === "session_pack";
     const row: Database["public"]["Tables"]["bills"]["Insert"] = {
-      member_id: addForm.member_id,
+      student_id: addForm.student_id,
       branch_id: branchId,
       class_id: addForm.class_id || null,
       type: addForm.type as Database["public"]["Enums"]["bill_type"],
@@ -151,9 +151,9 @@ export default function AdminPembayaran({ branchId }: { branchId: string }) {
     const { error } = await supabase.from("bills").insert(row);
     setSaving(false);
     if (error) return toast.error("Failed to create bill", error.message);
-    // Notify member
+    // Notify student
     await supabase.from("notifications").insert({
-      user_id: addForm.member_id,
+      user_id: addForm.student_id,
       title: "New bill",
       body: `A ${addForm.period_label} bill of ${fmtIDR(total)} has been created. Contact admin to confirm payment.`,
       icon: "invoice",
@@ -161,10 +161,10 @@ export default function AdminPembayaran({ branchId }: { branchId: string }) {
     });
     toast.success("Bill created successfully");
     const actUser = (await supabase.auth.getUser()).data.user;
-    logActivity(supabase, { userId: actUser?.id ?? "unknown", userRole: "admin", userName: actUser?.user_metadata?.full_name ?? "Admin", branchId, entityType: "bills", entityId: addForm.member_id, entityLabel: selectedMember?.full_name ?? undefined, action: "create", label: `Manual bill ${addForm.period_label} created for ${selectedMember?.full_name ?? addForm.member_id} — ${fmtIDR(total)}`, meta: { amount, discount, total } });
+    logActivity(supabase, { userId: actUser?.id ?? "unknown", userRole: "admin", userName: actUser?.user_metadata?.full_name ?? "Admin", branchId, entityType: "bills", entityId: addForm.student_id, entityLabel: selectedStudent?.full_name ?? undefined, action: "create", label: `Manual bill ${addForm.period_label} created for ${selectedStudent?.full_name ?? addForm.student_id} — ${fmtIDR(total)}`, meta: { amount, discount, total } });
     setOpenAdd(false);
     setSelectedPackage(null);
-    setAddForm({ member_id: "", class_id: "", type: "monthly", period_label: "", amount: "", discount: "", discount_reason: "", admin_notes: "", sessions_total: "" });
+    setAddForm({ student_id: "", class_id: "", type: "monthly", period_label: "", amount: "", discount: "", discount_reason: "", admin_notes: "", sessions_total: "" });
     load();
   };
 
@@ -173,31 +173,31 @@ export default function AdminPembayaran({ branchId }: { branchId: string }) {
     setOpenGenModal(false);
     setGenerating(true);
     try {
-      const { data: members, error: mErr } = await supabase
-        .from("members").select("id, member_classes(class:classes(id, price_monthly))")
+      const { data: students, error: mErr } = await supabase
+        .from("students").select("id, student_classes(class:classes(id, price_monthly))")
         .eq("branch_id", branchId).eq("status", "active").eq("type", "reguler");
-      if (mErr || !members) { toast.error("Failed to load students", mErr?.message); setGenerating(false); return; }
-      // Key existing bills by (member_id, class_id) — not member_id alone —
-      // so a member enrolled in more than one class still gets billed for
+      if (mErr || !students) { toast.error("Failed to load students", mErr?.message); setGenerating(false); return; }
+      // Key existing bills by (student_id, class_id) — not student_id alone —
+      // so a student enrolled in more than one class still gets billed for
       // every class, not just whichever one happened to be billed first.
-      const { data: existing } = await supabase.from("bills").select("member_id, class_id").eq("branch_id", branchId).eq("period_label", label);
-      const existingKeys = new Set((existing ?? []).map(b => `${b.member_id}:${b.class_id ?? ""}`));
+      const { data: existing } = await supabase.from("bills").select("student_id, class_id").eq("branch_id", branchId).eq("period_label", label);
+      const existingKeys = new Set((existing ?? []).map(b => `${b.student_id}:${b.class_id ?? ""}`));
       const rows: Database["public"]["Tables"]["bills"]["Insert"][] = [];
-      for (const m of members as unknown as { id: string; member_classes: { class: { id: string; price_monthly: number } | null }[] }[]) {
-        const classes = (m.member_classes ?? []).map(mc => mc.class).filter((c): c is { id: string; price_monthly: number } => !!c);
+      for (const m of students as unknown as { id: string; student_classes: { class: { id: string; price_monthly: number } | null }[] }[]) {
+        const classes = (m.student_classes ?? []).map(mc => mc.class).filter((c): c is { id: string; price_monthly: number } => !!c);
         if (classes.length === 0) continue;
         for (const cls of classes) {
           const key = `${m.id}:${cls.id}`;
           if (existingKeys.has(key)) continue;
-          rows.push({ member_id: m.id, branch_id: branchId, class_id: cls.id, type: "monthly" as Database["public"]["Enums"]["bill_type"], period_label: label, amount: cls.price_monthly ?? 0, discount: 0, status: "unpaid" as Database["public"]["Enums"]["payment_status"] });
+          rows.push({ student_id: m.id, branch_id: branchId, class_id: cls.id, type: "monthly" as Database["public"]["Enums"]["bill_type"], period_label: label, amount: cls.price_monthly ?? 0, discount: 0, status: "unpaid" as Database["public"]["Enums"]["payment_status"] });
         }
       }
       if (rows.length === 0) { toast.success("All regular students already have a bill for this period"); setGenerating(false); return; }
       const { error } = await supabase.from("bills").insert(rows);
       if (error) { toast.error("Failed to generate bills", error.message); setGenerating(false); return; }
-      // Notify all members
+      // Notify all students
       for (const row of rows) {
-        await supabase.from("notifications").insert({ user_id: row.member_id as string, title: "New bill", body: `A ${label} bill of ${fmtIDR(row.amount as number)} has been created.`, icon: "invoice", kind: "info" });
+        await supabase.from("notifications").insert({ user_id: row.student_id as string, title: "New bill", body: `A ${label} bill of ${fmtIDR(row.amount as number)} has been created.`, icon: "invoice", kind: "info" });
       }
       toast.success(`${rows.length} bills generated successfully`, `Period ${label}`);
       load();
@@ -249,7 +249,7 @@ export default function AdminPembayaran({ branchId }: { branchId: string }) {
               <tbody className="divide-y divide-line">
                 {displayBills.map((b) => (
                   <tr key={b.id} className="hover:bg-paper-tint">
-                    <td className="py-3.5 px-5 font-semibold"><NoTranslate>{b.member?.profile?.full_name ?? "—"}</NoTranslate></td>
+                    <td className="py-3.5 px-5 font-semibold"><NoTranslate>{b.student?.profile?.full_name ?? "—"}</NoTranslate></td>
                     <td className="text-ink-soft"><NoTranslate>{b.period_label}</NoTranslate></td>
                     <td className="text-ink-mute text-xs hidden sm:table-cell"><NoTranslate>{b.class?.name ?? "—"}</NoTranslate>{b.type === "session_pack" && b.sessions_total ? ` · ${`${b.sessions_used}/${b.sessions_total} sessions`}` : ""}</td>
                     <td className="text-right font-mono font-bold">
@@ -276,7 +276,7 @@ export default function AdminPembayaran({ branchId }: { branchId: string }) {
         {verifyTarget && (
           <div className="space-y-4">
             <Card className="!p-3 bg-paper-tint">
-              <div className="font-semibold text-ink text-sm"><NoTranslate>{verifyTarget.member?.profile?.full_name ?? "—"}</NoTranslate></div>
+              <div className="font-semibold text-ink text-sm"><NoTranslate>{verifyTarget.student?.profile?.full_name ?? "—"}</NoTranslate></div>
               <div className="text-xs text-ink-mute mt-0.5"><NoTranslate>{verifyTarget.period_label}</NoTranslate> · {fmtIDR(verifyTarget.total ?? verifyTarget.amount)}</div>
             </Card>
             <Field label={"Payment date"} required>
@@ -342,7 +342,7 @@ export default function AdminPembayaran({ branchId }: { branchId: string }) {
         {detailBill && (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-              <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{"Student"}</div><div className="font-semibold text-ink"><NoTranslate>{detailBill.member?.profile?.full_name ?? "—"}</NoTranslate></div></div>
+              <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{"Student"}</div><div className="font-semibold text-ink"><NoTranslate>{detailBill.student?.profile?.full_name ?? "—"}</NoTranslate></div></div>
               <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{"Period"}</div><div className="font-semibold text-ink"><NoTranslate>{detailBill.period_label}</NoTranslate></div></div>
               <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{"Amount"}</div><div className="font-mono font-semibold text-ink">{fmtIDR(detailBill.amount)}</div></div>
               <div><div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint">{"Discount"}</div><div className="font-mono font-semibold text-ink">{detailBill.discount > 0 ? fmtIDR(detailBill.discount) : "—"}</div></div>
@@ -378,13 +378,13 @@ export default function AdminPembayaran({ branchId }: { branchId: string }) {
             return (
               <>
                 <Field label={"Student"} required>
-                  <Select value={addForm.member_id} onChange={e => {
-                    const m = addMembers.find(x => x.id === e.target.value);
+                  <Select value={addForm.student_id} onChange={e => {
+                    const m = addStudents.find(x => x.id === e.target.value);
                     setSelectedPackage(null);
-                    setAddForm(f => ({ ...f, member_id: e.target.value, class_id: "", amount: "", sessions_total: "", type: m?.type === "private" ? "session_pack" : "monthly" }));
+                    setAddForm(f => ({ ...f, student_id: e.target.value, class_id: "", amount: "", sessions_total: "", type: m?.type === "private" ? "session_pack" : "monthly" }));
                   }}>
                     <option value="">{"— select student —"}</option>
-                    {addMembers.map(m => <option key={m.id} value={m.id} translate="no">{m.full_name} ({m.type})</option>)}
+                    {addStudents.map(m => <option key={m.id} value={m.id} translate="no">{m.full_name} ({m.type})</option>)}
                   </Select>
                 </Field>
                 <Field label={"Class"}>

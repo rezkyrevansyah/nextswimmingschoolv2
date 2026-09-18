@@ -36,7 +36,7 @@ Landing boleh `water-bg` / `caustics`. Panel jangan meniru.
 | OWN-05 | Schools | `schools` | `owner/schools` | logo/TTD kosong | panel §5 |
 | OWN-06 | Report Levels | `levels` | `owner/levels` | rubrik kosong | `03-alur/05-rapor-sekolah.md` |
 | OWN-07 | Classes | `classes` | `owner/classes` | tanpa paket sesi; tanpa privat | panel §7 |
-| OWN-08 | Private Students | `memberPrivate` | `owner/private-students` | form paket (harga+sesi), bukan tarif/pertemuan | FB-01…04; `03-alur/02-siswa.md` |
+| OWN-08 | Private Students | `studentPrivate` | `owner/private-students` | form paket (harga+sesi), bukan tarif/pertemuan | FB-01…04; `03-alur/02-siswa.md` |
 | OWN-09 | Coach Rates | `rates` | `owner/rates` | kelas tanpa tarif (tidak bisa diklaim) | US-08 |
 | OWN-10 | Competitions | `competitions` | `owner/competitions` | tab Awards bawaan; kosong | panel §10 |
 | OWN-10A | Awards | `competitions` | `owner/competitions` | pemilih siswa; saring cabang hanya Owner | panel §10A |
@@ -78,9 +78,9 @@ Satu set frame. Bedakan MC dengan anotasi `MC only` / `Admin if switch`.
 | ADM-03 | Coach | `coaches` | `admin/coaches` | sertifikat tertunda | panel |
 | ADM-04 | Class | `classes` | `admin/classes` | `class_packages` hanya di sini | F-KLS-02 |
 | ADM-05 | Class Activity | `activity` | `admin/class-activity` | libur, kalender pengganti | US-05 |
-| ADM-06 | Student | `members` | `admin/students` | reguler + afiliasi; jenjang wajib afiliasi | FB-08 |
+| ADM-06 | Student | `students` | `admin/students` | reguler + afiliasi; jenjang wajib afiliasi | FB-08 |
 | ADM-07 | Approvals | `approve` | `admin/approvals` | registrations + certifications; tanpa izin | US-01 |
-| ADM-08 | Private Students | `memberPrivate` | `admin/private-students` | sama konsep Owner privat | FB-01 |
+| ADM-08 | Private Students | `studentPrivate` | `admin/private-students` | sama konsep Owner privat | FB-01 |
 | ADM-09 | Announcements | `announce` | `admin/announcements` | sasaran peran | F-KMN-01 |
 | ADM-10 | Leave Requests | `izin` | `admin/leave` | pelatih / siswa / staf tanggal nanti | `03-alur/03` |
 | ADM-11 | Attendance | `absensi` | `admin/attendance` | rekap + manual; bukan honor | FB-05/06 |
@@ -130,7 +130,7 @@ Ponsel: Home, Absen, Honor, Profile. Tidak ada GPS. Tidak ada QR siswa.
 
 ---
 
-## Student — `/member` — `src/app/member/page.tsx`
+## Student — `/student` — `src/app/student/page.tsx`
 
 Gambar **tiga varian** tipe jika layout beda: `reguler` / `private` / `school_affiliate`.
 

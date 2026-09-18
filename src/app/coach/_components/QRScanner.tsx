@@ -6,8 +6,8 @@ import { useToast } from "@/components/providers/ToastProvider";
 import { createClient } from "@/utils/supabase/client";
 import {
   minutesAfterStart,
-  classifyMemberScan,
-  MEMBER_ATTENDANCE_CONFLICT,
+  classifyStudentScan,
+  STUDENT_ATTENDANCE_CONFLICT,
 } from "@/lib/attendance";
 import type { ClassRow } from "../_types";
 
@@ -26,49 +26,49 @@ export default function QRScanner({ coachId, classes, onClose }: {
   const todayName = new Date().toLocaleDateString("id-ID", { weekday: "long" });
 
   const markAttendance = async (qrCode: string) => {
-    // Lookup member by qr_code, join profile for suspend check
-    const { data: member, error: mErr } = await supabase
-      .from("members")
+    // Lookup student by qr_code, join profile for suspend check
+    const { data: student, error: mErr } = await supabase
+      .from("students")
       .select("id, status, suspend_until, profile:profiles(full_name)")
       .eq("qr_code", qrCode)
       .single();
 
-    if (mErr || !member) {
+    if (mErr || !student) {
       toast.error("QR not recognized", "Student not found");
       setTimeout(() => setLastScanned(null), 2000);
       return;
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const rawProfile = Array.isArray((member as any).profile) ? (member as any).profile[0] : (member as any).profile;
-    const typedMember = {
-      id: (member as any).id as string,
-      status: (member as any).status as string,
-      suspend_until: (member as any).suspend_until as string | null,
+    const rawProfile = Array.isArray((student as any).profile) ? (student as any).profile[0] : (student as any).profile;
+    const typedStudent = {
+      id: (student as any).id as string,
+      status: (student as any).status as string,
+      suspend_until: (student as any).suspend_until as string | null,
       profile: rawProfile as { full_name: string } | null,
     };
-    const name = typedMember.profile?.full_name ?? "Student";
+    const name = typedStudent.profile?.full_name ?? "Student";
 
-    // Block suspended members
+    // Block suspended students
     const today = new Date().toISOString().split("T")[0];
-    if (typedMember.status === "suspended" || (typedMember.suspend_until && typedMember.suspend_until >= today)) {
+    if (typedStudent.status === "suspended" || (typedStudent.suspend_until && typedStudent.suspend_until >= today)) {
       toast.error(`${name} is suspended`, "Student cannot be marked present while suspended");
       setTimeout(() => setLastScanned(null), 2500);
       return;
     }
 
-    // Which of THIS coach's classes the scanned member actually belongs to —
+    // Which of THIS coach's classes the scanned student actually belongs to —
     // not a single coach-wide "active class" guess (the old behavior), which
     // silently misattributed attendance whenever a coach has more than one
     // class the same day, and never worked for private students since it
     // never knew which class_id to consume a session against.
     const { data: mcRows } = await supabase
-      .from("member_classes")
+      .from("student_classes")
       .select("class_id")
-      .eq("member_id", typedMember.id)
+      .eq("student_id", typedStudent.id)
       .in("class_id", classes.map(c => c.id));
-    const memberClassIds = new Set((mcRows ?? []).map(r => r.class_id));
-    const candidates = classes.filter(c => memberClassIds.has(c.id));
+    const studentClassIds = new Set((mcRows ?? []).map(r => r.class_id));
+    const candidates = classes.filter(c => studentClassIds.has(c.id));
     const matchedClass = candidates.find(c => (c.schedule_days ?? []).includes(todayName)) ?? candidates[0];
 
     if (!matchedClass) {
@@ -77,10 +77,10 @@ export default function QRScanner({ coachId, classes, onClose }: {
       return;
     }
 
-    // Determine late status: member late if > 1 minute after class start
+    // Determine late status: student late if > 1 minute after class start
     const scanTime = new Date().toTimeString().slice(0, 8);
-    const memberLateMin = matchedClass.time_start ? minutesAfterStart(scanTime, matchedClass.time_start) : -999;
-    const memberStatus = classifyMemberScan(memberLateMin);
+    const studentLateMin = matchedClass.time_start ? minutesAfterStart(scanTime, matchedClass.time_start) : -999;
+    const studentStatus = classifyStudentScan(studentLateMin);
 
     if (matchedClass.class_type === "private") {
       // Attendance insert + remaining_sessions decrement + bill sync all
@@ -89,8 +89,8 @@ export default function QRScanner({ coachId, classes, onClose }: {
       // and remaining_sessions can never silently drift from attendance.
       const { data: result, error: recordErr } = await supabase
         .rpc("record_private_session_attendance", {
-          p_member_id: typedMember.id, p_class_id: matchedClass.id, p_session_date: today,
-          p_status: memberStatus, p_method: "qr", p_marked_by: coachId,
+          p_student_id: typedStudent.id, p_class_id: matchedClass.id, p_session_date: today,
+          p_status: studentStatus, p_method: "qr", p_marked_by: coachId,
         })
         .single();
       if (recordErr) {
@@ -109,7 +109,7 @@ export default function QRScanner({ coachId, classes, onClose }: {
       }
       if (out_bill_id && out_bill_sessions_total != null && out_bill_sessions_used != null && (out_bill_sessions_total - out_bill_sessions_used) <= 1) {
         await supabase.from("notifications").insert({
-          user_id: typedMember.id,
+          user_id: typedStudent.id,
           title: "Sessions almost up",
           body: `You have ${out_bill_sessions_total - out_bill_sessions_used} session(s) left in your package. Contact admin to renew your package.`,
           icon: "warning",
@@ -121,19 +121,19 @@ export default function QRScanner({ coachId, classes, onClose }: {
       return;
     }
 
-    const { error } = await supabase.from("member_attendances").upsert({
-      member_id: typedMember.id,
+    const { error } = await supabase.from("student_attendances").upsert({
+      student_id: typedStudent.id,
       class_id: matchedClass.id,
       session_date: today,
-      status: memberStatus,
+      status: studentStatus,
       method: "qr",
       marked_by: coachId,
-    }, { onConflict: MEMBER_ATTENDANCE_CONFLICT });
+    }, { onConflict: STUDENT_ATTENDANCE_CONFLICT });
 
     if (error) {
       toast.error(`Failed to mark attendance for ${name}`, error.message);
-    } else if (memberStatus === "telat") {
-      toast.error(`${name} present — Late`, `${memberLateMin} minutes after class started`);
+    } else if (studentStatus === "telat") {
+      toast.error(`${name} present — Late`, `${studentLateMin} minutes after class started`);
     } else {
       toast.success(`✓ ${name} present`, "Attendance recorded");
     }

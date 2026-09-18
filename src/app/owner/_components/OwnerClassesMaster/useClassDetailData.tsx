@@ -5,7 +5,7 @@ import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
 import { NoTranslate } from "@/components/ui/NoTranslate";
 import type {
-  ClassRow, CoachProfile, ClassCoachDetail, ClassMemberDetail, CoachAttendanceDetail, MemberAttendanceDetail, DetailTab,
+  ClassRow, CoachProfile, ClassCoachDetail, ClassStudentDetail, CoachAttendanceDetail, StudentAttendanceDetail, DetailTab,
 } from "./_types";
 
 export function useClassDetailData({
@@ -21,9 +21,9 @@ export function useClassDetailData({
   const [detailClass, setDetailClass] = useState<ClassRow | null>(null);
   const [detailTab, setDetailTab] = useState<DetailTab>("info");
   const [detailCoaches, setDetailCoaches] = useState<ClassCoachDetail[]>([]);
-  const [detailMembers, setDetailMembers] = useState<ClassMemberDetail[]>([]);
+  const [detailStudents, setDetailStudents] = useState<ClassStudentDetail[]>([]);
   const [detailCoachAtt, setDetailCoachAtt] = useState<CoachAttendanceDetail[]>([]);
-  const [detailMemberAtt, setDetailMemberAtt] = useState<MemberAttendanceDetail[]>([]);
+  const [detailStudentAtt, setDetailStudentAtt] = useState<StudentAttendanceDetail[]>([]);
   const [detailLoading, setDetailLoading] = useState(false);
   const [settingRole, setSettingRole] = useState<string | null>(null);
   const [savingSigner, setSavingSigner] = useState(false);
@@ -54,20 +54,20 @@ export function useClassDetailData({
           setDetailCoaches(list);
         }
         if (error) toast.error("Error loading coaches", error.message);
-      } else if (tab === "member") {
+      } else if (tab === "student") {
         const { data, error } = await supabase
-          .from("member_classes")
+          .from("student_classes")
           .select(
-            "joined_at, member:members!member_classes_member_id_fkey(id, member_no, status, total_sessions, remaining_sessions, profile:profiles!members_profile_id_fkey(id, full_name, phone, avatar_url, is_archived))"
+            "joined_at, student:students!student_classes_student_id_fkey(id, student_no, status, total_sessions, remaining_sessions, profile:profiles!students_profile_id_fkey(id, full_name, phone, avatar_url, is_archived))"
           )
           .eq("class_id", classId);
         if (data) {
           const list = (
             data as unknown as {
               joined_at?: string;
-              member: {
+              student: {
                 id: string;
-                member_no: string | null;
+                student_no: string | null;
                 status: string;
                 total_sessions: number | null;
                 remaining_sessions: number | null;
@@ -75,19 +75,19 @@ export function useClassDetailData({
               } | null;
             }[]
           )
-            .filter((r) => !!r.member && !!r.member.profile)
+            .filter((r) => !!r.student && !!r.student.profile)
             .map((r) => ({
-              id: r.member!.id,
-              member_no: r.member!.member_no,
-              status: r.member!.status,
-              total_sessions: r.member!.total_sessions,
-              remaining_sessions: r.member!.remaining_sessions,
-              full_name: r.member!.profile?.full_name ?? "—",
-              phone: r.member!.profile?.phone ?? null,
-              avatar_url: r.member!.profile?.avatar_url ?? null,
+              id: r.student!.id,
+              student_no: r.student!.student_no,
+              status: r.student!.status,
+              total_sessions: r.student!.total_sessions,
+              remaining_sessions: r.student!.remaining_sessions,
+              full_name: r.student!.profile?.full_name ?? "—",
+              phone: r.student!.profile?.phone ?? null,
+              avatar_url: r.student!.profile?.avatar_url ?? null,
               joined_at: r.joined_at,
             }));
-          setDetailMembers(list);
+          setDetailStudents(list);
         }
         if (error) toast.error("Error loading students", error.message);
       } else if (tab === "att_coach") {
@@ -101,16 +101,16 @@ export function useClassDetailData({
           .limit(100);
         if (data) setDetailCoachAtt(data as unknown as CoachAttendanceDetail[]);
         if (error) toast.error("Error loading coach attendances", error.message);
-      } else if (tab === "att_member") {
+      } else if (tab === "att_student") {
         const { data, error } = await supabase
-          .from("member_attendances")
+          .from("student_attendances")
           .select(
-            "id, session_date, status, method, created_at, member:members!member_attendances_member_id_fkey(id, member_no, profile:profiles!members_profile_id_fkey(full_name))"
+            "id, session_date, status, method, created_at, student:students!student_attendances_student_id_fkey(id, student_no, profile:profiles!students_profile_id_fkey(full_name))"
           )
           .eq("class_id", classId)
           .order("session_date", { ascending: false })
           .limit(100);
-        if (data) setDetailMemberAtt(data as unknown as MemberAttendanceDetail[]);
+        if (data) setDetailStudentAtt(data as unknown as StudentAttendanceDetail[]);
         if (error) toast.error("Error loading student attendances", error.message);
       }
       setDetailLoading(false);
@@ -122,9 +122,9 @@ export function useClassDetailData({
     setDetailClass(c);
     setDetailTab("info");
     setDetailCoaches([]);
-    setDetailMembers([]);
+    setDetailStudents([]);
     setDetailCoachAtt([]);
-    setDetailMemberAtt([]);
+    setDetailStudentAtt([]);
     setAddCoachId("");
   };
 
@@ -203,7 +203,7 @@ export function useClassDetailData({
   );
 
   return {
-    detailClass, setDetailClass, detailTab, detailCoaches, detailMembers, detailCoachAtt, detailMemberAtt,
+    detailClass, setDetailClass, detailTab, detailCoaches, detailStudents, detailCoachAtt, detailStudentAtt,
     detailLoading, settingRole, savingSigner, addCoachId, setAddCoachId, addingCoach,
     openDetail, switchDetailTab, setCoachRole, assignCoachToClass, removeCoachFromClass, setRaporSigner,
     availableCoachesForDetail,

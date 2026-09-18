@@ -6,11 +6,11 @@ import { Input, Select } from "@/components/ui/FormFields";
 import { Card } from "@/components/ui/Card";
 import Status from "@/components/ui/Status";
 import { NoTranslate } from "@/components/ui/NoTranslate";
-import type { MemberAttendanceRow } from "../../_types";
+import type { StudentAttendanceRow } from "../../_types";
 import { fmtDate } from "@/lib/utils";
-import { memberStatusKind, memberDbToUi } from "@/lib/attendance";
+import { studentStatusKind, studentDbToUi } from "@/lib/attendance";
 
-export default function AdminAbsensiMember({ branchId }: { branchId: string }) {
+export default function AdminAbsensiStudent({ branchId }: { branchId: string }) {
   const supabase = createClient();
   const localeTag = "en-US";
   const PAGE_SIZE = 30;
@@ -18,7 +18,7 @@ export default function AdminAbsensiMember({ branchId }: { branchId: string }) {
   const today = new Date().toISOString().split("T")[0];
   const defaultMonth = today.slice(0, 7);
 
-  const [records, setRecords] = useState<MemberAttendanceRow[]>([]);
+  const [records, setRecords] = useState<StudentAttendanceRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [page, setPage] = useState(0);
@@ -50,7 +50,7 @@ export default function AdminAbsensiMember({ branchId }: { branchId: string }) {
     const dateTo = new Date(Number(filterMonth.slice(0, 4)), Number(filterMonth.slice(5, 7)), 0)
       .toISOString().split("T")[0];
 
-    // member_attendances has no branch_id — scope via class_id
+    // student_attendances has no branch_id — scope via class_id
     let classIds: string[] = [];
     if (filterClass === "all") {
       const { data: cls } = await supabase.from("classes").select("id").eq("branch_id", branchId);
@@ -61,8 +61,8 @@ export default function AdminAbsensiMember({ branchId }: { branchId: string }) {
 
     if (classIds.length === 0) { setRecords([]); setHasMore(false); setLoading(false); return; }
 
-    let q = supabase.from("member_attendances")
-      .select("id, member_id, class_id, session_date, status, method, member:members(profile:profiles(full_name)), class:classes(name)")
+    let q = supabase.from("student_attendances")
+      .select("id, student_id, class_id, session_date, status, method, student:students(profile:profiles(full_name)), class:classes(name)")
       .in("class_id", classIds)
       .gte("session_date", dateFrom)
       .lte("session_date", dateTo)
@@ -73,11 +73,11 @@ export default function AdminAbsensiMember({ branchId }: { branchId: string }) {
     if (filterStatus !== "all") q = q.eq("status", filterStatus as "hadir" | "telat" | "izin" | "sakit" | "tidak_hadir");
 
     const { data } = await q;
-    const rows = (data ?? []) as unknown as MemberAttendanceRow[];
+    const rows = (data ?? []) as unknown as StudentAttendanceRow[];
 
     // Client-side name filter
     const filtered = filterName.trim()
-      ? rows.filter(r => r.member?.profile?.full_name?.toLowerCase().includes(filterName.trim().toLowerCase()))
+      ? rows.filter(r => r.student?.profile?.full_name?.toLowerCase().includes(filterName.trim().toLowerCase()))
       : rows;
 
     if (append) {
@@ -93,11 +93,11 @@ export default function AdminAbsensiMember({ branchId }: { branchId: string }) {
   useEffect(() => {
     setPage(0);
     loadRecords(0, false);
-    // Realtime: any change to member attendance → refresh (mirrors AdminDashboard.tsx's
+    // Realtime: any change to student attendance → refresh (mirrors AdminDashboard.tsx's
     // live_att channel). Merged into this effect so the channel is torn down and
     // recreated whenever loadRecords' own deps change, avoiding a stale closure.
-    const channel = supabase.channel(`live_member_att:${branchId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "member_attendances" }, () => loadRecords(0, false))
+    const channel = supabase.channel(`live_student_att:${branchId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "student_attendances" }, () => loadRecords(0, false))
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [loadRecords]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -151,12 +151,12 @@ export default function AdminAbsensiMember({ branchId }: { branchId: string }) {
                   {records.map(r => (
                     <tr key={r.id} className="hover:bg-paper-tint">
                       <td className="py-3 px-5 font-mono whitespace-nowrap text-ink-soft">{fmtDate(r.session_date)}</td>
-                      <td className="py-3 font-semibold text-ink"><NoTranslate>{r.member?.profile?.full_name ?? "—"}</NoTranslate></td>
+                      <td className="py-3 font-semibold text-ink"><NoTranslate>{r.student?.profile?.full_name ?? "—"}</NoTranslate></td>
                       <td className="py-3 text-ink-soft"><NoTranslate>{r.class?.name ?? "—"}</NoTranslate></td>
                       <td className="py-3">
                         {(() => {
-                          const ui = memberDbToUi(r.status);
-                          const kind = memberStatusKind(r.status);
+                          const ui = studentDbToUi(r.status);
+                          const kind = studentStatusKind(r.status);
                           const label = ui === "present" ? "Present"
                             : ui === "late" ? "Late"
                             : ui === "izin" ? "Excused"

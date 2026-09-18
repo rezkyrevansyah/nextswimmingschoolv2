@@ -2,10 +2,10 @@
 import type { Invoice } from "../../_types";
 
 export interface OwnerFinancialBill {
-  id: string; branch_id: string; member_id: string; period_label: string;
+  id: string; branch_id: string; student_id: string; period_label: string;
   amount: number; discount: number; total: number; status: string; type: string;
   paid_at: string | null; paid_method: string | null; created_at: string;
-  member?: { profile: { full_name: string } | null } | null;
+  student?: { profile: { full_name: string } | null } | null;
   class?: { name: string } | null;
   branch?: { name: string } | null;
 }

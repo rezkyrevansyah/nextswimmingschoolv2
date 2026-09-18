@@ -6,7 +6,7 @@ import type { PrintBestTime, PrintCriterion } from "@/lib/printRapor";
 import { resolveRaporSigner, type SchoolForSignerConfig } from "@/lib/rapor";
 import type { CoachReviewSlot, RaporEntryFull } from "./_types";
 
-export function useMemberRaporData({ memberId, branchId }: { memberId: string; branchId: string }) {
+export function useStudentRaporData({ studentId, branchId }: { studentId: string; branchId: string }) {
   const supabase = createClient();
   const toast = useToast();
   const [raporTab, setRaporTab] = useState<"rapor" | "review">("rapor");
@@ -21,17 +21,17 @@ export function useMemberRaporData({ memberId, branchId }: { memberId: string; b
   const [competitionsHistory, setCompetitionsHistory] = useState<any[]>([]);
 
   const load = useCallback(async () => {
-    if (!memberId) return;
+    if (!studentId) return;
 
     // Load owner settings
     supabase.from("owner_settings").select("*").eq("id", "default").maybeSingle().then(({ data: os }) => {
       if (os) setOwnerSettings(os);
     });
 
-    // Load school info if member belongs to a school
-    supabase.from("members")
+    // Load school info if student belongs to a school
+    supabase.from("students")
       .select("school:schools(id, name, logo_url, show_coach_sig, show_head_sig, show_school_sig, coach_sig_title, head_sig_title, school_signatures(name, title, image_url, is_active))")
-      .eq("id", memberId)
+      .eq("id", studentId)
       .single()
       .then(({ data: mem }) => {
         if (mem?.school) {
@@ -42,22 +42,22 @@ export function useMemberRaporData({ memberId, branchId }: { memberId: string; b
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data } = await (supabase as any).from("rapor_entries")
       .select("id, scores, notes, personality, motivation, learning_achievements, level, level_id, coach_id, period_id, class_id, rapor_periods(label, is_open), classes(name, rapor_signer_coach_id, class_coaches(coach_id, role, profile:profiles(full_name, signature_url))), coach:profiles!rapor_entries_coach_id_fkey(full_name, signature_url), rapor_levels(rapor_level_criteria(id, label, kind, options, sort_order))")
-      .eq("member_id", memberId)
+      .eq("student_id", studentId)
       .order("created_at", { ascending: false }) as { data: any[] | null };
     if (!data) return;
 
     // Load existing reviews (keyed by rapor_id + coach_id, since a class can have multiple coaches)
     const entryIds = data.map((e: any) => e.id);
     const { data: reviews } = entryIds.length
-      ? await supabase.from("member_reviews").select("id, rapor_id, coach_id, stars, message").in("rapor_id", entryIds).eq("member_id", memberId)
+      ? await supabase.from("student_reviews").select("id, rapor_id, coach_id, stars, message").in("rapor_id", entryIds).eq("student_id", studentId)
       : { data: [] };
     const reviewMap = new Map((reviews ?? []).map((r) => [`${r.rapor_id}:${r.coach_id}`, r]));
 
-    // Load best times for this member
+    // Load best times for this student
     const { data: btRows } = await supabase
-      .from("member_best_times")
+      .from("student_best_times")
       .select("stroke, distance, time_seconds")
-      .eq("member_id", memberId)
+      .eq("student_id", studentId)
       .eq("branch_id", branchId);
     const bestTimesArr: PrintBestTime[] = (btRows ?? []).map(r => ({
       stroke: (r as { stroke: string }).stroke,
@@ -65,14 +65,14 @@ export function useMemberRaporData({ memberId, branchId }: { memberId: string; b
       time_seconds: (r as { time_seconds: number }).time_seconds,
     }));
 
-    // Load competition achievements for this member
+    // Load competition achievements for this student
     const { data: compRows } = await supabase
       .from("competition_participations")
       .select(`
         id, category, age_group, time_formatted, time_seconds, rank, award, custom_award_label, certificate_url, notes,
         competition:competitions(name, start_date, location, organizer)
       `)
-      .eq("member_id", memberId)
+      .eq("student_id", studentId)
       .order("created_at", { ascending: false });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     setCompetitionsHistory((compRows as any[]) ?? []);
@@ -137,7 +137,7 @@ export function useMemberRaporData({ memberId, branchId }: { memberId: string; b
         coach_signature_url: signer?.signature_url ?? null,
       };
     }));
-  }, [memberId, branchId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [studentId, branchId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* eslint-disable react-hooks/set-state-in-effect -- async data loader */
   useEffect(() => { load(); }, [load]);
@@ -168,9 +168,9 @@ export function useMemberRaporData({ memberId, branchId }: { memberId: string; b
     setSavingSlot(key);
     const trimmedMsg = (draft.text ?? "").slice(0, 300);
     if (slot.review_id) {
-      await supabase.from("member_reviews").update({ stars: draft.stars, message: trimmedMsg }).eq("id", slot.review_id);
+      await supabase.from("student_reviews").update({ stars: draft.stars, message: trimmedMsg }).eq("id", slot.review_id);
     } else {
-      await supabase.from("member_reviews").insert({ rapor_id: entry.id, member_id: memberId, coach_id: slot.coach_id, stars: draft.stars, message: trimmedMsg });
+      await supabase.from("student_reviews").insert({ rapor_id: entry.id, student_id: studentId, coach_id: slot.coach_id, stars: draft.stars, message: trimmedMsg });
     }
     setSavingSlot(null);
     await load();

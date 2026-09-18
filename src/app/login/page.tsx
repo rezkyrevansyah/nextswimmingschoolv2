@@ -49,7 +49,7 @@ function LoginForm() {
 
     const role = data.user?.user_metadata?.role as string | undefined;
     const destination = roleHomePath(role);
-    toast.success("Login berhasil", `Mengarahkan ke halaman ${role ?? "member"}…`);
+    toast.success("Login berhasil", `Mengarahkan ke halaman ${role ?? "student"}…`);
     router.push(destination);
   };
 
@@ -176,7 +176,7 @@ function LoginForm() {
           <div className="text-sm text-ink-soft leading-relaxed">
             Reset password dilakukan langsung oleh admin cabang Anda untuk menjaga keamanan akun.
             <br /><br />
-            Klik tombol di bawah untuk menghubungi admin cabang via WhatsApp. Admin akan memberikan password baru yang langsung aktif begitu Anda masuk.
+            Klik tombol di bawah untuk menghubungi admin cabang via WhatsApp. Admin akan studentikan password baru yang langsung aktif begitu Anda masuk.
           </div>
         </div>
       </Modal>

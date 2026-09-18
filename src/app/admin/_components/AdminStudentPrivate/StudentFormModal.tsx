@@ -9,16 +9,16 @@ import DatePicker from "@/components/ui/DatePicker";
 import TimePicker from "@/components/ui/TimePicker";
 import { NoTranslate } from "@/components/ui/NoTranslate";
 import { DAY_OPTS } from "./_types";
-import type { useMemberPrivateData } from "./useMemberPrivateData";
+import type { useStudentPrivateData } from "./useStudentPrivateData";
 
 function MapLoading() {
   return <div className="rounded-xl border border-line bg-paper-tint h-[220px] flex items-center justify-center text-ink-mute text-sm">{"Loading map…"}</div>;
 }
 const MapPicker = dynamic(() => import("@/components/ui/MapPicker"), { ssr: false, loading: MapLoading });
 
-type MemberPrivateDataHook = ReturnType<typeof useMemberPrivateData>;
+type StudentPrivateDataHook = ReturnType<typeof useStudentPrivateData>;
 
-export default function StudentFormModal({ hook }: { hook: MemberPrivateDataHook }) {
+export default function StudentFormModal({ hook }: { hook: StudentPrivateDataHook }) {
   const {
     branchId, branches, openForm, setOpenForm, editTarget, form, setForm, saving, saveStudent,
     selectedBranchName, toggleDay, editClassId, editClassCoaches, coachesForBranch,

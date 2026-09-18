@@ -1,8 +1,8 @@
 # Student Panel — Konsep terkunci
 
 > Status: konsep panel terkunci. Niat produk: `docs/01-prd.md`. Umpan balik: `docs/02-umpan-balik.md`.
-> Peran `member` (bahasa produk: **Student**). Utama untuk ponsel. Tiga tipe: `reguler` · `private` · `school_affiliate`.
-> Sumber perilaku yang sudah ada: `src/app/member/page.tsx`.
+> Peran `student` (bahasa produk: **Student**). Utama untuk ponsel. Tiga tipe: `reguler` · `private` · `school_affiliate`.
+> Sumber perilaku yang sudah ada: `src/app/student/page.tsx`.
 > Tiga tipe siswa dan pintu create: `docs/03-alur/02-siswa.md`.
 
 ## Cara baca
@@ -26,7 +26,7 @@ Siswa tidak membuat kelas atau tagihan. Yang dibuat siswa: unggah foto (gerbang)
 | `private` | Admin atau Owner **Private Students** saja | Bukan generate bulanan; paket sesi | Satu kelas `class_type=private` |
 | `school_affiliate` | Admin **Student** (sekolah plus jenjang wajib) | Tab **Bills** **disembunyikan**; biasanya `school_covered` | Kelas reguler |
 
-- Satu pusat (`members.branch_id` atau metadata).
+- Satu pusat (`students.branch_id` atau metadata).
 - **Gerbang foto:** jika `is_profile_complete` belum true **dan** belum ada `avatar_url` → wajib unggah foto. Cukup salah satu (avatar atau lengkap) untuk membuka panel.
 - **Penangguhan** (`suspend_until`): spanduk plus hitung mundur. Tab **tidak** dikunci (beda pelatih). Pemindaian QR pelatih menolak siswa yang ditangguhkan.
 - Student **tidak** mencatat hadir sendiri. Hadir = pelatih memindai QR atau absensi manual. Izin = diajukan, Admin menyetujui (FB-05).
@@ -36,7 +36,7 @@ Siswa tidak membuat kelas atau tagihan. Yang dibuat siswa: unggah foto (gerbang)
 | Tipe | Yang ditonjolkan | Yang disembunyikan |
 |---|---|---|
 | Reguler | Jadwal, tagihan, izin | Sisa sesi paket privat |
-| Privat | Sisa sesi dari `members.remaining_sessions`, jadwal lentur, peringatan sisa ≤ 1 | Generate tagihan bulanan |
+| Privat | Sisa sesi dari `students.remaining_sessions`, jadwal lentur, peringatan sisa ≤ 1 | Generate tagihan bulanan |
 | Afiliasi | Jadwal, rapor, izin | Tab **Bills**; kartu tagihan `unpaid` di Home |
 
 ## Susunan menu terkunci
@@ -85,11 +85,11 @@ Memilih foto, mengunggah avatar (dikompres), lanjut ke panel, keluar. Mengunggah
 **Yang dapat dilakukan:**
 
 - jumlah hadir bulan ini (`hadir`);
-- reguler atau afiliasi: jumlah kelas aktif. Privat: sisa sesi dari `members.remaining_sessions` (FB-04);
+- reguler atau afiliasi: jumlah kelas aktif. Privat: sisa sesi dari `students.remaining_sessions` (FB-04);
 - reguler dan privat: kartu tagihan `unpaid` terbaru → **Bills** atau WhatsApp Admin;
 - **afiliasi: kartu tagihan `unpaid` tidak tampil**, meskipun ada baris `unpaid` di basis data;
 - privat sisa ≤ 1: peringatan perpanjang paket plus WhatsApp;
-- pengumuman (Admin, peran `member`, semua kelas atau kelas siswa);
+- pengumuman (Admin, peran `student`, semua kelas atau kelas siswa);
 - empat sesi terdekat; lencana izin jika tanggal jatuh pada izin `approved`.
 
 Sisa sesi privat **dilarang** dihitung dari `bills.sessions_used` atau dari jumlah baris di antarmuka. Sumber = kolom setelah pengurang peladen yang sama dengan absensi privat yang sah.
@@ -143,7 +143,7 @@ Tipe pengajuan **bukan** status absensi. Setelah Admin menyetujui, hasil rekaman
 **Yang dapat dilakukan:**
 
 - tab aktif: `unpaid` / `partial` — nominal, diskon, total, rekening pusat (Owner **Centers**), nomor WhatsApp Admin (**Settings** atau **Centers**);
-- paket sesi privat: sisa dari `members.remaining_sessions` (bukan `bills.sessions_used`);
+- paket sesi privat: sisa dari `students.remaining_sessions` (bukan `bills.sessions_used`);
 - tombol WhatsApp ke Admin (pesan berisi periode dan nama) — ini **bukan** WA laporkan kutu;
 - tab riwayat: `paid` plus tanggal verifikasi plus metode;
 - muat ulang otomatis saat Admin mengubah tagihan.
@@ -220,7 +220,7 @@ Tidak ada formulir unggah bukti. Admin yang dapat mengunggah bukti saat menandai
 |---|---|
 | Desktop: Home, Schedule, Attendance, Bills, Leave, Report Card, Profile | Leave sebelum Bills |
 | Afiliasi: tab Bills disembunyikan, tetapi kartu `unpaid` di Home masih bisa tampil | Kartu tagihan Home juga disembunyikan |
-| Sisa sesi kadang bisa salah sumber | Hanya `members.remaining_sessions` setelah pengurang peladen |
+| Sisa sesi kadang bisa salah sumber | Hanya `students.remaining_sessions` setelah pengurang peladen |
 | WA laporkan kutu sudah dihapus | Tetap terhapus; jangan dihidupkan |
 | Absent siswa tidak dijelaskan sumbernya | Absent hanya setelah pelatih kunci roster |
 | Riwayat perlombaan dan medali tampil sebagai kartu di **Home** | Riwayat kompetisi tetap di tab **Report Card**. Home tidak menampilkannya |

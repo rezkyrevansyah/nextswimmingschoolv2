@@ -2,10 +2,10 @@
 import Btn from "@/components/ui/Btn";
 import { NoTranslate } from "@/components/ui/NoTranslate";
 import { fmtDate } from "@/lib/utils";
-import type { AdminMemberHook } from "./_hook";
+import type { AdminStudentHook } from "./_hook";
 import { genderLabel } from "./_utils";
 
-export default function MemberInfoTab({ hook }: { hook: AdminMemberHook }) {
+export default function StudentInfoTab({ hook }: { hook: AdminStudentHook }) {
   const { detail, regProofUrl } = hook;
   if (!detail) return null;
   const p = detail.profile;
@@ -39,8 +39,8 @@ export default function MemberInfoTab({ hook }: { hook: AdminMemberHook }) {
       <div className="pt-3 border-t border-line">
         <div className="text-[10px] uppercase tracking-widest font-bold text-ink-faint mb-2">{"Classes Joined"}</div>
         <div className="flex flex-wrap gap-1.5">
-          {detail.member_classes?.map((mc, i) => mc.class && <span key={i} className="px-2 py-1 rounded-lg bg-ocean-50 text-ocean-700 text-xs font-semibold"><NoTranslate>{mc.class.name}</NoTranslate></span>)}
-          {(detail.member_classes?.length ?? 0) === 0 && <span className="text-xs text-warn-600 font-semibold">{"Not assigned to a class yet"}</span>}
+          {detail.student_classes?.map((mc, i) => mc.class && <span key={i} className="px-2 py-1 rounded-lg bg-ocean-50 text-ocean-700 text-xs font-semibold"><NoTranslate>{mc.class.name}</NoTranslate></span>)}
+          {(detail.student_classes?.length ?? 0) === 0 && <span className="text-xs text-warn-600 font-semibold">{"Not assigned to a class yet"}</span>}
         </div>
       </div>
       <div className="pt-3 border-t border-line">

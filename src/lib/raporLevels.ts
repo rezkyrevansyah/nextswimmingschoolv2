@@ -92,7 +92,7 @@ export function buildBestTimeMatrix(
 /**
  * Recorded best times that don't match any current (stroke, distance) pair
  * in the level's live template — e.g. the level's strokes/distances were
- * edited after this member's time was recorded. Surfaced separately so
+ * edited after this student's time was recorded. Surfaced separately so
  * historical data is never silently dropped from view.
  */
 export function findUnmatchedRecordedTimes(

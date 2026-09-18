@@ -236,7 +236,7 @@ export async function saveManualStaff(
 ): Promise<boolean> {
   const { supabase, toast, branches, genPeriod, genNotes, manualDescription, effectiveTaxForMode, currentGross, includedLoanTotal, userId, userName } = ctx;
   if (!extra.manualStaffId) {
-    toast.error("Please select a staff member first");
+    toast.error("Please select a staff student first");
     return false;
   }
   const staff = extra.staffList.find((s) => s.id === extra.manualStaffId);

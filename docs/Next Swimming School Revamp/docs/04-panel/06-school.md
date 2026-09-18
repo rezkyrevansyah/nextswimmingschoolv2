@@ -24,7 +24,7 @@ Sekolah tidak membuat siswa atau rapor. Menu hanya membaca apa yang sudah dicrea
 
 Yang **boleh** dilakukan:
 
-- melihat daftar siswa yang `members.school_id` sama dengan sekolah ini;
+- melihat daftar siswa yang `students.school_id` sama dengan sekolah ini;
 - melihat rapor **periode yang sedang dibuka** Admin;
 - mengunduh PDF atau ZIP rapor yang sudah dikunci pelatih;
 - melihat dan mengekspor rekap kehadiran siswa tersebut.
@@ -89,7 +89,7 @@ Jangan menambah tab.
 
 Jenjang sekolah ≠ nama kelas les. Jangan meniadakan jenjang di tabel hanya karena sudah ada di Excel.
 
-Daftar = semua `members` dengan `school_id` sekolah ini, plus kelas (`member_classes`) dan pelatih penandatangan (`rapor_signer_coach_id`; jika kosong memakai pelatih kepala kelas).
+Daftar = semua `students` dengan `school_id` sekolah ini, plus kelas (`student_classes`) dan pelatih penandatangan (`rapor_signer_coach_id`; jika kosong memakai pelatih kepala kelas).
 
 **Dampak ke peran lain:** Admin **Student** (tipe `school_affiliate`, `school_id`, `school_grade` wajib); Admin atau Owner **Classes** (nama kelas dan penandatangan); pelatih mengunci entri mengubah status menjadi lengkap.
 

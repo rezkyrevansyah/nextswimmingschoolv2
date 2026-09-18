@@ -81,7 +81,7 @@ export default function ClassFormModal({ hook }: { hook: ClassDataHook }) {
         </Field>
 
         {/* Private classes are no longer created here — see the dedicated
-            "Member Private" menu, which creates the member and its class
+            "Student Private" menu, which creates the student and its class
             slot together and keeps the 1:1 relationship intact. This
             screen now only ever creates regular (shared) classes. */}
         {isPrivate && (

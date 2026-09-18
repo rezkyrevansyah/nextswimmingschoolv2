@@ -48,7 +48,7 @@ export function useAccountsMasterData(branches: { id: string; name: string }[]) 
     let q = supabase
       .from("profiles")
       .select(
-        "id, full_name, email, phone, role, custom_role_label, branch_id, avatar_url, birth_date, gender, address, bank_name, bank_account, bank_holder, user_no, qr_code, is_archived, created_at, specialization, bio, branch:branches(id, name), members:members!members_profile_id_fkey(id, member_no, qr_code, type, status, remaining_sessions, total_sessions, school_id, date_start)"
+        "id, full_name, email, phone, role, custom_role_label, branch_id, avatar_url, birth_date, gender, address, bank_name, bank_account, bank_holder, user_no, qr_code, is_archived, created_at, specialization, bio, branch:branches(id, name), students:students!students_profile_id_fkey(id, student_no, qr_code, type, status, remaining_sessions, total_sessions, school_id, date_start)"
       )
       .order("full_name");
     if (roleFilter !== "all") q = q.eq("role", roleFilter);
@@ -78,11 +78,11 @@ export function useAccountsMasterData(branches: { id: string; name: string }[]) 
       admin: "Branch Admin",
       manager_center: "Manager Center",
       coach: "Coach",
-      member: "Student",
+      student: "Student",
       school: "School Partner",
       staff: "Branch Staff",
     })[role] ?? role;
-  const KNOWN_ROLES = ["owner", "admin", "manager_center", "coach", "member", "school", "staff"];
+  const KNOWN_ROLES = ["owner", "admin", "manager_center", "coach", "student", "school", "staff"];
   const isKnownRole = (role: string) => KNOWN_ROLES.includes(role);
 
   const filtered = useMemo(() => {
@@ -96,14 +96,14 @@ export function useAccountsMasterData(branches: { id: string; name: string }[]) 
         const roleMatch = roleLabel(a.role).toLowerCase().includes(s);
         const branchMatch = (a.branch?.name ?? "").toLowerCase().includes(s);
         const userNoMatch = (a.user_no ?? "").toLowerCase().includes(s);
-        const memberNoMatch = (a.members && a.members[0]?.member_no?.toLowerCase().includes(s)) || false;
-        return nameMatch || emailMatch || roleMatch || branchMatch || userNoMatch || memberNoMatch;
+        const studentNoMatch = (a.students && a.students[0]?.student_no?.toLowerCase().includes(s)) || false;
+        return nameMatch || emailMatch || roleMatch || branchMatch || userNoMatch || studentNoMatch;
       });
   }, [accounts, showArchived, search]);
 
   // Map account to QRCardAccount format
   const toQRCardAccount = (a: AccountProfile): QRCardAccount => {
-    const m = a.members && a.members[0];
+    const m = a.students && a.students[0];
     return {
       id: a.id,
       full_name: a.full_name,
@@ -111,9 +111,9 @@ export function useAccountsMasterData(branches: { id: string; name: string }[]) 
       role: a.role,
       custom_role_label: a.custom_role_label,
       user_no: a.user_no,
-      member_no: m?.member_no,
-      member_type: m?.type,
-      qr_code: m?.qr_code || a.qr_code || m?.member_no || a.user_no || a.id,
+      student_no: m?.student_no,
+      student_type: m?.type,
+      qr_code: m?.qr_code || a.qr_code || m?.student_no || a.user_no || a.id,
       branch: a.branch,
       phone: a.phone,
     };
@@ -261,11 +261,11 @@ export function useAccountsMasterData(branches: { id: string; name: string }[]) 
               bank_holder: form.bank_holder.trim() || undefined,
             }
           : {}),
-        ...(form.role === "member"
+        ...(form.role === "student"
           ? {
-              member_type: form.member_type,
-              school_id: form.member_type === "school_affiliate" ? form.school_id || undefined : undefined,
-              school_grade: form.member_type === "school_affiliate" ? form.school_grade.trim() || undefined : undefined,
+              student_type: form.student_type,
+              school_id: form.student_type === "school_affiliate" ? form.school_id || undefined : undefined,
+              school_grade: form.student_type === "school_affiliate" ? form.school_grade.trim() || undefined : undefined,
             }
           : {}),
         ...((form.role === "admin" || form.role === "manager_center") && autoCreateStaff && staffEmail && effectiveStaffPassword

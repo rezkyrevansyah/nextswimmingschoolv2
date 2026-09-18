@@ -8,11 +8,11 @@ import QRBox from "@/components/ui/QRBox";
 import { NoTranslate } from "@/components/ui/NoTranslate";
 import { fmtDate, waLink, clampPercent, cn } from "@/lib/utils";
 import { calcAge } from "../../_utils";
-import type { useMemberPrivateData } from "./useMemberPrivateData";
+import type { useStudentPrivateData } from "./useStudentPrivateData";
 
-type MemberPrivateDataHook = ReturnType<typeof useMemberPrivateData>;
+type StudentPrivateDataHook = ReturnType<typeof useStudentPrivateData>;
 
-export default function StudentDetailModal({ hook }: { hook: MemberPrivateDataHook }) {
+export default function StudentDetailModal({ hook }: { hook: StudentPrivateDataHook }) {
   const { detailTarget, setDetailTarget, branchName, openAddSesi, openEdit } = hook;
 
   return (
@@ -97,7 +97,7 @@ export default function StudentDetailModal({ hook }: { hook: MemberPrivateDataHo
 
         return (
           <div className="grid md:grid-cols-12 gap-6 items-start">
-            {/* Left Column: Digital Member Pass & Attendance QR (4 cols) */}
+            {/* Left Column: Digital Student Pass & Attendance QR (4 cols) */}
             <div className="md:col-span-4 space-y-4">
               <div className="p-5 rounded-2xl bg-paper-tint/60 border border-line flex flex-col items-center text-center shadow-sm">
                 <div className="relative">
@@ -118,11 +118,11 @@ export default function StudentDetailModal({ hook }: { hook: MemberPrivateDataHo
                   <NoTranslate>{profile?.full_name ?? "—"}</NoTranslate>
                 </div>
 
-                {detailTarget.member_no ? (
+                {detailTarget.student_no ? (
                   <div className="mt-1.5 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white border border-line-strong/60 shadow-xs">
                     <span className="w-1.5 h-1.5 rounded-full bg-ocean-500" />
                     <span className="font-mono text-xs font-semibold text-ocean-800 tracking-wider">
-                      <NoTranslate>{detailTarget.member_no}</NoTranslate>
+                      <NoTranslate>{detailTarget.student_no}</NoTranslate>
                     </span>
                   </div>
                 ) : null}

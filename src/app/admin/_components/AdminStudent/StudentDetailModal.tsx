@@ -7,19 +7,19 @@ import QRBox from "@/components/ui/QRBox";
 import { NoTranslate } from "@/components/ui/NoTranslate";
 import { calcAge } from "../../_utils";
 import type { ClassPackage } from "../../_types";
-import type { AdminMemberHook } from "./_hook";
-import MemberInfoTab from "./MemberInfoTab";
-import MemberAttendanceTab from "./MemberAttendanceTab";
-import MemberPaymentTab from "./MemberPaymentTab";
-import MemberCompetitionTab from "./MemberCompetitionTab";
+import type { AdminStudentHook } from "./_hook";
+import StudentInfoTab from "./StudentInfoTab";
+import StudentAttendanceTab from "./StudentAttendanceTab";
+import StudentPaymentTab from "./StudentPaymentTab";
+import StudentCompetitionTab from "./StudentCompetitionTab";
 
-export default function MemberDetailModal({ hook }: { hook: AdminMemberHook }) {
+export default function StudentDetailModal({ hook }: { hook: AdminStudentHook }) {
   const {
     detail, closeDetail, detailTab, setDetailTab,
-    attLoaded, loadAttendances, billsLoaded, loadBills, memberCompsLoaded, loadMemberComps,
+    attLoaded, loadAttendances, billsLoaded, loadBills, studentCompsLoaded, loadStudentComps,
     openEdit, setOpenResetPwd, setNewPwd,
     setAddSesiForm, setPrivateClassPackages, setOpenAddSesi,
-    setSuspendMemberTarget, setSuspendMemberForm, liftSuspendMember, deleteMember,
+    setSuspendStudentTarget, setSuspendStudentForm, liftSuspendStudent, deleteStudent,
   } = hook;
 
   const p = detail?.profile;
@@ -35,8 +35,8 @@ export default function MemberDetailModal({ hook }: { hook: AdminMemberHook }) {
           {detail?.type === "private" && (
             <Btn variant="accent" icon="plus" onClick={async () => {
               setAddSesiForm({ jumlah: "", generate_bill: false, selectedPackageId: "" });
-              // Load packages for this member's private class
-              const classId = detail.member_classes?.[0]?.class?.id;
+              // Load packages for this student's private class
+              const classId = detail.student_classes?.[0]?.class?.id;
               if (classId) {
                 const db = createClient();
                 const { data: pkgs } = await db.from("class_packages").select("id, name, sessions, price, sort_order, active").eq("class_id", classId).eq("active", true).order("sort_order");
@@ -48,10 +48,10 @@ export default function MemberDetailModal({ hook }: { hook: AdminMemberHook }) {
             }}>{"Add Session"}</Btn>
           )}
           {detail?.status !== "suspended"
-            ? <Btn variant="ghost" className="text-warn-600" onClick={() => { setSuspendMemberTarget(detail); setSuspendMemberForm({ reason: "", until: "" }); }}>{"Suspend"}</Btn>
-            : <Btn variant="soft" size="sm" icon="check" onClick={() => detail && liftSuspendMember(detail)}>{"End Suspend"}</Btn>
+            ? <Btn variant="ghost" className="text-warn-600" onClick={() => { setSuspendStudentTarget(detail); setSuspendStudentForm({ reason: "", until: "" }); }}>{"Suspend"}</Btn>
+            : <Btn variant="soft" size="sm" icon="check" onClick={() => detail && liftSuspendStudent(detail)}>{"End Suspend"}</Btn>
           }
-          <Btn variant="ghost" className="text-danger-500" icon="trash" onClick={() => detail && deleteMember(detail)}>{"Delete Permanently"}</Btn>
+          <Btn variant="ghost" className="text-danger-500" icon="trash" onClick={() => detail && deleteStudent(detail)}>{"Delete Permanently"}</Btn>
         </>
       }>
       {detail && (
@@ -86,7 +86,7 @@ export default function MemberDetailModal({ hook }: { hook: AdminMemberHook }) {
                     setDetailTab(id);
                     if (id === "absensi" && !attLoaded) loadAttendances(detail.id);
                     if (id === "pembayaran" && !billsLoaded) loadBills(detail.id);
-                    if (id === "lomba" && !memberCompsLoaded) loadMemberComps(detail.id);
+                    if (id === "lomba" && !studentCompsLoaded) loadStudentComps(detail.id);
                   }}
                   className={`flex-1 px-3 py-1.5 text-xs font-bold rounded-lg transition-colors ${detailTab === id ? "bg-white text-ocean-700 shadow-sm" : "text-ink-mute hover:text-ink-soft"}`}>
                   {label}
@@ -94,10 +94,10 @@ export default function MemberDetailModal({ hook }: { hook: AdminMemberHook }) {
               ))}
             </div>
 
-            {detailTab === "info" && <MemberInfoTab hook={hook} />}
-            {detailTab === "absensi" && <MemberAttendanceTab hook={hook} />}
-            {detailTab === "pembayaran" && <MemberPaymentTab hook={hook} />}
-            {detailTab === "lomba" && <MemberCompetitionTab hook={hook} />}
+            {detailTab === "info" && <StudentInfoTab hook={hook} />}
+            {detailTab === "absensi" && <StudentAttendanceTab hook={hook} />}
+            {detailTab === "pembayaran" && <StudentPaymentTab hook={hook} />}
+            {detailTab === "lomba" && <StudentCompetitionTab hook={hook} />}
           </div>
         </div>
       )}

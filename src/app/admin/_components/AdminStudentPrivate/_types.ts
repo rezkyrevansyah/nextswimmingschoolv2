@@ -1,11 +1,11 @@
 export interface PrivateStudentRow {
-  id: string; // member id
+  id: string; // student id
   profile_id: string;
   branch_id: string;
   branch: { name: string } | null;
   status: string;
   qr_code: string | null;
-  member_no: string | null;
+  student_no: string | null;
   remaining_sessions: number | null;
   total_sessions: number | null;
   profile: {

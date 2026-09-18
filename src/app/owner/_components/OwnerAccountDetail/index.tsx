@@ -6,7 +6,7 @@ import AccountEditForm from "./AccountEditForm";
 import AccountViewPanel from "./AccountViewPanel";
 import type { Props } from "./_types";
 
-export type { AccountProfile, AccountMemberData } from "./_types";
+export type { AccountProfile, AccountStudentData } from "./_types";
 
 export default function OwnerAccountDetail(props: Props) {
   const hook = useAccountDetailData(props);

@@ -4,7 +4,7 @@
  * against the reference at rapor-new.svg / rapor-new.jpg.
  *
  * Assets served from /public/rapor/ (copied from /public/assets rapor/).
- * Used by: school/page.tsx, member/page.tsx, coach/page.tsx
+ * Used by: school/page.tsx, student/page.tsx, coach/page.tsx
  *
  * Two modes:
  *   1. downloadRaporPdf() — POST /api/rapor/pdf → real PDF download (server renders with Puppeteer)
@@ -30,13 +30,13 @@ export interface PrintSignatureItem {
 }
 
 export interface PrintStudent {
-  /** Member + period identifiers used by the server to re-derive and
+  /** Student + period identifiers used by the server to re-derive and
    * authorize the actual rapor data — every other field below is only a
    * client-side preview and is IGNORED by /api/rapor/pdf. */
-  member_id?: string;
+  student_id?: string;
   period_id?: string;
   full_name: string;
-  member_no?: string | null;
+  student_no?: string | null;
   class_name: string;
   level?: string | null;
   coach_name: string;
@@ -52,8 +52,8 @@ export interface PrintStudent {
   learning_achievements?: string | null;
   attendance_rate?: number | null; // 0–100
   best_times?: PrintBestTime[];
-  level_strokes?: string[];   // ordered stroke names from the member's level (rapor_level_strokes), sort_order-sorted
-  level_distances?: number[]; // ordered distances from the member's level (rapor_level_distances), sort_order-sorted
+  level_strokes?: string[];   // ordered stroke names from the student's level (rapor_level_strokes), sort_order-sorted
+  level_distances?: number[]; // ordered distances from the student's level (rapor_level_distances), sort_order-sorted
   criteria?: PrintCriterion[];
   coach_signature_url?: string | null; // uploaded coach signature from Supabase Storage
   school_logo_url?: string | null;
@@ -241,7 +241,7 @@ function buildRaporHtml(s: PrintStudent, assets: RaporAssets): string {
 
   // Info rows
   const infoRows = [
-    { label: "ID NUMBER", value: s.member_no ?? "—" },
+    { label: "ID NUMBER", value: s.student_no ?? "—" },
     { label: "FULL NAME",  value: escapeHtml(s.full_name) },
     { label: "AGE",        value: age },
     { label: "LEVEL",      value: escapeHtml(s.level ?? "—") },
@@ -266,8 +266,8 @@ function buildRaporHtml(s: PrintStudent, assets: RaporAssets): string {
       }).join("")
     : `<tr><td colspan="2" style="text-align:center;color:#888;font-style:italic;padding:12px">Belum ada penilaian</td></tr>`;
 
-  // PBT columns — prefer the member's LEVEL-defined strokes/distances (consistent grid shape
-  // across every member on the same level); fall back to dynamic discovery from this member's
+  // PBT columns — prefer the student's LEVEL-defined strokes/distances (consistent grid shape
+  // across every student on the same level); fall back to dynamic discovery from this student's
   // own recorded times for legacy entries with no level, or a level with an empty template.
   const uniqueStrokesFallback = [...new Set(bestTimes.map(t => t.stroke.toUpperCase()))].sort();
   const uniqueDistsFallback   = [...new Set(bestTimes.map(t => Number(t.distance)))].sort((a, b) => a - b);
@@ -352,7 +352,7 @@ function buildRaporHtml(s: PrintStudent, assets: RaporAssets): string {
         </div>
       </div>
 
-      <!-- INFO MEMBER -->
+      <!-- INFO STUDENT -->
       <div class="info-wrap">
         <div class="avatar-circle">${avatarHtml}</div>
         <div class="info-rows">

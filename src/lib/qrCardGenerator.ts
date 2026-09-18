@@ -12,15 +12,15 @@ export interface QRCardAccount {
   avatar_url?: string | null;
   branch?: { id?: string; name: string } | null;
   branch_name?: string | null;
-  member_no?: string | null;
-  member_type?: string | null;
+  student_no?: string | null;
+  student_type?: string | null;
   phone?: string | null;
 }
 
 /**
  * Generates a clean, sanitized filename for downloading QR images based on account data:
  * Format: [ROLE]_[NAME]_[USER_NO or BRANCH].png
- * Example: MEMBER_Rezky-Revansyah_NSS-M-008.png
+ * Example: STUDENT_Rezky-Revansyah_NSS-M-008.png
  */
 export function formatQRFileName(account: QRCardAccount): string {
   const role = (account.role || "USER").toUpperCase();
@@ -31,7 +31,7 @@ export function formatQRFileName(account: QRCardAccount): string {
     .replace(/\s+/g, "-");
 
   const idCode =
-    account.member_no ||
+    account.student_no ||
     account.user_no ||
     (account.branch?.name ?? account.branch_name ?? "").replace(/\s+/g, "-") ||
     account.id.slice(0, 8).toUpperCase();
@@ -51,7 +51,7 @@ function getRoleBadgeColors(role: string): { bg: string; text: string; label: st
       return { bg: "#0284C7", text: "#FFFFFF", label: "ADMIN" };
     case "coach":
       return { bg: "#0D9488", text: "#FFFFFF", label: "COACH" };
-    case "member":
+    case "student":
       return { bg: "#16A34A", text: "#FFFFFF", label: "STUDENT" };
     case "staff":
       return { bg: "#4F46E5", text: "#FFFFFF", label: "STAFF" };
@@ -157,7 +157,7 @@ export async function generateBrandedQRCardCanvas(
   ctx.fillText(displayName, width / 2, 245);
 
   // 5. Account Number / User No
-  const userCode = account.member_no || account.user_no || qrValue;
+  const userCode = account.student_no || account.user_no || qrValue;
   ctx.fillStyle = "#64748B";
   ctx.font = "600 16px monospace";
   ctx.fillText(`ID: ${userCode}`, width / 2, 275);
@@ -208,7 +208,7 @@ export async function generateBrandedQRCardCanvas(
  * Downloads a single Branded QR ID Card PNG with structured filename
  */
 export async function downloadSingleQRCard(account: QRCardAccount, qrValue?: string): Promise<void> {
-  const code = qrValue || account.qr_code || account.member_no || account.user_no || account.id;
+  const code = qrValue || account.qr_code || account.student_no || account.user_no || account.id;
   const canvas = await generateBrandedQRCardCanvas(account, code);
   const dataUrl = canvas.toDataURL("image/png");
 
@@ -234,7 +234,7 @@ export async function downloadBulkQRZip(
 
   for (let i = 0; i < accounts.length; i++) {
     const acc = accounts[i];
-    const qrValue = acc.qr_code || acc.member_no || acc.user_no || acc.id;
+    const qrValue = acc.qr_code || acc.student_no || acc.user_no || acc.id;
     try {
       const canvas = await generateBrandedQRCardCanvas(acc, qrValue);
       const dataUrl = canvas.toDataURL("image/png");
@@ -265,7 +265,7 @@ export async function printQRCardSheet(accounts: QRCardAccount[]): Promise<void>
   const cardsHtml: string[] = [];
 
   for (const acc of accounts) {
-    const qrValue = acc.qr_code || acc.member_no || acc.user_no || acc.id;
+    const qrValue = acc.qr_code || acc.student_no || acc.user_no || acc.id;
     const qrDataUrl = await QRCode.toDataURL(qrValue, {
       width: 180,
       margin: 1,
@@ -275,7 +275,7 @@ export async function printQRCardSheet(accounts: QRCardAccount[]): Promise<void>
     const roleInfo = getRoleBadgeColors(acc.role);
     const badgeLabel = acc.custom_role_label ? `${roleInfo.label} · ${acc.custom_role_label}` : roleInfo.label;
     const name = acc.full_name?.trim() || acc.email?.split("@")[0] || "User";
-    const userCode = acc.member_no || acc.user_no || qrValue;
+    const userCode = acc.student_no || acc.user_no || qrValue;
     const branchName = acc.branch?.name || acc.branch_name || "NEXT Swimming School";
 
     cardsHtml.push(`

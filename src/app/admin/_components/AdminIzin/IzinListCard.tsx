@@ -20,7 +20,7 @@ export default function IzinListCard({ hook }: { hook: IzinDataHook }) {
     <Card padded={false}>
       <div className="px-5 py-3 border-b border-line flex items-center gap-2">
         <div className="flex gap-1.5 bg-paper-tint rounded-xl p-1">
-          {[["coach", "Coach Leave"], ["member", "Student Leave"]].map(([id, l]) => (
+          {[["coach", "Coach Leave"], ["student", "Student Leave"]].map(([id, l]) => (
             <button key={id} onClick={() => setTab(id)} className={`px-4 py-1.5 text-sm font-bold rounded-lg ${tab === id ? "bg-white text-ocean-700 shadow-sm" : "text-ink-mute hover:text-ink-soft"}`}>{l}</button>
           ))}
         </div>

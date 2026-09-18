@@ -105,7 +105,7 @@ export default function ClassFormModal({ hook }: { hook: OwnerClassesMasterHook 
         </Field>
 
         {/* Private classes are no longer created/edited here — see the
-            dedicated "Member Private" menu, which creates the member and
+            dedicated "Student Private" menu, which creates the student and
             its class slot together and keeps the 1:1 relationship intact.
             This screen now only ever manages regular (shared) classes. */}
 

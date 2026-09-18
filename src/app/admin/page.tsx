@@ -11,8 +11,8 @@ import { GoogleLanguageSwitcher } from "@/components/GoogleTranslate";
 import AdminSettings from "./_components/AdminSettings";
 import AdminDashboard from "./_components/AdminDashboard";
 import AdminClass from "./_components/AdminClass";
-import AdminMember from "./_components/AdminMember";
-import AdminMemberPrivate from "./_components/AdminMemberPrivate";
+import AdminStudent from "./_components/AdminStudent";
+import AdminStudentPrivate from "./_components/AdminStudentPrivate";
 import AdminCoach from "./_components/AdminCoach";
 import AdminClassActivity from "./_components/AdminClassActivity";
 import AdminAbsensi from "./_components/AdminAbsensi";
@@ -46,8 +46,8 @@ function buildNavItems(role: string, showPayments: boolean): NavItem[] {
     { id: "activity",   label: "Class Activity",  icon: "calendar"  },
     { section: "Management" },
     { id: "classes",    label: "Class",   icon: "swim"      },
-    { id: "members",    label: "Student",   icon: "users"     },
-    { id: "memberPrivate", label: "Private Students", icon: "star" },
+    { id: "students",    label: "Student",   icon: "users"     },
+    { id: "studentPrivate", label: "Private Students", icon: "star" },
     { id: "coaches",    label: "Coach",   icon: "shield"    },
     { id: "competitions", label: "Competitions", icon: "flag" },
     { id: "absensi",    label: "Attendance",   icon: "check"     },
@@ -70,8 +70,8 @@ function buildTitles(): Record<string, [string, string]> {
     dashboard: ["Dashboard", ""],
     activity:  ["Class Activity",  "Calendar for all classes"],
     classes:   ["Class",   "Class & schedule CRUD"],
-    members:   ["Student",   "Center student management"],
-    memberPrivate: ["Private Students", "Manage every private (1-on-1) student in one place — schedule, location, coach, and session count."],
+    students:   ["Student",   "Center student management"],
+    studentPrivate: ["Private Students", "Manage every private (1-on-1) student in one place — schedule, location, coach, and session count."],
     coaches:   ["Coach",   "Coaches at your center"],
     competitions: ["Competitions", "Swimming competitions & student achievements"],
     absensi:   ["Attendance",   "Coach & student · SSDP"],
@@ -211,8 +211,8 @@ export default function AdminPage() {
       case "dashboard": return <AdminDashboard branchId={branchId} />;
       case "activity":  return <AdminClassActivity branchId={branchId} />;
       case "classes":   return <AdminClass branchId={branchId} />;
-      case "members":   return <AdminMember branchId={branchId} />;
-      case "memberPrivate": return <AdminMemberPrivate branchId={branchId} />;
+      case "students":   return <AdminStudent branchId={branchId} />;
+      case "studentPrivate": return <AdminStudentPrivate branchId={branchId} />;
       case "coaches":   return <AdminCoach branchId={branchId} />;
       case "competitions": return <AdminCompetition branchId={branchId} />;
       case "absensi":   return <AdminAbsensi branchId={branchId} />;

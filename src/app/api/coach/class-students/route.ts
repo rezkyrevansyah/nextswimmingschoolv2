@@ -1,12 +1,12 @@
 /**
- * GET /api/coach/class-members?classIds=id1,id2,...
- * Returns member rosters (grouped by class_id) for classes this coach
+ * GET /api/coach/class-students?classIds=id1,id2,...
+ * Returns student rosters (grouped by class_id) for classes this coach
  * teaches. Coach-only; only classIds the requesting coach actually teaches
  * are honored — any others are silently dropped from the result.
  *
  * Runs server-side via the service role client because `profiles` RLS only
  * allows a user to read their own row (or admin/owner) — a coach reading
- * another user's (member's) profile directly from the browser is blocked by
+ * another user's (student's) profile directly from the browser is blocked by
  * RLS regardless of query shape. This route intentionally bypasses that for
  * the one legitimate case (a coach viewing their own class rosters).
  */
@@ -31,19 +31,19 @@ export async function GET(req: NextRequest) {
 
   const { data: taught } = await db.from("class_coaches").select("class_id").eq("coach_id", user.id).in("class_id", requestedIds);
   const classIds = (taught ?? []).map(t => t.class_id);
-  if (classIds.length === 0) return NextResponse.json({ membersByClass: {} });
+  if (classIds.length === 0) return NextResponse.json({ studentsByClass: {} });
 
   const { data, error } = await db
-    .from("member_classes")
-    .select("class_id, member:members(id, profile:profiles(full_name, avatar_url, birth_date, phone, gender, address, health_notes))")
+    .from("student_classes")
+    .select("class_id, student:students(id, profile:profiles(full_name, avatar_url, birth_date, phone, gender, address, health_notes))")
     .in("class_id", classIds);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  const membersByClass: Record<string, unknown[]> = {};
+  const studentsByClass: Record<string, unknown[]> = {};
   for (const row of data ?? []) {
-    if (!row.member) continue;
-    (membersByClass[row.class_id] ??= []).push(row.member);
+    if (!row.student) continue;
+    (studentsByClass[row.class_id] ??= []).push(row.student);
   }
 
-  return NextResponse.json({ membersByClass });
+  return NextResponse.json({ studentsByClass });
 }

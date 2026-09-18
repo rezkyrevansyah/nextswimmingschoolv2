@@ -141,10 +141,10 @@ export default function CoachRapor({ coachId, branchId, coachName, branchName }:
       {loading ? <div className="text-ink-mute text-sm">{"Loading…"}</div> : (
         <div className="space-y-3">
           {paginated.map((e) => (
-            <Card key={e.id || e.member_id} className="flex items-center gap-3">
-              <Avatar name={e.member?.profile?.full_name ?? "?"} src={e.member?.profile?.avatar_url ?? undefined} size={40} />
+            <Card key={e.id || e.student_id} className="flex items-center gap-3">
+              <Avatar name={e.student?.profile?.full_name ?? "?"} src={e.student?.profile?.avatar_url ?? undefined} size={40} />
               <div className="flex-1 min-w-0">
-                <div className="font-semibold text-ink truncate"><NoTranslate>{e.member?.profile?.full_name}</NoTranslate></div>
+                <div className="font-semibold text-ink truncate"><NoTranslate>{e.student?.profile?.full_name}</NoTranslate></div>
                 <div className="text-xs text-ink-mute"><NoTranslate>{e.class?.name}</NoTranslate></div>
               </div>
               {e.locked ? <Status kind="approved">{"Done"}</Status> : <Status kind="pending">{"Pending"}</Status>}

@@ -67,16 +67,16 @@ export default function CompetitionDetailModal({ hook }: { hook: AdminCompetitio
                 <tbody className="divide-y divide-line bg-white">
                   {participations.map(p => {
                     const awardInfo = AWARD_LABELS[p.award] || AWARD_LABELS.participant;
-                    const memberName = (p.member?.profile as any)?.full_name ?? "Student";
-                    const avatarUrl = (p.member?.profile as any)?.avatar_url;
+                    const studentName = (p.student?.profile as any)?.full_name ?? "Student";
+                    const avatarUrl = (p.student?.profile as any)?.avatar_url;
 
                     return (
                       <tr key={p.id} className="hover:bg-paper-tint/60 transition-colors">
                         <td className="py-3 px-4 min-w-[200px]">
                           <div className="flex items-center gap-2.5">
-                            <Avatar src={avatarUrl ?? undefined} name={memberName} size={32} />
+                            <Avatar src={avatarUrl ?? undefined} name={studentName} size={32} />
                             <div className="min-w-0">
-                              <div className="font-bold text-ink-strong truncate max-w-[180px]"><NoTranslate>{memberName}</NoTranslate></div>
+                              <div className="font-bold text-ink-strong truncate max-w-[180px]"><NoTranslate>{studentName}</NoTranslate></div>
                               <div className="text-xs text-ink-mute">{p.branch?.name ? <NoTranslate>{p.branch.name}</NoTranslate> : "Center"}</div>
                             </div>
                           </div>
@@ -101,7 +101,7 @@ export default function CompetitionDetailModal({ hook }: { hook: AdminCompetitio
                         </td>
                         <td className="py-3 px-4 text-center whitespace-nowrap">
                           {(() => {
-                            const doc = getDoc(p.member_id, p.competition_id);
+                            const doc = getDoc(p.student_id, p.competition_id);
                             return doc ? (
                               <button
                                 type="button"

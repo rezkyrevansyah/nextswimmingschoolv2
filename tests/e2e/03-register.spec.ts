@@ -115,7 +115,7 @@ test.describe("Halaman Registrasi — Step 1 (Formulir)", () => {
 
     // Field orang tua sekarang muncul
     await expect(page.getByPlaceholder(/Andika Putra/i)).toBeVisible();
-    // Ada dua field tel: HP member dan HP orang tua
+    // Ada dua field tel: HP student dan HP orang tua
     const telInputs = page.locator("input[type='tel']");
     expect(await telInputs.count()).toBeGreaterThanOrEqual(2);
   });

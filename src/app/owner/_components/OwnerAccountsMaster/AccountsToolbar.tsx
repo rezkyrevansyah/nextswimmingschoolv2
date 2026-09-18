@@ -44,7 +44,7 @@ export default function AccountsToolbar({ hook }: { hook: AccountsMasterDataHook
             <option value="admin">{"Branch Admin"}</option>
             <option value="manager_center">{"Manager Center"}</option>
             <option value="coach">{"Coach"}</option>
-            <option value="member">{"Student"}</option>
+            <option value="student">{"Student"}</option>
             <option value="school">{"School Partner"}</option>
             <option value="staff">{"Branch Staff"}</option>
           </select>

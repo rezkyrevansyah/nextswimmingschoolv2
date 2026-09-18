@@ -43,8 +43,8 @@ export default function AccountsTable({ hook }: { hook: AccountsMasterDataHook }
             <tbody className="divide-y divide-line">
               {filtered.map((a) => {
                 const displayName = a.full_name?.trim() || a.email?.split("@")[0] || roleLabel(a.role) || "—";
-                const m = a.members && a.members[0];
-                const code = m?.member_no || a.user_no || a.qr_code || a.id.slice(0, 8).toUpperCase();
+                const m = a.students && a.students[0];
+                const code = m?.student_no || a.user_no || a.qr_code || a.id.slice(0, 8).toUpperCase();
                 const isChecked = selectedQRIds.has(a.id);
 
                 return (

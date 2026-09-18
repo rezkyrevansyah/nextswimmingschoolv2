@@ -6,14 +6,14 @@ import { Card, SectionTitle } from "@/components/ui/Card";
 import Avatar from "@/components/ui/Avatar";
 import { NoTranslate } from "@/components/ui/NoTranslate";
 import { fmtDate } from "@/lib/utils";
-import { useMemberRaporData } from "./useMemberRaporData";
+import { useStudentRaporData } from "./useStudentRaporData";
 import RaporDetailModal from "./RaporDetailModal";
 
-export default function MemberRapor({ memberId, memberName, branchId, avatarUrl, memberNo, birthDate, location }: {
-  memberId: string; memberName: string; branchId: string;
-  avatarUrl?: string | null; memberNo?: string | null; birthDate?: string | null; location?: string;
+export default function StudentRapor({ studentId, studentName, branchId, avatarUrl, studentNo, birthDate, location }: {
+  studentId: string; studentName: string; branchId: string;
+  avatarUrl?: string | null; studentNo?: string | null; birthDate?: string | null; location?: string;
 }) {
-  const hook = useMemberRaporData({ memberId, branchId });
+  const hook = useStudentRaporData({ studentId, branchId });
   const {
     raporTab, setRaporTab, entries, competitionsHistory,
     openRapor, draftKey, getDraft, setDraft, saveReview, savingSlot,
@@ -223,7 +223,7 @@ export default function MemberRapor({ memberId, memberName, branchId, avatarUrl,
         </>
       )}
 
-      <RaporDetailModal hook={hook} memberId={memberId} memberName={memberName} avatarUrl={avatarUrl} memberNo={memberNo} birthDate={birthDate} location={location} />
+      <RaporDetailModal hook={hook} studentId={studentId} studentName={studentName} avatarUrl={avatarUrl} studentNo={studentNo} birthDate={birthDate} location={location} />
     </div>
   );
 }

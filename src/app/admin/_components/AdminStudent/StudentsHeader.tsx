@@ -1,9 +1,9 @@
 "use client";
 import Btn from "@/components/ui/Btn";
 import { Stat } from "@/components/ui/Card";
-import type { AdminMemberHook } from "./_hook";
+import type { AdminStudentHook } from "./_hook";
 
-export default function MembersHeader({ hook }: { hook: AdminMemberHook }) {
+export default function StudentsHeader({ hook }: { hook: AdminStudentHook }) {
   const {
     qrSelectMode, selectedQR, setQrSelectMode, setSelectedQR, generatingQR, bulkDownloadQR,
     filteredSorted, downloadTemplate, setImportStep, setImportRows, setImportResult, setOpenImport,

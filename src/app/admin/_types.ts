@@ -69,10 +69,10 @@ export interface AttendanceRow {
   class?: { name: string } | null;
 }
 
-export interface MemberAttendanceRow {
-  id: string; member_id: string; class_id: string; session_date: string;
+export interface StudentAttendanceRow {
+  id: string; student_id: string; class_id: string; session_date: string;
   status: string; method: string;
-  member?: { profile?: { full_name: string } | null } | null;
+  student?: { profile?: { full_name: string } | null } | null;
   class?: { name: string } | null;
 }
 

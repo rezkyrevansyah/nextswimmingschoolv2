@@ -91,7 +91,7 @@ Arsip: pusat tidak tampil di operasional harian, data tetap. Pulihkan = aktif la
 | Pembuat | Boleh membuat | Tidak boleh |
 |---|---|---|
 | Sistem, masuk pertama Owner | Baris Owner lewat `POST /api/owner/init-profile` | — |
-| Owner **Accounts** | `admin`, `manager_center`, `coach`, `staff`, `school`, `member` (reguler atau afiliasi) | Owner dari formulir tambah; siswa `private` |
+| Owner **Accounts** | `admin`, `manager_center`, `coach`, `staff`, `school`, `student` (reguler atau afiliasi) | Owner dari formulir tambah; siswa `private` |
 | Admin / MC **Coach**, **Student**, **School Panel** | Pelatih (pusat ini atau tautan), siswa reguler/afiliasi, akun sekolah | Owner, Admin, siswa privat |
 | Admin / MC **Private Students** | Siswa privat + kelas privat | — |
 | Publik `/register` | Baris pendaftaran tertunda | Akun aktif; itu Approvals |
@@ -153,7 +153,7 @@ Pelatih mengisi tautan spreadsheet program per kelas (`class_coach_spreadsheets`
 1. Pusat ≠ lokasi privat. Clock-in reguler memakai pin pusat; privat/eksternal memakai pin kelas.
 2. Admin ≠ Manager Center ≠ Owner.
 3. Kelas reguler ≠ kelas privat ≠ jenjang sekolah (`school_grade`).
-4. `class_packages` ≠ sisa sesi privat (`members.remaining_sessions`).
+4. `class_packages` ≠ sisa sesi privat (`students.remaining_sessions`).
 5. Libur kelas ≠ izin pelatih ≠ izin siswa ≠ sakit staf.
 6. CMS landing pelatih ≠ daftar pelatih operasional.
 7. Pratinjau Owner ≠ wewenang Admin.

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { fmtIDR, fmtDate, fmtDateLong, fmtTime, waLink, cn, clampPercent, maskMemberName, mailtoLink } from "./utils";
+import { fmtIDR, fmtDate, fmtDateLong, fmtTime, waLink, cn, clampPercent, maskStudentName, mailtoLink } from "./utils";
 
 // ---------------------------------------------------------------------------
 // fmtIDR
@@ -370,39 +370,39 @@ describe("fmtDateLong — edge cases", () => {
 });
 
 // ---------------------------------------------------------------------------
-// maskMemberName
+// maskStudentName
 // ---------------------------------------------------------------------------
-describe("maskMemberName", () => {
+describe("maskStudentName", () => {
   it("masks a two-word name to first initial + fixed asterisks", () => {
-    expect(maskMemberName("Andi Saputra")).toBe("A***");
+    expect(maskStudentName("Andi Saputra")).toBe("A***");
   });
 
   it("masks a single-word name the same way", () => {
-    expect(maskMemberName("Dimas")).toBe("D***");
+    expect(maskStudentName("Dimas")).toBe("D***");
   });
 
   it("uppercases a lowercase first letter", () => {
-    expect(maskMemberName("dimas pratama")).toBe("D***");
+    expect(maskStudentName("dimas pratama")).toBe("D***");
   });
 
   it("trims leading whitespace before masking", () => {
-    expect(maskMemberName("  Rina Wulandari")).toBe("R***");
+    expect(maskStudentName("  Rina Wulandari")).toBe("R***");
   });
 
   it("falls back to a generic mask for an empty string", () => {
-    expect(maskMemberName("")).toBe("Member***");
+    expect(maskStudentName("")).toBe("Student***");
   });
 
   it("falls back to a generic mask for null", () => {
-    expect(maskMemberName(null)).toBe("Member***");
+    expect(maskStudentName(null)).toBe("Student***");
   });
 
   it("falls back to a generic mask for undefined", () => {
-    expect(maskMemberName(undefined)).toBe("Member***");
+    expect(maskStudentName(undefined)).toBe("Student***");
   });
 
   it("never returns more of the name than the first character", () => {
-    const result = maskMemberName("Christopherson Wibowo");
+    const result = maskStudentName("Christopherson Wibowo");
     expect(result).toBe("C***");
     expect(result).not.toContain("hristopherson");
   });

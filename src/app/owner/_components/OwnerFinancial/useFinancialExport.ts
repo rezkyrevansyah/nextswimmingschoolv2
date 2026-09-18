@@ -39,7 +39,7 @@ export function useFinancialExport(data: Data, computed: Computed) {
         ["Date"]: (row.source === "manual" ? row.occurred_at : (row.paid_at ?? row.created_at))?.slice(0, 10) ?? "-",
         ["Source"]: row.source === "manual" ? "Manual" : "Bill",
         ["Branch"]: row.branch?.name ?? "-",
-        ["Description"]: row.source === "manual" ? row.description : (row.member?.profile?.full_name ?? row.period_label),
+        ["Description"]: row.source === "manual" ? row.description : (row.student?.profile?.full_name ?? row.period_label),
         ["Amount"]: row.source === "manual" ? row.amount : row.total,
         ["Status"]: row.source === "manual" ? "-" : row.status,
       }));

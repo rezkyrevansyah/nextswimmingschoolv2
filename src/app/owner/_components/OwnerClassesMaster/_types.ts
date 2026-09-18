@@ -59,9 +59,9 @@ export interface ClassCoachDetail {
   is_archived?: boolean;
 }
 
-export interface ClassMemberDetail {
+export interface ClassStudentDetail {
   id: string;
-  member_no: string | null;
+  student_no: string | null;
   status: string;
   total_sessions: number | null;
   remaining_sessions: number | null;
@@ -83,15 +83,15 @@ export interface CoachAttendanceDetail {
   profile: { full_name: string | null } | null;
 }
 
-export interface MemberAttendanceDetail {
+export interface StudentAttendanceDetail {
   id: string;
   session_date: string;
   status: string;
   method: string | null;
   created_at: string;
-  member: {
+  student: {
     id: string;
-    member_no: string | null;
+    student_no: string | null;
     profile: { full_name: string | null } | null;
   } | null;
 }
@@ -119,4 +119,4 @@ export const EMPTY_CLASS_FORM = {
 
 export const DAY_OPTS = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"];
 
-export type DetailTab = "info" | "coach" | "member" | "att_coach" | "att_member";
+export type DetailTab = "info" | "coach" | "student" | "att_coach" | "att_student";

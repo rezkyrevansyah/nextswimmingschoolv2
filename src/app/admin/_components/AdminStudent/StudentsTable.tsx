@@ -4,9 +4,9 @@ import Avatar from "@/components/ui/Avatar";
 import Status from "@/components/ui/Status";
 import { NoTranslate } from "@/components/ui/NoTranslate";
 import { calcAge } from "../../_utils";
-import type { AdminMemberHook } from "./_hook";
+import type { AdminStudentHook } from "./_hook";
 
-export default function MembersTable({ hook }: { hook: AdminMemberHook }) {
+export default function StudentsTable({ hook }: { hook: AdminStudentHook }) {
   const {
     loading, qrSelectMode, filteredSorted, selectedQR, setSelectedQR, sortBy, toggleSort, sortDir,
     paginated, setDetail, setDetailTab, setAttLoaded, setBillsLoaded, setAttendances, setBills,
@@ -49,7 +49,7 @@ export default function MembersTable({ hook }: { hook: AdminMemberHook }) {
           </thead>
           <tbody className="divide-y divide-line">
             {paginated.map((m) => {
-              const cls = m.member_classes?.map(mc => mc.class?.name).filter(Boolean).join(", ") ?? "—";
+              const cls = m.student_classes?.map(mc => mc.class?.name).filter(Boolean).join(", ") ?? "—";
               const fullName = m.profile?.full_name ?? "—";
               const age = m.profile?.birth_date ? calcAge(m.profile.birth_date) : null;
               const isChecked = selectedQR.has(m.id);

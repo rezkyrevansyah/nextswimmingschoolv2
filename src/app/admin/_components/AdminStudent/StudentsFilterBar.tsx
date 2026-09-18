@@ -1,10 +1,10 @@
 "use client";
 import Icon from "@/components/ui/Icon";
 import { NoTranslate } from "@/components/ui/NoTranslate";
-import type { AdminMemberHook } from "./_hook";
+import type { AdminStudentHook } from "./_hook";
 import { genderLabel } from "./_utils";
 
-export default function MembersFilterBar({ hook }: { hook: AdminMemberHook }) {
+export default function StudentsFilterBar({ hook }: { hook: AdminStudentHook }) {
   const {
     search, setSearch, tab, setTab, sortBy, setSortBy, sortDir, setSortDir,
     showFilters, setShowFilters, activeFilterCount,
@@ -19,8 +19,8 @@ export default function MembersFilterBar({ hook }: { hook: AdminMemberHook }) {
         <Icon name="search" className="w-4 h-4 text-ink-faint shrink-0" />
         <input
           type="search"
-          name="member_search"
-          id="member_search_input"
+          name="student_search"
+          id="student_search_input"
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder={"Search name, email, or phone number…"}

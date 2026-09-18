@@ -1,9 +1,9 @@
 /**
  * GET /api/coach/rapor-entries?periodId=xxx
- * Returns this coach's rapor entries for a period, with member profile and
+ * Returns this coach's rapor entries for a period, with student profile and
  * co-teaching coaches' names/signatures resolved server-side — the nested
  * `profile:profiles(...)` reads are blocked by RLS when done client-side as
- * a coach (see class-members/route.ts for the full explanation).
+ * a coach (see class-students/route.ts for the full explanation).
  *
  * Only reads — the period lookup, class ownership, and stub-entry creation
  * stay client-side (those touch only the coach's own rows, unaffected by
@@ -31,9 +31,9 @@ export async function GET(req: NextRequest) {
   const { data, error } = await db
     .from("rapor_entries")
     .select(`
-      id, member_id, class_id, locked, scores, notes, personality, motivation, learning_achievements, level, level_id, period_id,
-      member:members(
-        id, member_no, type, school_id,
+      id, student_id, class_id, locked, scores, notes, personality, motivation, learning_achievements, level, level_id, period_id,
+      student:students(
+        id, student_no, type, school_id,
         profile:profiles(full_name, avatar_url, birth_date),
         school:schools(
           id, name, logo_url, show_coach_sig, show_head_sig, show_school_sig, coach_sig_title, head_sig_title,

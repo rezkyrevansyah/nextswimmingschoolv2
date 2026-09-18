@@ -69,7 +69,7 @@ export default function LeaveDecisionModals({ hook }: { hook: IzinDataHook }) {
         </div>
       </Modal>
 
-      {/* Reject leave + reason modal (coach & member) */}
+      {/* Reject leave + reason modal (coach & student) */}
       <Modal open={!!rejectTarget} onClose={() => setRejectTarget(null)} title={`Reject ${tab === "coach" ? "Coach" : "Student"} Leave`} size="sm"
         footer={<><Btn variant="ghost" onClick={() => setRejectTarget(null)}>{"Cancel"}</Btn><Btn variant="danger" onClick={confirmReject} disabled={rejecting}>{rejecting ? "Rejecting…" : "Reject Leave"}</Btn></>}>
         <div className="space-y-4">

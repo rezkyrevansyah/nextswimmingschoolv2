@@ -31,7 +31,7 @@ function getAllItems(): MobileNavItem[] {
   ];
 }
 
-export default function MemberShell({ children, active, setActive, name, branchName, userId, avatarUrl, isSchoolAffiliate }: {
+export default function StudentShell({ children, active, setActive, name, branchName, userId, avatarUrl, isSchoolAffiliate }: {
   children: React.ReactNode;
   active: TabId;
   setActive: (id: TabId) => void;

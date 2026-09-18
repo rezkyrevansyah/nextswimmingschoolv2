@@ -1,18 +1,18 @@
 /**
- * POST /api/admin/import-members
- * Body: { branch_id: string, rows: ImportMemberRow[] }
- * Bulk-creates members sequentially to avoid Supabase auth rate limits.
+ * POST /api/admin/import-students
+ * Body: { branch_id: string, rows: ImportStudentRow[] }
+ * Bulk-creates students sequentially to avoid Supabase auth rate limits.
  * Only callable by admin or owner.
  */
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { getSupabaseAdmin } from "@/utils/supabase/admin";
 
-interface ImportMemberRow {
+interface ImportStudentRow {
   email: string;
   password: string;
   full_name: string;
-  member_type?: "reguler" | "private" | "school_affiliate";
+  student_type?: "reguler" | "private" | "school_affiliate";
   birth_date?: string;
   gender?: string;
   phone?: string;
@@ -22,7 +22,7 @@ interface ImportMemberRow {
   class_id?: string | null;
   school_id?: string | null;
   school_grade?: string | null;
-  // Private-only — a private member always gets its own dedicated 1:1 class,
+  // Private-only — a private student always gets its own dedicated 1:1 class,
   // always at this branch's own pool (location_type: "branch").
   package_price?: number | null;
   schedule_days?: string[] | null;
@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
   }
   const callerBranchId = callerProfile?.branch_id ?? (user.user_metadata?.branch_id as string | undefined) ?? null;
 
-  const body = await req.json() as { branch_id?: string; rows?: ImportMemberRow[] };
+  const body = await req.json() as { branch_id?: string; rows?: ImportStudentRow[] };
   const { branch_id, rows } = body;
 
   if (!branch_id) {
@@ -68,9 +68,9 @@ export async function POST(req: NextRequest) {
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
     const rowNum = i + 2; // row 1 = header in Excel
-    const isPrivate = row.member_type === "private";
+    const isPrivate = row.student_type === "private";
 
-    // For a private member, create their dedicated 1:1 class first — always
+    // For a private student, create their dedicated 1:1 class first — always
     // at this branch's own pool (location_type: "branch"). Rolled back below
     // if any later step in this row fails.
     let privateClassId: string | null = null;
@@ -104,7 +104,7 @@ export async function POST(req: NextRequest) {
       email: row.email,
       password: row.password,
       email_confirm: true,
-      user_metadata: { full_name: row.full_name, role: "member", branch_id, phone: row.phone },
+      user_metadata: { full_name: row.full_name, role: "student", branch_id, phone: row.phone },
     });
 
     if (authError) {
@@ -125,7 +125,7 @@ export async function POST(req: NextRequest) {
     const userId = authData.user.id;
 
     // Structured account ID (NEXT.xxx.ST.yy) — atomic sequence, generated once per row.
-    const { data: userNo, error: userNoError } = await db.rpc("generate_user_no", { p_role: "member" });
+    const { data: userNo, error: userNoError } = await db.rpc("generate_user_no", { p_role: "student" });
     if (userNoError || !userNo) {
       await db.auth.admin.deleteUser(userId);
       if (privateClassId) await db.from("classes").delete().eq("id", privateClassId);
@@ -136,7 +136,7 @@ export async function POST(req: NextRequest) {
     // 2. Insert profile (with fallback update on 23505)
     const profileData = {
       id: userId,
-      role: "member" as const,
+      role: "student" as const,
       full_name: row.full_name,
       email: row.email,
       phone: row.phone || null,
@@ -168,43 +168,43 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 3. Insert members row
-    const { data: memberRow, error: memberError } = await db
-      .from("members")
+    // 3. Insert students row
+    const { data: studentRow, error: studentError } = await db
+      .from("students")
       .insert({
         profile_id: userId,
         branch_id,
-        type: row.member_type ?? "reguler",
+        type: row.student_type ?? "reguler",
         status: "active",
-        school_id: row.member_type === "school_affiliate" ? (row.school_id ?? null) : null,
-        school_grade: row.member_type === "school_affiliate" ? (row.school_grade ?? null) : null,
+        school_id: row.student_type === "school_affiliate" ? (row.school_id ?? null) : null,
+        school_grade: row.student_type === "school_affiliate" ? (row.school_grade ?? null) : null,
         date_start: new Date().toISOString().split("T")[0],
         total_sessions: isPrivate ? (row.total_sessions ?? null) : null,
         remaining_sessions: isPrivate ? (row.total_sessions ?? null) : null,
-        member_no: userNo,
+        student_no: userNo,
       })
       .select("id")
       .single();
 
-    if (memberError) {
+    if (studentError) {
       await db.auth.admin.deleteUser(userId);
       if (privateClassId) await db.from("classes").delete().eq("id", privateClassId);
-      failed.push({ row: rowNum, email: row.email, error: memberError.message });
+      failed.push({ row: rowNum, email: row.email, error: studentError.message });
       continue;
     }
 
-    if (isPrivate && privateClassId && memberRow) {
-      // 4a. Link the member to their dedicated private class (no capacity
+    if (isPrivate && privateClassId && studentRow) {
+      // 4a. Link the student to their dedicated private class (no capacity
       // check needed — it's a fresh capacity-1 class created above).
-      await db.from("member_classes").insert({
-        member_id: memberRow.id,
+      await db.from("student_classes").insert({
+        student_id: studentRow.id,
         class_id: privateClassId,
         joined_at: new Date().toISOString(),
       });
 
       // 4b. Assign head/assistant coach(es), re-validating they still exist
       // and are coaches (they may have been deleted since the preview step).
-      // Non-fatal — the member row already exists either way.
+      // Non-fatal — the student row already exists either way.
       const candidateCoachIds = [row.head_coach_id, ...(row.assistant_coach_ids ?? [])].filter((id): id is string => !!id);
       let validCoachIds = new Set<string>();
       if (candidateCoachIds.length > 0) {
@@ -227,7 +227,7 @@ export async function POST(req: NextRequest) {
       const packagePrice = row.package_price ?? 0;
       if (packagePrice > 0) {
         const { error: billErr } = await db.from("bills").insert({
-          member_id: memberRow.id,
+          student_id: studentRow.id,
           branch_id,
           class_id: privateClassId,
           period_label: `Tambah ${row.total_sessions ?? 0} sesi`,
@@ -241,19 +241,19 @@ export async function POST(req: NextRequest) {
         });
         if (billErr) classWarnings.push({ row: rowNum, email: row.email, warning: "Gagal membuat tagihan paket — bisa dibuat manual lewat menu Private Students" });
       }
-    } else if (row.class_id && memberRow) {
-      // 4. Assign to an existing class (non-fatal — member row already exists either way)
+    } else if (row.class_id && studentRow) {
+      // 4. Assign to an existing class (non-fatal — student row already exists either way)
       const { data: classRow } = await db.from("classes").select("capacity").eq("id", row.class_id).single();
       const { count: enrolledCount } = await db
-        .from("member_classes")
-        .select("member_id", { count: "exact", head: true })
+        .from("student_classes")
+        .select("student_id", { count: "exact", head: true })
         .eq("class_id", row.class_id);
       const capacity = classRow?.capacity ?? 0;
       if (capacity > 0 && (enrolledCount ?? 0) >= capacity) {
         classWarnings.push({ row: rowNum, email: row.email, warning: "Kelas sudah penuh — student dibuat tanpa penugasan kelas" });
       } else {
-        await db.from("member_classes").insert({
-          member_id: memberRow.id,
+        await db.from("student_classes").insert({
+          student_id: studentRow.id,
           class_id: row.class_id,
           joined_at: new Date().toISOString(),
         });

@@ -50,7 +50,7 @@ Dashboard di puncak. Storage dan Activity Log di dasar. Kasbon bukan menu sendir
 | 5 | Schools | `schools` | Logo dan tanda tangan; butuh akun `school` |
 | 6 | Report Levels | `levels` | Rubrik global; sebelum periode rapor diisi |
 | 7 | Classes | `classes` | Kelas reguler; butuh pusat dan pelatih |
-| 8 | Private Students | `memberPrivate` | Akun plus kelas privat; butuh pelatih |
+| 8 | Private Students | `studentPrivate` | Akun plus kelas privat; butuh pelatih |
 | 9 | Coach Rates | `rates` | Tarif; butuh kelas |
 | 10 | Competitions | `competitions` | Prestasi; butuh siswa |
 | 11 | Leave Requests | `izin` | Jaring pengaman lintas pusat; sama mesin dengan Admin |
@@ -154,7 +154,7 @@ Dashboard di puncak. Storage dan Activity Log di dasar. Kasbon bukan menu sendir
 **Yang dapat dilakukan:**
 
 - menyaring peran, pusat, arsip, dan kata kunci;
-- membuat akun (`POST /api/admin/users`): `admin | manager_center | coach | member | school | staff`. Formulir tambah **tidak** dapat membuat Owner;
+- membuat akun (`POST /api/admin/users`): `admin | manager_center | coach | student | school | staff`. Formulir tambah **tidak** dapat membuat Owner;
 - saat membuat Admin atau Manager Center: opsi otomatis membuat Staff (surel `namastaff@…`);
 - tipe siswa di formulir tambah: `reguler | school_affiliate` (plus sekolah dan **jenjang wajib** jika afiliasi);
 - rincian: mengubah profil, peran, dan pusat (peran **dapat** diubah menjadi `owner`), mengatur ulang kata sandi, menonaktifkan atau mengaktifkan (`is_archived`), menghapus;
@@ -232,7 +232,7 @@ Absensi pelatih/siswa di rincian kelas **bukan** pengganti menu **Attendance**. 
 
 ---
 
-## 8. Private Students (`memberPrivate`)
+## 8. Private Students (`studentPrivate`)
 
 **Apa:** Les privat — satu siswa berpasangan dengan satu kelas `class_type=private`. Komponen sama dengan Admin; Owner melihat semua pusat plus saringan pusat. Satu-satunya jalur create siswa privat (FB-01).
 
@@ -244,7 +244,7 @@ Absensi pelatih/siswa di rincian kelas **bukan** pengganti menu **Attendance**. 
 
 Setiap perubahan jadwal, lokasi, atau pelatih berlaku untuk absensi **baru**. Absensi **lama** menyimpan konfigurasi saat kejadian; tidak ditimpa (FB-03). Jika lokasi berubah dari A ke B, acuan jarak clock-in sesi berikutnya adalah B. Tanpa pin, jarak tidak dihitung. Pergantian pelatih tidak menghapus clock-in sebelumnya dan tidak memindahkan honor sesi yang sudah dikunci invoice.
 
-Sisa sesi = `members.remaining_sessions` setelah pengurang peladen yang sama dengan absensi privat yang sah (FB-04). Empat angka yang harus konsisten: sesi awal paket, sesi terpakai, sisa, tampilan di panel Student.
+Sisa sesi = `students.remaining_sessions` setelah pengurang peladen yang sama dengan absensi privat yang sah (FB-04). Empat angka yang harus konsisten: sesi awal paket, sesi terpakai, sisa, tampilan di panel Student.
 
 **Dampak ke peran lain:**
 
@@ -356,7 +356,7 @@ Daftar `coach_attendances` (saringan pelatih, kelas, pusat, tanggal). Input manu
 
 ### B. Student
 
-Daftar `member_attendances` (kelas, status, bulan, nama, pusat). Hampir hanya baca. Baris `sakit`/`izin` otomatis dari Admin **Leave Requests** yang disetujui. Status sah: `hadir | telat | izin | sakit | tidak_hadir` (FB-05).
+Daftar `student_attendances` (kelas, status, bulan, nama, pusat). Hampir hanya baca. Baris `sakit`/`izin` otomatis dari Admin **Leave Requests** yang disetujui. Status sah: `hadir | telat | izin | sakit | tidak_hadir` (FB-05).
 
 ### C. Staff
 
@@ -432,7 +432,7 @@ Saringan tanggal (FB-11): default bulan berjalan; pengguna dapat ganti ke bulan 
 - **Staff:** mengajukan reimburse; gaji tampil di tab Payslip staf
 - **Coach:** honor lewat invoice, bukan input di sini
 
-**Jangan:** menyatukan `bills` ke satu tabel dengan honor. Jangan merapikan template Excel sebelum kueri saringan benar. Jangan memberi Admin biasa akses Financial (FB-12).
+**Jangan:** menyatukan `bills` ke satu tabel dengan honor. Jangan merapikan template Excel sebelum kueri saringan benar. Jangan studenti Admin biasa akses Financial (FB-12).
 
 ---
 

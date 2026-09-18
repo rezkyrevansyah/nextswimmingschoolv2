@@ -45,35 +45,35 @@ export function useSchoolRaporData() {
   const load = useCallback(async (sid: string, pid: string | null, periodLabel: string | null, branch_id: string, schoolConfig?: SchoolForSignerConfig & { logo_url: string | null }) => {
     setLoading(true);
 
-    const { data: memberRows } = await supabase
-      .from("members")
-      .select("id, profile_id, member_no, school_grade, profile:profiles(full_name, birth_date, avatar_url)")
+    const { data: studentRows } = await supabase
+      .from("students")
+      .select("id, profile_id, student_no, school_grade, profile:profiles(full_name, birth_date, avatar_url)")
       .eq("school_id", sid);
 
-    if (!memberRows || memberRows.length === 0) {
+    if (!studentRows || studentRows.length === 0) {
       setStudents([]);
       setLoading(false);
       return;
     }
 
-    const memberIds = memberRows.map(m => m.id);
+    const studentIds = studentRows.map(m => m.id);
 
     const [{ data: mcRows }, { data: entries }, { data: bestTimes }, { data: levelDistances }, { data: levelStrokes }] = await Promise.all([
       supabase
-        .from("member_classes")
-        .select("member_id, class_id, class:classes(id, name, rapor_signer_coach_id, class_coaches(coach_id, role, profile:profiles(full_name, signature_url)))")
-        .in("member_id", memberIds),
+        .from("student_classes")
+        .select("student_id, class_id, class:classes(id, name, rapor_signer_coach_id, class_coaches(coach_id, role, profile:profiles(full_name, signature_url)))")
+        .in("student_id", studentIds),
       pid
         ? supabase
             .from("rapor_entries")
-            .select("id, member_id, class_id, period_id, scores, notes, personality, motivation, learning_achievements, level, level_id, locked, rapor_levels(rapor_level_criteria(id, label, description, kind, options, sort_order))")
+            .select("id, student_id, class_id, period_id, scores, notes, personality, motivation, learning_achievements, level, level_id, locked, rapor_levels(rapor_level_criteria(id, label, description, kind, options, sort_order))")
             .eq("period_id", pid)
-            .in("member_id", memberIds)
+            .in("student_id", studentIds)
         : Promise.resolve({ data: [] }),
       supabase
-        .from("member_best_times")
-        .select("id, member_id, stroke, distance, time_seconds, event_date, is_official")
-        .in("member_id", memberIds)
+        .from("student_best_times")
+        .select("id, student_id, stroke, distance, time_seconds, event_date, is_official")
+        .in("student_id", studentIds)
         .order("distance", { ascending: true }),
       supabase
         .from("rapor_level_distances")
@@ -94,13 +94,13 @@ export function useSchoolRaporData() {
     const headName = ownerSettings?.head_name || "Syahril Sidik";
     const headTitle = ownerSettings?.head_title || "HEAD OF NEXT SWIMMING";
 
-    const classByMember = new Map<string, {
+    const classByStudent = new Map<string, {
       name: string;
       signerCoach: { full_name: string; signature_url: string | null } | null;
     }>();
 
     type McRow = {
-      member_id: string;
+      student_id: string;
       class: {
         id: string;
         name: string;
@@ -121,7 +121,7 @@ export function useSchoolRaporData() {
         profile: cc.profile ? { full_name: cc.profile.full_name, signature_url: cc.profile.signature_url ?? null } : null,
       }));
       const signer = resolveRaporSigner(coaches, mc.class.rapor_signer_coach_id);
-      classByMember.set(mc.member_id, {
+      classByStudent.set(mc.student_id, {
         name: mc.class.name,
         signerCoach: signer,
       });
@@ -129,7 +129,7 @@ export function useSchoolRaporData() {
 
     type RaporEntryRow = {
       id: string;
-      member_id: string;
+      student_id: string;
       class_id: string;
       period_id: string;
       scores: Record<string, number | string>;
@@ -145,16 +145,16 @@ export function useSchoolRaporData() {
       } | null;
     };
 
-    const entryByMember = new Map<string, RaporEntryRow>();
+    const entryByStudent = new Map<string, RaporEntryRow>();
     (entries as unknown as RaporEntryRow[] ?? []).forEach(e => {
-      entryByMember.set(e.member_id, e);
+      entryByStudent.set(e.student_id, e);
     });
 
-    const btByMember = new Map<string, PrintBestTime[]>();
+    const btByStudent = new Map<string, PrintBestTime[]>();
     (bestTimes ?? []).forEach(bt => {
-      const arr = btByMember.get(bt.member_id) ?? [];
+      const arr = btByStudent.get(bt.student_id) ?? [];
       arr.push({ stroke: bt.stroke, distance: bt.distance, time_seconds: bt.time_seconds });
-      btByMember.set(bt.member_id, arr);
+      btByStudent.set(bt.student_id, arr);
     });
 
     const distancesByLevel = new Map<string, number[]>();
@@ -171,9 +171,9 @@ export function useSchoolRaporData() {
       strokesByLevel.set(ls.level_id, arr);
     });
 
-    type MemberProfile = {
+    type StudentProfile = {
       id: string;
-      member_no?: string | null;
+      student_no?: string | null;
       school_grade?: string | null;
       profile: {
         full_name: string;
@@ -182,9 +182,9 @@ export function useSchoolRaporData() {
       } | null;
     };
 
-    const rows: Student[] = (memberRows as unknown as MemberProfile[]).map(m => {
-      const cls = classByMember.get(m.id);
-      const entry = entryByMember.get(m.id);
+    const rows: Student[] = (studentRows as unknown as StudentProfile[]).map(m => {
+      const cls = classByStudent.get(m.id);
+      const entry = entryByStudent.get(m.id);
       const profile = m.profile;
       const signer = cls?.signerCoach ?? null;
       const coachSig = signer?.signature_url ?? null;
@@ -203,7 +203,7 @@ export function useSchoolRaporData() {
       return {
         id: m.id,
         full_name: profile?.full_name ?? "—",
-        member_no: m.member_no ?? null,
+        student_no: m.student_no ?? null,
         birth_date: profile?.birth_date ?? null,
         avatar_url: profile?.avatar_url ?? null,
         school_grade: m.school_grade ?? null,
@@ -221,7 +221,7 @@ export function useSchoolRaporData() {
         learning_achievements: entry?.learning_achievements ?? null,
         level: entry?.level ?? null,
         criteria,
-        best_times: btByMember.get(m.id) ?? [],
+        best_times: btByStudent.get(m.id) ?? [],
         level_strokes: entry?.level_id ? (strokesByLevel.get(entry.level_id) ?? []) : [],
         level_distances: entry?.level_id ? (distancesByLevel.get(entry.level_id) ?? []) : [],
         school_logo_url: schoolConfig?.logo_url ?? null,

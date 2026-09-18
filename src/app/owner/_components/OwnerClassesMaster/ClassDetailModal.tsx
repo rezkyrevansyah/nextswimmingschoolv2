@@ -4,8 +4,8 @@ import Modal from "@/components/ui/Modal";
 import { NoTranslate } from "@/components/ui/NoTranslate";
 import ClassInfoTab from "./ClassInfoTab";
 import ClassCoachTab from "./ClassCoachTab";
-import ClassMemberTab from "./ClassMemberTab";
-import { ClassCoachAttendanceTab, ClassMemberAttendanceTab } from "./ClassAttendanceTabs";
+import ClassStudentTab from "./ClassStudentTab";
+import { ClassCoachAttendanceTab, ClassStudentAttendanceTab } from "./ClassAttendanceTabs";
 import type { OwnerClassesMasterHook } from "./_hook";
 
 export default function ClassDetailModal({ hook }: { hook: OwnerClassesMasterHook }) {
@@ -27,13 +27,13 @@ export default function ClassDetailModal({ hook }: { hook: OwnerClassesMasterHoo
         <div className="space-y-4">
           {/* Tab Navigation */}
           <div className="flex gap-1 flex-wrap border-b border-line pb-2">
-            {(["info", "coach", "member", "att_coach", "att_member"] as const).map((tab) => {
+            {(["info", "coach", "student", "att_coach", "att_student"] as const).map((tab) => {
               const labels: Record<string, string> = {
                 info: "Info",
                 coach: "Coach",
-                member: "Student",
+                student: "Student",
                 att_coach: "Coach Attendance",
-                att_member: "Student Attendance",
+                att_student: "Student Attendance",
               };
               return (
                 <button
@@ -52,9 +52,9 @@ export default function ClassDetailModal({ hook }: { hook: OwnerClassesMasterHoo
 
           {detailTab === "info" && <ClassInfoTab hook={hook} />}
           {detailTab === "coach" && <ClassCoachTab hook={hook} />}
-          {detailTab === "member" && <ClassMemberTab hook={hook} />}
+          {detailTab === "student" && <ClassStudentTab hook={hook} />}
           {detailTab === "att_coach" && <ClassCoachAttendanceTab hook={hook} />}
-          {detailTab === "att_member" && <ClassMemberAttendanceTab hook={hook} />}
+          {detailTab === "att_student" && <ClassStudentAttendanceTab hook={hook} />}
         </div>
       )}
     </Modal>

@@ -1,6 +1,6 @@
-export interface AccountMemberData {
+export interface AccountStudentData {
   id: string;
-  member_no: string | null;
+  student_no: string | null;
   qr_code: string | null;
   type: string;
   status: string;
@@ -10,7 +10,7 @@ export interface AccountMemberData {
   school_grade: string | null;
   date_start: string | null;
   school?: { id: string; name: string } | null;
-  member_classes?: { class: { id: string; name: string; time_start?: string; time_end?: string } }[];
+  student_classes?: { class: { id: string; name: string; time_start?: string; time_end?: string } }[];
 }
 
 export interface AccountProfile {
@@ -36,8 +36,8 @@ export interface AccountProfile {
   specialization: string | null;
   bio: string | null;
   linked_admin_id?: string | null;
-  member?: AccountMemberData | null;
-  members?: AccountMemberData[] | null;
+  student?: AccountStudentData | null;
+  students?: AccountStudentData[] | null;
 }
 
 export interface Props {
@@ -49,7 +49,7 @@ export interface Props {
 }
 
 // Only roles actually paid through this system carry a bank account —
-// members/schools pay the school, they don't receive payouts from it.
+// students/schools pay the school, they don't receive payouts from it.
 export const BANK_ACCOUNT_ROLES = ["staff", "admin", "coach", "manager_center"];
 
 export const ROLE_COLORS: Record<string, string> = {
@@ -57,7 +57,7 @@ export const ROLE_COLORS: Record<string, string> = {
   admin: "bg-ocean-100 text-ocean-700 border-ocean-200",
   manager_center: "bg-indigo-100 text-indigo-700 border-indigo-200",
   coach: "bg-wave-100 text-wave-700 border-wave-200",
-  member: "bg-green-100 text-green-700 border-green-200",
+  student: "bg-green-100 text-green-700 border-green-200",
   school: "bg-amber-100 text-amber-700 border-amber-200",
   staff: "bg-slate-100 text-slate-700 border-slate-200",
 };

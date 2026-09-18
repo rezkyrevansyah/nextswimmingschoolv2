@@ -4,7 +4,7 @@ import { useCompetitionData } from "./useCompetitionData";
 import { useParticipationData } from "./useParticipationData";
 import type { AdminCompetitionHook } from "./_hook";
 import AwardsTab from "./AwardsTab";
-import MemberAchievementModal from "./MemberAchievementModal";
+import StudentAchievementModal from "./StudentAchievementModal";
 import CompetitionsTab from "./CompetitionsTab";
 import CompetitionFormModal from "./CompetitionFormModal";
 import CompetitionDetailModal from "./CompetitionDetailModal";
@@ -14,7 +14,7 @@ export default function AdminCompetition({ branchId }: { branchId: string }) {
   const comp = useCompetitionData(branchId);
   const part = useParticipationData({
     branchId,
-    membersList: comp.membersList,
+    studentsList: comp.studentsList,
     selectedComp: comp.selectedComp,
     loadCompetitions: comp.loadCompetitions,
   });
@@ -67,11 +67,11 @@ export default function AdminCompetition({ branchId }: { branchId: string }) {
         </button>
       </div>
 
-      {/* ── AWARDS TAB: Member-first landing view matching pen.dev CeNt0 & NmdyX ── */}
+      {/* ── AWARDS TAB: Student-first landing view matching pen.dev CeNt0 & NmdyX ── */}
       {activeTab === "awards" && <AwardsTab hook={hook} />}
 
-      {/* ── Modal: Member Achievement Detail (popup opened by clicking a member above) ── */}
-      <MemberAchievementModal hook={hook} />
+      {/* ── Modal: Student Achievement Detail (popup opened by clicking a student above) ── */}
+      <StudentAchievementModal hook={hook} />
 
       {/* ── COMPETITIONS TAB ── */}
       {activeTab === "competitions" && <CompetitionsTab hook={hook} />}

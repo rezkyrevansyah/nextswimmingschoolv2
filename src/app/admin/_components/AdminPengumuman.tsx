@@ -20,7 +20,7 @@ interface Announcement {
 }
 
 const ANNOUNCEMENT_ROLE_LABELS = [
-  { value: "member", label: "Student" },
+  { value: "student", label: "Student" },
   { value: "coach",  label: "Coach" },
   { value: "admin",  label: "Branch Admin" },
   { value: "school", label: "School" },
@@ -35,7 +35,7 @@ export default function AdminPengumuman({ branchId }: { branchId: string }) {
   const [openAdd, setOpenAdd] = useState(false);
   const [saving, setSaving] = useState(false);
   const [classes, setClasses] = useState<ClassRow[]>([]);
-  const [form, setForm] = useState({ title: "", body: "", target: "all", target_roles: ["member"] as string[], valid_from: "", valid_until: "", class_ids: [] as string[] });
+  const [form, setForm] = useState({ title: "", body: "", target: "all", target_roles: ["student"] as string[], valid_from: "", valid_until: "", class_ids: [] as string[] });
 
   const toggleRole = (role: string) => {
     setForm(f => ({
@@ -92,14 +92,14 @@ export default function AdminPengumuman({ branchId }: { branchId: string }) {
     const notifBody = `${form.title}: ${form.body.slice(0, 80)}${form.body.length > 80 ? "…" : ""}`;
     let targetUserIds: string[] = [];
 
-    // MEMBER
-    if (form.target_roles.includes("member")) {
+    // STUDENT
+    if (form.target_roles.includes("student")) {
       if (form.target === "all") {
-        const { data: mRows } = await supabase.from("members").select("id").eq("branch_id", branchId).eq("status", "active");
+        const { data: mRows } = await supabase.from("students").select("id").eq("branch_id", branchId).eq("status", "active");
         targetUserIds.push(...(mRows ?? []).map(m => m.id as string));
       } else if (form.class_ids.length > 0) {
-        const { data: mcRows } = await supabase.from("member_classes").select("member_id").in("class_id", form.class_ids);
-        targetUserIds.push(...[...new Set((mcRows ?? []).map(mc => mc.member_id as string))]);
+        const { data: mcRows } = await supabase.from("student_classes").select("student_id").in("class_id", form.class_ids);
+        targetUserIds.push(...[...new Set((mcRows ?? []).map(mc => mc.student_id as string))]);
       }
     }
 
@@ -120,9 +120,9 @@ export default function AdminPengumuman({ branchId }: { branchId: string }) {
       targetUserIds.push(...(admRows ?? []).map(a => (a as { id: string }).id));
     }
 
-    // SCHOOL — school_affiliate members
+    // SCHOOL — school_affiliate students
     if (form.target_roles.includes("school")) {
-      const { data: sRows } = await supabase.from("members").select("id").eq("branch_id", branchId).eq("type", "school_affiliate").eq("status", "active");
+      const { data: sRows } = await supabase.from("students").select("id").eq("branch_id", branchId).eq("type", "school_affiliate").eq("status", "active");
       targetUserIds.push(...(sRows ?? []).map(s => (s as { id: string }).id));
     }
 
@@ -135,7 +135,7 @@ export default function AdminPengumuman({ branchId }: { branchId: string }) {
     setSaving(false);
     toast.success("Announcement created");
     setOpenAdd(false);
-    setForm({ title: "", body: "", target: "all", target_roles: ["member"], valid_from: "", valid_until: "", class_ids: [] });
+    setForm({ title: "", body: "", target: "all", target_roles: ["student"], valid_from: "", valid_until: "", class_ids: [] });
     load();
   };
 
@@ -164,7 +164,7 @@ export default function AdminPengumuman({ branchId }: { branchId: string }) {
     <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div><h2 className="font-display font-bold text-2xl">{"Announcements"}</h2><p className="text-ink-mute text-sm mt-0.5">{"Shown on the student home page as a banner."}</p></div>
-        <Btn variant="primary" icon="plus" onClick={() => { setForm({ title: "", body: "", target: "all", target_roles: ["member"], valid_from: "", valid_until: "", class_ids: [] }); setOpenAdd(true); }}>{"Create Announcement"}</Btn>
+        <Btn variant="primary" icon="plus" onClick={() => { setForm({ title: "", body: "", target: "all", target_roles: ["student"], valid_from: "", valid_until: "", class_ids: [] }); setOpenAdd(true); }}>{"Create Announcement"}</Btn>
       </div>
       {loading ? <div className="text-ink-mute text-sm">{"Loading…"}</div> : (
         <div className="grid lg:grid-cols-2 gap-5">

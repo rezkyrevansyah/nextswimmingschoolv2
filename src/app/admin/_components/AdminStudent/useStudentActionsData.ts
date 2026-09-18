@@ -5,23 +5,23 @@ import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
 import { logActivity } from "@/lib/activityLog";
 import type { ClassRow, ClassPackage } from "../../_types";
-import type { MemberRow } from "./_types";
+import type { StudentRow } from "./_types";
 
-export function useMemberActionsData({
+export function useStudentActionsData({
   branchId, detail, setDetail, classes, load,
 }: {
   branchId: string;
-  detail: MemberRow | null;
-  setDetail: React.Dispatch<React.SetStateAction<MemberRow | null>>;
+  detail: StudentRow | null;
+  setDetail: React.Dispatch<React.SetStateAction<StudentRow | null>>;
   classes: ClassRow[];
   load: () => Promise<void>;
 }) {
   const supabase = createClient();
   const toast = useToast();
   const confirm = useConfirm();
-  const [suspendMemberTarget, setSuspendMemberTarget] = useState<MemberRow | null>(null);
-  const [suspendMemberForm, setSuspendMemberForm] = useState({ reason: "", until: "" });
-  const [suspendingMember, setSuspendingMember] = useState(false);
+  const [suspendStudentTarget, setSuspendStudentTarget] = useState<StudentRow | null>(null);
+  const [suspendStudentForm, setSuspendStudentForm] = useState({ reason: "", until: "" });
+  const [suspendingStudent, setSuspendingStudent] = useState(false);
   const [openResetPwd, setOpenResetPwd] = useState(false);
   const [newPwd, setNewPwd] = useState("");
   const [showNewPwd, setShowNewPwd] = useState(false);
@@ -30,23 +30,23 @@ export function useMemberActionsData({
   const [savingAddSesi, setSavingAddSesi] = useState(false);
   const [privateClassPackages, setPrivateClassPackages] = useState<ClassPackage[]>([]);
 
-  const doSuspendMember = async () => {
-    if (!suspendMemberTarget || !suspendMemberForm.reason || !suspendMemberForm.until) return toast.error("Reason and end date are required");
-    setSuspendingMember(true);
+  const doSuspendStudent = async () => {
+    if (!suspendStudentTarget || !suspendStudentForm.reason || !suspendStudentForm.until) return toast.error("Reason and end date are required");
+    setSuspendingStudent(true);
     const user = (await supabase.auth.getUser()).data.user;
-    const { error } = await supabase.from("members")
-      .update({ status: "suspended", suspend_until: suspendMemberForm.until, suspend_reason: suspendMemberForm.reason })
-      .eq("id", suspendMemberTarget.id);
-    setSuspendingMember(false);
+    const { error } = await supabase.from("students")
+      .update({ status: "suspended", suspend_until: suspendStudentForm.until, suspend_reason: suspendStudentForm.reason })
+      .eq("id", suspendStudentTarget.id);
+    setSuspendingStudent(false);
     if (error) return toast.error("Failed to suspend student", error.message);
-    toast.success(`${suspendMemberTarget.profile?.full_name ?? "Student"} suspended`);
-    logActivity(supabase, { userId: user?.id ?? "unknown", userRole: "admin", userName: user?.user_metadata?.full_name ?? "Admin", branchId, entityType: "members", entityId: suspendMemberTarget.id, entityLabel: suspendMemberTarget.profile?.full_name ?? undefined, action: "suspend", label: `Student ${suspendMemberTarget.profile?.full_name ?? suspendMemberTarget.id} suspended until ${suspendMemberForm.until}`, meta: { reason: suspendMemberForm.reason, until: suspendMemberForm.until } });
-    setSuspendMemberTarget(null);
+    toast.success(`${suspendStudentTarget.profile?.full_name ?? "Student"} suspended`);
+    logActivity(supabase, { userId: user?.id ?? "unknown", userRole: "admin", userName: user?.user_metadata?.full_name ?? "Admin", branchId, entityType: "students", entityId: suspendStudentTarget.id, entityLabel: suspendStudentTarget.profile?.full_name ?? undefined, action: "suspend", label: `Student ${suspendStudentTarget.profile?.full_name ?? suspendStudentTarget.id} suspended until ${suspendStudentForm.until}`, meta: { reason: suspendStudentForm.reason, until: suspendStudentForm.until } });
+    setSuspendStudentTarget(null);
     setDetail(null);
     load();
   };
 
-  const deleteMember = async (m: MemberRow) => {
+  const deleteStudent = async (m: StudentRow) => {
     const ok = await confirm({ body: `Permanently delete student account ${m.profile?.full_name ?? ""}? All data including attendance and bills will be deleted too.`, danger: true, confirmLabel: "Delete Permanently" });
     if (!ok) return;
     const res = await fetch(`/api/admin/users/${m.profile_id}`, { method: "DELETE" });
@@ -59,14 +59,14 @@ export function useMemberActionsData({
     load();
   };
 
-  const liftSuspendMember = async (m: MemberRow) => {
+  const liftSuspendStudent = async (m: StudentRow) => {
     const user = (await supabase.auth.getUser()).data.user;
-    const { error } = await supabase.from("members")
+    const { error } = await supabase.from("students")
       .update({ status: "active", suspend_until: null, suspend_reason: null })
       .eq("id", m.id);
     if (error) return toast.error("Failed to end suspend", error.message);
     toast.success("Suspend ended");
-    logActivity(supabase, { userId: user?.id ?? "unknown", userRole: "admin", userName: user?.user_metadata?.full_name ?? "Admin", branchId, entityType: "members", entityId: m.id, entityLabel: m.profile?.full_name ?? undefined, action: "unsuspend", label: `Suspend for student ${m.profile?.full_name ?? m.id} ended` });
+    logActivity(supabase, { userId: user?.id ?? "unknown", userRole: "admin", userName: user?.user_metadata?.full_name ?? "Admin", branchId, entityType: "students", entityId: m.id, entityLabel: m.profile?.full_name ?? undefined, action: "unsuspend", label: `Suspend for student ${m.profile?.full_name ?? m.id} ended` });
     setDetail(null);
     load();
   };
@@ -90,7 +90,7 @@ export function useMemberActionsData({
     const db = createClient();
     const newTotal = (detail.total_sessions ?? 0) + jumlah;
     const newRemaining = (detail.remaining_sessions ?? 0) + jumlah;
-    const { error } = await db.from("members")
+    const { error } = await db.from("students")
       .update({ total_sessions: newTotal, remaining_sessions: newRemaining })
       .eq("id", detail.id);
     if (error) { setSavingAddSesi(false); return toast.error("Failed to add session", error.message); }
@@ -100,8 +100,8 @@ export function useMemberActionsData({
       if (selectedPkg) {
         // Use package price
         await db.from("bills").insert({
-          member_id: detail.id, branch_id: branchId,
-          class_id: detail.member_classes?.[0]?.class?.id ?? null,
+          student_id: detail.id, branch_id: branchId,
+          class_id: detail.student_classes?.[0]?.class?.id ?? null,
           period_label: selectedPkg.name,
           type: "session_pack" as "monthly",
           sessions_total: selectedPkg.sessions,
@@ -113,12 +113,12 @@ export function useMemberActionsData({
         });
       } else {
         // Fallback: use price_per_session
-        const cls = detail.member_classes?.[0]?.class;
+        const cls = detail.student_classes?.[0]?.class;
         const classRow = cls ? classes.find(c => c.id === cls.id) : null;
         const pricePerSession = classRow?.price_per_session ?? 0;
         if (pricePerSession > 0) {
           await db.from("bills").insert({
-            member_id: detail.id, branch_id: branchId,
+            student_id: detail.id, branch_id: branchId,
             period_label: `Add ${jumlah} sessions`,
             type: "session_pack" as "monthly",
             amount: pricePerSession * jumlah,
@@ -135,17 +135,17 @@ export function useMemberActionsData({
     setOpenAddSesi(false);
     setAddSesiForm({ jumlah: "", generate_bill: false, selectedPackageId: "" });
     // Refresh detail
-    const { data } = await db.from("members")
-      .select("id, profile_id, type, status, date_start, qr_code, school_id, school_grade, remaining_sessions, total_sessions, suspend_until, suspend_reason, profile:profiles(full_name, birth_date, phone, gender, address, health_notes, email, avatar_url), member_classes(class:classes(id, name))")
+    const { data } = await db.from("students")
+      .select("id, profile_id, type, status, date_start, qr_code, school_id, school_grade, remaining_sessions, total_sessions, suspend_until, suspend_reason, profile:profiles(full_name, birth_date, phone, gender, address, health_notes, email, avatar_url), student_classes(class:classes(id, name))")
       .eq("id", detail.id).single();
-    if (data) setDetail(data as unknown as MemberRow);
+    if (data) setDetail(data as unknown as StudentRow);
     load();
   };
 
   return {
-    suspendMemberTarget, setSuspendMemberTarget, suspendMemberForm, setSuspendMemberForm, suspendingMember, doSuspendMember,
+    suspendStudentTarget, setSuspendStudentTarget, suspendStudentForm, setSuspendStudentForm, suspendingStudent, doSuspendStudent,
     openResetPwd, setOpenResetPwd, newPwd, setNewPwd, showNewPwd, setShowNewPwd, resetPassword,
     openAddSesi, setOpenAddSesi, addSesiForm, setAddSesiForm, savingAddSesi, privateClassPackages, setPrivateClassPackages, doAddSesi,
-    deleteMember, liftSuspendMember,
+    deleteStudent, liftSuspendStudent,
   };
 }

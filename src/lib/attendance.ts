@@ -3,20 +3,20 @@
  *
  * Three tables remain the source of truth:
  *   coach_attendances  — coach × class × date   status: present | late | absent
- *   member_attendances — member × class × date  status: hadir | telat | izin | sakit | tidak_hadir
+ *   student_attendances — student × class × date  status: hadir | telat | izin | sakit | tidak_hadir
  *   staff_attendances  — staff × calendar day   status: present | absent | izin | sakit
  *
  * UI canon is English: present | late | absent | sick | izin
  * Coach izin/sakit live on coach_leaves; an approved leave writes session
  * rows as original=absent + substitute=present. Staff has no Late.
- * Members never write their own rows (QR / coach / admin / approved leave).
+ * Students never write their own rows (QR / coach / admin / approved leave).
  */
 
 export const UI_ATTENDANCE_STATUSES = ["present", "late", "absent", "sick", "izin"] as const;
 export type UiAttendanceStatus = (typeof UI_ATTENDANCE_STATUSES)[number];
 
-export const MEMBER_DB_STATUSES = ["hadir", "telat", "izin", "sakit", "tidak_hadir"] as const;
-export type MemberDbStatus = (typeof MEMBER_DB_STATUSES)[number];
+export const STUDENT_DB_STATUSES = ["hadir", "telat", "izin", "sakit", "tidak_hadir"] as const;
+export type StudentDbStatus = (typeof STUDENT_DB_STATUSES)[number];
 
 export const COACH_DB_STATUSES = ["present", "late", "absent"] as const;
 export type CoachDbStatus = (typeof COACH_DB_STATUSES)[number];
@@ -28,15 +28,15 @@ export type AttendanceStatusKind = "present" | "late" | "absent" | "excused" | "
 
 /** Postgres ON CONFLICT targets — unique indexes already exist in live DB. */
 export const COACH_ATTENDANCE_CONFLICT = "coach_id,class_id,session_date";
-export const MEMBER_ATTENDANCE_CONFLICT = "class_id,member_id,session_date";
+export const STUDENT_ATTENDANCE_CONFLICT = "class_id,student_id,session_date";
 export const STAFF_ATTENDANCE_CONFLICT = "staff_id,attendance_date";
 
 /** Coach is late if clock-in is more than 15 minutes after class start. */
 export const COACH_LATE_THRESHOLD_MINUTES = 15;
-/** Member QR/scan is late if more than 1 minute after class start. */
-export const MEMBER_QR_LATE_THRESHOLD_MINUTES = 1;
+/** Student QR/scan is late if more than 1 minute after class start. */
+export const STUDENT_QR_LATE_THRESHOLD_MINUTES = 1;
 
-export const MEMBER_STATUS_TO_UI: Record<MemberDbStatus, UiAttendanceStatus> = {
+export const STUDENT_STATUS_TO_UI: Record<StudentDbStatus, UiAttendanceStatus> = {
   hadir: "present",
   telat: "late",
   tidak_hadir: "absent",
@@ -44,7 +44,7 @@ export const MEMBER_STATUS_TO_UI: Record<MemberDbStatus, UiAttendanceStatus> = {
   izin: "izin",
 };
 
-export const UI_TO_MEMBER_STATUS: Record<UiAttendanceStatus, MemberDbStatus> = {
+export const UI_TO_STUDENT_STATUS: Record<UiAttendanceStatus, StudentDbStatus> = {
   present: "hadir",
   late: "telat",
   absent: "tidak_hadir",
@@ -72,8 +72,8 @@ export const UI_TO_STAFF_STATUS: Partial<Record<UiAttendanceStatus, StaffDbStatu
   sick: "sakit",
 };
 
-function isMemberDbStatus(value: string): value is MemberDbStatus {
-  return (MEMBER_DB_STATUSES as readonly string[]).includes(value);
+function isStudentDbStatus(value: string): value is StudentDbStatus {
+  return (STUDENT_DB_STATUSES as readonly string[]).includes(value);
 }
 
 function isCoachDbStatus(value: string): value is CoachDbStatus {
@@ -84,10 +84,10 @@ function isStaffDbStatus(value: string): value is StaffDbStatus {
   return (STAFF_DB_STATUSES as readonly string[]).includes(value);
 }
 
-/** Map a member_attendances.status (or a UI alias) to the UI canon. */
-export function memberDbToUi(status: string | null | undefined): UiAttendanceStatus {
+/** Map a student_attendances.status (or a UI alias) to the UI canon. */
+export function studentDbToUi(status: string | null | undefined): UiAttendanceStatus {
   if (!status) return "absent";
-  if (isMemberDbStatus(status)) return MEMBER_STATUS_TO_UI[status];
+  if (isStudentDbStatus(status)) return STUDENT_STATUS_TO_UI[status];
   if ((UI_ATTENDANCE_STATUSES as readonly string[]).includes(status)) return status as UiAttendanceStatus;
   if (status === "alpha") return "absent";
   return "absent";
@@ -111,8 +111,8 @@ export function staffDbToUi(status: string | null | undefined): UiAttendanceStat
   return "absent";
 }
 
-export function uiToMemberDb(ui: UiAttendanceStatus): MemberDbStatus {
-  return UI_TO_MEMBER_STATUS[ui];
+export function uiToStudentDb(ui: UiAttendanceStatus): StudentDbStatus {
+  return UI_TO_STUDENT_STATUS[ui];
 }
 
 export function uiToCoachDb(ui: UiAttendanceStatus): CoachDbStatus | null {
@@ -129,8 +129,8 @@ export function uiToStatusKind(ui: UiAttendanceStatus): AttendanceStatusKind {
   return ui;
 }
 
-export function memberStatusKind(status: string | null | undefined): AttendanceStatusKind {
-  return uiToStatusKind(memberDbToUi(status));
+export function studentStatusKind(status: string | null | undefined): AttendanceStatusKind {
+  return uiToStatusKind(studentDbToUi(status));
 }
 
 export function coachStatusKind(status: string | null | undefined): AttendanceStatusKind {
@@ -142,8 +142,8 @@ export function staffStatusKind(status: string | null | undefined): AttendanceSt
 }
 
 /** Present-like: attended the session (on time or late). */
-export function isMemberPresentLike(status: string | null | undefined): boolean {
-  const ui = memberDbToUi(status);
+export function isStudentPresentLike(status: string | null | undefined): boolean {
+  const ui = studentDbToUi(status);
   return ui === "present" || ui === "late";
 }
 
@@ -156,8 +156,8 @@ export function isStaffPresentLike(status: string | null | undefined): boolean {
   return staffDbToUi(status) === "present";
 }
 
-export function memberStatusIcon(status: string | null | undefined): "check" | "clipboard" | "warning" | "close" | "info" {
-  const ui = memberDbToUi(status);
+export function studentStatusIcon(status: string | null | undefined): "check" | "clipboard" | "warning" | "close" | "info" {
+  const ui = studentDbToUi(status);
   if (ui === "present") return "check";
   if (ui === "izin") return "clipboard";
   if (ui === "sick") return "warning";
@@ -182,12 +182,12 @@ export function classifyCoachClockIn(minutesLate: number): CoachDbStatus {
   return minutesLate > COACH_LATE_THRESHOLD_MINUTES ? "late" : "present";
 }
 
-export function classifyMemberScan(minutesLate: number): MemberDbStatus {
-  return minutesLate > MEMBER_QR_LATE_THRESHOLD_MINUTES ? "telat" : "hadir";
+export function classifyStudentScan(minutesLate: number): StudentDbStatus {
+  return minutesLate > STUDENT_QR_LATE_THRESHOLD_MINUTES ? "telat" : "hadir";
 }
 
-/** Approved member leave → session status. ujian / lainnya / unknown map to izin. */
-export function memberLeaveTypeToStatus(type: string | null | undefined): MemberDbStatus {
+/** Approved student leave → session status. ujian / lainnya / unknown map to izin. */
+export function studentLeaveTypeToStatus(type: string | null | undefined): StudentDbStatus {
   return type === "sakit" ? "sakit" : "izin";
 }
 

@@ -20,7 +20,7 @@ CREATE TABLE public.branches (
 );
 CREATE TABLE public.profiles (
   id uuid NOT NULL,
-  role USER-DEFINED NOT NULL DEFAULT 'member'::user_role,
+  role USER-DEFINED NOT NULL DEFAULT 'student'::user_role,
   branch_id uuid,
   full_name text NOT NULL DEFAULT ''::text,
   nick_name text,
@@ -124,12 +124,12 @@ CREATE TABLE public.class_criteria (
   CONSTRAINT class_criteria_pkey PRIMARY KEY (id),
   CONSTRAINT class_criteria_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.classes(id)
 );
-CREATE TABLE public.members (
+CREATE TABLE public.students (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
   profile_id uuid NOT NULL,
   branch_id uuid NOT NULL,
-  type USER-DEFINED NOT NULL DEFAULT 'reguler'::member_type,
-  status USER-DEFINED NOT NULL DEFAULT 'active'::member_status,
+  type USER-DEFINED NOT NULL DEFAULT 'reguler'::student_type,
+  status USER-DEFINED NOT NULL DEFAULT 'active'::student_status,
   suspend_until date,
   suspend_reason text,
   school_id uuid,
@@ -140,19 +140,19 @@ CREATE TABLE public.members (
   pay_status USER-DEFINED NOT NULL DEFAULT 'unpaid'::payment_status,
   admin_notes text,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
-  member_no text,
-  CONSTRAINT members_pkey PRIMARY KEY (id),
-  CONSTRAINT members_profile_id_fkey FOREIGN KEY (profile_id) REFERENCES public.profiles(id),
-  CONSTRAINT members_school_id_fkey FOREIGN KEY (school_id) REFERENCES public.schools(id),
-  CONSTRAINT members_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branches(id)
+  student_no text,
+  CONSTRAINT students_pkey PRIMARY KEY (id),
+  CONSTRAINT students_profile_id_fkey FOREIGN KEY (profile_id) REFERENCES public.profiles(id),
+  CONSTRAINT students_school_id_fkey FOREIGN KEY (school_id) REFERENCES public.schools(id),
+  CONSTRAINT students_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branches(id)
 );
-CREATE TABLE public.member_classes (
-  member_id uuid NOT NULL,
+CREATE TABLE public.student_classes (
+  student_id uuid NOT NULL,
   class_id uuid NOT NULL,
   joined_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT member_classes_pkey PRIMARY KEY (member_id, class_id),
-  CONSTRAINT member_classes_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.classes(id),
-  CONSTRAINT member_classes_member_id_fkey FOREIGN KEY (member_id) REFERENCES public.members(id)
+  CONSTRAINT student_classes_pkey PRIMARY KEY (student_id, class_id),
+  CONSTRAINT student_classes_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.classes(id),
+  CONSTRAINT student_classes_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.students(id)
 );
 CREATE TABLE public.certifications (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -198,20 +198,20 @@ CREATE TABLE public.coach_attendances (
   CONSTRAINT coach_attendances_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.classes(id),
   CONSTRAINT coach_attendances_invoice_id_fkey FOREIGN KEY (invoice_id) REFERENCES public.coach_invoices(id)
 );
-CREATE TABLE public.member_attendances (
+CREATE TABLE public.student_attendances (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
-  member_id uuid NOT NULL,
+  student_id uuid NOT NULL,
   class_id uuid NOT NULL,
   session_date date NOT NULL,
   status USER-DEFINED NOT NULL DEFAULT 'hadir'::attendance_status,
   method USER-DEFINED,
   marked_by uuid,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT member_attendances_pkey PRIMARY KEY (id),
-  CONSTRAINT member_attendances_class_member_date_key UNIQUE (class_id, member_id, session_date),
-  CONSTRAINT member_attendances_marked_by_fkey FOREIGN KEY (marked_by) REFERENCES public.profiles(id),
-  CONSTRAINT member_attendances_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.classes(id),
-  CONSTRAINT member_attendances_member_id_fkey FOREIGN KEY (member_id) REFERENCES public.members(id)
+  CONSTRAINT student_attendances_pkey PRIMARY KEY (id),
+  CONSTRAINT student_attendances_class_student_date_key UNIQUE (class_id, student_id, session_date),
+  CONSTRAINT student_attendances_marked_by_fkey FOREIGN KEY (marked_by) REFERENCES public.profiles(id),
+  CONSTRAINT student_attendances_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.classes(id),
+  CONSTRAINT student_attendances_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.students(id)
 );
 CREATE TABLE public.coach_leaves (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -243,9 +243,9 @@ CREATE TABLE public.coach_leave_classes (
   CONSTRAINT coach_leave_classes_leave_id_fkey FOREIGN KEY (leave_id) REFERENCES public.coach_leaves(id),
   CONSTRAINT coach_leave_classes_substitute_id_fkey FOREIGN KEY (substitute_id) REFERENCES public.profiles(id)
 );
-CREATE TABLE public.member_leaves (
+CREATE TABLE public.student_leaves (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
-  member_id uuid NOT NULL,
+  student_id uuid NOT NULL,
   type USER-DEFINED NOT NULL,
   reason text,
   date_from date NOT NULL,
@@ -256,20 +256,20 @@ CREATE TABLE public.member_leaves (
   reject_reason text,
   created_by_admin boolean NOT NULL DEFAULT false,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT member_leaves_pkey PRIMARY KEY (id),
-  CONSTRAINT member_leaves_reviewed_by_fkey FOREIGN KEY (reviewed_by) REFERENCES public.profiles(id),
-  CONSTRAINT member_leaves_member_id_fkey FOREIGN KEY (member_id) REFERENCES public.members(id)
+  CONSTRAINT student_leaves_pkey PRIMARY KEY (id),
+  CONSTRAINT student_leaves_reviewed_by_fkey FOREIGN KEY (reviewed_by) REFERENCES public.profiles(id),
+  CONSTRAINT student_leaves_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.students(id)
 );
-CREATE TABLE public.member_leave_classes (
+CREATE TABLE public.student_leave_classes (
   leave_id uuid NOT NULL,
   class_id uuid NOT NULL,
-  CONSTRAINT member_leave_classes_pkey PRIMARY KEY (leave_id, class_id),
-  CONSTRAINT member_leave_classes_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.classes(id),
-  CONSTRAINT member_leave_classes_leave_id_fkey FOREIGN KEY (leave_id) REFERENCES public.member_leaves(id)
+  CONSTRAINT student_leave_classes_pkey PRIMARY KEY (leave_id, class_id),
+  CONSTRAINT student_leave_classes_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.classes(id),
+  CONSTRAINT student_leave_classes_leave_id_fkey FOREIGN KEY (leave_id) REFERENCES public.student_leaves(id)
 );
 CREATE TABLE public.bills (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
-  member_id uuid NOT NULL,
+  student_id uuid NOT NULL,
   class_id uuid,
   branch_id uuid NOT NULL,
   type USER-DEFINED NOT NULL DEFAULT 'monthly'::bill_type,
@@ -291,7 +291,7 @@ CREATE TABLE public.bills (
   CONSTRAINT bills_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.classes(id),
   CONSTRAINT bills_verified_by_fkey FOREIGN KEY (verified_by) REFERENCES public.profiles(id),
   CONSTRAINT bills_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branches(id),
-  CONSTRAINT bills_member_id_fkey FOREIGN KEY (member_id) REFERENCES public.members(id)
+  CONSTRAINT bills_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.students(id)
 );
 CREATE TABLE public.coach_invoices (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -394,7 +394,7 @@ CREATE TABLE public.rapor_periods (
 CREATE TABLE public.rapor_entries (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
   period_id uuid NOT NULL,
-  member_id uuid NOT NULL,
+  student_id uuid NOT NULL,
   class_id uuid NOT NULL,
   coach_id uuid NOT NULL,
   scores jsonb NOT NULL DEFAULT '{}'::jsonb,
@@ -410,22 +410,22 @@ CREATE TABLE public.rapor_entries (
   CONSTRAINT rapor_entries_pkey PRIMARY KEY (id),
   CONSTRAINT rapor_entries_coach_id_fkey FOREIGN KEY (coach_id) REFERENCES public.profiles(id),
   CONSTRAINT rapor_entries_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.classes(id),
-  CONSTRAINT rapor_entries_member_id_fkey FOREIGN KEY (member_id) REFERENCES public.members(id),
+  CONSTRAINT rapor_entries_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.students(id),
   CONSTRAINT rapor_entries_period_id_fkey FOREIGN KEY (period_id) REFERENCES public.rapor_periods(id),
   CONSTRAINT rapor_entries_level_id_fkey FOREIGN KEY (level_id) REFERENCES public.rapor_levels(id)
 );
-CREATE TABLE public.member_reviews (
+CREATE TABLE public.student_reviews (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
   rapor_id uuid NOT NULL,
-  member_id uuid NOT NULL,
+  student_id uuid NOT NULL,
   coach_id uuid NOT NULL,
   stars integer NOT NULL CHECK (stars >= 1 AND stars <= 5),
   message text,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT member_reviews_pkey PRIMARY KEY (id),
-  CONSTRAINT member_reviews_coach_id_fkey FOREIGN KEY (coach_id) REFERENCES public.profiles(id),
-  CONSTRAINT member_reviews_member_id_fkey FOREIGN KEY (member_id) REFERENCES public.members(id),
-  CONSTRAINT member_reviews_rapor_id_fkey FOREIGN KEY (rapor_id) REFERENCES public.rapor_entries(id)
+  CONSTRAINT student_reviews_pkey PRIMARY KEY (id),
+  CONSTRAINT student_reviews_coach_id_fkey FOREIGN KEY (coach_id) REFERENCES public.profiles(id),
+  CONSTRAINT student_reviews_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.students(id),
+  CONSTRAINT student_reviews_rapor_id_fkey FOREIGN KEY (rapor_id) REFERENCES public.rapor_entries(id)
 );
 CREATE TABLE public.registrations (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -443,14 +443,14 @@ CREATE TABLE public.registrations (
   reviewed_by uuid,
   reviewed_at timestamp with time zone,
   proof_url text,
-  member_id uuid,
+  student_id uuid,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   reject_reason text,
   email text,
   CONSTRAINT registrations_pkey PRIMARY KEY (id),
   CONSTRAINT registrations_reviewed_by_fkey FOREIGN KEY (reviewed_by) REFERENCES public.profiles(id),
   CONSTRAINT registrations_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branches(id),
-  CONSTRAINT registrations_member_id_fkey FOREIGN KEY (member_id) REFERENCES public.members(id)
+  CONSTRAINT registrations_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.students(id)
 );
 CREATE TABLE public.class_holidays (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -659,9 +659,9 @@ CREATE TABLE public.activity_logs (
   CONSTRAINT activity_logs_pkey PRIMARY KEY (id),
   CONSTRAINT activity_logs_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branches(id)
 );
-CREATE TABLE public.member_best_times (
+CREATE TABLE public.student_best_times (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
-  member_id uuid NOT NULL,
+  student_id uuid NOT NULL,
   branch_id uuid NOT NULL,
   stroke text NOT NULL,
   distance integer NOT NULL,
@@ -670,10 +670,10 @@ CREATE TABLE public.member_best_times (
   coach_id uuid,
   notes text,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT member_best_times_pkey PRIMARY KEY (id),
-  CONSTRAINT member_best_times_member_id_fkey FOREIGN KEY (member_id) REFERENCES public.members(id),
-  CONSTRAINT member_best_times_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branches(id),
-  CONSTRAINT member_best_times_coach_id_fkey FOREIGN KEY (coach_id) REFERENCES public.profiles(id)
+  CONSTRAINT student_best_times_pkey PRIMARY KEY (id),
+  CONSTRAINT student_best_times_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.students(id),
+  CONSTRAINT student_best_times_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branches(id),
+  CONSTRAINT student_best_times_coach_id_fkey FOREIGN KEY (coach_id) REFERENCES public.profiles(id)
 );
 CREATE TABLE public.landing_safety (
   id integer NOT NULL DEFAULT 1 CHECK (id = 1),

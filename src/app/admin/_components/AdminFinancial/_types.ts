@@ -1,6 +1,6 @@
 export interface FinancialRow {
   id: string;
-  member_id: string;
+  student_id: string;
   class_id: string | null;
   period_label: string;
   amount: number;
@@ -11,7 +11,7 @@ export interface FinancialRow {
   paid_at: string | null;
   paid_method: string | null;
   created_at: string;
-  member?: { profile: { full_name: string } | null } | null;
+  student?: { profile: { full_name: string } | null } | null;
   class?: { name: string } | null;
 }
 

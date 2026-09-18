@@ -170,7 +170,7 @@ export default function IncomeTab({ hook }: { hook: AdminFinancialDataHook }) {
                   ) : (
                     <tr key={row.id} className="hover:bg-paper-tint/50 transition-colors">
                       <td className="px-4 py-3">
-                        <div className="font-semibold text-ink text-sm"><NoTranslate>{row.member?.profile?.full_name ?? "—"}</NoTranslate></div>
+                        <div className="font-semibold text-ink text-sm"><NoTranslate>{row.student?.profile?.full_name ?? "—"}</NoTranslate></div>
                       </td>
                       <td className="px-3 py-3 text-ink-soft hidden md:table-cell">{row.class?.name ? <NoTranslate>{row.class.name}</NoTranslate> : <span className="text-ink-faint">—</span>}</td>
                       <td className="px-3 py-3 text-ink-soft"><NoTranslate>{row.period_label}</NoTranslate></td>

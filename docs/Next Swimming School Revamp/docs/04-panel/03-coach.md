@@ -128,7 +128,7 @@ Rincian mesin: `docs/03-alur/03-absensi-izin-honor.md` bab 3–4. **Sick** dan *
 
 Siswa **tidak** memindai sendiri dan **tidak** menekan hadir (FB-05).
 
-**Dampak ke peran lain:** Student melihat hadir/telat; privat mengurangi `members.remaining_sessions`; Admin/Owner **Attendance**; invoice honor hanya memakai clock-in pelatih, bukan absensi siswa.
+**Dampak ke peran lain:** Student melihat hadir/telat; privat mengurangi `students.remaining_sessions`; Admin/Owner **Attendance**; invoice honor hanya memakai clock-in pelatih, bukan absensi siswa.
 
 ---
 
@@ -136,7 +136,7 @@ Siswa **tidak** memindai sendiri dan **tidak** menekan hadir (FB-05).
 
 **Tidak terkunci** saat ditangguhkan atau profil belum lengkap.
 
-**Yang dapat dilakukan:** daftar kelas yang diampu (reguler dan privat) **plus sesi covering** yang sudah `approved` (“Menggantikan {nama} · {kelas} · {pusat} · {jam}”); rincian lokasi, tujuan, deskripsi, daftar siswa (`/api/coach/class-members` karena RLS); mengisi tautan spreadsheet (`class_coach_spreadsheets`, satu per pelatih per kelas) sehingga `spreadsheet_filled = true`; melihat spreadsheet pelatih lain; rincian satu siswa plus riwayat absensinya.
+**Yang dapat dilakukan:** daftar kelas yang diampu (reguler dan privat) **plus sesi covering** yang sudah `approved` (“Menggantikan {nama} · {kelas} · {pusat} · {jam}”); rincian lokasi, tujuan, deskripsi, daftar siswa (`/api/coach/class-students` karena RLS); mengisi tautan spreadsheet (`class_coach_spreadsheets`, satu per pelatih per kelas) sehingga `spreadsheet_filled = true`; melihat spreadsheet pelatih lain; rincian satu siswa plus riwayat absensinya.
 
 **Tidak** dapat membuat, mengubah harga, atau menugaskan pelatih. Itu Admin atau Owner.
 
@@ -214,7 +214,7 @@ Draf Owner **tidak** tampil. Kasbon tidak punya tab — hanya baris potongan di 
 | Izin / delegasi | — | Leave Requests + Class Activity + jadwal pengganti otomatis | — | Nama pelatih hari itu | — |
 | Attendance | Sesi honor; hub absensi | Absensi pelatih/siswa | — | QR hadir/telat; privat −1 sesi | — |
 | Class | Spreadsheet di rincian kelas | Spreadsheet + daftar siswa | — | Rincian + riwayat absen | — |
-| Report Card | Level + tanda tangan Head | Periode + PDF + ulasan | — | PDF + memberi ulasan | PDF afiliasi |
+| Report Card | Level + tanda tangan Head | Periode + PDF + ulasan | — | PDF + studenti ulasan | PDF afiliasi |
 | Honor → Invoice | Setuju/tolak/slip/Bell | Tidak meninjau | — | — | — |
 | Honor → Payslip | Terbit = tampil di sini | — | — | — | — |
 | Profile | Rekening di slip | CRUD pelatih + Approvals | — | — | — |

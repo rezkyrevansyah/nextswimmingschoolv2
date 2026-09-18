@@ -19,7 +19,7 @@ interface CoachReviewRow {
   stars: number;
   message: string | null;
   created_at: string;
-  member_name: string;
+  student_name: string;
   coach_name: string;
   coach_id: string;
   period_label: string;
@@ -91,7 +91,7 @@ function AdminCoachReviews({ branchId }: { branchId: string }) {
             <div className="flex items-start justify-between gap-2">
               <div>
                 {/* reviewer identity is masked server-side — do not add Avatar/photo here */}
-                <div className="font-semibold text-ink text-sm"><NoTranslate>{r.member_name}</NoTranslate></div>
+                <div className="font-semibold text-ink text-sm"><NoTranslate>{r.student_name}</NoTranslate></div>
                 <div className="text-xs text-ink-mute"><NoTranslate>{r.coach_name} · {r.period_label}</NoTranslate></div>
               </div>
               <div className="flex flex-col items-end gap-1 shrink-0">

@@ -65,7 +65,7 @@ export const cn = (...classes: (string | undefined | false | null)[]): string =>
  * instead of having its own top-level page.
  */
 export const roleHomePath = (role?: string | null): string => {
-  if (!role) return "/member";
+  if (!role) return "/student";
   if (role === "manager_center") return "/admin";
   return `/${role}`;
 };
@@ -79,7 +79,7 @@ export const clampPercent = (value: number, max: number): number => {
 };
 
 /** Mask a reviewer's name to protect anonymity: "Andi Saputra" -> "A***" */
-export function maskMemberName(fullName?: string | null): string {
+export function maskStudentName(fullName?: string | null): string {
   const trimmed = (fullName ?? "").trim();
   if (!trimmed) return "Student***";
   return `${trimmed.charAt(0).toUpperCase()}***`;

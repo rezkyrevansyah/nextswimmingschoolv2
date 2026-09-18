@@ -133,7 +133,7 @@ export default function SchoolPage() {
           <SchoolAbsensi
             schoolId={schoolId}
             schoolName={schoolName}
-            members={students.map(s => ({ id: s.id, name: s.full_name, school_grade: s.school_grade, class_name: s.class_name }))}
+            students={students.map(s => ({ id: s.id, name: s.full_name, school_grade: s.school_grade, class_name: s.class_name }))}
           />
         )}
 

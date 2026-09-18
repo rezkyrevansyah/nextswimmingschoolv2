@@ -1,10 +1,10 @@
 "use client";
 import { useState } from "react";
 import AdminAbsensiCoach from "./AdminAbsensiCoach";
-import AdminAbsensiMember from "./AdminAbsensiMember";
+import AdminAbsensiStudent from "./AdminAbsensiStudent";
 
 export default function AdminAbsensi({ branchId }: { branchId: string }) {
-  const [sub, setSub] = useState<"coach" | "member">("coach");
+  const [sub, setSub] = useState<"coach" | "student">("coach");
   return (
     <div className="space-y-5">
       <div>
@@ -13,7 +13,7 @@ export default function AdminAbsensi({ branchId }: { branchId: string }) {
       </div>
       {/* Sub-tab bar */}
       <div className="flex gap-1 bg-paper-tint rounded-xl p-1 w-fit">
-        {([["coach", "Coach"], ["member", "Student"]] as const).map(([id, label]) => (
+        {([["coach", "Coach"], ["student", "Student"]] as const).map(([id, label]) => (
           <button key={id} type="button" onClick={() => setSub(id)}
             className={`px-5 py-2 text-sm font-bold rounded-lg transition-colors ${sub === id ? "bg-white text-ocean-700 shadow-sm" : "text-ink-mute hover:text-ink-soft"}`}>
             {label}
@@ -21,7 +21,7 @@ export default function AdminAbsensi({ branchId }: { branchId: string }) {
         ))}
       </div>
       {sub === "coach" && <AdminAbsensiCoach branchId={branchId} />}
-      {sub === "member" && <AdminAbsensiMember branchId={branchId} />}
+      {sub === "student" && <AdminAbsensiStudent branchId={branchId} />}
     </div>
   );
 }

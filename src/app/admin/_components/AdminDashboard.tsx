@@ -6,34 +6,34 @@ import Status from "@/components/ui/Status";
 import Avatar from "@/components/ui/Avatar";
 import { NoTranslate } from "@/components/ui/NoTranslate";
 import { createClient } from "@/utils/supabase/client";
-import { memberDbToUi, memberStatusKind } from "@/lib/attendance";
+import { studentDbToUi, studentStatusKind } from "@/lib/attendance";
 import type { ClassRow, AttendanceRow } from "../_types";
 
 export default function AdminDashboard({ branchId }: { branchId: string }) {
   const supabase = createClient();
-  const [stats, setStats] = useState({ members: 0, coaches: 0, classes: 0, pending: 0, coachLeaves: 0, memberLeaves: 0 });
+  const [stats, setStats] = useState({ students: 0, coaches: 0, classes: 0, pending: 0, coachLeaves: 0, studentLeaves: 0 });
   const [todayClasses, setTodayClasses] = useState<(ClassRow & { is_holiday?: boolean })[]>([]);
   const [recentCoachAtt, setRecentCoachAtt] = useState<AttendanceRow[]>([]);
-  const [recentMemberAtt, setRecentMemberAtt] = useState<{ id: string; member_name: string; class_name: string; status: string; session_date: string }[]>([]);
+  const [recentStudentAtt, setRecentStudentAtt] = useState<{ id: string; student_name: string; class_name: string; status: string; session_date: string }[]>([]);
   const [classesWithoutCoach, setClassesWithoutCoach] = useState<{ id: string; name: string }[]>([]);
   const [overdueCount, setOverdueCount] = useState(0);
 
   const loadAttendance = useCallback(async () => {
     if (!branchId) return;
     const today = new Date().toISOString().split("T")[0];
-    const [coachRes, memberRes] = await Promise.all([
+    const [coachRes, studentRes] = await Promise.all([
       supabase.from("coach_attendances")
         .select("id, session_date, clock_in_time, status, is_manual, profile:profiles!coach_attendances_coach_id_fkey(full_name), class:classes(name)")
         .eq("branch_id", branchId).eq("session_date", today)
         .order("clock_in_at", { ascending: false }).limit(6),
-      supabase.from("member_attendances")
-        .select("id, session_date, status, member:members(profile:profiles(full_name)), class:classes(name)")
+      supabase.from("student_attendances")
+        .select("id, session_date, status, student:students(profile:profiles(full_name)), class:classes(name)")
         .eq("session_date", today).in("status", ["hadir", "telat"])
         .order("created_at", { ascending: false }).limit(6),
     ]);
     if (coachRes.data) setRecentCoachAtt(coachRes.data as unknown as AttendanceRow[]);
-    if (memberRes.data) setRecentMemberAtt((memberRes.data as unknown as { id: string; session_date: string; status: string; member: { profile: { full_name: string } | null } | null; class: { name: string } | null }[])
-      .map(r => ({ id: r.id, member_name: r.member?.profile?.full_name ?? "—", class_name: r.class?.name ?? "—", status: r.status, session_date: r.session_date })));
+    if (studentRes.data) setRecentStudentAtt((studentRes.data as unknown as { id: string; session_date: string; status: string; student: { profile: { full_name: string } | null } | null; class: { name: string } | null }[])
+      .map(r => ({ id: r.id, student_name: r.student?.profile?.full_name ?? "—", class_name: r.class?.name ?? "—", status: r.status, session_date: r.session_date })));
   }, [branchId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* eslint-disable react-hooks/set-state-in-effect -- async data loader */
@@ -44,12 +44,12 @@ export default function AdminDashboard({ branchId }: { branchId: string }) {
 
     // Counts — coach aktif = not archived AND not suspended
     Promise.all([
-      supabase.from("members").select("id", { count: "exact" }).eq("branch_id", branchId).eq("status", "active"),
+      supabase.from("students").select("id", { count: "exact" }).eq("branch_id", branchId).eq("status", "active"),
       supabase.from("profiles").select("id, suspend_until").eq("branch_id", branchId).eq("role", "coach").eq("is_archived", false),
       supabase.from("classes").select("id", { count: "exact" }).eq("branch_id", branchId).eq("status", "active"),
       supabase.from("registrations").select("id", { count: "exact" }).eq("branch_id", branchId).eq("status", "pending"),
       supabase.from("coach_leaves").select("id, profile:profiles!coach_leaves_coach_id_fkey(branch_id)").eq("status", "pending"),
-      supabase.from("member_leaves").select("id, member:members!member_leaves_member_id_fkey(branch_id)").eq("status", "pending"),
+      supabase.from("student_leaves").select("id, student:students!student_leaves_student_id_fkey(branch_id)").eq("status", "pending"),
       supabase.from("certifications").select("id", { count: "exact" }).eq("status", "pending"),
     ]).then(([m, c, k, reg, cl, ml, cert]) => {
       // Coach aktif = not archived AND (no suspend_until OR suspend_until < today)
@@ -57,10 +57,10 @@ export default function AdminDashboard({ branchId }: { branchId: string }) {
         .filter(p => !p.suspend_until || p.suspend_until < today).length;
       const coachLeaveCount = ((cl.data ?? []) as unknown as { profile?: { branch_id?: string | null } | null }[])
         .filter(r => r.profile?.branch_id === branchId).length;
-      const memberLeaveCount = ((ml.data ?? []) as unknown as { member?: { branch_id?: string | null } | null }[])
-        .filter(r => r.member?.branch_id === branchId).length;
-      const totalPending = (reg.count ?? 0) + (cert.count ?? 0) + coachLeaveCount + memberLeaveCount;
-      setStats({ members: m.count ?? 0, coaches: activeCoaches, classes: k.count ?? 0, pending: totalPending, coachLeaves: coachLeaveCount, memberLeaves: memberLeaveCount });
+      const studentLeaveCount = ((ml.data ?? []) as unknown as { student?: { branch_id?: string | null } | null }[])
+        .filter(r => r.student?.branch_id === branchId).length;
+      const totalPending = (reg.count ?? 0) + (cert.count ?? 0) + coachLeaveCount + studentLeaveCount;
+      setStats({ students: m.count ?? 0, coaches: activeCoaches, classes: k.count ?? 0, pending: totalPending, coachLeaves: coachLeaveCount, studentLeaves: studentLeaveCount });
     });
 
     // Today's classes + holiday status
@@ -102,7 +102,7 @@ export default function AdminDashboard({ branchId }: { branchId: string }) {
     // Realtime: new attendances → refresh
     const channel = supabase.channel(`live_att:${branchId}`)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "coach_attendances", filter: `branch_id=eq.${branchId}` }, () => loadAttendance())
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "member_attendances" }, () => loadAttendance())
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "student_attendances" }, () => loadAttendance())
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
@@ -141,14 +141,14 @@ export default function AdminDashboard({ branchId }: { branchId: string }) {
       )}
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Stat label={"Active students"} value={stats.members} icon="users"   tone="ocean" />
+        <Stat label={"Active students"} value={stats.students} icon="users"   tone="ocean" />
         <Stat label={"Active coaches"} value={stats.coaches} icon="swim"    tone="wave"  />
         <Stat label={"Active classes"} value={stats.classes} icon="grid"    tone="ocean" />
         <Stat label={"Approvement"}   value={stats.pending} icon="warning" tone="warn"  sub={"All pending items"} />
       </div>
       <div className="grid sm:grid-cols-2 gap-4">
         <Stat label={"Coach leave"}  value={stats.coachLeaves} icon="calendar" tone="warn" sub={"Awaiting approval"} />
-        <Stat label={"Student leave"} value={stats.memberLeaves} icon="calendar" tone="warn" sub={"Awaiting approval"} />
+        <Stat label={"Student leave"} value={stats.studentLeaves} icon="calendar" tone="warn" sub={"Awaiting approval"} />
       </div>
 
       <div className="grid lg:grid-cols-3 gap-5">
@@ -190,7 +190,7 @@ export default function AdminDashboard({ branchId }: { branchId: string }) {
         <Card>
           <SectionTitle sub={"Real-time"}>{"Live Attendance"}</SectionTitle>
           <div className="space-y-1">
-            {recentCoachAtt.length === 0 && recentMemberAtt.length === 0 && <p className="text-ink-mute text-sm">{"No attendance yet today."}</p>}
+            {recentCoachAtt.length === 0 && recentStudentAtt.length === 0 && <p className="text-ink-mute text-sm">{"No attendance yet today."}</p>}
             {recentCoachAtt.map((a) => (
               <div key={`c-${a.id}`} className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-paper-tint">
                 <span className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${a.is_manual ? "bg-manual-50 text-manual-500" : "bg-wave-50 text-wave-600"}`}>
@@ -203,17 +203,17 @@ export default function AdminDashboard({ branchId }: { branchId: string }) {
                 <span className="text-[10px] font-mono text-ink-faint">{a.clock_in_time?.slice(0, 5)}</span>
               </div>
             ))}
-            {recentMemberAtt.map((a) => (
+            {recentStudentAtt.map((a) => (
               <div key={`m-${a.id}`} className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-paper-tint">
-                <span className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${memberStatusKind(a.status) === "late" ? "bg-warn-50 text-warn-600" : "bg-ok-50 text-ok-600"}`}>
+                <span className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${studentStatusKind(a.status) === "late" ? "bg-warn-50 text-warn-600" : "bg-ok-50 text-ok-600"}`}>
                   <Icon name="users" className="w-3.5 h-3.5" />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <div className="text-xs font-semibold text-ink truncate"><NoTranslate>{a.member_name}</NoTranslate></div>
+                  <div className="text-xs font-semibold text-ink truncate"><NoTranslate>{a.student_name}</NoTranslate></div>
                   <div className="text-[10px] text-ink-mute">{(<>{"Student · "}<NoTranslate>{a.class_name}</NoTranslate></>)}</div>
                 </div>
-                <span className={`text-[10px] font-mono ${memberDbToUi(a.status) === "late" ? "text-warn-600" : "text-ok-500"}`}>
-                  {memberDbToUi(a.status) === "late" ? "Late" : "Present"}
+                <span className={`text-[10px] font-mono ${studentDbToUi(a.status) === "late" ? "text-warn-600" : "text-ok-500"}`}>
+                  {studentDbToUi(a.status) === "late" ? "Late" : "Present"}
                 </span>
               </div>
             ))}

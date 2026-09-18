@@ -41,7 +41,7 @@ export default function AddAccountModal({ hook }: { hook: AccountsMasterDataHook
             <option value="admin">{"Branch Admin"}</option>
             <option value="manager_center">{"Manager Center"}</option>
             <option value="coach">{"Coach"}</option>
-            <option value="member">{"Student"}</option>
+            <option value="student">{"Student"}</option>
             <option value="school">{"School Partner"}</option>
             <option value="staff">{"Branch Staff"}</option>
           </Select>
@@ -78,20 +78,20 @@ export default function AddAccountModal({ hook }: { hook: AccountsMasterDataHook
             />
           </Field>
         )}
-        {form.role === "member" && (
+        {form.role === "student" && (
           <>
             <Field label={"Student Type"}>
               <Select
-                value={form.member_type}
+                value={form.student_type}
                 onChange={(e) =>
-                  setForm((f) => ({ ...f, member_type: e.target.value as typeof f.member_type }))
+                  setForm((f) => ({ ...f, student_type: e.target.value as typeof f.student_type }))
                 }
               >
                 <option value="reguler">{"Regular"}</option>
                 <option value="school_affiliate">{"School-affiliated"}</option>
               </Select>
             </Field>
-            {form.member_type === "school_affiliate" && (
+            {form.student_type === "school_affiliate" && (
               <>
                 <Field label={"School"}>
                   <Select

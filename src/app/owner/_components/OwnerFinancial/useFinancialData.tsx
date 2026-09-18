@@ -302,7 +302,7 @@ export function useFinancialData({ branches, userId, userName }: { branches: Bra
   useEffect(() => {
     setLoadingBills(true);
     supabase.from("bills")
-      .select("id, branch_id, member_id, period_label, amount, discount, total, status, type, paid_at, paid_method, created_at, member:members(profile:profiles(full_name)), class:classes(name), branch:branches(name)")
+      .select("id, branch_id, student_id, period_label, amount, discount, total, status, type, paid_at, paid_method, created_at, student:students(profile:profiles(full_name)), class:classes(name), branch:branches(name)")
       .order("created_at", { ascending: false })
       .limit(2000)
       .then(({ data }) => { if (data) setBills(data as unknown as OwnerFinancialBill[]); setLoadingBills(false); });

@@ -3,7 +3,7 @@
  *
  * Menghapus cabang secara permanen beserta semua auth.users yang terkait.
  * Urutan operasi:
- *   1. Ambil semua profile_id yang branch_id = branchId (coach, member, admin, school)
+ *   1. Ambil semua profile_id yang branch_id = branchId (coach, student, admin, school)
  *   2. Hapus semua auth.users tersebut via admin SDK
  *   3. Hapus row branches — CASCADE di DB akan bersihkan semua data terkait
  *

@@ -15,7 +15,7 @@ export type ActivityAction =
 export interface LogActivityOptions {
   /** Actor's user id (profiles.id or auth.uid) */
   userId: string;
-  /** 'owner' | 'admin' | 'coach' | 'member' */
+  /** 'owner' | 'admin' | 'coach' | 'student' */
   userRole: string;
   /** Full name — denormalized so log stays readable after account deletion */
   userName: string;
@@ -23,7 +23,7 @@ export interface LogActivityOptions {
   branchId?: string | null;
   /** Branch display name — denormalized */
   branchName?: string | null;
-  /** Table name: 'bills', 'members', 'branches', etc. */
+  /** Table name: 'bills', 'students', 'branches', etc. */
   entityType: string;
   /** UUID of the affected row (stored as TEXT to avoid FK constraints) */
   entityId: string;

@@ -13,7 +13,7 @@ export const ACTION_BADGE: Record<string, string> = {
 };
 
 export const ENTITY_COLORS: Record<string, string> = {
-  branches: "bg-ocean-50 text-ocean-700", members: "bg-wave-50 text-wave-700",
+  branches: "bg-ocean-50 text-ocean-700", students: "bg-wave-50 text-wave-700",
   bills: "bg-ok-50 text-ok-700", coach_invoices: "bg-warn-50 text-warn-700",
   payslips: "bg-ok-50 text-ok-700", registrations: "bg-ocean-50 text-ocean-700",
   certifications: "bg-wave-50 text-wave-700", coach_attendances: "bg-paper-deep text-ink-soft",

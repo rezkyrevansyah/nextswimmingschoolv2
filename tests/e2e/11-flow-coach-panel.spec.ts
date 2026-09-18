@@ -89,7 +89,7 @@ test.describe("Coach Flow — Kelas", () => {
     await expect(page.locator("body")).toBeVisible();
   });
 
-  test("jika ada kelas, bisa dibuka detail dan lihat daftar member", async ({ page }) => {
+  test("jika ada kelas, bisa dibuka detail dan lihat daftar student", async ({ page }) => {
     // Klik kelas pertama yang ada
     const kelasCard = page.locator("[class*='card'], tr").first();
     if (await kelasCard.isVisible({ timeout: 3_000 }).catch(() => false)) {
@@ -139,7 +139,7 @@ test.describe("Coach Flow — Rapor", () => {
     await expect(page.locator("body")).toBeVisible();
   });
 
-  test("jika periode rapor aktif, bisa isi rapor member", async ({ page }) => {
+  test("jika periode rapor aktif, bisa isi rapor student", async ({ page }) => {
     const isiBtn = page.getByRole("button", { name: /Isi Rapor|Input Rapor/i }).first();
     if (await isiBtn.isVisible({ timeout: 3_000 }).catch(() => false)) {
       await isiBtn.click();

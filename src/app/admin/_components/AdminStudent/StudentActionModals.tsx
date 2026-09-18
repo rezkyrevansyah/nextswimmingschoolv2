@@ -6,13 +6,13 @@ import { Card } from "@/components/ui/Card";
 import { Field, Input, Textarea, Switch } from "@/components/ui/FormFields";
 import { NoTranslate } from "@/components/ui/NoTranslate";
 import { fmtIDR } from "@/lib/utils";
-import type { AdminMemberHook } from "./_hook";
+import type { AdminStudentHook } from "./_hook";
 
-export default function MemberActionModals({ hook }: { hook: AdminMemberHook }) {
+export default function StudentActionModals({ hook }: { hook: AdminStudentHook }) {
   const {
     detail,
     openResetPwd, setOpenResetPwd, newPwd, setNewPwd, showNewPwd, setShowNewPwd, resetPassword,
-    suspendMemberTarget, setSuspendMemberTarget, suspendMemberForm, setSuspendMemberForm, suspendingMember, doSuspendMember,
+    suspendStudentTarget, setSuspendStudentTarget, suspendStudentForm, setSuspendStudentForm, suspendingStudent, doSuspendStudent,
     openAddSesi, setOpenAddSesi, addSesiForm, setAddSesiForm, savingAddSesi, privateClassPackages, doAddSesi,
     classes,
   } = hook;
@@ -33,18 +33,18 @@ export default function MemberActionModals({ hook }: { hook: AdminMemberHook }) 
         </Field>
       </Modal>
 
-      {/* Suspend member modal */}
-      <Modal open={!!suspendMemberTarget} onClose={() => setSuspendMemberTarget(null)} title={(<>{"Suspend Student — "}<NoTranslate>{suspendMemberTarget?.profile?.full_name ?? ""}</NoTranslate></>)} size="sm"
-        footer={<><Btn variant="ghost" onClick={() => setSuspendMemberTarget(null)}>{"Cancel"}</Btn><Btn variant="ghost" className="text-warn-600" onClick={doSuspendMember} disabled={suspendingMember}>{suspendingMember ? "Saving…" : "Apply Suspend"}</Btn></>}>
+      {/* Suspend student modal */}
+      <Modal open={!!suspendStudentTarget} onClose={() => setSuspendStudentTarget(null)} title={(<>{"Suspend Student — "}<NoTranslate>{suspendStudentTarget?.profile?.full_name ?? ""}</NoTranslate></>)} size="sm"
+        footer={<><Btn variant="ghost" onClick={() => setSuspendStudentTarget(null)}>{"Cancel"}</Btn><Btn variant="ghost" className="text-warn-600" onClick={doSuspendStudent} disabled={suspendingStudent}>{suspendingStudent ? "Saving…" : "Apply Suspend"}</Btn></>}>
         <div className="space-y-4">
           <Card className="!p-3 bg-warn-50 border-warn-200">
             <div className="flex items-start gap-2.5 text-sm text-warn-700"><Icon name="warning" className="w-5 h-5 shrink-0 mt-0.5" /><span>{"The student cannot log in during the suspension and won't appear in the coach's attendance list."}</span></div>
           </Card>
           <Field label={"Suspend reason"} required>
-            <Textarea rows={2} value={suspendMemberForm.reason} onChange={e => setSuspendMemberForm(f => ({ ...f, reason: e.target.value }))} placeholder={"E.g. Unpaid bill for 2 months."} />
+            <Textarea rows={2} value={suspendStudentForm.reason} onChange={e => setSuspendStudentForm(f => ({ ...f, reason: e.target.value }))} placeholder={"E.g. Unpaid bill for 2 months."} />
           </Field>
           <Field label={"Suspend ends"} required hint={"Student automatically reactivates after this date"}>
-            <Input type="date" value={suspendMemberForm.until} onChange={e => setSuspendMemberForm(f => ({ ...f, until: e.target.value }))} min={new Date().toISOString().slice(0, 10)} />
+            <Input type="date" value={suspendStudentForm.until} onChange={e => setSuspendStudentForm(f => ({ ...f, until: e.target.value }))} min={new Date().toISOString().slice(0, 10)} />
           </Field>
         </div>
       </Modal>
@@ -88,7 +88,7 @@ export default function MemberActionModals({ hook }: { hook: AdminMemberHook }) 
                 </div>
               );
             }
-            const classRow = classes.find(c => c.id === detail?.member_classes?.[0]?.class?.id);
+            const classRow = classes.find(c => c.id === detail?.student_classes?.[0]?.class?.id);
             const pricePerSession = classRow?.price_per_session;
             const jumlah = Number(addSesiForm.jumlah) || 0;
             return pricePerSession ? (

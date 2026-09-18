@@ -22,7 +22,7 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "Next Swimming School — Sistem Manajemen",
   description:
-    "Sistem manajemen terintegrasi untuk Next Swimming School — member, coach, admin, dan owner.",
+    "Sistem manajemen terintegrasi untuk Next Swimming School — student, coach, admin, dan owner.",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,

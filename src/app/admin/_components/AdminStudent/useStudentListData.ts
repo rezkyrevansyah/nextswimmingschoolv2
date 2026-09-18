@@ -2,12 +2,12 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { createClient } from "@/utils/supabase/client";
 import type { ClassRow, School } from "../../_types";
-import type { MemberRow } from "./_types";
+import type { StudentRow } from "./_types";
 
-export function useMemberListData({ branchId }: { branchId: string }) {
+export function useStudentListData({ branchId }: { branchId: string }) {
   const supabase = createClient();
   const [tab, setTab] = useState("all");
-  const [members, setMembers] = useState<MemberRow[]>([]);
+  const [students, setStudents] = useState<StudentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [classes, setClasses] = useState<ClassRow[]>([]);
   const [schoolsList, setSchoolsList] = useState<School[]>([]);
@@ -29,12 +29,12 @@ export function useMemberListData({ branchId }: { branchId: string }) {
     if (!branchId) return;
     setLoading(true);
     const db = createClient();
-    const sel = "id, profile_id, type, status, date_start, qr_code, school_id, school_grade, member_no, remaining_sessions, total_sessions, suspend_until, suspend_reason, profile:profiles(full_name, birth_date, phone, gender, address, health_notes, email, avatar_url), member_classes(class:classes(id, name))";
-    let q = db.from("members").select(sel).eq("branch_id", branchId).order("created_at", { ascending: false });
-    if (tab === "suspended") q = db.from("members").select(sel).eq("branch_id", branchId).eq("status", "suspended") as typeof q;
+    const sel = "id, profile_id, type, status, date_start, qr_code, school_id, school_grade, student_no, remaining_sessions, total_sessions, suspend_until, suspend_reason, profile:profiles(full_name, birth_date, phone, gender, address, health_notes, email, avatar_url), student_classes(class:classes(id, name))";
+    let q = db.from("students").select(sel).eq("branch_id", branchId).order("created_at", { ascending: false });
+    if (tab === "suspended") q = db.from("students").select(sel).eq("branch_id", branchId).eq("status", "suspended") as typeof q;
     else if (tab !== "all") q = q.eq("type", tab as "reguler" | "private" | "school_affiliate");
     const { data } = await q;
-    if (data) setMembers(data as unknown as MemberRow[]);
+    if (data) setStudents(data as unknown as StudentRow[]);
     setLoading(false);
   }, [branchId, tab]);
 
@@ -54,10 +54,10 @@ export function useMemberListData({ branchId }: { branchId: string }) {
   const findCoachByPhone = (phone: string) => coachesForImport.find(c => (c.phone ?? "").replace(/\D/g, "") === phone.replace(/\D/g, "") && phone.trim() !== "");
 
   const stats = {
-    all:     members.length,
-    reguler: members.filter(m => m.type === "reguler").length,
-    private: members.filter(m => m.type === "private").length,
-    school:  members.filter(m => m.type === "school_affiliate").length,
+    all:     students.length,
+    reguler: students.filter(m => m.type === "reguler").length,
+    private: students.filter(m => m.type === "private").length,
+    school:  students.filter(m => m.type === "school_affiliate").length,
   };
 
   const activeFilterCount = [filterGender, filterClass, filterSchool, filterSessions].filter(Boolean).length;
@@ -65,8 +65,8 @@ export function useMemberListData({ branchId }: { branchId: string }) {
   const filteredSorted = useMemo(() => {
     // 1. Tab filter
     let result = tab === "suspended"
-      ? members.filter(m => m.status === "suspended")
-      : tab === "all" ? members : members.filter(m => m.type === tab);
+      ? students.filter(m => m.status === "suspended")
+      : tab === "all" ? students : students.filter(m => m.type === tab);
 
     // 2. Search
     if (search.trim()) {
@@ -80,7 +80,7 @@ export function useMemberListData({ branchId }: { branchId: string }) {
 
     // 3. Filters
     if (filterGender)   result = result.filter(m => m.profile?.gender === filterGender);
-    if (filterClass)    result = result.filter(m => m.member_classes?.some(mc => mc.class?.id === filterClass));
+    if (filterClass)    result = result.filter(m => m.student_classes?.some(mc => mc.class?.id === filterClass));
     if (filterSchool)   result = result.filter(m => m.school_id === filterSchool);
     if (filterSessions === "has")  result = result.filter(m => (m.remaining_sessions ?? 0) > 0);
     if (filterSessions === "low")  result = result.filter(m => m.remaining_sessions !== null && m.remaining_sessions <= 3);
@@ -102,7 +102,7 @@ export function useMemberListData({ branchId }: { branchId: string }) {
     }
 
     return result;
-  }, [members, tab, search, filterGender, filterClass, filterSchool, filterSessions, sortBy, sortDir]);
+  }, [students, tab, search, filterGender, filterClass, filterSchool, filterSessions, sortBy, sortDir]);
 
   const totalPages = Math.max(1, Math.ceil(filteredSorted.length / PAGE_SIZE));
   // Clamp page to valid range (auto-resets to 0 when filter shrinks result set)
@@ -117,7 +117,7 @@ export function useMemberListData({ branchId }: { branchId: string }) {
   };
 
   return {
-    tab, setTab, members, setMembers, loading, classes, schoolsList, coachesForImport,
+    tab, setTab, students, setStudents, loading, classes, schoolsList, coachesForImport,
     search, setSearch, filterGender, setFilterGender, filterClass, setFilterClass,
     filterSchool, setFilterSchool, filterSessions, setFilterSessions,
     sortBy, setSortBy, sortDir, setSortDir, showFilters, setShowFilters, page, setPage, PAGE_SIZE,

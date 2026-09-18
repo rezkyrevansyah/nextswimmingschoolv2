@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { getSupabaseAdmin } from "@/utils/supabase/admin";
-import { maskMemberName } from "@/lib/utils";
+import { maskStudentName } from "@/lib/utils";
 
 export async function GET(req: NextRequest) {
   const supabase = await createClient();
@@ -23,8 +23,8 @@ export async function GET(req: NextRequest) {
 
   const admin = getSupabaseAdmin();
   const { data, error } = await admin
-    .from("member_reviews")
-    .select("id, stars, message, created_at, coach_id, coach:profiles!member_reviews_coach_id_fkey(full_name), member:members!member_reviews_member_id_fkey(profile:profiles(full_name)), rapor:rapor_entries!inner!member_reviews_rapor_id_fkey(class:classes!inner(branch_id), rapor_periods(label))")
+    .from("student_reviews")
+    .select("id, stars, message, created_at, coach_id, coach:profiles!student_reviews_coach_id_fkey(full_name), student:students!student_reviews_student_id_fkey(profile:profiles(full_name)), rapor:rapor_entries!inner!student_reviews_rapor_id_fkey(class:classes!inner(branch_id), rapor_periods(label))")
     .eq("rapor.class.branch_id", branchId)
     .order("created_at", { ascending: false });
 
@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
   const rows = (data as unknown as {
     id: string; stars: number; message: string | null; created_at: string; coach_id: string;
     coach: { full_name: string } | null;
-    member: { profile: { full_name: string } | null } | null;
+    student: { profile: { full_name: string } | null } | null;
     rapor: { rapor_periods: { label: string } | null } | null;
   }[]).map(r => ({
     id: r.id,
@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
     created_at: r.created_at,
     coach_id: r.coach_id,
     coach_name: r.coach?.full_name ?? "—",
-    member_name: maskMemberName(r.member?.profile?.full_name),
+    student_name: maskStudentName(r.student?.profile?.full_name),
     period_label: r.rapor?.rapor_periods?.label ?? "—",
   }));
 

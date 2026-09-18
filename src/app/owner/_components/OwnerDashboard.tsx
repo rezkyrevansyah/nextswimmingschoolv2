@@ -20,7 +20,7 @@ export default function OwnerDashboard({ branches, onSelectTab }: { branches: Br
       .then(({ data }) => { if (data) setInvoices(data as unknown as Invoice[]); });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const totalMembers = branches.reduce((a, b) => a + (b.member_count ?? 0), 0);
+  const totalStudents = branches.reduce((a, b) => a + (b.student_count ?? 0), 0);
   const totalCoaches = branches.reduce((a, b) => a + (b.coach_count ?? 0), 0);
   const totalClasses = branches.reduce((a, b) => a + (b.class_count ?? 0), 0);
 
@@ -56,7 +56,7 @@ export default function OwnerDashboard({ branches, onSelectTab }: { branches: Br
             {"Active students"}
           </span>
           <span className="font-display font-extrabold text-3xl lg:text-[32px] text-ocean-600 leading-tight">
-            {totalMembers}
+            {totalStudents}
           </span>
         </div>
 
@@ -125,7 +125,7 @@ export default function OwnerDashboard({ branches, onSelectTab }: { branches: Br
                   <NoTranslate>{b.name}</NoTranslate>
                 </span>
                 <span className="w-20 text-right font-mono text-[13px] text-ink-soft tabular-nums">
-                  {b.member_count ?? 0}
+                  {b.student_count ?? 0}
                 </span>
                 <span className="w-20 text-right font-mono text-[13px] text-ink-soft tabular-nums">
                   {b.coach_count ?? 0}

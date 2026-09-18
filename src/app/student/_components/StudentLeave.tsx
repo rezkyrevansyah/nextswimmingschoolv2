@@ -10,7 +10,7 @@ import { NoTranslate } from "@/components/ui/NoTranslate";
 import { useToast } from "@/components/providers/ToastProvider";
 import { createClient } from "@/utils/supabase/client";
 
-export default function MemberLeave({ memberId, onSwitchToAbsen }: { memberId: string; onSwitchToAbsen?: () => void }) {
+export default function StudentLeave({ studentId, onSwitchToAbsen }: { studentId: string; onSwitchToAbsen?: () => void }) {
   const supabase = createClient();
   const toast = useToast();
   const [openForm, setOpenForm] = useState(false);
@@ -20,21 +20,21 @@ export default function MemberLeave({ memberId, onSwitchToAbsen }: { memberId: s
   const [submitting, setSubmitting] = useState(false);
 
   const load = useCallback(async () => {
-    if (!memberId) return;
+    if (!studentId) return;
     const [lvRes, clsRes] = await Promise.all([
-      supabase.from("member_leaves")
-        .select("id, date_from, date_to, type, reason, status, reject_reason, member_leave_classes(class_id)")
-        .eq("member_id", memberId)
+      supabase.from("student_leaves")
+        .select("id, date_from, date_to, type, reason, status, reject_reason, student_leave_classes(class_id)")
+        .eq("student_id", studentId)
         .order("created_at", { ascending: false }),
-      supabase.from("member_classes")
+      supabase.from("student_classes")
         .select("classes(id, name)")
-        .eq("member_id", memberId),
+        .eq("student_id", studentId),
     ]);
     if (lvRes.data) {
       setLeaves(lvRes.data.map((l) => ({
         id: l.id, date_from: l.date_from, date_to: l.date_to, type: l.type,
         reason: l.reason, status: l.status, reject_reason: l.reject_reason,
-        class_ids: (l.member_leave_classes as unknown as { class_id: string }[])?.map((x) => x.class_id) ?? [],
+        class_ids: (l.student_leave_classes as unknown as { class_id: string }[])?.map((x) => x.class_id) ?? [],
       })));
     }
     if (clsRes.data) {
@@ -43,7 +43,7 @@ export default function MemberLeave({ memberId, onSwitchToAbsen }: { memberId: s
         return { id: c?.id ?? "", name: c?.name ?? "" };
       }).filter((c) => c.id));
     }
-  }, [memberId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [studentId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* eslint-disable react-hooks/set-state-in-effect -- async data loader */
   useEffect(() => { load(); }, [load]);
@@ -59,17 +59,17 @@ export default function MemberLeave({ memberId, onSwitchToAbsen }: { memberId: s
       return toast.error("Invalid date range", "End date must be on or after the start date.");
     }
     setSubmitting(true);
-    const { data: newLeave, error } = await supabase.from("member_leaves").insert({
-      member_id: memberId,
+    const { data: newLeave, error } = await supabase.from("student_leaves").insert({
+      student_id: studentId,
       date_from: form.start_date,
       date_to: form.end_date || form.start_date,
       type: form.type as "izin" | "sakit" | "ujian" | "lainnya",
       reason: form.notes || null,
       status: "pending" as const,
     }).select("id").single();
-    // Link to classes via member_leave_classes
+    // Link to classes via student_leave_classes
     if (!error && newLeave && form.class_ids.length > 0) {
-      await supabase.from("member_leave_classes").insert(form.class_ids.map((class_id) => ({ leave_id: newLeave.id, class_id })));
+      await supabase.from("student_leave_classes").insert(form.class_ids.map((class_id) => ({ leave_id: newLeave.id, class_id })));
     }
     setSubmitting(false);
     if (!error) {

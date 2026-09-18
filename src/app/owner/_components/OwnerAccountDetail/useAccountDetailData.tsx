@@ -5,7 +5,7 @@ import { useConfirm } from "@/components/providers/ConfirmProvider";
 import { NoTranslate } from "@/components/ui/NoTranslate";
 import { createClient } from "@/utils/supabase/client";
 import { downloadSingleQRCard } from "@/lib/qrCardGenerator";
-import type { AccountMemberData, Props } from "./_types";
+import type { AccountStudentData, Props } from "./_types";
 
 export function useAccountDetailData({ account, branches, open, onClose, onRefresh }: Props) {
   const toast = useToast();
@@ -17,7 +17,7 @@ export function useAccountDetailData({ account, branches, open, onClose, onRefre
     admin: "Branch Admin",
     manager_center: "Manager Center",
     coach: "Coach",
-    member: "Student",
+    student: "Student",
     school: "School Partner",
     staff: "Branch Staff",
   };
@@ -30,10 +30,10 @@ export function useAccountDetailData({ account, branches, open, onClose, onRefre
   const [showPwdReset, setShowPwdReset] = useState(false);
   const [showNewPwd, setShowNewPwd] = useState(false);
 
-  // Extra loaded details (coach classes, certifications, member classes)
+  // Extra loaded details (coach classes, certifications, student classes)
   const [coachClasses, setCoachClasses] = useState<{ id: string; name: string; time_start?: string; time_end?: string; branch?: { name: string } }[]>([]);
   const [certifications, setCertifications] = useState<{ id: string; name: string; title: string; valid_until: string | null }[]>([]);
-  const [memberData, setMemberData] = useState<AccountMemberData | null>(null);
+  const [studentData, setStudentData] = useState<AccountStudentData | null>(null);
   const [schools, setSchools] = useState<{ id: string; name: string }[]>([]);
   const [downloadingQr, setDownloadingQr] = useState(false);
 
@@ -67,8 +67,8 @@ export function useAccountDetailData({ account, branches, open, onClose, onRefre
     custom_role_label: "",
     bio: "",
     specialization: "",
-    // Member fields
-    member_type: "reguler",
+    // Student fields
+    student_type: "reguler",
     total_sessions: "",
     remaining_sessions: "",
     school_id: "",
@@ -107,14 +107,14 @@ export function useAccountDetailData({ account, branches, open, onClose, onRefre
         });
     }
 
-    if (account.role === "member") {
+    if (account.role === "student") {
       supabase
-        .from("members")
-        .select("id, member_no, qr_code, type, status, remaining_sessions, total_sessions, school_id, school_grade, date_start, school:schools(id, name), member_classes(class:classes(id, name, time_start, time_end))")
+        .from("students")
+        .select("id, student_no, qr_code, type, status, remaining_sessions, total_sessions, school_id, school_grade, date_start, school:schools(id, name), student_classes(class:classes(id, name, time_start, time_end))")
         .eq("profile_id", account.id)
         .maybeSingle()
         .then(({ data }) => {
-          if (data) setMemberData(data as unknown as AccountMemberData);
+          if (data) setStudentData(data as unknown as AccountStudentData);
         });
     }
 
@@ -130,7 +130,7 @@ export function useAccountDetailData({ account, branches, open, onClose, onRefre
 
   const openEdit = () => {
     if (!account) return;
-    const m = memberData || (account.members && account.members[0]) || account.member;
+    const m = studentData || (account.students && account.students[0]) || account.student;
     const personal = linkedStaff ?? account;
     setForm({
       full_name: account.full_name ?? "",
@@ -147,7 +147,7 @@ export function useAccountDetailData({ account, branches, open, onClose, onRefre
       custom_role_label: account.custom_role_label ?? "",
       bio: account.bio ?? "",
       specialization: account.specialization ?? "",
-      member_type: m?.type || "reguler",
+      student_type: m?.type || "reguler",
       total_sessions: m?.total_sessions != null ? String(m.total_sessions) : "",
       remaining_sessions: m?.remaining_sessions != null ? String(m.remaining_sessions) : "",
       school_id: m?.school_id || "",
@@ -207,19 +207,19 @@ export function useAccountDetailData({ account, branches, open, onClose, onRefre
       });
     }
 
-    // If member, update members table too
-    if (account.role === "member" && memberData) {
+    // If student, update students table too
+    if (account.role === "student" && studentData) {
       await supabase
-        .from("members")
+        .from("students")
         .update({
-          type: form.member_type,
+          type: form.student_type,
           total_sessions: form.total_sessions ? Number(form.total_sessions) : null,
           remaining_sessions: form.remaining_sessions ? Number(form.remaining_sessions) : null,
-          school_id: form.member_type === "school_affiliate" ? form.school_id || null : null,
-          school_grade: form.member_type === "school_affiliate" ? form.school_grade.trim() || null : null,
+          school_id: form.student_type === "school_affiliate" ? form.school_id || null : null,
+          school_grade: form.student_type === "school_affiliate" ? form.school_grade.trim() || null : null,
           branch_id: form.branch_id || null,
         })
-        .eq("id", memberData.id);
+        .eq("id", studentData.id);
     }
 
     setSaving(false);
@@ -301,7 +301,7 @@ export function useAccountDetailData({ account, branches, open, onClose, onRefre
     if (!account) return;
     setDownloadingQr(true);
     try {
-      const qrValue = memberData?.qr_code || memberData?.member_no || account.qr_code || account.user_no || account.id;
+      const qrValue = studentData?.qr_code || studentData?.student_no || account.qr_code || account.user_no || account.id;
       await downloadSingleQRCard(
         {
           id: account.id,
@@ -310,7 +310,7 @@ export function useAccountDetailData({ account, branches, open, onClose, onRefre
           role: account.role,
           custom_role_label: account.custom_role_label,
           user_no: account.user_no,
-          member_no: memberData?.member_no,
+          student_no: studentData?.student_no,
           qr_code: qrValue,
           branch: account.branch,
           phone: account.phone,
@@ -338,7 +338,7 @@ export function useAccountDetailData({ account, branches, open, onClose, onRefre
     branches, ROLE_LABELS, account, open, onClose,
     editing, setEditing, saving, banning, resettingPwd, newPassword, setNewPassword,
     showPwdReset, setShowPwdReset, showNewPwd, setShowNewPwd,
-    coachClasses, certifications, memberData, schools, downloadingQr,
+    coachClasses, certifications, studentData, schools, downloadingQr,
     linkedStaff, form, setForm,
     copyToClipboard, openEdit, saveEdit, handleBanToggle, handleResetPassword, handleDelete,
     handleDownloadSingleQR, calcAge,

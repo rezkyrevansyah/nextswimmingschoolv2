@@ -29,7 +29,7 @@ Dokumen ini adalah **sumber kebenaran niat produk**. Agen mulai dari `docs/READM
 5. Jangan memakai dokumen uji lama sebagai sumber menu Owner **Database Manager**. Fitur itu sudah dihapus.
 6. Navigasi panel memakai **tab di dalam halaman** (`useState`), bukan rute Next.js per menu.
 7. Produk **tidak** memiliki fitur kecerdasan buatan pada versi ini. Jangan menambah model, prompt, atau API AI.
-8. Bahasa produk untuk siswa adalah **Student**. Peran di database, rute, dan tabel tetap `member` / `/member` / `members`. Jangan menulis “Member” di prosa.
+8. Bahasa produk untuk siswa adalah **Student**. Peran di database, rute, dan tabel juga `student` / `/student` / `students` (direname dari `member`). Jangan menulis “Member” di prosa.
 
 ### 0.3 Berkas terkait
 
@@ -75,7 +75,7 @@ Keberhasilan diukur dari angka dan pemeriksaan yang dapat diulang, bukan dari ke
 | Kode | KPI | Ambang | Cara ukur |
 |---|---|---|---|
 | KPI-01 | Enam alur kritis lulus uji penerimaan tanpa langkah yang dilewati | 6/6 alur pada setiap rilis | Skrip uji atau daftar periksa bab 2.3: daftar publik, hadir di kolam, izin pelatih, honor pelatih, rapor, sekolah mitra |
-| KPI-02 | Isolasi data per pusat | 0 rekaman `branch_id` lain yang terbaca peran `admin`, `manager_center`, `staff`, `member`, `school` | Uji dengan dua pusat; akun A tidak melihat siswa, tagihan, atau kelas pusat B |
+| KPI-02 | Isolasi data per pusat | 0 rekaman `branch_id` lain yang terbaca peran `admin`, `manager_center`, `staff`, `student`, `school` | Uji dengan dua pusat; akun A tidak melihat siswa, tagihan, atau kelas pusat B |
 | KPI-03 | Generate tagihan bulanan tanpa duplikat dan tanpa salah sasaran | 0 baris ganda untuk pasangan siswa × kelas × periode; 0 baris `private` dari generate bulanan | Hitung `bills` setelah satu kali generate pada data uji |
 | KPI-04 | Periode rapor unik per pusat | Tepat 0 atau 1 baris `rapor_periods.is_open = true` per `branch_id` | Buka periode kedua; periode pertama harus tertutup |
 | KPI-05 | Aturan waktu clock-in pelatih | Jendela = 3 jam sebelum `time_start` sampai `time_end`; `present` jika selisih ke `time_start` ≤ 15 menit; selain itu `late` jika masih dalam jendela | Uji tiga cap waktu: T−3 jam 1 menit (tolak), T+15 menit (present), T+16 menit (late) |
@@ -116,7 +116,7 @@ Kriteria penerimaan:
 - [ ] Formulir tersimpan dengan status tertunda di `registrations`.
 - [ ] Calon tidak dapat masuk panel siswa sebelum disetujui.
 - [ ] Admin dapat menyunting, menyetujui, menolak, atau menghapus.
-- [ ] Persetujuan membuat akun `member`; penolakan tidak membuat akun.
+- [ ] Persetujuan membuat akun `student`; penolakan tidak membuat akun.
 - [ ] Lencana **Approvals** = jumlah pendaftaran tertunda + sertifikat pelatih tertunda; izin orang tidak masuk lencana.
 
 #### US-02 — Gerbang foto siswa
@@ -172,7 +172,7 @@ Kriteria penerimaan:
 Kriteria penerimaan:
 
 - [ ] Tipe sah: `izin`, `sakit`, `ujian`, `lainnya`; minimal satu kelas dan tanggal.
-- [ ] Persetujuan menyisipkan `member_attendances` `sakit` atau `izin` pada tanggal yang jatuh di `schedule_days`.
+- [ ] Persetujuan menyisipkan `student_attendances` `sakit` atau `izin` pada tanggal yang jatuh di `schedule_days`.
 - [ ] Beranda dan jadwal siswa menampilkan lencana pada tanggal itu.
 - [ ] Alur ini bukan izin pelatih dan bukan sakit staf.
 
@@ -232,7 +232,7 @@ Kriteria penerimaan:
 
 Kriteria penerimaan:
 
-- [ ] Daftar = `members.school_id` sekolah itu saja.
+- [ ] Daftar = `students.school_id` sekolah itu saja.
 - [ ] Tidak ada ubahan siswa, kelas, pelatih, izin, atau iuran.
 - [ ] Tidak ada tab pengumuman.
 - [ ] Ekspor absensi Excel memakai hasil saringan saat ini; batas muat 2.000 baris; nama berkas `Absensi-{nama-sekolah}-{dari}-sd-{sampai}.xlsx`.
@@ -293,7 +293,7 @@ Prioritas semua butir: **wajib** untuk perilaku yang sudah ada. Rincian layar: `
 
 | Kode | Persyaratan | Cerita |
 |---|---|---|
-| F-AKN-01 | Peran sah: `owner`, `admin`, `manager_center`, `coach`, `staff`, `member`, `school`. | US-12 |
+| F-AKN-01 | Peran sah: `owner`, `admin`, `manager_center`, `coach`, `staff`, `student`, `school`. | US-12 |
 | F-AKN-02 | Formulir tambah tidak membuat Owner; suntingan peran **dapat** diubah menjadi `owner`. | US-12 |
 | F-AKN-03 | Admin tidak dapat membuat Owner atau Admin. | US-12 |
 | F-AKN-04 | Membuat Admin atau Manager Center dapat otomatis membuat Staff (surel `namastaff@…`). | US-12 |
@@ -325,7 +325,7 @@ Prioritas semua butir: **wajib** untuk perilaku yang sudah ada. Rincian layar: `
 | F-HNR-01 s.d. F-HNR-12 | Sesuai kriteria US-08 dan US-09. | US-08, US-09 |
 | F-RPR-01 | Owner mengelola rubrik: `score_10`, `score_100`, `choice`, `text`, waktu standar, cakupan kelas. | US-10 |
 | F-RPR-02 s.d. F-RPR-07 | Sesuai kriteria US-10 dan US-11 plus catatan kompetisi di riwayat rapor. | US-10, US-11 |
-| F-KMN-01 | Pengumuman per pusat menyasar `member`, `coach`, `admin`, `school`. | — |
+| F-KMN-01 | Pengumuman per pusat menyasar `student`, `coach`, `admin`, `school`. | — |
 | F-KMN-02 | Panel School tidak punya tab pengumuman. | US-11 |
 | F-KMN-03 | CMS landing: program, sorotan pelatih, video, keunggulan, testimoni, mitra, cabang, FAQ, kaki. | US-12 |
 | F-KMN-04 | Sorotan pelatih landing bukan daftar pelatih operasional. | US-12 |
@@ -373,7 +373,7 @@ Alur data yang mengikat:
 
 1. Pengguna masuk → sesi memuat `profiles.role` dan `branch_id` (kecuali Owner dan pelatih multitaut).
 2. Panel merender tab di dalam satu halaman. Bukan rute per menu.
-3. Mutasi menulis tabel domain (`bills`, `coach_attendances`, `member_attendances`, `coach_invoices`, `payslips`, `rapor_entries`, dan seterusnya).
+3. Mutasi menulis tabel domain (`bills`, `coach_attendances`, `student_attendances`, `coach_invoices`, `payslips`, `rapor_entries`, dan seterusnya).
 4. Sebagian aksi memanggil `logActivity` → `activity_logs` (UI log hanya Owner).
 5. Berkas (avatar, tanda tangan, bukti Admin, foto kelas) masuk ember publik atau privat; Owner memantau lewat **System Storage**.
 
@@ -387,7 +387,7 @@ Publik (/ , /register)
         ├── Admin / MC (/admin)      → satu branch_id
         ├── Pelatih (/coach)         → class_coaches + coach_branches
         ├── Staf (/staff)            → satu branch_id
-        ├── Student (/member)        → satu branch_id + tipe
+        ├── Student (/student)        → satu branch_id + tipe
         └── Sekolah (/school)        → schools.profile_id + school_id
 ```
 
@@ -397,13 +397,13 @@ Sumber visual: `src/app/globals.css` (`@theme inline`, Tailwind v4). Tidak ada `
 
 | Jenis | Titik | Catatan |
 |---|---|---|
-| Rute panel | `src/app/owner/`, `src/app/admin/`, `src/app/coach/page.tsx`, `src/app/staff/page.tsx`, `src/app/member/page.tsx`, `src/app/school/page.tsx` | Tab `useState` |
+| Rute panel | `src/app/owner/`, `src/app/admin/`, `src/app/coach/page.tsx`, `src/app/staff/page.tsx`, `src/app/student/page.tsx`, `src/app/school/page.tsx` | Tab `useState` |
 | API akun | `POST /api/admin/users` | Buat pengguna operasional |
 | API Owner | `POST /api/owner/init-profile` | Baris profil Owner |
 | API CMS | `POST /api/owner/revalidate` | Setelah sunting landing |
 | API penyimpanan | `/api/storage/stats` | Statistik ember |
 | API rapor pelatih | `/api/rapor/coach-reviews` | Ulasan disamarkan |
-| API kelas pelatih | `/api/coach/class-members`, `/api/coach/attendance-detail` | Karena RLS |
+| API kelas pelatih | `/api/coach/class-students`, `/api/coach/attendance-detail` | Karena RLS |
 | RPC privat | `consume_private_session` | Sekali per hari |
 | RPC batal invoice | `cancel_coach_invoice` | Melepas klaim sesi |
 | Pratinjau Admin | `sessionStorage.ownerPreviewBranch` | Bukan cookie |
@@ -505,7 +505,7 @@ Versi di bawah menata **prioritas uji dan perbaikan**, bukan janji kalender (TBD
 | Periode rapor dobel | Dua rubrik aktif, PDF kacau | KPI-04 |
 | `consume_private_session` dobel | Sisa sesi terpotong dua kali | Tolak duplikat hari yang sama |
 | Hapus berkas storage | Avatar, bukti, tanda tangan rusak | Konfirmasi Owner; catat di log |
-| RLS pelatih vs daftar siswa | Daftar kosong atau bocor lintas kelas | Pakai `/api/coach/class-members`, bukan kueri langsung yang melanggar RLS |
+| RLS pelatih vs daftar siswa | Daftar kosong atau bocor lintas kelas | Pakai `/api/coach/class-students`, bukan kueri langsung yang melanggar RLS |
 | Placeholder pencarian dianggap rusak | Tiket “search tidak jalan” | F-AKN-08: bukan pencarian global |
 | Ketergantungan WhatsApp di luar aplikasi | Konfirmasi bayar gagal jika nomor pusat kosong | Validasi nomor di Centers/Settings sebelum mengandalkan tombol |
 | Latensi atau kuota belum diukur | Syarat “cepat” tidak dapat diuji | TBD-05; jangan menulis ambang ms sebelum ada angka |
@@ -534,7 +534,7 @@ Istilah kolom kiri wajib di dokumen, tiket, dan instruksi agen. Label UI tetap s
 | Periode invoice | Periods, `invoice_periods` | Jendela pengajuan invoice honor |
 | Periode rapor | Report Cards, `rapor_periods` | Jendela isi rapor; satu terbuka per pusat |
 | Kasbon | Loan List, `coach_loans` | Pinjaman; potongan di slip |
-| Student | Student panel, peran `member`, rute `/member`, tabel `members` | Bahasa produk untuk siswa. Jangan menulis “Member” di prosa. |
+| Student | Student panel, peran `student`, rute `/student`, tabel `students` | Bahasa produk untuk siswa; peran/rute/tabel direname dari `member`. Jangan menulis “Member” di prosa. |
 | Les privat | Private Students, `class_type=private` | Satu siswa, satu kelas; bukan menu Class |
 | Siswa afiliasi | `school_affiliate` | Terikat sekolah mitra |
 | Manager Center | `manager_center` | Panel Admin; selalu Payments + Financial |
@@ -543,7 +543,7 @@ Istilah kolom kiri wajib di dokumen, tiket, dan instruksi agen. Label UI tetap s
 | Libur kelas | `class_holidays` | Satu tanggal per kelas; bukan izin orang |
 | Izin orang | Leave Requests | Izin pelatih atau siswa |
 | Paket sesi kelas | `class_packages` | Hanya Admin **Class** |
-| Paket sesi privat | `members.remaining_sessions` | Bukan `class_packages` |
+| Paket sesi privat | `students.remaining_sessions` | Bukan `class_packages` |
 
 ---
 

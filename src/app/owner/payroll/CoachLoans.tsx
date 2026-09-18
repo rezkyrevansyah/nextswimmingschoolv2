@@ -138,7 +138,7 @@ export default function CoachLoans({ branches, userId, userName }: { branches: B
   }, [form.principal_amount, form.tenor_months]);
 
   const saveLoan = async () => {
-    if (!form.coach_id) return toast.error("Please select a coach or staff member first");
+    if (!form.coach_id) return toast.error("Please select a coach or staff student first");
     if (!form.branch_id) return toast.error("Please select a center first");
     const principal = Number(form.principal_amount || 0);
     const tenor = Number(form.tenor_months || 0);

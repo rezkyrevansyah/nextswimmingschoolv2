@@ -1,17 +1,17 @@
 /**
- * 07-member-panel.spec.ts
+ * 07-student-panel.spec.ts
  * ─────────────────────────────────────────────────────────────────────────────
- * Test suite untuk Member Panel (/member)
+ * Test suite untuk Student Panel (/student)
  *
- * Memerlukan: TEST_MEMBER_EMAIL + TEST_MEMBER_PASSWORD
+ * Memerlukan: TEST_STUDENT_EMAIL + TEST_STUDENT_PASSWORD
  */
 
 import { test, expect } from "../fixtures/auth";
 
-test.describe("Member Panel — Home Tab", () => {
+test.describe("Student Panel — Home Tab", () => {
   test.beforeEach(async ({ page, skipIfNoAuth }) => {
-    skipIfNoAuth("member");
-    await page.goto("/member");
+    skipIfNoAuth("student");
+    await page.goto("/student");
     await page.waitForLoadState("networkidle");
   });
 
@@ -19,15 +19,15 @@ test.describe("Member Panel — Home Tab", () => {
   // Positive Tests
   // ─────────────────────────────────────────────────────────────────────────
 
-  test("halaman member termuat dengan header", async ({ page }) => {
+  test("halaman student termuat dengan header", async ({ page }) => {
     await expect(page.locator("header").first()).toBeVisible({ timeout: 10_000 });
     // Logo ditampilkan sebagai image, bukan teks "NEXT"
     const logo = page.locator("img[alt*='Next Swimming School']").first();
     await expect(logo).toBeAttached();
   });
 
-  test("home tab menampilkan greeting member", async ({ page }) => {
-    // Greeting "Hai, [nama member]" — gunakan first() untuk menghindari strict mode violation
+  test("home tab menampilkan greeting student", async ({ page }) => {
+    // Greeting "Hai, [nama student]" — gunakan first() untuk menghindari strict mode violation
     // (teks "Hai," muncul di h1 header dan h2 body secara bersamaan)
     await expect(page.getByText(/Hai,/i).first()).toBeVisible({ timeout: 10_000 });
   });
@@ -37,16 +37,16 @@ test.describe("Member Panel — Home Tab", () => {
   });
 
   test("mobile nav bar ada di halaman", async ({ page }) => {
-    // Member page menggunakan MobileNav (bottom nav) — pakai lg:hidden, ada di DOM tapi hidden di desktop
+    // Student page menggunakan MobileNav (bottom nav) — pakai lg:hidden, ada di DOM tapi hidden di desktop
     const nav = page.locator("nav").first();
     await expect(nav).toBeAttached();
   });
 });
 
-test.describe("Member Panel — Tab Navigasi", () => {
+test.describe("Student Panel — Tab Navigasi", () => {
   test.beforeEach(async ({ page, skipIfNoAuth }) => {
-    skipIfNoAuth("member");
-    await page.goto("/member");
+    skipIfNoAuth("student");
+    await page.goto("/student");
     await page.waitForLoadState("networkidle");
   });
 
@@ -79,10 +79,10 @@ test.describe("Member Panel — Tab Navigasi", () => {
   });
 });
 
-test.describe("Member Panel — Tab Jadwal", () => {
+test.describe("Student Panel — Tab Jadwal", () => {
   test.beforeEach(async ({ page, skipIfNoAuth }) => {
-    skipIfNoAuth("member");
-    await page.goto("/member");
+    skipIfNoAuth("student");
+    await page.goto("/student");
     await page.waitForLoadState("networkidle");
     await page.getByRole("button", { name: /Jadwal/i }).first().click();
     await page.waitForTimeout(1000);
@@ -97,10 +97,10 @@ test.describe("Member Panel — Tab Jadwal", () => {
   });
 });
 
-test.describe("Member Panel — Tab Tagihan", () => {
+test.describe("Student Panel — Tab Tagihan", () => {
   test.beforeEach(async ({ page, skipIfNoAuth }) => {
-    skipIfNoAuth("member");
-    await page.goto("/member");
+    skipIfNoAuth("student");
+    await page.goto("/student");
     await page.waitForLoadState("networkidle");
     await page.getByRole("button", { name: /Tagihan|Bayar/i }).first().click();
     await page.waitForTimeout(1000);
@@ -136,10 +136,10 @@ test.describe("Member Panel — Tab Tagihan", () => {
   });
 });
 
-test.describe("Member Panel — Tab Absensi", () => {
+test.describe("Student Panel — Tab Absensi", () => {
   test.beforeEach(async ({ page, skipIfNoAuth }) => {
-    skipIfNoAuth("member");
-    await page.goto("/member");
+    skipIfNoAuth("student");
+    await page.goto("/student");
     await page.waitForLoadState("networkidle");
     // Tab absensi mungkin ada di navigasi lebih (tidak selalu di main nav)
     const absenBtn = page.getByRole("button", { name: /Absen/i }).first();
@@ -154,10 +154,10 @@ test.describe("Member Panel — Tab Absensi", () => {
   });
 });
 
-test.describe("Member Panel — Tab Izin", () => {
+test.describe("Student Panel — Tab Izin", () => {
   test.beforeEach(async ({ page, skipIfNoAuth }) => {
-    skipIfNoAuth("member");
-    await page.goto("/member");
+    skipIfNoAuth("student");
+    await page.goto("/student");
     await page.waitForLoadState("networkidle");
     const izinBtn = page.getByRole("button", { name: /Izin/i }).first();
     if (await izinBtn.isVisible({ timeout: 3_000 }).catch(() => false)) {
@@ -215,10 +215,10 @@ test.describe("Member Panel — Tab Izin", () => {
   });
 });
 
-test.describe("Member Panel — Tab Rapor", () => {
+test.describe("Student Panel — Tab Rapor", () => {
   test.beforeEach(async ({ page, skipIfNoAuth }) => {
-    skipIfNoAuth("member");
-    await page.goto("/member");
+    skipIfNoAuth("student");
+    await page.goto("/student");
     await page.waitForLoadState("networkidle");
     await page.getByRole("button", { name: /Rapor/i }).first().click();
     await page.waitForTimeout(1000);
@@ -240,16 +240,16 @@ test.describe("Member Panel — Tab Rapor", () => {
   });
 });
 
-test.describe("Member Panel — Tab Profile", () => {
+test.describe("Student Panel — Tab Profile", () => {
   test.beforeEach(async ({ page, skipIfNoAuth }) => {
-    skipIfNoAuth("member");
-    await page.goto("/member");
+    skipIfNoAuth("student");
+    await page.goto("/student");
     await page.waitForLoadState("networkidle");
     await page.getByRole("button", { name: /Profile|Profil|Saya/i }).first().click();
     await page.waitForTimeout(1000);
   });
 
-  test("profile tab menampilkan data member", async ({ page }) => {
+  test("profile tab menampilkan data student", async ({ page }) => {
     await expect(page.locator("body")).toBeVisible();
   });
 
@@ -268,7 +268,7 @@ test.describe("Member Panel — Tab Profile", () => {
   });
 
   test("QR code terlihat di halaman profile", async ({ page }) => {
-    // QRBox ada di profile member
+    // QRBox ada di profile student
     const qr = page.locator("svg, canvas, [class*='qr']").first();
     if (await qr.isVisible({ timeout: 3_000 }).catch(() => false)) {
       await expect(qr).toBeVisible();

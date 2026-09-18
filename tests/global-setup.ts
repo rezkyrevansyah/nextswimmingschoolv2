@@ -8,7 +8,7 @@
  *   TEST_OWNER_EMAIL / TEST_OWNER_PASSWORD
  *   TEST_ADMIN_EMAIL / TEST_ADMIN_PASSWORD
  *   TEST_COACH_EMAIL / TEST_COACH_PASSWORD
- *   TEST_MEMBER_EMAIL / TEST_MEMBER_PASSWORD
+ *   TEST_STUDENT_EMAIL / TEST_STUDENT_PASSWORD
  *   TEST_SCHOOL_EMAIL / TEST_SCHOOL_PASSWORD
  */
 
@@ -26,7 +26,7 @@ const ROLES = [
   { key: "owner",  emailVar: "TEST_OWNER_EMAIL",  passVar: "TEST_OWNER_PASSWORD"  },
   { key: "admin",  emailVar: "TEST_ADMIN_EMAIL",   passVar: "TEST_ADMIN_PASSWORD"  },
   { key: "coach",  emailVar: "TEST_COACH_EMAIL",   passVar: "TEST_COACH_PASSWORD"  },
-  { key: "member", emailVar: "TEST_MEMBER_EMAIL",  passVar: "TEST_MEMBER_PASSWORD" },
+  { key: "student", emailVar: "TEST_STUDENT_EMAIL",  passVar: "TEST_STUDENT_PASSWORD" },
   { key: "school", emailVar: "TEST_SCHOOL_EMAIL",  passVar: "TEST_SCHOOL_PASSWORD" },
 ] as const;
 

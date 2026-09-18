@@ -1,7 +1,7 @@
 /**
  * GET /api/coach/attendance-detail?classId=xxx&date=yyyy-mm-dd
- * Returns per-member attendance status for one class session, with the
- * member's name resolved server-side (see class-members/route.ts for why —
+ * Returns per-student attendance status for one class session, with the
+ * student's name resolved server-side (see class-students/route.ts for why —
  * same `profiles` RLS block applies here).
  */
 import { NextRequest, NextResponse } from "next/server";
@@ -28,8 +28,8 @@ export async function GET(req: NextRequest) {
   if (!teaches) return NextResponse.json({ error: "Anda tidak mengajar kelas ini." }, { status: 403 });
 
   const { data, error } = await db
-    .from("member_attendances")
-    .select("member_id, status, method, member:members(profile:profiles(full_name))")
+    .from("student_attendances")
+    .select("student_id, status, method, student:students(profile:profiles(full_name))")
     .eq("class_id", classId)
     .eq("session_date", date)
     .order("status");
@@ -37,10 +37,10 @@ export async function GET(req: NextRequest) {
 
   const rows = (data ?? []).map(r => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const m = (Array.isArray(r.member) ? r.member[0] : r.member) as any;
+    const m = (Array.isArray(r.student) ? r.student[0] : r.student) as any;
     const p = (Array.isArray(m?.profile) ? m?.profile[0] : m?.profile) as any;
     return {
-      member_id: r.member_id,
+      student_id: r.student_id,
       full_name: p?.full_name ?? "—",
       status: r.status,
       method: r.method ?? "",

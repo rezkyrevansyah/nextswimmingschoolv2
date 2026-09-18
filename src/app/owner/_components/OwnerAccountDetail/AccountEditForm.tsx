@@ -21,7 +21,7 @@ export default function AccountEditForm({ hook }: { hook: AccountDetailDataHook 
             <option value="admin">{"Branch Admin"}</option>
             <option value="manager_center">{"Manager Center"}</option>
             <option value="coach">{"Coach"}</option>
-            <option value="member">{"Student"}</option>
+            <option value="student">{"Student"}</option>
             <option value="staff">{"Branch Staff"}</option>
             <option value="school">{"School Partner"}</option>
           </Select>
@@ -61,19 +61,19 @@ export default function AccountEditForm({ hook }: { hook: AccountDetailDataHook 
         </Select>
       </Field>
 
-      {/* Member Specific Form Inputs */}
-      {form.role === "member" && (
+      {/* Student Specific Form Inputs */}
+      {form.role === "student" && (
         <div className="border border-green-200 bg-green-50/40 rounded-xl p-3.5 space-y-3">
           <div className="text-xs font-bold text-green-900 uppercase tracking-wider">{"Student Settings"}</div>
           <div className="grid sm:grid-cols-3 gap-3">
             <Field label={"Student Type"}>
-              <Select value={form.member_type} onChange={(e) => setForm((f) => ({ ...f, member_type: e.target.value }))} disabled={form.member_type === "private"}>
+              <Select value={form.student_type} onChange={(e) => setForm((f) => ({ ...f, student_type: e.target.value }))} disabled={form.student_type === "private"}>
                 <option value="reguler">{"Regular"}</option>
                 <option value="school_affiliate">{"School-affiliated"}</option>
-                {form.member_type === "private" && <option value="private">{"Private"}</option>}
+                {form.student_type === "private" && <option value="private">{"Private"}</option>}
               </Select>
             </Field>
-            {form.member_type !== "private" && (
+            {form.student_type !== "private" && (
               <>
                 <Field label={"Total Sessions"}>
                   <Input type="number" min={0} value={form.total_sessions} onChange={(e) => setForm((f) => ({ ...f, total_sessions: e.target.value }))} />
@@ -84,13 +84,13 @@ export default function AccountEditForm({ hook }: { hook: AccountDetailDataHook 
               </>
             )}
           </div>
-          {form.member_type === "private" && (
+          {form.student_type === "private" && (
             <div className="flex items-center gap-2 p-3 rounded-xl bg-ocean-50 border border-ocean-100 text-sm text-ocean-800">
               <Icon name="info" className="w-4 h-4 shrink-0 text-ocean-500" />
               <span>{"Private students are managed from the \"Student Private\" menu — schedule, location, coach, and session count are all edited there, safely, since it's the only place guaranteed to match this student's own class slot."}</span>
             </div>
           )}
-          {form.member_type === "school_affiliate" && (
+          {form.student_type === "school_affiliate" && (
             <div className="grid sm:grid-cols-2 gap-3">
               <Field label={"Select School"}>
                 <Select value={form.school_id} onChange={(e) => setForm((f) => ({ ...f, school_id: e.target.value }))}>

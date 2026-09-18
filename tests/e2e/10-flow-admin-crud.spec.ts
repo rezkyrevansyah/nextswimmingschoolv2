@@ -1,11 +1,11 @@
 /**
  * 10-flow-admin-crud.spec.ts
  * ─────────────────────────────────────────────────────────────────────────────
- * Flow test: Admin membuat kelas, coach, dan member.
+ * Flow test: Admin membuat kelas, coach, dan student.
  *
  * Credential yang dibuat dalam test ini:
  *   Coach  → coach@next.com  / Coach1234
- *   Member → member@next.com / Member1234
+ *   Student → student@next.com / Student1234
  *
  * Memerlukan: TEST_ADMIN_EMAIL + TEST_ADMIN_PASSWORD di .env.test
  */
@@ -25,11 +25,11 @@ const NEW_COACH = {
   password: "Coach1234",
 };
 
-const NEW_MEMBER = {
-  fullName: "Member Test",
-  email: "member@next.com",
+const NEW_STUDENT = {
+  fullName: "Student Test",
+  email: "student@next.com",
   phone: "081200000003",
-  password: "Member1234",
+  password: "Student1234",
   dob: "2005-06-15",
 };
 
@@ -190,79 +190,79 @@ test.describe("Admin Flow — Buat Coach Baru", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Member
+// Student
 // ─────────────────────────────────────────────────────────────────────────────
 
-test.describe("Admin Flow — Buat Member Baru", () => {
+test.describe("Admin Flow — Buat Student Baru", () => {
   test.beforeEach(async ({ page, skipIfNoAuth }) => {
     skipIfNoAuth("admin");
     await page.goto("/admin");
     await page.waitForLoadState("networkidle");
-    await page.getByRole("button", { name: /^Member$/i }).first().click();
+    await page.getByRole("button", { name: /^Student$/i }).first().click();
     await page.waitForTimeout(1000);
   });
 
-  test("bisa membuka modal tambah member", async ({ page }) => {
-    const tambahBtn = page.getByRole("button", { name: /Tambah Member/i }).first();
+  test("bisa membuka modal tambah student", async ({ page }) => {
+    const tambahBtn = page.getByRole("button", { name: /Tambah Student/i }).first();
     if (await tambahBtn.isVisible({ timeout: 5_000 }).catch(() => false)) {
       await tambahBtn.click();
-      await expect(page.getByRole("heading", { name: /Tambah Member/i })).toBeVisible({ timeout: 5_000 });
+      await expect(page.getByRole("heading", { name: /Tambah Student/i })).toBeVisible({ timeout: 5_000 });
       await page.keyboard.press("Escape");
     }
   });
 
-  test("bisa membuat akun member baru dengan credential yang ditetapkan", async ({ page }) => {
-    const tambahBtn = page.getByRole("button", { name: /Tambah Member/i }).first();
+  test("bisa membuat akun student baru dengan credential yang ditetapkan", async ({ page }) => {
+    const tambahBtn = page.getByRole("button", { name: /Tambah Student/i }).first();
     if (!await tambahBtn.isVisible({ timeout: 5_000 }).catch(() => false)) return;
 
     await tambahBtn.click();
-    await expect(page.getByRole("heading", { name: /Tambah Member/i })).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByRole("heading", { name: /Tambah Student/i })).toBeVisible({ timeout: 5_000 });
 
     // Nama lengkap
     const namaInput = page.locator("input[type='text']").first();
-    await namaInput.fill(NEW_MEMBER.fullName);
+    await namaInput.fill(NEW_STUDENT.fullName);
 
     // Tanggal lahir
     const dobInput = page.locator("input[type='date']").first();
     if (await dobInput.isVisible({ timeout: 2_000 }).catch(() => false)) {
-      await dobInput.fill(NEW_MEMBER.dob);
+      await dobInput.fill(NEW_STUDENT.dob);
     }
 
-    // Tipe member — pilih Reguler
-    const tipeMember = page.locator("select").filter({ hasText: /Reguler|Private|Afiliasi/i }).first();
-    if (await tipeMember.isVisible({ timeout: 2_000 }).catch(() => false)) {
-      await tipeMember.selectOption("regular");
+    // Tipe student — pilih Reguler
+    const tipeStudent = page.locator("select").filter({ hasText: /Reguler|Private|Afiliasi/i }).first();
+    if (await tipeStudent.isVisible({ timeout: 2_000 }).catch(() => false)) {
+      await tipeStudent.selectOption("regular");
     }
 
     // No HP
     const phoneInput = page.locator("input[type='tel']").first();
     if (await phoneInput.isVisible({ timeout: 2_000 }).catch(() => false)) {
-      await phoneInput.fill(NEW_MEMBER.phone);
+      await phoneInput.fill(NEW_STUDENT.phone);
     }
 
     // Email login
-    await page.locator("input[type='email']").fill(NEW_MEMBER.email);
+    await page.locator("input[type='email']").fill(NEW_STUDENT.email);
 
     // Password
-    await page.locator("input[type='password']").fill(NEW_MEMBER.password);
+    await page.locator("input[type='password']").fill(NEW_STUDENT.password);
 
     await page.getByRole("button", { name: /Simpan|Buat/i }).last().click();
 
     await page.waitForTimeout(4_000);
-    const modalOpen = await page.getByRole("heading", { name: /Tambah Member/i })
+    const modalOpen = await page.getByRole("heading", { name: /Tambah Student/i })
       .isVisible().catch(() => false);
 
     if (modalOpen) {
-      console.log("  [info] Member sudah terdaftar atau ada error — lewati");
+      console.log("  [info] Student sudah terdaftar atau ada error — lewati");
     } else {
-      await expect(page.getByText(NEW_MEMBER.fullName)).toBeVisible({ timeout: 10_000 });
+      await expect(page.getByText(NEW_STUDENT.fullName)).toBeVisible({ timeout: 10_000 });
     }
   });
 
-  test("member yang sudah ada muncul di list dengan status aktif", async ({ page }) => {
-    const memberRow = page.getByText(NEW_MEMBER.fullName).first();
-    if (await memberRow.isVisible({ timeout: 5_000 }).catch(() => false)) {
-      await expect(memberRow).toBeVisible();
+  test("student yang sudah ada muncul di list dengan status aktif", async ({ page }) => {
+    const studentRow = page.getByText(NEW_STUDENT.fullName).first();
+    if (await studentRow.isVisible({ timeout: 5_000 }).catch(() => false)) {
+      await expect(studentRow).toBeVisible();
     }
   });
 });
@@ -302,7 +302,7 @@ test.describe("Admin Flow — Approvement Registrasi", () => {
 // Tagihan
 // ─────────────────────────────────────────────────────────────────────────────
 
-test.describe("Admin Flow — Buat Tagihan Member", () => {
+test.describe("Admin Flow — Buat Tagihan Student", () => {
   test.beforeEach(async ({ page, skipIfNoAuth }) => {
     skipIfNoAuth("admin");
     await page.goto("/admin");

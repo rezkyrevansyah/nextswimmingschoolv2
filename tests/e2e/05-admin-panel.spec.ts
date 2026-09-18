@@ -30,22 +30,22 @@ test.describe("Admin Panel — Dashboard", () => {
   });
 });
 
-test.describe("Admin Panel — Manajemen Member", () => {
+test.describe("Admin Panel — Manajemen Student", () => {
   test.beforeEach(async ({ page, skipIfNoAuth }) => {
     skipIfNoAuth("admin");
     await page.goto("/admin");
     await page.waitForLoadState("networkidle");
-    // Label sidebar aktual: "Member"
-    await page.getByRole("button", { name: /^Member$/i }).first().click();
+    // Label sidebar aktual: "Student"
+    await page.getByRole("button", { name: /^Student$/i }).first().click();
     await page.waitForTimeout(1000);
   });
 
-  test("tab Member menampilkan daftar atau pesan kosong", async ({ page }) => {
+  test("tab Student menampilkan daftar atau pesan kosong", async ({ page }) => {
     await expect(page.locator("body")).toBeVisible();
   });
 
-  test("jika ada member, bisa dibuka detail profilnya", async ({ page }) => {
-    // Cek apakah ada tombol detail/lihat member
+  test("jika ada student, bisa dibuka detail profilnya", async ({ page }) => {
+    // Cek apakah ada tombol detail/lihat student
     const viewBtn = page.getByRole("button", { name: /Detail|Lihat|Profil/i }).first();
     if (await viewBtn.isVisible({ timeout: 3_000 }).catch(() => false)) {
       await viewBtn.click();

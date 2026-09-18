@@ -37,15 +37,15 @@ export function useAdminRaporData(branchId: string, periods: RaporPeriod[]) {
     setLoading(true);
     const [{ data }, { data: ownerSettings }] = await Promise.all([
       supabase
-        .from("members")
+        .from("students")
         .select(`
-          id, member_no, type, school_id,
+          id, student_no, type, school_id,
           profile:profiles(full_name, avatar_url, birth_date),
           school:schools(
             id, name, logo_url, show_coach_sig, show_head_sig, show_school_sig, coach_sig_title, head_sig_title,
             school_signatures(id, name, title, image_url, is_active)
           ),
-          member_classes(
+          student_classes(
             classes(
               id, name, rapor_signer_coach_id,
               class_coaches(coach_id, role, profile:profiles(full_name, signature_url))
@@ -62,20 +62,20 @@ export function useAdminRaporData(branchId: string, periods: RaporPeriod[]) {
 
     if (!data) { setStudents([]); setLoading(false); return; }
 
-    const memberIds = data.map(m => m.id);
-    const { data: btRows } = memberIds.length
-      ? await supabase.from("member_best_times").select("member_id, stroke, distance, time_seconds").in("member_id", memberIds).eq("branch_id", branchId)
+    const studentIds = data.map(m => m.id);
+    const { data: btRows } = studentIds.length
+      ? await supabase.from("student_best_times").select("student_id, stroke, distance, time_seconds").in("student_id", studentIds).eq("branch_id", branchId)
       : { data: [] };
-    const btByMember = new Map<string, PrintBestTime[]>();
-    for (const row of (btRows ?? []) as { member_id: string; stroke: string; distance: number; time_seconds: number }[]) {
-      const list = btByMember.get(row.member_id) ?? [];
+    const btByStudent = new Map<string, PrintBestTime[]>();
+    for (const row of (btRows ?? []) as { student_id: string; stroke: string; distance: number; time_seconds: number }[]) {
+      const list = btByStudent.get(row.student_id) ?? [];
       list.push({ stroke: row.stroke, distance: row.distance, time_seconds: row.time_seconds });
-      btByMember.set(row.member_id, list);
+      btByStudent.set(row.student_id, list);
     }
 
     const rows: Student[] = data.map((m) => {
       const profile = (m.profile as unknown as { full_name: string; avatar_url: string | null; birth_date: string | null } | null);
-      const mc = (m.member_classes as unknown as { classes: { id: string; name: string; rapor_signer_coach_id: string | null; class_coaches: { coach_id: string; role: string; profile: { full_name: string; signature_url: string | null } | null }[] } | null }[])?.[0];
+      const mc = (m.student_classes as unknown as { classes: { id: string; name: string; rapor_signer_coach_id: string | null; class_coaches: { coach_id: string; role: string; profile: { full_name: string; signature_url: string | null } | null }[] } | null }[])?.[0];
       const cls = mc?.classes;
       const signer = resolveRaporSigner(cls?.class_coaches ?? [], cls?.rapor_signer_coach_id);
       const entry = (m.rapor_entries as unknown as { id: string; scores: Record<string, number | string>; notes: string | null; personality: string | null; motivation: string | null; learning_achievements: string | null; level: string | null; period_id: string; locked: boolean; rapor_levels: { id: string; name: string; rapor_level_criteria: { id: string; label: string; kind: string; options: string[] | null; sort_order: number }[]; rapor_level_strokes: { name: string; sort_order: number }[]; rapor_level_distances: { distance: number; sort_order: number }[] } | null }[])
@@ -93,7 +93,7 @@ export function useAdminRaporData(branchId: string, periods: RaporPeriod[]) {
       return {
         id: m.id,
         full_name: profile?.full_name ?? "—",
-        member_no: (m as unknown as { member_no: string | null }).member_no ?? null,
+        student_no: (m as unknown as { student_no: string | null }).student_no ?? null,
         birth_date: profile?.birth_date ?? null,
         avatar_url: profile?.avatar_url ?? null,
         class_name: cls?.name ?? "—",
@@ -107,7 +107,7 @@ export function useAdminRaporData(branchId: string, periods: RaporPeriod[]) {
         learning_achievements: entry?.learning_achievements ?? null,
         level: entry?.level ?? null,
         criteria,
-        best_times: btByMember.get(m.id) ?? [],
+        best_times: btByStudent.get(m.id) ?? [],
         level_strokes: levelStrokes,
         level_distances: levelDistances,
         school_logo_url: school?.logo_url ?? null,
@@ -150,9 +150,9 @@ export function useAdminRaporData(branchId: string, periods: RaporPeriod[]) {
   const totalDone = students.filter(s => s.is_filled).length;
 
   const toPrintStudent = (s: Student) => ({
-    member_id: s.id, period_id: effectivePeriodId,
+    student_id: s.id, period_id: effectivePeriodId,
     full_name: s.full_name, avatar_url: s.avatar_url ?? undefined,
-    member_no: s.member_no ?? undefined, birth_date: s.birth_date ?? undefined,
+    student_no: s.student_no ?? undefined, birth_date: s.birth_date ?? undefined,
     level: s.level ?? undefined,
     class_name: s.class_name, coach_name: s.coach_name,
     coach_signature_url: s.coach_signature_url,

@@ -4,18 +4,35 @@
 
 ## What this project is
 
-A Next.js (App Router) web app for **Next Swimming School** — a multi-branch swimming school management system. It has a public landing page and six role-based panels: Owner, Admin, Coach, Member, School, and Staff.
+A Next.js (App Router) web app for **Next Swimming School** — a multi-branch swimming school management system. It has a public landing page and seven role-based accounts: Owner, Admin, Manager Center, Coach, Student, School, and Staff (see "Roles" below).
 
 ## Key docs
 
-- [docs/README.md](docs/README.md) — **start here** (reading order, glossary)
-- [docs/01-prd.md](docs/01-prd.md) — product intent
-- [docs/02-umpan-balik.md](docs/02-umpan-balik.md) — mistakes that must not repeat
-- [docs/03-alur/](docs/03-alur/) — cross-role flows
-- [docs/04-panel/](docs/04-panel/) — per-role screens
-- [docs/05-desain/](docs/05-desain/) — visual tokens
-- [supabase/schema.sql](supabase/schema.sql) — current full SQL schema reference
+- [docs/Next Swimming School Revamp/docs/README.md](docs/Next%20Swimming%20School%20Revamp/docs/README.md) — **start here** (reading order, glossary)
+- [docs/Next Swimming School Revamp/docs/01-prd.md](docs/Next%20Swimming%20School%20Revamp/docs/01-prd.md) — product intent
+- [docs/Next Swimming School Revamp/docs/02-umpan-balik.md](docs/Next%20Swimming%20School%20Revamp/docs/02-umpan-balik.md) — mistakes that must not repeat
+- [docs/Next Swimming School Revamp/docs/03-alur/](docs/Next%20Swimming%20School%20Revamp/docs/03-alur/) — cross-role flows
+- [docs/Next Swimming School Revamp/docs/04-panel/](docs/Next%20Swimming%20School%20Revamp/docs/04-panel/) — per-role screens
+- [docs/Next Swimming School Revamp/docs/05-desain/](docs/Next%20Swimming%20School%20Revamp/docs/05-desain/) — visual tokens
+- [docs/06-struktur-kode.md](docs/06-struktur-kode.md) — file-size/screen-folder refactor log (see "File size" in AGENTS.md)
+- [supabase/schema.sql](supabase/schema.sql) — SQL schema reference (kept best-effort in sync; the live DB via `information_schema`/`pg_catalog` is always the source of truth — see "Applying database migrations")
 - `supabase/*.sql` — standalone migration scripts, one per feature — **apply these yourself, don't hand them to the user to paste into the Supabase SQL Editor.** See "Applying database migrations" below.
+
+## Roles
+
+Seven roles, all stored in the `user_role` Postgres enum (`profiles.role`). Each gets a `public_id` on creation, formatted `NEXT.<3-digit seq>.<code>.<YY>` (e.g. `NEXT.001.ST.26`) plus a permanent QR (`qr_payload`) — the `<code>` below is the account-code letters used in that ID, **not** the panel route:
+
+| Role (DB value) | Code | Panel route | Notes |
+|---|---|---|---|
+| `owner` | `OW` | `/owner` | Every branch. Full access incl. Financial. |
+| `admin` | `AD` | `/admin` | One branch. Same panel as Manager Center; Payments/Financial visibility can be toggled off per branch (`branches.show_payments_to_admin`). |
+| `manager_center` | `MC` | `/admin` | One branch. **Reuses the Admin panel** (no separate top-level page) — always sees Payments + Financial regardless of the branch toggle. Admin ≠ Manager Center ≠ Owner: don't conflate their permissions. |
+| `coach` | `CO` | `/coach` | One branch. Mobile-first shell. |
+| `student` | `ST` | `/student` | One branch. Product-facing label is **"Student"** — this was renamed from the legacy `member` role/route/table (see `supabase/rename_member_to_student.sql`); do not reintroduce "Member" in code, routes, table names, or prose. Mobile-first shell. Three types: `reguler` \| `private` \| `school_affiliate`. |
+| `school` | `SC` | `/school` | Partner school account; reads students where `students.school_id` matches. |
+| `staff` | `SF` | `/staff` | One branch. Mobile-first shell. |
+
+`src/lib/utils.ts::roleHomePath()` derives the route from the role string directly (`/${role}`), except `manager_center` which is special-cased to `/admin`.
 
 ## Tech stack
 
@@ -118,9 +135,9 @@ src/
     login/page.tsx
     register/page.tsx
     owner/page.tsx       ← Owner panel shell (thin) + owner/_components/<Screen>/ per menu — see "File size" in AGENTS.md
-    admin/page.tsx       ← Admin panel shell (thin) + admin/_components/<Screen>/ per menu
+    admin/page.tsx       ← Admin panel shell (thin) + admin/_components/<Screen>/ per menu — also serves manager_center (same route, role-aware nav)
     coach/page.tsx       ← Coach panel mobile-first shell + coach/_components/<Screen>/ per tab
-    member/page.tsx      ← Member panel mobile-first shell + member/_components/<Screen>/ per tab
+    student/page.tsx     ← Student panel mobile-first shell + student/_components/<Screen>/ per tab (role `student`, formerly `member`)
     school/page.tsx      ← School panel shell + school/_components/<Screen>/ (rapor + attendance/export)
     staff/page.tsx       ← Staff panel mobile-first shell + staff/_components/<Screen>/ per tab
   hooks/
@@ -145,10 +162,10 @@ supabase/
 
 ## Panel navigation pattern
 
-Panel pages (owner, admin, coach, member) use **internal `useState` tab routing**, NOT Next.js router. This is intentional — zero loading between tabs, matches the original prototype UX.
+Panel pages (owner, admin, coach, student) use **internal `useState` tab routing**, NOT Next.js router. This is intentional — zero loading between tabs, matches the original prototype UX.
 
-- Owner + Admin: `Sidebar` (desktop) + `Topbar` + `Bell`
-- Coach + Member: mobile-first `Shell` with `MobileNav` (bottom) + inline desktop header links
+- Owner + Admin (incl. Manager Center, which reuses `/admin`): `Sidebar` (desktop) + `Topbar` + `Bell`
+- Coach + Student: mobile-first `Shell` with `MobileNav` (bottom) + inline desktop header links
 
 ## Key utilities
 

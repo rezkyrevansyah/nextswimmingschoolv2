@@ -15,7 +15,7 @@ export default function ViewRaporModal({ hook, coachName, branchName }: { hook: 
     <Modal
       open={!!viewing}
       onClose={() => { setViewing(null); setViewBestTimes([]); }}
-      title={(<>{"Report Card — "}<NoTranslate>{viewing?.member?.profile?.full_name ?? ""}</NoTranslate></>)}
+      title={(<>{"Report Card — "}<NoTranslate>{viewing?.student?.profile?.full_name ?? ""}</NoTranslate></>)}
       size="lg"
       footer={
         <>
@@ -28,15 +28,15 @@ export default function ViewRaporModal({ hook, coachName, branchName }: { hook: 
               .sort((a, b) => a.sort_order - b.sort_order)
               .map(c => ({ id: c.id, label: c.label, kind: c.kind as PrintCriterion["kind"] }));
             const signer  = resolveRaporSigner(vClass?.class_coaches ?? [], vClass?.rapor_signer_coach_id);
-            const memSchool = (viewing.member as unknown as { school?: { id: string; name: string; logo_url: string | null; show_coach_sig?: boolean; show_head_sig?: boolean; show_school_sig?: boolean; coach_sig_title?: string; head_sig_title?: string; school_signatures?: { name: string; title: string; image_url: string; is_active: boolean }[] } | null })?.school;
+            const memSchool = (viewing.student as unknown as { school?: { id: string; name: string; logo_url: string | null; show_coach_sig?: boolean; show_head_sig?: boolean; show_school_sig?: boolean; coach_sig_title?: string; head_sig_title?: string; school_signatures?: { name: string; title: string; image_url: string; is_active: boolean }[] } | null })?.school;
             const coachSig = signer?.signature_url ?? signatureUrl;
             const signatures = buildSchoolRaporSignatures(memSchool, signer?.full_name ?? coachName, coachSig, ownerSettings);
             const raporData = {
-              member_id: viewing.member_id, period_id: period.id,
-              full_name: viewing.member?.profile?.full_name ?? "",
-              member_no: viewing.member?.member_no ?? undefined,
-              avatar_url: viewing.member?.profile?.avatar_url ?? undefined,
-              birth_date: viewing.member?.profile?.birth_date ?? undefined,
+              student_id: viewing.student_id, period_id: period.id,
+              full_name: viewing.student?.profile?.full_name ?? "",
+              student_no: viewing.student?.student_no ?? undefined,
+              avatar_url: viewing.student?.profile?.avatar_url ?? undefined,
+              birth_date: viewing.student?.profile?.birth_date ?? undefined,
               location: branchName || undefined,
               class_name: viewing.class?.name ?? "",
               coach_name: signer?.full_name ?? coachName,
@@ -79,9 +79,9 @@ export default function ViewRaporModal({ hook, coachName, branchName }: { hook: 
             {/* Header */}
             <Card className="!p-3 bg-paper-tint">
               <div className="flex items-center gap-3">
-                <Avatar name={viewing.member?.profile?.full_name ?? "?"} src={viewing.member?.profile?.avatar_url ?? undefined} size={42} />
+                <Avatar name={viewing.student?.profile?.full_name ?? "?"} src={viewing.student?.profile?.avatar_url ?? undefined} size={42} />
                 <div>
-                  <div className="font-semibold text-ink"><NoTranslate>{viewing.member?.profile?.full_name}</NoTranslate></div>
+                  <div className="font-semibold text-ink"><NoTranslate>{viewing.student?.profile?.full_name}</NoTranslate></div>
                   <div className="text-xs text-ink-mute"><NoTranslate>{viewing.class?.name}</NoTranslate> · <NoTranslate>{period?.label}</NoTranslate></div>
                 </div>
               </div>

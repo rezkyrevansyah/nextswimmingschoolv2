@@ -1,6 +1,6 @@
 "use client";
 import { NoTranslate } from "@/components/ui/NoTranslate";
-import { coachDbToUi, memberDbToUi } from "@/lib/attendance";
+import { coachDbToUi, studentDbToUi } from "@/lib/attendance";
 import type { OwnerClassesMasterHook } from "./_hook";
 
 const ATT_STATUS_LABELS: Record<string, string> = {
@@ -80,14 +80,14 @@ export function ClassCoachAttendanceTab({ hook }: { hook: OwnerClassesMasterHook
   );
 }
 
-export function ClassMemberAttendanceTab({ hook }: { hook: OwnerClassesMasterHook }) {
-  const { detailLoading, detailMemberAtt } = hook;
+export function ClassStudentAttendanceTab({ hook }: { hook: OwnerClassesMasterHook }) {
+  const { detailLoading, detailStudentAtt } = hook;
 
   return (
     <div>
       {detailLoading ? (
         <div className="text-center py-8 text-ink-mute text-sm">{"Loading…"}</div>
-      ) : detailMemberAtt.length === 0 ? (
+      ) : detailStudentAtt.length === 0 ? (
         <div className="text-center py-8 text-ink-mute text-sm">{"No student attendance data yet."}</div>
       ) : (
         <div className="overflow-x-auto border rounded-xl">
@@ -101,23 +101,23 @@ export function ClassMemberAttendanceTab({ hook }: { hook: OwnerClassesMasterHoo
               </tr>
             </thead>
             <tbody className="divide-y divide-line bg-white">
-              {detailMemberAtt.map((a) => (
+              {detailStudentAtt.map((a) => (
                 <tr key={a.id} className="hover:bg-paper-tint/50">
                   <td className="py-2 px-3 font-mono font-semibold text-ink">{a.session_date}</td>
                   <td className="py-2 px-3 font-bold text-ink">
-                    <NoTranslate>{a.member?.profile?.full_name ?? a.member?.member_no ?? "—"}</NoTranslate>
+                    <NoTranslate>{a.student?.profile?.full_name ?? a.student?.student_no ?? "—"}</NoTranslate>
                   </td>
                   <td className="py-2 px-3">
                     <span
                       className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                        memberDbToUi(a.status) === "present"
+                        studentDbToUi(a.status) === "present"
                           ? "bg-ok-50 text-ok-700"
-                          : memberDbToUi(a.status) === "absent"
+                          : studentDbToUi(a.status) === "absent"
                           ? "bg-danger-50 text-danger-700"
                           : "bg-warn-50 text-warn-700"
                       }`}
                     >
-                      {ATT_STATUS_LABELS[memberDbToUi(a.status)] ?? a.status}
+                      {ATT_STATUS_LABELS[studentDbToUi(a.status)] ?? a.status}
                     </span>
                   </td>
                   <td className="py-2 px-3 text-ink-mute uppercase font-mono text-[10px]">

@@ -6,36 +6,36 @@ import { NoTranslate } from "@/components/ui/NoTranslate";
 import { fmtDate } from "@/lib/utils";
 import type { AdminCompetitionHook } from "./_hook";
 
-export default function MemberAchievementModal({ hook }: { hook: AdminCompetitionHook }) {
+export default function StudentAchievementModal({ hook }: { hook: AdminCompetitionHook }) {
   const {
     AWARD_LABELS,
-    awardMemberId, setAwardMemberId, awardMemberSearch, setAwardMemberSearch, setMemberParticipations,
-    memberParticipations, memberParticipationsLoading, openAddParticipant, openDuplicateParticipant,
+    awardStudentId, setAwardStudentId, awardStudentSearch, setAwardStudentSearch, setStudentParticipations,
+    studentParticipations, studentParticipationsLoading, openAddParticipant, openDuplicateParticipant,
     openEditParticipant, handleRemoveParticipant, getDoc, handleViewDoc,
   } = hook;
 
-  if (!awardMemberId) return null;
+  if (!awardStudentId) return null;
 
   return (
     <Modal
-      open={!!awardMemberId}
-      onClose={() => { setAwardMemberId(""); setAwardMemberSearch(""); setMemberParticipations([]); }}
-      title={awardMemberSearch ? <NoTranslate>{awardMemberSearch}</NoTranslate> : "Student Achievements"}
+      open={!!awardStudentId}
+      onClose={() => { setAwardStudentId(""); setAwardStudentSearch(""); setStudentParticipations([]); }}
+      title={awardStudentSearch ? <NoTranslate>{awardStudentSearch}</NoTranslate> : "Student Achievements"}
       size="xl"
     >
       <div className="space-y-4">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div>
             <div className="font-bold text-ink-strong">{"Achievement History"}</div>
-            <p className="text-xs text-ink-mute">{`${memberParticipations.length} entries · all competitions`}</p>
+            <p className="text-xs text-ink-mute">{`${studentParticipations.length} entries · all competitions`}</p>
           </div>
-          <Btn variant="primary" size="sm" icon="plus" onClick={() => openAddParticipant(awardMemberId)}>
+          <Btn variant="primary" size="sm" icon="plus" onClick={() => openAddParticipant(awardStudentId)}>
             {"Add Award"}
           </Btn>
         </div>
-        {memberParticipationsLoading ? (
+        {studentParticipationsLoading ? (
           <div className="py-8 text-center text-ink-mute text-sm">{"Loading data..."}</div>
-        ) : memberParticipations.length === 0 ? (
+        ) : studentParticipations.length === 0 ? (
           <div className="py-8 text-center text-ink-mute text-sm border border-dashed border-line rounded-xl">
             {"No awards for this participant yet. Click Add Award above."}
           </div>
@@ -54,7 +54,7 @@ export default function MemberAchievementModal({ hook }: { hook: AdminCompetitio
                 </tr>
               </thead>
               <tbody className="divide-y divide-line bg-white">
-                {memberParticipations.map(p => {
+                {studentParticipations.map(p => {
                   const awardInfo = AWARD_LABELS[p.award] || AWARD_LABELS.participant;
                   const comp = (p as unknown as { competition?: { name: string; start_date: string; level: string } }).competition;
                   return (
@@ -78,7 +78,7 @@ export default function MemberAchievementModal({ hook }: { hook: AdminCompetitio
                       </td>
                       <td className="py-3 px-4 text-center whitespace-nowrap">
                         {(() => {
-                          const doc = getDoc(p.member_id, p.competition_id);
+                          const doc = getDoc(p.student_id, p.competition_id);
                           return doc ? (
                             <button
                               type="button"

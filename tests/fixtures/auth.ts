@@ -9,7 +9,7 @@ import { test as base, expect } from "@playwright/test";
 import fs from "fs";
 import path from "path";
 
-type Role = "owner" | "admin" | "coach" | "member" | "school";
+type Role = "owner" | "admin" | "coach" | "student" | "school";
 
 function authFileHasSession(role: Role): boolean {
   const file = path.join(__dirname, `../.auth/${role}.json`);

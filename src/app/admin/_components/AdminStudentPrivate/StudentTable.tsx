@@ -3,11 +3,11 @@ import Icon from "@/components/ui/Icon";
 import Btn from "@/components/ui/Btn";
 import Avatar from "@/components/ui/Avatar";
 import { NoTranslate } from "@/components/ui/NoTranslate";
-import type { useMemberPrivateData } from "./useMemberPrivateData";
+import type { useStudentPrivateData } from "./useStudentPrivateData";
 
-type MemberPrivateDataHook = ReturnType<typeof useMemberPrivateData>;
+type StudentPrivateDataHook = ReturnType<typeof useStudentPrivateData>;
 
-export default function StudentTable({ hook }: { hook: MemberPrivateDataHook }) {
+export default function StudentTable({ hook }: { hook: StudentPrivateDataHook }) {
   const {
     branches, coaches, loading,
     search, setSearch, filterBranchId, setFilterBranchId, filterCoachId, setFilterCoachId,
@@ -147,7 +147,7 @@ export default function StudentTable({ hook }: { hook: MemberPrivateDataHook }) 
                       <Avatar name={row.profile?.full_name ?? "?"} size={32} />
                       <div>
                         <div className="font-semibold text-ink text-sm"><NoTranslate>{row.profile?.full_name}</NoTranslate></div>
-                        <div className="text-[11px] font-mono text-ink-mute"><NoTranslate>{row.member_no || row.profile?.email || "—"}</NoTranslate></div>
+                        <div className="text-[11px] font-mono text-ink-mute"><NoTranslate>{row.student_no || row.profile?.email || "—"}</NoTranslate></div>
                       </div>
                     </div>
                   </td>

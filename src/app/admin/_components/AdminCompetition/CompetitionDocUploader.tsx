@@ -5,17 +5,17 @@ import { Field } from "@/components/ui/FormFields";
 import Icon from "@/components/ui/Icon";
 import type { CompetitionDocumentRow } from "./_types";
 
-// One certificate/document per (member, competition) — covers every category that member
+// One certificate/document per (student, competition) — covers every category that student
 // won at that event, so it's uploaded once here rather than repeated per achievement row.
 export default function CompetitionDocUploader({
   competitionId,
-  memberId,
+  studentId,
   doc,
   onUploaded,
   onView,
 }: {
   competitionId: string;
-  memberId: string;
+  studentId: string;
   doc: CompetitionDocumentRow | undefined;
   onUploaded: (doc: CompetitionDocumentRow) => void;
   onView: (doc: CompetitionDocumentRow) => void;
@@ -29,7 +29,7 @@ export default function CompetitionDocUploader({
     const fd = new FormData();
     fd.append("file", file);
     fd.append("competitionId", competitionId);
-    fd.append("memberId", memberId);
+    fd.append("studentId", studentId);
     const res = await fetch("/api/upload/competition-doc", { method: "POST", body: fd });
     const json = await res.json().catch(() => ({})) as { url?: string; content_type?: string; error?: string };
     setUploading(false);
@@ -38,7 +38,7 @@ export default function CompetitionDocUploader({
       return;
     }
     toast.success("Document uploaded successfully.");
-    onUploaded({ id: doc?.id ?? "", competition_id: competitionId, member_id: memberId, document_url: json.url, content_type: json.content_type ?? null });
+    onUploaded({ id: doc?.id ?? "", competition_id: competitionId, student_id: studentId, document_url: json.url, content_type: json.content_type ?? null });
   };
 
   return (

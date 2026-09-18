@@ -4,25 +4,25 @@ import Modal from "@/components/ui/Modal";
 import Avatar from "@/components/ui/Avatar";
 import { NoTranslate } from "@/components/ui/NoTranslate";
 import { waLink } from "@/lib/utils";
-import { calcAgeFromBirthDate, type MemberDetail } from "./_shared";
+import { calcAgeFromBirthDate, type StudentDetail } from "./_shared";
 
-export default function MemberDetailModal({ member, onClose }: { member: MemberDetail; onClose: () => void }) {
-  const name = member.profile?.full_name ?? "—";
-  const age = member.profile?.birth_date ? calcAgeFromBirthDate(member.profile.birth_date) : null;
+export default function StudentDetailModal({ student, onClose }: { student: StudentDetail; onClose: () => void }) {
+  const name = student.profile?.full_name ?? "—";
+  const age = student.profile?.birth_date ? calcAgeFromBirthDate(student.profile.birth_date) : null;
 
   const rows: [string, React.ReactNode][] = [
     ["Age", age != null ? `${age} years old` : null],
-    ["Gender", member.profile?.gender === "male" ? "Male" : member.profile?.gender === "female" ? "Female" : null],
-    ["Phone No.", member.profile?.phone ? <NoTranslate>{member.profile.phone}</NoTranslate> : null],
-    ["Address", member.profile?.address ? <NoTranslate>{member.profile.address}</NoTranslate> : null],
-    ["Health history / allergies", member.profile?.health_notes ? <NoTranslate>{member.profile.health_notes}</NoTranslate> : null],
+    ["Gender", student.profile?.gender === "male" ? "Male" : student.profile?.gender === "female" ? "Female" : null],
+    ["Phone No.", student.profile?.phone ? <NoTranslate>{student.profile.phone}</NoTranslate> : null],
+    ["Address", student.profile?.address ? <NoTranslate>{student.profile.address}</NoTranslate> : null],
+    ["Health history / allergies", student.profile?.health_notes ? <NoTranslate>{student.profile.health_notes}</NoTranslate> : null],
   ];
 
   return (
     <Modal open onClose={onClose} title={<NoTranslate>{name}</NoTranslate>} size="sm"
       footer={
         <div className="flex items-center gap-2 w-full">
-          {member.profile?.phone && (
+          {student.profile?.phone && (
             <a href={waLink(`Hello ${name}, I'm a Coach from Next Swimming School.`)} target="_blank" rel="noreferrer" className="flex-1">
               <Btn variant="wa" className="w-full" icon="whatsapp">{"Chat Student"}</Btn>
             </a>
@@ -32,7 +32,7 @@ export default function MemberDetailModal({ member, onClose }: { member: MemberD
       }>
       <div className="space-y-1">
         <div className="flex items-center gap-3 mb-4">
-          <Avatar name={name} src={member.profile?.avatar_url ?? undefined} size={48} />
+          <Avatar name={name} src={student.profile?.avatar_url ?? undefined} size={48} />
           <div>
             <div className="font-display font-bold text-ink text-base"><NoTranslate>{name}</NoTranslate></div>
             {age != null && <div className="text-xs text-ink-mute">{`${age} years old`}</div>}

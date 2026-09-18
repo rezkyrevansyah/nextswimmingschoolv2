@@ -9,9 +9,9 @@ Pakai ini sebagai definisi selesai rilis, bukan sebagai sumber menu.
 ## Alur 1 — Daftar publik → les reguler
 
 1. `/register` tersimpan `registrations` tertunda.
-2. Calon tidak masuk `/member`.
+2. Calon tidak masuk `/student`.
 3. Admin Approvals: sunting / setuju / tolak / hapus.
-4. Setuju → akun `member` reguler.
+4. Setuju → akun `student` reguler.
 5. Gerbang foto jika perlu (US-02).
 6. Masuk kelas reguler.
 7. Generate tagihan: 0 duplikat, 0 baris private (KPI-03).

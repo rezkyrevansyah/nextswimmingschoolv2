@@ -316,7 +316,7 @@ export default function CoachHome({ setOverlay, setActive, coachId, branchId, pr
                         {isOnLeave && <Status kind="inactive">{"On Leave Today"}</Status>}
                         {isClockedIn && <Status kind="approved">{"Already Clocked In"}</Status>}
                       </div>
-                      <div className="text-xs text-ink-mute mt-0.5 font-mono">{c.time_start?.slice(0,5)}{c.time_end ? `–${c.time_end.slice(0,5)}` : ""} · {c.enrolled}/{c.capacity} member</div>
+                      <div className="text-xs text-ink-mute mt-0.5 font-mono">{c.time_start?.slice(0,5)}{c.time_end ? `–${c.time_end.slice(0,5)}` : ""} · {c.enrolled}/{c.capacity} student</div>
                       {!isHoliday && !isOnLeave && !isClockedIn && (
                         <div className="mt-3 flex flex-wrap gap-2">
                           {inWindow ? (

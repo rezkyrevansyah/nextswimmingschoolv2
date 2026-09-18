@@ -21,14 +21,14 @@ function calcAge(birthDate: string): number {
   return age;
 }
 
-export default function MemberProfile({ memberId, memberName, onLogout, onProfileComplete, onAvatarChange }: { memberId: string; memberName: string; onLogout: () => void; onProfileComplete?: () => void; onAvatarChange?: (url: string) => void }) {
+export default function StudentProfile({ studentId, studentName, onLogout, onProfileComplete, onAvatarChange }: { studentId: string; studentName: string; onLogout: () => void; onProfileComplete?: () => void; onAvatarChange?: (url: string) => void }) {
   const supabase = createClient();
   const { upload } = useUpload();
   const [profile, setProfile] = useState<{
     full_name: string; birth_date: string | null; gender: string | null;
     phone: string | null; address: string | null; health_notes: string | null;
     date_start: string | null; qr_code: string | null;
-    avatar_url: string | null; member_no: string | null;
+    avatar_url: string | null; student_no: string | null;
   } | null>(null);
   const [regInfo, setRegInfo] = useState<{ parent_name: string | null; parent_phone: string | null } | null>(null);
   const [editPhone, setEditPhone] = useState("");
@@ -47,11 +47,11 @@ export default function MemberProfile({ memberId, memberName, onLogout, onProfil
 
 
   useEffect(() => {
-    if (!memberId) return;
-    // member row for date_start + qr_code
-    supabase.from("members")
-      .select("date_start, qr_code, profile_id, member_no")
-      .eq("id", memberId)
+    if (!studentId) return;
+    // student row for date_start + qr_code
+    supabase.from("students")
+      .select("date_start, qr_code, profile_id, student_no")
+      .eq("id", studentId)
       .single()
       .then(({ data: m }) => {
         if (!m) return;
@@ -62,7 +62,7 @@ export default function MemberProfile({ memberId, memberName, onLogout, onProfil
           .single()
           .then(({ data: p }) => {
             if (p) {
-              setProfile({ ...p, date_start: m.date_start ?? null, qr_code: m.qr_code ?? null, member_no: m.member_no ?? null });
+              setProfile({ ...p, date_start: m.date_start ?? null, qr_code: m.qr_code ?? null, student_no: m.student_no ?? null });
               setEditPhone(p.phone ?? "");
               setEditAddress(p.address ?? "");
               setEditHealth(p.health_notes ?? "");
@@ -71,17 +71,17 @@ export default function MemberProfile({ memberId, memberName, onLogout, onProfil
         // registration for parent info
         supabase.from("registrations")
           .select("parent_name, parent_phone")
-          .eq("member_id", memberId)
+          .eq("student_id", studentId)
           .order("created_at", { ascending: false })
           .limit(1)
           .single()
           .then(({ data: r }) => { if (r) setRegInfo({ parent_name: r.parent_name, parent_phone: r.parent_phone }); });
       });
-  }, [memberId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [studentId]); // eslint-disable-line react-hooks/exhaustive-deps
 
 
   const saveProfile = async () => {
-    if (!memberId || !profile) return;
+    if (!studentId || !profile) return;
     setSaving(true);
     // profile_id is fetched inside useEffect; we update profiles by auth uid
     const { data: { user } } = await supabase.auth.getUser();
@@ -109,7 +109,7 @@ export default function MemberProfile({ memberId, memberName, onLogout, onProfil
           {/* Avatar — click to view lightbox; use hidden input ref for picking */}
           <button type="button" onClick={() => setPhotoView("open")} className="relative inline-block shrink-0 cursor-zoom-in group">
             <Avatar
-              name={memberName}
+              name={studentName}
               src={avatarPreview ?? profile?.avatar_url ?? undefined}
               size={72}
             />
@@ -118,10 +118,10 @@ export default function MemberProfile({ memberId, memberName, onLogout, onProfil
             </div>
           </button>
           <div className="flex-1 min-w-0">
-            <div className="font-display font-bold text-xl text-ink"><NoTranslate>{profile?.full_name ?? memberName}</NoTranslate></div>
+            <div className="font-display font-bold text-xl text-ink"><NoTranslate>{profile?.full_name ?? studentName}</NoTranslate></div>
             <div className="text-sm text-ocean-700 font-semibold">{age != null ? `${age} yo · Student` : "Student"}</div>
             {profile?.date_start && <div className="text-xs text-ink-mute mt-1">{`Student since ${fmtDate(profile.date_start)}`}</div>}
-            {profile?.member_no && <div className="text-xs text-ink-mute font-mono mt-0.5"><NoTranslate>{profile.member_no}</NoTranslate></div>}
+            {profile?.student_no && <div className="text-xs text-ink-mute font-mono mt-0.5"><NoTranslate>{profile.student_no}</NoTranslate></div>}
             {avatarSaving && (
               <div className="mt-2 text-xs text-ink-mute font-semibold animate-pulse">{"Uploading photo…"}</div>
             )}
@@ -144,10 +144,10 @@ export default function MemberProfile({ memberId, memberName, onLogout, onProfil
         </div>
         <div className="flex justify-center my-4">
           <QRBox
-            value={profile?.qr_code ?? `NSS-M-${memberId.slice(0, 8).toUpperCase()}`}
+            value={profile?.qr_code ?? `NSS-M-${studentId.slice(0, 8).toUpperCase()}`}
             size={180}
             downloadable
-            downloadName={`QR-${profile?.full_name?.replace(/\s+/g, "-") ?? memberId}`}
+            downloadName={`QR-${profile?.full_name?.replace(/\s+/g, "-") ?? studentId}`}
           />
         </div>
         <div className="flex justify-center gap-2">
@@ -209,7 +209,7 @@ export default function MemberProfile({ memberId, memberName, onLogout, onProfil
       {photoView && (
         <PhotoLightbox
           src={avatarPreview ?? profile?.avatar_url ?? null}
-          name={memberName}
+          name={studentName}
           onClose={() => setPhotoView(null)}
           onChangePick={async e => {
             const f = e.target.files?.[0] ?? null;

@@ -57,7 +57,7 @@ Sesi + profiles.role
   /admin             admin | manager_center, satu branch_id
   /coach             coach, class_coaches + coach_branches
   /staff             staff, satu branch_id
-  /member            Student (peran member)
+  /student            Student (peran student)
   /school            school, schools.profile_id
 ```
 
@@ -87,8 +87,8 @@ src/app/
   coach/tabs/<id>/
   staff/page.tsx
   staff/tabs/<id>/
-  member/page.tsx
-  member/tabs/<id>/
+  student/page.tsx
+  student/tabs/<id>/
   school/page.tsx
   school/tabs/<id>/
   api/                       rute di docs/06-teknis/API.md
@@ -125,7 +125,7 @@ Alias impor: `@/` → `src/`.
 
 KPI-02: peran selain Owner (dan pelatih yang ditautkan ke pusat itu) tidak membaca `branch_id` lain.
 
-Pelatih: daftar siswa kelas lewat API pelatih jika RLS menolak kueri langsung (`/api/coach/class-members`, `/api/coach/attendance-detail`).
+Pelatih: daftar siswa kelas lewat API pelatih jika RLS menolak kueri langsung (`/api/coach/class-students`, `/api/coach/attendance-detail`).
 
 Manager Center ≠ Owner meskipun URL `/admin` sama.
 

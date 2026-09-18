@@ -115,7 +115,7 @@ export default function Income({ hook }: { hook: FinancialHook }) {
                   ) : (
                     <tr key={row.id} className="hover:bg-paper-tint">
                       <td className="px-4 py-2.5 text-xs text-ink-mute"><NoTranslate>{row.branch?.name ?? "—"}</NoTranslate></td>
-                      <td className="px-4 py-2.5 font-medium"><NoTranslate>{row.member?.profile?.full_name ?? "—"}</NoTranslate></td>
+                      <td className="px-4 py-2.5 font-medium"><NoTranslate>{row.student?.profile?.full_name ?? "—"}</NoTranslate></td>
                       <td className="px-4 py-2.5 text-xs text-ink-mute"><NoTranslate>{row.class?.name ?? "—"}</NoTranslate></td>
                       <td className="px-4 py-2.5 text-xs"><NoTranslate>{row.period_label}</NoTranslate></td>
                       <td className="px-4 py-2.5 text-xs">

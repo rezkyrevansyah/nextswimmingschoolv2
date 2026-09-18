@@ -1,10 +1,10 @@
-// ── Private types (AdminMember only) ─────────────────────────────────────────
+// ── Private types (AdminStudent only) ─────────────────────────────────────────
 
-export interface MemberRow {
+export interface StudentRow {
   id: string; profile_id: string; type: string; status: string;
   date_start: string; qr_code: string | null; school_id: string | null;
   school_grade: string | null;
-  member_no: string | null;
+  student_no: string | null;
   remaining_sessions: number | null; total_sessions: number | null;
   suspend_until?: string | null; suspend_reason?: string | null;
   profile?: {
@@ -12,14 +12,14 @@ export interface MemberRow {
     gender: string | null; address: string | null; health_notes: string | null;
     email: string | null; avatar_url: string | null;
   } | null;
-  member_classes?: { class: { id: string; name: string } | null }[];
+  student_classes?: { class: { id: string; name: string } | null }[];
 }
 
 export interface ImportRow {
   nama_lengkap?: unknown;
   email?: unknown;
   password?: unknown;
-  tipe_member?: unknown;
+  tipe_student?: unknown;
   tanggal_lahir?: unknown;
   jenis_kelamin?: unknown;
   no_hp?: unknown;
@@ -48,7 +48,7 @@ export interface ValidatedRow {
   full_name: string;
   email: string;
   password: string;
-  member_type: "reguler" | "private" | "school_affiliate";
+  student_type: "reguler" | "private" | "school_affiliate";
   birth_date?: string;
   gender?: string;
   phone?: string;

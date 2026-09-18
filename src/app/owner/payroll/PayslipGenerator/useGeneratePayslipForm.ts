@@ -239,7 +239,7 @@ export function useGeneratePayslipForm({
 
   // Attendance check for staff
   const checkStaffAttendance = async () => {
-    if (!manualStaffId) return toast.error("Please select a staff member first");
+    if (!manualStaffId) return toast.error("Please select a staff student first");
     setLoadingStaffAttendance(true);
     const now = new Date();
     const y = now.getFullYear();

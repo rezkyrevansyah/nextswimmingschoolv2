@@ -9,12 +9,12 @@ import { getSupabaseAdmin } from "@/utils/supabase/admin";
 export async function GET() {
   const db = getSupabaseAdmin();
 
-  const [branches, members, coaches, classes] = await Promise.all([
+  const [branches, students, coaches, classes] = await Promise.all([
     db.from("branches")
       .select("id", { count: "exact", head: true })
       .eq("status", "active"),
 
-    db.from("members")
+    db.from("students")
       .select("id", { count: "exact", head: true })
       .eq("status", "active"),
 
@@ -32,7 +32,7 @@ export async function GET() {
 
   return NextResponse.json({
     branches: branches.count ?? 0,
-    members: members.count ?? 0,
+    students: students.count ?? 0,
     coaches: uniqueCoaches,
     classes: classes.count ?? 0,
   });

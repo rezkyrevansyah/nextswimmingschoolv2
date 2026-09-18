@@ -2,22 +2,22 @@
 import Icon from "@/components/ui/Icon";
 import { NoTranslate } from "@/components/ui/NoTranslate";
 import { fmtDate } from "@/lib/utils";
-import type { AdminMemberHook } from "./_hook";
+import type { AdminStudentHook } from "./_hook";
 
-export default function MemberCompetitionTab({ hook }: { hook: AdminMemberHook }) {
-  const { loadingMemberComps, memberComps, setPhotoView } = hook;
+export default function StudentCompetitionTab({ hook }: { hook: AdminStudentHook }) {
+  const { loadingStudentComps, studentComps, setPhotoView } = hook;
 
   return (
     <div className="space-y-3">
-      {loadingMemberComps ? (
+      {loadingStudentComps ? (
         <div className="py-8 text-center text-ink-mute text-sm">Memuat riwayat perlombaan...</div>
-      ) : memberComps.length === 0 ? (
+      ) : studentComps.length === 0 ? (
         <div className="py-8 text-center text-ink-mute text-sm border border-dashed border-line rounded-xl">
           Belum ada riwayat perlombaan tercatat untuk student ini.
         </div>
       ) : (
         <div className="space-y-2.5 max-h-[380px] overflow-y-auto pr-1">
-          {memberComps.map((item) => {
+          {studentComps.map((item) => {
             const compName = item.competition?.name || "Perlombaan";
             const compDate = item.competition?.start_date ? fmtDate(item.competition.start_date) : "—";
             const compLoc = item.competition?.location || item.competition?.city || "";

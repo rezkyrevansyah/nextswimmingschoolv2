@@ -290,7 +290,7 @@ export function useFinancialComputed(data: Data) {
       const q = incomeSearch.toLowerCase();
       r = r.filter(row => row.source === "manual"
         ? row.description.toLowerCase().includes(q) || (row.category ?? "").toLowerCase().includes(q) || row.branch?.name?.toLowerCase().includes(q)
-        : row.member?.profile?.full_name?.toLowerCase().includes(q) || row.period_label.toLowerCase().includes(q) || row.class?.name?.toLowerCase().includes(q) || row.branch?.name?.toLowerCase().includes(q)
+        : row.student?.profile?.full_name?.toLowerCase().includes(q) || row.period_label.toLowerCase().includes(q) || row.class?.name?.toLowerCase().includes(q) || row.branch?.name?.toLowerCase().includes(q)
       );
     }
     r = [...r].sort((a, b) => {

@@ -7,7 +7,7 @@ import { fmtDate } from "@/lib/utils";
 
 interface MyReviewRow {
   id: string; stars: number; message: string | null;
-  created_at: string; member_name: string; period_label: string;
+  created_at: string; student_name: string; period_label: string;
 }
 
 export default function CoachMyReviews({ coachId }: { coachId: string }) {
@@ -61,7 +61,7 @@ export default function CoachMyReviews({ coachId }: { coachId: string }) {
             <div className="flex items-start justify-between gap-2 mb-2">
               <div>
                 {/* reviewer identity is masked server-side — do not add Avatar/photo here */}
-                <div className="font-semibold text-ink text-sm"><NoTranslate>{r.member_name}</NoTranslate></div>
+                <div className="font-semibold text-ink text-sm"><NoTranslate>{r.student_name}</NoTranslate></div>
                 <div className="text-xs text-ink-mute"><NoTranslate>{r.period_label}</NoTranslate></div>
               </div>
               <div className="flex flex-col items-end gap-1 shrink-0">
