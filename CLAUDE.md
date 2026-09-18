@@ -4,7 +4,7 @@
 
 ## What this project is
 
-A Next.js (App Router) web app for **Next Swimming School** — a multi-branch swimming school management system. It has a public landing page and five role-based panels: Owner, Admin, Coach, Member, and School.
+A Next.js (App Router) web app for **Next Swimming School** — a multi-branch swimming school management system. It has a public landing page and six role-based panels: Owner, Admin, Coach, Member, School, and Staff.
 
 ## Key docs
 
@@ -98,6 +98,14 @@ How to actually apply it:
 
 ## File structure
 
+> **File size rule (see AGENTS.md and docs/06-struktur-kode.md):** panel god-files
+> have already been split into screen-folders (`page.tsx` = thin shell,
+> each menu/tab = its own file/folder under `_components/<Screen>/`). Soft
+> target ≤ 400 lines, hard ceiling 500 lines per screen file, and an
+> absolute hard stop of **1000 lines for any hand-written `.ts`/`.tsx`
+> file in this repo, no exceptions**. If you're about to push a file past
+> that, split it into a screen-folder first — don't keep appending.
+
 ```
 src/
   app/
@@ -109,12 +117,12 @@ src/
       _components/       ← landing sections (Hero, Branches, Coaches, Programs, Testimonials, Partners, Faq, Footer, FloatingWhatsapp)
     login/page.tsx
     register/page.tsx
-    owner/page.tsx       ← Owner panel (12 sub-pages via internal useState)
-    admin/page.tsx       ← Admin panel (14 sub-pages via internal useState)
-    coach/page.tsx       ← Coach panel mobile-first (7 tabs)
-    member/page.tsx      ← Member panel mobile-first (7 tabs)
-    school/page.tsx      ← School panel (rapor + attendance/export tabs)
-  i18n/                  ← dictionaries.ts + locales/{en,id}/ — see Locale section
+    owner/page.tsx       ← Owner panel shell (thin) + owner/_components/<Screen>/ per menu — see "File size" in AGENTS.md
+    admin/page.tsx       ← Admin panel shell (thin) + admin/_components/<Screen>/ per menu
+    coach/page.tsx       ← Coach panel mobile-first shell + coach/_components/<Screen>/ per tab
+    member/page.tsx      ← Member panel mobile-first shell + member/_components/<Screen>/ per tab
+    school/page.tsx      ← School panel shell + school/_components/<Screen>/ (rapor + attendance/export)
+    staff/page.tsx       ← Staff panel mobile-first shell + staff/_components/<Screen>/ per tab
   hooks/
     useUpload.ts          ← Supabase Storage upload hook
     useSignedUrl.ts       ← resolves a private-bucket key into a signed URL for rendering
@@ -125,9 +133,10 @@ src/
     CardNav.tsx, BorderGlowCard.tsx, CircularGallery.tsx, DotField.tsx, LogoLoop.tsx, TextType.tsx
                           ← standalone visual/animation components used mainly on the landing page (CircularGallery uses ogl/WebGL)
     ui/                  ← Icon, Btn, Card, Modal, Status, Avatar, FormFields, Logo, QRBox, Placeholder,
-                            DatePicker, MonthYearPicker, TimePicker, MapPicker, PhotoLightbox, StarDisplay, LanguageSwitcher
+                            DatePicker, MonthYearPicker, TimePicker, MapPicker, PhotoLightbox, StarDisplay, NoTranslate
     layout/              ← Sidebar, Topbar, MobileNav, Bell, BetaFeedback
-    providers/           ← ToastProvider, ConfirmProvider, LocaleProvider
+    providers/           ← ToastProvider, ConfirmProvider
+    GoogleTranslate.tsx  ← `<GoogleTranslate />` widget + `<GoogleLanguageSwitcher />` — see Locale section
 supabase/
   schema.sql             ← current full SQL schema reference
   storage_policies.sql   ← Supabase Storage bucket RLS policies
@@ -168,25 +177,23 @@ cn(...classes)         // hand-rolled class-merge utility (classes.filter(Boolea
 | `<Logo size={N} withWord? />` | `components/ui/Logo.tsx` | wraps `next/image` |
 | `<Placeholder />` | `components/ui/Placeholder.tsx` | diagonal stripe placeholder |
 | `<QRBox />` | `components/ui/QRBox.tsx` | SVG QR placeholder |
-| `<DatePicker />` / `<MonthYearPicker />` / `<TimePicker />` | `components/ui/*.tsx` | custom dropdown pickers, locale-aware month/day names via `useLocale()` |
+| `<DatePicker />` / `<MonthYearPicker />` / `<TimePicker />` | `components/ui/*.tsx` | custom dropdown pickers, English month/day names hardcoded |
 | `<MapPicker />` | `components/ui/MapPicker.tsx` | Leaflet map for picking a lat/lng (dynamic-imported) |
 | `<PhotoLightbox />` | `components/ui/PhotoLightbox.tsx` | fullscreen photo viewer with optional "change photo" |
 | `<StarDisplay stars={} />` | `components/ui/StarDisplay.tsx` | shared star-rating display |
-| `<LanguageSwitcher />` | `components/ui/LanguageSwitcher.tsx` | EN/ID toggle, mounted in every panel header |
+| `<NoTranslate>` | `components/ui/NoTranslate.tsx` | wraps raw DB values (names, free text) so Google Translate skips them — see Locale section |
 
 ## Providers
 
 - `useToast()` from `ToastProvider` — replaces `alert()`
 - `useConfirm()` from `ConfirmProvider` — async Promise-based `confirm()`
-- `useLocale()` from `LocaleProvider` — `{ locale, setLocale, t, tArray }`, see Locale section
 
 ## Locale / i18n
 
-Default language is **English**, with Bahasa Indonesia as a user-selectable option via the `<LanguageSwitcher />` in every panel header. Custom Context-based i18n (not a routing-based library, since panels use internal tab state, not sub-routes):
-- `src/i18n/dictionaries.ts` — `translate()`/`translateArray()`, `Locale` type, `dictionaries` map
-- `src/i18n/locales/{en,id}/*.ts` — one file per panel; `id` files are type-annotated against their `en` counterpart so a missing/mismatched key fails `tsc`
-- `src/components/providers/LocaleProvider.tsx` — persists to `localStorage` + `profiles.locale` (synced in the background)
-- Migration status: shared `ui`/`layout` components, Member panel's Shell+Home, and locale dictionaries for Owner (`owner.ts`) and Coach (`coach.ts`) now exist and are wired into those panels; Admin/School panel bodies and the rest of Member's tabs are still hardcoded Indonesian pending further migration passes.
+**There is no custom i18n system.** All UI text is hardcoded English directly in components — there is no `src/i18n/`, no dictionary files, no `useLocale()`/`t()`/`tNode()`. That system was fully removed (all call sites converted to literal strings, dictionaries and `LocaleProvider` deleted) because the custom locale switching was replaced by Google Translate:
+- `src/components/GoogleTranslate.tsx` — `<GoogleTranslate />` (mounted once per panel layout) drives the actual translation; `<GoogleLanguageSwitcher variant="pill" />` is the switcher shown in panel headers.
+- `src/components/ui/NoTranslate.tsx` — wrap any raw database value rendered inline in translated UI (a name, free-text note, amount already formatted, etc.) in `<NoTranslate>` so Google Translate doesn't mangle it.
+- Do not reintroduce a dictionary/translation-key system. If you need a string to vary, hardcode the English text at the call site — Google Translate handles everything else at render time.
 
 ## Data
 
